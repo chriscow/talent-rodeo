@@ -1,0 +1,149 @@
+version: '3'
+
+env:
+  STATIC_DIR: "assets/static"
+
+# ====================================================================================
+# HELPERS
+# ====================================================================================
+
+tasks:
+  help:
+    desc: Print available tasks with descriptions
+    cmds:
+      - task --list-all
+
+# ====================================================================================
+# QUALITY CONTROL
+# ====================================================================================
+
+  audit:
+    desc: Run quality control checks
+    deps: [test]
+    cmds:
+      - go mod tidy -diff
+      - go mod verify
+      - cmd: test -z "$(gofmt -l .)"
+        platforms: [linux, darwin] # Unix-like systems only
+      - go vet ./...
+      - go run honnef.co/go/tools/cmd/staticcheck@latest -checks=all,-ST1000,-U1000 ./...
+      - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  test:
+    desc: Run all tests
+    cmds:
+      - go test -v -race -buildvcs ./...
+
+  test-cover:
+    desc: Run all tests and display coverage
+    cmds:
+      - go test -v -race -buildvcs -coverprofile=/tmp/coverage.out ./...
+      - go tool cover -html=/tmp/coverage.out
+
+# ====================================================================================
+# DEVELOPMENT
+# ====================================================================================
+
+  tidy:
+    desc: Tidy modfiles and format .go files
+    cmds:
+      - go mod tidy -v
+      - go fmt ./...
+
+  debug:
+    cmds:
+      - go run github.com/go-delve/delve/cmd/dlv@v1.23.1 exec /tmp/bin/web
+    deps:
+      - build
+
+  # build:
+  #   desc: Build the cmd/web application
+  #   cmds:
+  #     - go build -o=/tmp/bin/web ./cmd/web
+  build:templ:
+    cmds:
+      - go run github.com/a-h/templ/cmd/templ@v0.2.793 generate -v
+
+  build:
+    cmds:
+      - go build -o=/tmp/bin/web ./cmd/web
+    deps:
+      - build:templ
+
+    parallel: true
+
+  run:
+    desc: Run the cmd/web application
+    deps: [build]
+    cmds:
+      - /tmp/bin/web --http-port=2304
+
+  live:templ:
+    cmds:
+      - go run github.com/a-h/templ/cmd/templ@v0.2.793 generate --watch --proxy="http://localhost:2304" --open-browser=false -v
+
+
+  live:server:
+    cmds:
+      - |
+        go run github.com/air-verse/air@v1.52.3 \
+        --build.cmd "go build -o=/tmp/bin/web ./cmd/web" \
+        --build.bin "/tmp/bin/web" \
+        --build.delay "100" \
+        --build.exclude_dir "node_modules,data,public" \
+        --build.include_ext "go" \
+        --build.stop_on_error "false" \
+        --misc.clean_on_exit true \
+        -- --http-port=2304 
+
+  live:reload:
+    cmds:
+      - |
+        go run github.com/air-verse/air@v1.52.3 \
+        --build.cmd "go run github.com/a-h/templ/cmd/templ@v0.2.793 generate --notify-proxy" \
+        --build.bin "true" \
+        --build.delay "100" \
+        --build.exclude_dir "" \
+        --build.include_dir "$STATIC_DIR" \
+        --build.include_ext "js,css"
+
+  live:
+    deps:
+      - live:templ
+      - live:reload
+      - live:server  
+          
+
+# ====================================================================================
+# SQL MIGRATIONS
+# ====================================================================================
+
+  migrations-new:
+    desc: Create a new database migration
+    cmds:
+      - go run -tags 'sqlite3' github.com/golang-migrate/migrate/v4/cmd/migrate@latest create -seq -ext=.sql -dir=./assets/migrations {{.CLI_ARGS}}
+
+  migrations-up:
+    desc: Apply all up database migrations
+    cmds:
+      - go run -tags 'sqlite3' github.com/golang-migrate/migrate/v4/cmd/migrate@latest -path=./assets/migrations -database="sqlite3://db.sqlite" up
+
+  migrations-down:
+    desc: Apply all down database migrations
+    cmds:
+      - go run -tags 'sqlite3' github.com/golang-migrate/migrate/v4/cmd/migrate@latest -path=./assets/migrations -database="sqlite3://db.sqlite" down
+
+  migrations-goto:
+    desc: Migrate to a specific version number
+    cmds:
+      - go run -tags 'sqlite3' github.com/golang-migrate/migrate/v4/cmd/migrate@latest -path=./assets/migrations -database="sqlite3://db.sqlite" goto {{.CLI_ARGS}}
+
+  migrations-force:
+    desc: Force database migration
+    cmds:
+      - go run -tags 'sqlite3' github.com/golang-migrate/migrate/v4/cmd/migrate@latest -path=./assets/migrations -database="sqlite3://db.sqlite" force {{.CLI_ARGS}}
+
+  migrations-version:
+    desc: Print the current in-use migration version
+    cmds:
+      - go run -tags 'sqlite3' github.com/golang-migrate/migrate/v4/cmd/migrate@latest -path=./assets/migrations -database="sqlite3://db.sqlite" version

@@ -1,0 +1,134 @@
+{{define "conversation_state"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recruiter Agent Dashboard</title>
+    <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@1.*/css/pico.min.css">
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <style>
+        .status-card {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            border-radius: 4px;
+        }
+        .status-high { background-color: #d4edda; }
+        .status-medium { background-color: #fff3cd; }
+        .status-low { background-color: #f8d7da; }
+        .progress-complete { color: green; }
+        .progress-incomplete { color: orange; }
+    </style>
+</head>
+<body>
+    <main class="container">
+        <div hx-sse="connect:/events">
+            <!-- Candidate Section -->
+            <article class="status-card status-{{.CandidateInfo.EngagementLevel}}"
+                     hx-sse="swap:message:candidate">
+                <header>
+                    <h3>{{.CandidateInfo.Name}}</h3>
+                    <p>{{.CandidateInfo.PhoneNumber}}</p>
+                </header>
+                <div class="grid">
+                    <div>
+                        <h4>Known Facts</h4>
+                        <ul>
+                            {{range .CandidateInfo.KnownFacts}}
+                            <li>{{.}}</li>
+                            {{end}}
+                        </ul>
+                    </div>
+                    <div>
+                        <h4>Inferred Preferences</h4>
+                        <ul>
+                            {{range .CandidateInfo.InferredPreferences}}
+                            <li>{{.}}</li>
+                            {{end}}
+                        </ul>
+                    </div>
+                    <div>
+                        <h4>Potential Concerns</h4>
+                        <ul>
+                            {{range .CandidateInfo.PotentialConcerns}}
+                            <li>{{.}}</li>
+                            {{end}}
+                        </ul>
+                    </div>
+                </div>
+            </article>
+
+            <!-- Call Context Section -->
+            <article class="status-card" hx-sse="swap:message:call">
+                <header>
+                    <h3>Call Status</h3>
+                    <p>ID: {{.CallContext.CallID}}</p>
+                    <p>Stage: {{.Stage}}</p>
+                </header>
+                
+                {{with .CallContext}}
+                <div class="grid">
+                    <div>
+                        <h4>Time Info</h4>
+                        <p>Date: {{.Today}}</p>
+                        {{if .StartTime}}
+                        <p>Start: {{.StartTime.Format "15:04:05"}}</p>
+                        {{end}}
+                        {{if .Duration}}
+                        <p>Duration: {{.Duration}}</p>
+                        {{end}}
+                    </div>
+                    
+                    <div>
+                        <h4>Completion Criteria</h4>
+                        <ul>
+                            {{with .CompletionCriteria}}
+                            <li class="{{if .BasicInfoCollected}}progress-complete{{else}}progress-incomplete{{end}}">
+                                Basic Info Collected
+                            </li>
+                            <li class="{{if .CareerGoalsDiscussed}}progress-complete{{else}}progress-incomplete{{end}}">
+                                Career Goals Discussed
+                            </li>
+                            <li class="{{if .SkillsAssessed}}progress-complete{{else}}progress-incomplete{{end}}">
+                                Skills Assessed
+                            </li>
+                            <li class="{{if .NextStepsPlanned}}progress-complete{{else}}progress-incomplete{{end}}">
+                                Next Steps Planned
+                            </li>
+                            {{end}}
+                        </ul>
+                    </div>
+                </div>
+                {{end}}
+            </article>
+
+            <!-- Goals Progress Section -->
+            <article class="status-card" hx-sse="swap:message:goals">
+                <h3>Goals Progress</h3>
+                <div class="grid">
+                    {{range .CallContext.GoalsProgress}}
+                    <div>
+                        <h4>{{.GoalName}}</h4>
+                        <p class="{{if .Status}}progress-complete{{else}}progress-incomplete{{end}}">
+                            Priority: {{.Priority}}
+                        </p>
+                        <ul>
+                            {{range .RelatedInfo}}
+                            <li>{{.}}</li>
+                            {{end}}
+                        </ul>
+                    </div>
+                    {{end}}
+                </div>
+            </article>
+        </div>
+    </main>
+
+    <script>
+        document.body.addEventListener('htmx:sseMessage', function(event) {
+            console.log('SSE Message received:', event.detail.data);
+        });
+    </script>
+</body>
+</html>
+{{end}}

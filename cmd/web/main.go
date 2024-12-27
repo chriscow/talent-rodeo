@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -9,12 +10,19 @@ import (
 	"runtime/debug"
 	"sync"
 
+	"talent-rodeo/internal/auth"
 	"talent-rodeo/internal/database"
 	"talent-rodeo/internal/smtp"
 	"talent-rodeo/internal/version"
 
+	"github.com/delaneyj/toolbelt"
+	"github.com/delaneyj/toolbelt/embeddednats"
 	"github.com/gorilla/sessions"
+	"github.com/joho/godotenv"
 	"github.com/lmittmann/tint"
+	"github.com/markbates/goth"
+	"github.com/markbates/goth/gothic"
+	natsserver "github.com/nats-io/nats-server/v2/server"
 )
 
 func main() {
@@ -57,27 +65,36 @@ type config struct {
 		password string
 		from     string
 	}
+	linkedin struct {
+		clientID     string
+		clientSecret string
+	}
 }
 
 type application struct {
 	config       config
-	db           *database.PG
+	db           *database.DB
 	logger       *slog.Logger
 	mailer       *smtp.Mailer
 	sessionStore *sessions.CookieStore
 	wg           sync.WaitGroup
+	ns           *embeddednats.Server
 }
 
 func run(logger *slog.Logger) error {
+	if err := checkEnv(); err != nil {
+		return err
+	}
+
 	var cfg config
 
-	flag.StringVar(&cfg.baseURL, "base-url", "http://localhost:4444", "base URL for the application")
+	flag.StringVar(&cfg.baseURL, "base-url", os.Getenv("BASE_URL"), "base URL for the application")
 	flag.IntVar(&cfg.httpPort, "http-port", 4444, "port to listen on for HTTP requests")
 	flag.StringVar(&cfg.autoHTTPS.domain, "auto-https-domain", "", "domain to enable automatic HTTPS for")
 	flag.StringVar(&cfg.autoHTTPS.email, "auto-https-email", "admin@example.com", "contact email address for problems with LetsEncrypt certificates")
 	flag.BoolVar(&cfg.autoHTTPS.staging, "auto-https-staging", false, "use LetsEncrypt staging environment")
-	flag.StringVar(&cfg.cookie.secretKey, "cookie-secret-key", "u5u34s7x34xtjcgfq4r7qpvn2pillnzc", "secret key for cookie authentication/encryption")
-	flag.StringVar(&cfg.db.dsn, "db-dsn", "user:pass@localhost:5432/db", "postgreSQL DSN")
+	flag.StringVar(&cfg.cookie.secretKey, "cookie-secret-key", os.Getenv("SESSION_SECRET"), "secret key for cookie authentication/encryption")
+	flag.StringVar(&cfg.db.dsn, "db-dsn", "db.sqlite", "sqlite3 DSN")
 	flag.BoolVar(&cfg.db.automigrate, "db-automigrate", true, "run migrations on startup")
 	flag.StringVar(&cfg.notifications.email, "notifications-email", "", "contact email address for error notifications")
 	flag.StringVar(&cfg.session.secretKey, "session-secret-key", "flopalna4chu7nxzxlbcv34d7k5rrljw", "secret key for session cookie authentication")
@@ -88,6 +105,13 @@ func run(logger *slog.Logger) error {
 	flag.StringVar(&cfg.smtp.password, "smtp-password", "pa55word", "smtp password")
 	flag.StringVar(&cfg.smtp.from, "smtp-from", "Example Name <no-reply@example.org>", "smtp sender")
 
+	flag.StringVar(&cfg.linkedin.clientID, "linkedin-client-id", os.Getenv("LINKEDIN_AUTH_CLIENT_ID"), "LinkedIn client ID")
+	flag.StringVar(&cfg.linkedin.clientSecret, "linkedin-client-secret", os.Getenv("LINKEDIN_AUTH_CLIENT_SECRET"), "LinkedIn client secret")
+
+	if cfg.linkedin.clientID == "" || cfg.linkedin.clientSecret == "" {
+		return fmt.Errorf("LINKEDIN_AUTH_CLIENT_ID and LINKEDIN_AUTH_CLIENT_SECRET environment variables are required")
+	}
+
 	showVersion := flag.Bool("version", false, "display version and exit")
 
 	flag.Parse()
@@ -97,7 +121,7 @@ func run(logger *slog.Logger) error {
 		return nil
 	}
 
-	db, err := database.NewPG(cfg.db.dsn, cfg.db.automigrate)
+	db, err := database.New(cfg.db.dsn, cfg.db.automigrate)
 	if err != nil {
 		return err
 	}
@@ -122,12 +146,26 @@ func run(logger *slog.Logger) error {
 		Secure:   true,
 	}
 
+	gothic.Store = sessionStore
+	goth.UseProviders(
+		auth.New(cfg.linkedin.clientID, cfg.linkedin.clientSecret, cfg.baseURL+"/auth/linkedin/callback"),
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ns, err := setupNATS(ctx)
+	if err != nil {
+		return fmt.Errorf("error setting up NATS: %w", err)
+	}
+
 	app := &application{
 		config:       cfg,
 		db:           db,
 		logger:       logger,
 		mailer:       mailer,
 		sessionStore: sessionStore,
+		ns:           ns,
 	}
 
 	if cfg.autoHTTPS.domain != "" {
@@ -135,4 +173,65 @@ func run(logger *slog.Logger) error {
 	}
 
 	return app.serveHTTP()
+}
+
+func setupNATS(ctx context.Context) (*embeddednats.Server, error) {
+	natsPort, err := toolbelt.FreePort()
+	if err != nil {
+		return nil, fmt.Errorf("error getting free port: %w", err)
+	}
+
+	ns, err := embeddednats.New(ctx, embeddednats.WithNATSServerOptions(&natsserver.Options{
+		JetStream: true,
+		Port:      natsPort,
+	}))
+
+	if err != nil {
+		return nil, fmt.Errorf("error creating embedded nats server: %w", err)
+	}
+
+	ns.WaitForServer()
+
+	return ns, nil
+}
+
+func checkEnv() error {
+	err := godotenv.Load()
+	if err != nil {
+		fmt.Printf("Error loading .env file: %s\n", err.Error())
+	}
+
+	baseURL := os.Getenv("BASE_URL")
+	if baseURL == "" {
+		return fmt.Errorf("BASE_URL environment variable is required")
+	}
+
+	sessionSecret := os.Getenv("SESSION_SECRET")
+	if sessionSecret == "" {
+		return fmt.Errorf("SESSION_SECRET environment variable is required")
+	}
+
+	smtpUser := os.Getenv("SMTP_USERNAME")
+	if smtpUser == "" {
+		return fmt.Errorf("SMTP_USERNAME environment variable is required")
+	}
+
+	smtpPwd := os.Getenv("SMTP_PASSWORD")
+	if smtpPwd == "" {
+		return fmt.Errorf("SMTP_PASSWORD environment variable is required")
+	}
+
+	if os.Getenv("LINKEDIN_AUTH_CLIENT_ID") == "" {
+		return fmt.Errorf("LINKEDIN_AUTH_CLIENT_ID environment variable is required")
+	}
+
+	if os.Getenv("LINKEDIN_AUTH_CLIENT_SECRET") == "" {
+		return fmt.Errorf("LINKEDIN_AUTH_CLIENT_SECRET environment variable is required")
+	}
+
+	if os.Getenv("OPENAI_API_KEY") == "" {
+		return fmt.Errorf("OPENAI_API_KEY environment variable is required")
+	}
+
+	return nil
 }

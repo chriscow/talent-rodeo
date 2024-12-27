@@ -7,6 +7,7 @@ import (
 
 	"talent-rodeo/internal/response"
 
+	"github.com/justinas/nosurf"
 	"github.com/tomasen/realip"
 )
 
@@ -51,5 +52,86 @@ func (app *application) logAccess(next http.Handler) http.Handler {
 		responseAttrs := slog.Group("repsonse", "status", mw.StatusCode, "size", mw.BytesCount)
 
 		app.logger.Info("access", userAttrs, requestAttrs, responseAttrs)
+	})
+}
+
+func (app *application) preventCSRF(next http.Handler) http.Handler {
+	csrfHandler := nosurf.New(next)
+
+	csrfHandler.SetBaseCookie(http.Cookie{
+		HttpOnly: true,
+		Path:     "/",
+		MaxAge:   86400,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   true,
+	})
+
+	return csrfHandler
+}
+
+func (app *application) authenticate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		session, err := app.sessionStore.Get(r, "session")
+		if err != nil {
+			app.serverError(w, r, err)
+			return
+		}
+
+		userID, ok := session.Values["userID"].(int)
+		if ok {
+			user, found, err := app.db.GetUser(userID)
+			if err != nil {
+				app.serverError(w, r, err)
+				return
+			}
+
+			if found {
+				r = contextSetAuthenticatedUser(r, user)
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (app *application) requireAuthenticatedUser(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authenticatedUser := contextGetAuthenticatedUser(r)
+
+		if authenticatedUser == nil {
+			session, err := app.sessionStore.Get(r, "session")
+			if err != nil {
+				app.serverError(w, r, err)
+				return
+			}
+
+			session.Values["redirectPathAfterLogin"] = r.URL.Path
+
+			err = session.Save(r, w)
+			if err != nil {
+				app.serverError(w, r, err)
+				return
+			}
+
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+
+		w.Header().Add("Cache-Control", "no-store")
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (app *application) requireAnonymousUser(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authenticatedUser := contextGetAuthenticatedUser(r)
+
+		if authenticatedUser != nil {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+
+		}
+
+		next.ServeHTTP(w, r)
 	})
 }
