@@ -15,8 +15,6 @@ import (
 	_ "github.com/lib/pq"
 )
 
-const defaultTimeout = 3 * time.Second
-
 type PG struct {
 	*sqlx.DB
 }
