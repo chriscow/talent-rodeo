@@ -1,13 +1,13 @@
 package pages
 
 import (
-    "talent-rodeo/cmd/web/layouts"
-    "talent-rodeo/cmd/web/partials"
+    "talent-rodeo/cmd/web/templates/layouts"
+    "talent-rodeo/cmd/web/templates/partials"
     "talent-rodeo/internal/database"
 )
 
-templ Index(user *database.User, csrf string) {
-    @layouts.Container("home", user) {
+templ Index(csrfToken string, user *database.User) {    
+    @layouts.Container("home", csrfToken, user) {
         if user != nil {
                 <h1>Welcome back, {user.FirstName}</h1>
                 <p>What would you like to do today?</p>

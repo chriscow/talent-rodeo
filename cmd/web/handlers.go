@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"talent-rodeo/cmd/web/pages"
+	"talent-rodeo/cmd/web/templates/pages"
 
 	"github.com/google/uuid"
 	"github.com/justinas/nosurf"
@@ -24,7 +24,7 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 		app.logger.Warn("home", "auth-state", "no user")
 	}
 
-	pages.Index(user, token).Render(r.Context(), w)
+	pages.Index(token, user).Render(r.Context(), w)
 	// data := app.newTemplateData(r)
 
 	// err := response.Page(w, http.StatusOK, data, "pages/home.tmpl")

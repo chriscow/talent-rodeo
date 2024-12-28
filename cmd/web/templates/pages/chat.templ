@@ -1,0 +1,100 @@
+package pages
+
+import (
+    "github.com/sashabaranov/go-openai"
+    "talent-rodeo/cmd/web/templates/layouts"
+    "talent-rodeo/internal/database"
+)
+
+templ ChatIndex(csrfToken string, user *database.User) {
+    @layouts.Container("chat", csrfToken, user) {
+    <style>
+        .chat-container {
+            max-height: 500px;
+            overflow-y: auto;
+            margin-bottom: 1rem;
+            padding: 1rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .message {
+            margin-bottom: 1rem;
+            padding: 0.5rem;
+            border-radius: 4px;
+        }
+        .user-message {
+            background-color: #e9ecef;
+        }
+        .bot-message {
+            background-color: #f8f9fa;
+        }
+        [x-cloak] { 
+            display: none !important; 
+        }
+    </style>
+    <main class="container" x-data="{ 
+        systemPrompt: '', 
+        message: '',
+        isLoading: false 
+    }">
+        <h1>GPT-4 Chat Interface</h1>
+        
+        <article>
+            <header>System Prompt</header>
+            <textarea 
+                x-model="systemPrompt"
+                rows="5" 
+                placeholder="Enter system prompt here..."
+            ></textarea>
+        </article>
+
+        <div 
+            id="chatContainer"
+            class="chat-container"
+            hx-get="/messages"
+            hx-trigger="load"
+            hx-swap="innerHTML"
+        ></div>
+
+        <form
+            hx-post="/chat"
+            hx-target="#chatContainer"
+            hx-swap="innerHTML"
+            @submit="isLoading = true"
+            @htmx:after-settle="isLoading = false; message = ''"
+        >
+            <div class="grid">
+                <input type="hidden" name="system_prompt" x-bind:value="systemPrompt"/>
+                <textarea 
+                    name="message"
+                    x-model="message"
+                    rows="3" 
+                    placeholder="Type your message here..." 
+                    required
+                ></textarea>
+                <button 
+                    type="submit" 
+                    x-bind:disabled="isLoading"
+                >
+                    <span x-show="!isLoading">Send</span>
+                    <span x-show="isLoading" x-cloak>Sending...</span>
+                </button>
+            </div>
+        </form>
+    </main>
+    }
+}
+
+templ MessagesList(messages []openai.ChatCompletionMessage) {
+	for _, msg := range messages {
+		if msg.Role == "user" {
+			<div class="message user-message">
+				{ msg.Content }
+			</div>
+		} else if msg.Role == "assistant" {
+			<div class="message bot-message">
+				{ msg.Content }
+			</div>
+		}
+	}
+}

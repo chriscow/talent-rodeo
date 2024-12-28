@@ -11,5 +11,6 @@ CREATE TABLE users (
     description TEXT,
     user_id TEXT,
     avatar_url TEXT,
-    location TEXT
+    location TEXT,
+    is_superuser BOOLEAN NOT NULL DEFAULT 0,
 );
