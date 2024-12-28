@@ -32,6 +32,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/nats-io/nats-server/v2 v2.10.24
 	github.com/nats-io/nats.go v1.37.0
+	github.com/sashabaranov/go-openai v1.36.1
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/spf13/cobra v1.8.1
 	github.com/starfederation/datastar v0.21.3

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"runtime/debug"
 
-	"talent-rodeo/internal/response"
+	"talent-rodeo/cmd/web/templates/errors"
 )
 
 func (app *application) reportServerError(r *http.Request, err error) {
@@ -36,33 +36,13 @@ func (app *application) reportServerError(r *http.Request, err error) {
 
 func (app *application) serverError(w http.ResponseWriter, r *http.Request, err error) {
 	app.reportServerError(r, err)
-
-	data := app.newTemplateData(r)
-
-	err = response.Page(w, http.StatusInternalServerError, data, "pages/errors/500.tmpl")
-	if err != nil {
-		app.reportServerError(r, err)
-
-		message := "The server encountered a problem and could not process your request"
-		http.Error(w, message, http.StatusInternalServerError)
-	}
+	errors.ServerError().Render(r.Context(), w)
 }
 
 func (app *application) notFound(w http.ResponseWriter, r *http.Request) {
-	data := app.newTemplateData(r)
-
-	err := response.Page(w, http.StatusNotFound, data, "pages/errors/404.tmpl")
-	if err != nil {
-		app.serverError(w, r, err)
-	}
+	errors.NotFound().Render(r.Context(), w)
 }
 
 func (app *application) badRequest(w http.ResponseWriter, r *http.Request, err error) {
-	data := app.newTemplateData(r)
-	data["ErrorMessage"] = err.Error()
-
-	err = response.Page(w, http.StatusBadRequest, data, "pages/errors/400.tmpl")
-	if err != nil {
-		app.serverError(w, r, err)
-	}
+	errors.BadRequest(err.Error()).Render(r.Context(), w)
 }

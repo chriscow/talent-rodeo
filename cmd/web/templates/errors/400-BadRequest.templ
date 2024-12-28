@@ -1,0 +1,12 @@
+package errors
+
+import (
+    "talent-rodeo/cmd/web/templates/layouts"
+)
+
+templ BadRequest(msg string) {
+    @layouts.Container("Bad Request", "", nil) {
+        <h1>Bad request</h1>
+        <p>{msg}</p>
+    }
+}

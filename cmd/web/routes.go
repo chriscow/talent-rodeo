@@ -4,13 +4,15 @@ import (
 	"net/http"
 
 	"talent-rodeo/assets"
+	"talent-rodeo/cmd/web/templates/errors"
 
+	"github.com/a-h/templ"
 	"github.com/alexedwards/flow"
 )
 
 func (app *application) routes() http.Handler {
 	mux := flow.New()
-	mux.NotFound = http.HandlerFunc(app.notFound)
+	mux.NotFound = templ.Handler(errors.NotFound())
 
 	mux.Use(app.logAccess)
 	mux.Use(app.recoverPanic)
@@ -30,12 +32,6 @@ func (app *application) routes() http.Handler {
 
 			mux.HandleFunc("/auth/:provider", app.socialAuth, "GET")
 			mux.HandleFunc("/auth/:provider/callback", app.socialCallback, "GET")
-			// mux.HandleFunc("/signup", app.signup, "GET", "POST")
-			// mux.HandleFunc("/login", app.login, "GET", "POST")
-			// mux.HandleFunc("/forgotten-password", app.forgottenPassword, "GET", "POST")
-			// mux.HandleFunc("/forgotten-password-confirmation", app.forgottenPasswordConfirmation, "GET")
-			// mux.HandleFunc("/password-reset/:plaintextToken", app.passwordReset, "GET", "POST")
-			// mux.HandleFunc("/password-reset-confirmation", app.passwordResetConfirmation, "GET")
 		})
 
 		mux.Group(func(mux *flow.Mux) {
@@ -44,12 +40,15 @@ func (app *application) routes() http.Handler {
 
 			// mux.HandleFunc("/logout", app.logout, "POST")
 		})
-	})
 
-	// mux.HandleFunc("/", app.home, "GET")
-	// mux.HandleFunc("/watch", app.watch, "GET")
-	// mux.HandleFunc("/monitor", app.monitor, "GET")
-	// mux.HandleFunc("/monitor/events", app.monitorEvents, "GET")
+		mux.Group(func(mux *flow.Mux) {
+			mux.Use(app.requireSuperUser)
+
+			mux.HandleFunc("/admin", app.admin, "GET")
+			mux.HandleFunc("/chat", app.handleChat, "GET", "POST")
+			mux.HandleFunc("/messages", app.handleMessages, "GET")
+		})
+	})
 
 	return mux
 }

@@ -14,6 +14,7 @@ type User struct {
 	Created      time.Time `db:"created"`
 	Email        string    `db:"email"`
 	HashedSecret string    `db:"hashed_secret"`
+	IsSuperUser  bool      `db:"is_superuser"`
 
 	Provider          string `db:"provider"`
 	Name              string `db:"name"`
@@ -92,6 +93,18 @@ func (db *DB) GetUser(id int) (*User, bool, error) {
 	}
 
 	return &user, true, err
+}
+
+func (db *DB) GetUsers() ([]User, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+
+	var users []User
+
+	query := `SELECT * FROM users`
+
+	err := db.SelectContext(ctx, &users, query)
+	return users, err
 }
 
 func (db *DB) GetUserByEmail(email string) (*User, bool, error) {

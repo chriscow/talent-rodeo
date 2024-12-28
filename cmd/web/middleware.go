@@ -11,6 +11,8 @@ import (
 	"github.com/tomasen/realip"
 )
 
+const CSRFTokenKey contextKey = "csrf_token"
+
 func (app *application) recoverPanic(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
@@ -89,6 +91,19 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 				r = contextSetAuthenticatedUser(r, user)
 			}
 		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (app *application) requireSuperUser(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authenticatedUser := contextGetAuthenticatedUser(r)
+
+		if authenticatedUser == nil || !authenticatedUser.IsSuperUser {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+
 		next.ServeHTTP(w, r)
 	})
 }

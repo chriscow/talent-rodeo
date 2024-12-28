@@ -1,0 +1,18 @@
+package pages
+
+import (
+    "talent-rodeo/cmd/web/templates/layouts"
+    "talent-rodeo/internal/database"
+)
+
+templ Admin(csrfToken string, user *database.User, users []database.User) {
+    @layouts.Container("admin", csrfToken, user) {
+        <h1>Welcome, {user.FirstName}</h1>
+        <p>Here are the users:</p>
+        <ul>
+        for _, u := range users {
+            <li>{u.Name}</li>
+        }
+        </ul>
+    }
+}
