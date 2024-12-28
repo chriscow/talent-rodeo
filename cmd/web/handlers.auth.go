@@ -77,6 +77,10 @@ func (app *application) socialCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) logout(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	q.Set("provider", "linkedin")
+	r.URL.RawQuery = q.Encode()
+
 	gothic.Logout(w, r)
 
 	session, err := app.sessionStore.Get(r, "session")
@@ -85,8 +89,7 @@ func (app *application) logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	delete(session.Values, "authenticated")
-	delete(session.Values, "socialUserID")
+	delete(session.Values, "userID")
 	delete(session.Values, "redirectPathAfterLogin")
 	session.Save(r, w)
 

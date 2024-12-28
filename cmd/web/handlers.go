@@ -21,7 +21,7 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 	if user != nil {
 		app.logger.Debug("home", "user name", user.Name)
 	} else {
-		app.logger.Warn("home", "no user")
+		app.logger.Warn("home", "auth-state", "no user")
 	}
 
 	pages.Index(user, token).Render(r.Context(), w)

@@ -40,7 +40,7 @@ func (app *application) routes() http.Handler {
 
 		mux.Group(func(mux *flow.Mux) {
 			mux.Use(app.requireAuthenticatedUser)
-			mux.HandleFunc("/auth/logout/:provider", app.socialCallback, "GET")
+			mux.HandleFunc("/logout", app.logout, "GET")
 
 			// mux.HandleFunc("/logout", app.logout, "POST")
 		})

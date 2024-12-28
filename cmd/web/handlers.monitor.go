@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"talent-rodeo/cmd/web/pages"
 	"time"
 
 	"github.com/shirou/gopsutil/cpu"
@@ -20,10 +19,6 @@ type SystemMonitorSignals struct {
 	CpuUser        string `json:"cpuUser,omitempty"`
 	CpuSystem      string `json:"cpuSystem,omitempty"`
 	CpuIdle        string `json:"cpuIdle,omitempty"`
-}
-
-func (app *application) monitor(w http.ResponseWriter, r *http.Request) {
-	pages.MonitorInitial().Render(r.Context(), w)
 }
 
 func (app *application) monitorEvents(w http.ResponseWriter, r *http.Request) {
