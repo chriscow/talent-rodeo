@@ -2,23 +2,21 @@ package pages
 
 import (
     "talent-rodeo/cmd/web/layouts"
+    "talent-rodeo/cmd/web/partials"
     "talent-rodeo/internal/database"
 )
 
 templ Index(user *database.User, csrf string) {
-    @layouts.Base("home") {
+    @layouts.Container("home", user) {
         if user != nil {
-            <div class="container">
                 <h1>Welcome back, {user.FirstName}</h1>
                 <p>What would you like to do today?</p>
                 <form action="/logout" method="post">
                     <input type="hidden" name="csrf" value="@csrf">
                     <button type="submit">Log Out</button>
                 </form>
-            </div>
-            return
         } else {
-            @Login()
+            @partials.Login()
         }
     }
 }

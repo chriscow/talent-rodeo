@@ -20,10 +20,11 @@ __pycache__
 **/*.sqlite3
 **/*.zip
 **/*.env
+**/*_templ.go
+**/*_templ.txt
 **/.venv
 **/.weaviate
 **/.wrangler
-**/*_templ.go
 **/node_modules
 **/tmp
 **/*.backup
