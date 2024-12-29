@@ -5,7 +5,7 @@ import (
 )
 
 templ BadRequest(msg string) {
-    @layouts.Container("Bad Request", "", nil) {
+    @layouts.Container("Bad Request", nil) {
         <h1>Bad request</h1>
         <p>{msg}</p>
     }

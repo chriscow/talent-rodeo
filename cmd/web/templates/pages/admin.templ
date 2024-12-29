@@ -6,7 +6,7 @@ import (
 )
 
 templ Admin(csrfToken string, user *database.User, users []database.User) {
-    @layouts.Container("admin", csrfToken, user) {
+    @layouts.Container("admin", user) {
         <h1>Welcome, {user.FirstName}</h1>
         <p>Here are the users:</p>
         <ul>

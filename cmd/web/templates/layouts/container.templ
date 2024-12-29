@@ -6,11 +6,7 @@ import (
     "talent-rodeo/internal/database"
 )
 
-
-
-templ Container(title, csrfToken string, user *database.User) {
-    <!DOCTYPE html>
-    <html lang="en">
+templ head(title string) {
     <head>
         <title>{ title }</title>
         <meta charset="utf-8">
@@ -31,7 +27,39 @@ templ Container(title, csrfToken string, user *database.User) {
     <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/notyf@3/notyf.min.js"></script>
     <script src="https://unpkg.com/feather-icons"></script>
-    <script src="/static/js/modal.js"></script>
+    <script src="/static/js/modal.js"></script>    
+}
+
+templ scripts() {
+    <script>
+
+        htmx.logger = function(elt, event, data) { if(console) console.log(event, elt, data)}
+
+        var notyf = new Notyf();
+        document.body.addEventListener('htmx:responseError', function(event) {
+            var errorMessage;
+            try {
+                errorMessage = JSON.parse(event.detail.xhr.responseText).error;
+            } catch (error) {
+                errorMessage = event.detail.error;
+            }
+            notyf.error(`${errorMessage}`);
+
+            console.log('-------------------')
+            console.log("event:", event)
+            console.log('-------------------')
+        })
+
+        feather.replace()  // feather icons
+    </script>
+
+    <script src="/static/js/minimal-theme-switcher.js"></script>    
+}
+
+templ ContainerWithCSRF(title, csrfToken string, user *database.User) {
+    <!DOCTYPE html>
+    <html lang="en">
+    @head(title)
 
     @templ.Raw(fmt.Sprintf("<body hx-headers='{\"X-CSRF-Token\": \"%s\"}' >", csrfToken))
     <main class="container">
@@ -41,29 +69,23 @@ templ Container(title, csrfToken string, user *database.User) {
     </main>
     @templ.Raw("</body>")
 
-<script>
+    @scripts()
+    </html>
+}
 
-    htmx.logger = function(elt, event, data) { if(console) console.log(event, elt, data)}
+templ Container(title string, user *database.User) {
+    <!DOCTYPE html>
+    <html lang="en">
+    @head(title)
 
-    var notyf = new Notyf();
-    document.body.addEventListener('htmx:responseError', function(event) {
-        var errorMessage;
-        try {
-            errorMessage = JSON.parse(event.detail.xhr.responseText).error;
-        } catch (error) {
-            errorMessage = event.detail.error;
-        }
-        notyf.error(`${errorMessage}`);
+    <body>
+    <main class="container">
+        @partials.Nav(user)
+        { children... }
+        @partials.Footer()
+    </main>
+    </body>
 
-        console.log('-------------------')
-        console.log("event:", event)
-        console.log('-------------------')
-    })
-
-    feather.replace()  // feather icons
-</script>
-
-    <script src="/static/js/minimal-theme-switcher.js"></script>
-
+    @scripts()
     </html>
 }

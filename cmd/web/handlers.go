@@ -9,13 +9,11 @@ import (
 	"talent-rodeo/cmd/web/templates/pages"
 
 	"github.com/google/uuid"
-	"github.com/justinas/nosurf"
 	"github.com/nats-io/nats.go/jetstream"
 	datastar "github.com/starfederation/datastar/sdk/go"
 )
 
 func (app *application) home(w http.ResponseWriter, r *http.Request) {
-	token := nosurf.Token(r)
 	user := contextGetAuthenticatedUser(r)
 
 	if user != nil {
@@ -24,13 +22,7 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 		app.logger.Warn("home", "auth-state", "no user")
 	}
 
-	pages.Index(token, user).Render(r.Context(), w)
-	// data := app.newTemplateData(r)
-
-	// err := response.Page(w, http.StatusOK, data, "pages/home.tmpl")
-	// if err != nil {
-	// 	app.serverError(w, r, err)
-	// }
+	pages.Index(user).Render(r.Context(), w)
 }
 
 func (app *application) watch(w http.ResponseWriter, r *http.Request) {
