@@ -7,7 +7,7 @@ import (
 )
 
 templ ChatIndex(csrfToken string, user *database.User) {
-    @layouts.Container("chat", csrfToken, user) {
+    @layouts.Container("chat", user) {
     <style>
         .chat-container {
             max-height: 500px;
@@ -63,6 +63,8 @@ templ ChatIndex(csrfToken string, user *database.User) {
             @submit="isLoading = true"
             @htmx:after-settle="isLoading = false; message = ''"
         >
+            <input type="hidden" name="csrf_token" value={ csrfToken }>
+
             <div class="grid">
                 <input type="hidden" name="system_prompt" x-bind:value="systemPrompt"/>
                 <textarea 

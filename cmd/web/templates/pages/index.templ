@@ -6,8 +6,8 @@ import (
     "talent-rodeo/internal/database"
 )
 
-templ Index(csrfToken string, user *database.User) {    
-    @layouts.Container("home", csrfToken, user) {
+templ Index(user *database.User) {    
+    @layouts.Container("home", user) {
         if user != nil {
                 <h1>Welcome back, {user.FirstName}</h1>
                 <p>What would you like to do today?</p>
