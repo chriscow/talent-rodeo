@@ -14,10 +14,12 @@ func (app *application) routes() http.Handler {
 	mux := flow.New()
 	mux.NotFound = templ.Handler(errors.NotFound())
 
+	mux.Use(app.debugHeaders)
 	mux.Use(app.recoverPanic)
 	mux.Use(app.securityHeaders)
 
 	mux.Group(func(mux *flow.Mux) {
+		mux.HandleFunc("/call/status/:session-id", app.callStatus, "GET")
 	})
 
 	mux.Use(app.logAccess)
@@ -33,7 +35,6 @@ func (app *application) routes() http.Handler {
 
 		mux.Group(func(mux *flow.Mux) {
 			mux.Use(app.requireAnonymousUser)
-
 			mux.HandleFunc("/auth/:provider", app.socialAuth, "GET")
 			mux.HandleFunc("/auth/:provider/callback", app.socialCallback, "GET")
 		})

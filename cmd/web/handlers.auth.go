@@ -56,6 +56,7 @@ func (app *application) socialCallback(w http.ResponseWriter, r *http.Request) {
 		app.serverError(w, r, err)
 		return
 	}
+
 	session.Values["userID"] = dbUser.ID
 
 	r = contextSetAuthenticatedUser(r, dbUser)
