@@ -1,4 +1,4 @@
-package main
+package recruiter
 
 import (
 	"text/template"
@@ -7,29 +7,70 @@ import (
 	"github.com/chriscow/minds"
 )
 
-// Enums as Go constants
-const (
-	ConversationStagePlanningContact = "planning_contact"
-	ConversationStageInitialContact  = "initial_contact"
-	ConversationStageDiscovery       = "discovery"
-	ConversationStageDeepDive        = "deep_dive"
-	ConversationStageFollowUp        = "follow_up"
-	ConversationStageClosing         = "closing"
+type ConversationStage int
+type EngagementLevel int
 
-	EngagementLevelHigh   = "high"
-	EngagementLevelMedium = "medium"
-	EngagementLevelLow    = "low"
+const (
+	ConversationStageUnknown ConversationStage = iota
+	ConversationStagePlanningContact
+	ConversationStageInitialContact
+	ConversationStageDiscovery
+	ConversationStageDeepDive
+	ConversationStageFollowUp
+	ConversationStageClosing
 )
+
+const (
+	EngagementLevelUnknown EngagementLevel = iota
+	EngagementLevelHigh
+	EngagementLevelMedium
+	EngagementLevelLow
+)
+
+func (cs ConversationStage) String() string {
+	switch cs {
+	case ConversationStagePlanningContact:
+		return "planning_contact"
+	case ConversationStageInitialContact:
+		return "initial_contact"
+	case ConversationStageDiscovery:
+		return "discovery"
+	case ConversationStageDeepDive:
+		return "deep_dive"
+	case ConversationStageFollowUp:
+		return "follow_up"
+	case ConversationStageClosing:
+		return "closing"
+	default:
+		return "unknown"
+	}
+}
+
+func (el EngagementLevel) String() string {
+	switch el {
+	case EngagementLevelHigh:
+		return "high"
+	case EngagementLevelMedium:
+		return "medium"
+	case EngagementLevelLow:
+		return "low"
+	default:
+		return "unknown"
+	}
+}
 
 // Structs for state management
 type CandidateInfo struct {
-	KnownFacts          []string       `json:"known_facts"`
-	InferredPreferences []string       `json:"inferred_preferences"`
-	PotentialConcerns   []string       `json:"potential_concerns"`
-	EngagementLevel     string         `json:"engagement_level"`
-	Resume              map[string]any `json:"resume"`
-	Name                string         `json:"name"`
-	PhoneNumber         string         `json:"phone_number"`
+	// KnownFacts are facts about the candidate that are known or discovered during the call
+	KnownFacts          []string        `json:"known_facts" description:"Facts about the candidate that are known or discovered during the call"`
+	InferredPreferences []string        `json:"inferred_preferences" description:"Career preferences inferred from the candidate's responses"`
+	PotentialConcerns   []string        `json:"potential_concerns" description:"Potential concerns about the candidate"`
+	EngagementLevel     EngagementLevel `json:"engagement_level" enum:"high,medium,low"  description:"The candidate's engagement level during the call"`
+	Resume              string          `json:"resume" description:"The candidate's resume in markdown format"`
+	Name                string          `json:"name" description:"The candidate's name"`
+	Email               string          `json:"email" description:"The candidate's email address"`
+	PhoneNumber         string          `json:"phone_number" description:"The candidate's phone number"`
+	Timezone            string          `json:"timezone" description:"The candidate's timezone"`
 }
 
 type GoalProgress struct {
@@ -39,41 +80,32 @@ type GoalProgress struct {
 	Priority    int      `json:"priority"`
 }
 
-type CallCompletionCriteria struct {
-	BasicInfoCollected   bool `json:"basic_info_collected"`
-	CareerGoalsDiscussed bool `json:"career_goals_discussed"`
-	SkillsAssessed       bool `json:"skills_assessed"`
-	NextStepsPlanned     bool `json:"next_steps_planned"`
-}
-
 type CallContext struct {
-	Today              string                 `json:"today"`
-	CallID             string                 `json:"call_id"`
-	StartTime          *time.Time             `json:"start_time"`
-	Duration           *time.Duration         `json:"duration"`
-	CompletionCriteria CallCompletionCriteria `json:"completion_criteria"`
-	GoalsProgress      []GoalProgress         `json:"goals_progress"`
+	Today         string         `json:"today"`
+	CallID        string         `json:"call_id"`
+	StartTime     *time.Time     `json:"start_time"`
+	Duration      *time.Duration `json:"duration"`
+	GoalsProgress []GoalProgress `json:"goals_progress"`
 }
 
 type ConversationState struct {
-	Stage         string        `json:"stage" yaml:"stage"`
-	CandidateInfo CandidateInfo `json:"candidate_info"`
-	CallContext   CallContext   `json:"call_context"`
+	Stage     ConversationStage `json:"stage" enum:"planning_contact,initial_contact,discovery,deep_dive,follow_up,closing" description:"The stage of the conversation"`
+	Candidate CandidateInfo     `json:"candidate"`
+	Context   CallContext       `json:"context"`
 }
 
 func (s *ConversationState) InitializeCall() {
-	s.CallContext.GoalsProgress = []GoalProgress{
+	s.Context.GoalsProgress = []GoalProgress{
 		{GoalName: "establish_rapport", Priority: 1},
 		{GoalName: "gather_background", Priority: 2},
 		{GoalName: "understand_motivations", Priority: 3},
 		{GoalName: "discuss_skills", Priority: 4},
 		{GoalName: "plan_next_steps", Priority: 5},
 	}
-	s.CallContext.CompletionCriteria = CallCompletionCriteria{}
 }
 
 func (s *ConversationState) ShouldEndCall() bool {
-	for _, goal := range s.CallContext.GoalsProgress {
+	for _, goal := range s.Context.GoalsProgress {
 		if !goal.Status {
 			return false
 		}
@@ -82,14 +114,12 @@ func (s *ConversationState) ShouldEndCall() bool {
 }
 
 func (s *ConversationState) GetNextGoal() *string {
-	var nextGoal *string
-	for _, goal := range s.CallContext.GoalsProgress {
+	for _, goal := range s.Context.GoalsProgress {
 		if !goal.Status {
-			nextGoal = &goal.GoalName
-			break
+			return &goal.GoalName
 		}
 	}
-	return nextGoal
+	return nil
 }
 
 // System template using text/template
@@ -113,10 +143,10 @@ func NewRecruiter() *Recruiter {
 	return &Recruiter{
 		state: ConversationState{
 			Stage: ConversationStageInitialContact,
-			CandidateInfo: CandidateInfo{
+			Candidate: CandidateInfo{
 				EngagementLevel: EngagementLevelMedium,
 			},
-			CallContext: CallContext{
+			Context: CallContext{
 				Today:  time.Now().Format(time.RFC3339),
 				CallID: "initial_call",
 			},
@@ -132,21 +162,3 @@ func (r *Recruiter) String() string {
 func (r *Recruiter) HandleThread(tc minds.ThreadContext, next minds.ThreadHandler) (minds.ThreadContext, error) {
 	return next.HandleThread(tc, nil)
 }
-
-// func (r *Recruiter) Respond(userInput string) string {
-// 	// Render the template with the state
-// 	var rendered string
-// 	templateData := map[string]any{
-// 		"Today": time.Now().Format(time.RFC3339),
-// 		"State": r.State,
-// 	}
-// 	err := r.SystemTemplate.Execute(&rendered, templateData)
-// 	if err != nil {
-// 		panic(err)
-// 	}
-
-// 	// Prepare the request for LLM (e.g., OpenAI)
-// 	// Simulated response as this example doesn't actually call the LLM
-// 	response := fmt.Sprintf("Responding to: %s with state: %s", userInput, rendered)
-// 	return response
-// }

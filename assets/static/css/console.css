@@ -1,0 +1,48 @@
+.scrollable {
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.event {
+    margin: 0.5rem 0;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    background-color: var(--background-color);
+}
+
+.event pre {
+    margin-top: 0.5rem;
+    padding: 0.5rem;
+    background-color: var(--background-alt);
+    overflow-x: auto;
+}
+
+.color-box {
+    height: 4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.25rem;
+    border: 1px solid var(--border-color);
+}
+
+.color-box span {
+    background: var(--background-color);
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    border: 1px solid var(--border-color);
+}
+
+[x-cloak] {
+    display: none !important;
+}
+
+.success {
+    color: green;
+    font-weight: bold;
+}
+
+.warning {
+    color: orange;
+    font-weight: bold;
+}

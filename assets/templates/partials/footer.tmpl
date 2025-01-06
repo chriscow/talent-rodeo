@@ -1,7 +1,19 @@
 {{define "partial:footer"}}
-<footer>
-    &copy; {{now | formatTime "2006"}}
-    <br>
-    Version: {{.Version}}
+<footer class="container">
+    <nav>
+        <ul>
+            <li>
+                <small>
+                    Copyright &copy; {{now | formatTime "2006"}} Scout, LLC</a>
+                </small>
+            </li>
+        </ul>
+        <ul>
+            <li><a href="https://www.scout.llc/about">About Us</a></li>
+            <li><a href="https://www.scout.llc//privacy#contact">Contact Us</a></li>
+            <li><a href="https://www.scout.llc//terms">Terms of Use</a></li>
+            <li><a href="https://www.scout.llc//privacy">Privacy Policy</a></li>
+        </ul>
+    </nav>
 </footer>
 {{end}}

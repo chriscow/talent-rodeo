@@ -1,0 +1,17 @@
+---
+---
+## Recovery Patterns
+<recovery-patterns>
+    <recovery type="Off-Topic Conversation">
+        OBSERVATION: Conversation drifting to [topic]
+        REDIRECT: "That's interesting! Speaking of [relevant aspect], how does that relate to your ideal next role?"
+    </recovery>
+    <recovery type="Negative Focus">
+        OBSERVATION: Multiple complaints about current situation
+        REDIRECT: "I understand those challenges. What would your ideal work environment look like?"
+    </recovery>
+    <recovery type="Low Engagement">
+        OBSERVATION: Short or vague responses
+        REDIRECT: "Let me approach this differently - what aspects of your current role do you enjoy the most?"
+    </recovery>
+</recovery-patterns>

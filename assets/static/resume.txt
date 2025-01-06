@@ -1,0 +1,131 @@
+---
+name: Chris Cowherd
+phone: 425-829-5443
+email: madcow@gmail.com
+github: https://github.com/chriscow
+linkedin: linkedin.com/in/chriscowherd
+---
+
+# Chris Cowherd
+
+## Software Engineering Leader
+
+**30 Years of Software Engineering Leadership**
+
+- Extensive experience in a technical leadership role
+- Engineering manager and hands-on contributor
+- Thought leader, inventor, and implementer of protocol standards and systems
+- Strategic, analytical, and highly personable, with a collaborative, inclusive leadership style
+- Adept at seeing the big picture, building strong teams, and driving positive outcomes
+
+**Core Values:** Transparent • Trustworthy • Inclusive • Accessible • Passionate
+
+### Core Competencies
+
+- Software Development
+- Risk Management
+- Privacy Compliance
+- IT Platform Development
+- Cloud Native Expertise
+- Team Building / Leadership
+- Information Security
+- AI & Data Analytics
+- Technology Diligence & Audits
+- Financial Integration
+- Acquisition & Transition
+- Strategic Planning
+- Tooling & Automation
+- Vendor Management
+
+## Professional Experience
+
+### Backend Software Engineer, Generative AI  
+**BlestX Ventures, LLC** - Redmond, WA | 2023 - Present  
+Private research integrating generative AI for manufacturing processes  
+**Stack:** OpenAI, Python, Go, Flask, Google Cloud, Docker  
+
+- Integrated OpenAI technology for advanced workflows
+- Hand-crafted PDF parsing and ingestion
+- Developed retrieval augmented generation (RAG) using Weaviate & Pinecone
+- Conducted prompt engineering and reranked results with cross-encoders
+- Expanded search surface area with synthesized data
+- Coordinated distributed LLM agents and optimized function calling
+
+---
+
+### Chief Technology Officer  
+**i2 Holdings dba Ambassador Software** - Seattle, WA | 2020 - 2022  
+Private equity funded SaaS company executing roll-up strategy in marketing technology AI & Analytics  
+**Stack:** Python, Go, PostgreSQL, Django, Google Cloud, AWS, Docker  
+
+- Protected and advanced all company technology assets
+- Led a team of 18 engineers across geographies
+- Owned product roadmaps, lifecycle design, and execution
+- Delivered reliable project execution through meticulous planning
+- Mentored team for professional growth and career development
+
+---
+
+### Principal Software Engineer  
+**Stahurricane LLC** - Bellevue, WA | 2018 - 2021  
+**Stack:** Go, Python, C#, CUDA, HLSL Compute Shaders, Unity, Google Cloud, AWS, Docker  
+
+- Developed systems for VR and complex mathematical research
+- Built cloud-native systems for ML inference at scale
+- Explored higher-dimension structures with GPUs and Unity applications
+
+---
+
+### Chief Technology Officer  
+**Donuts Inc.** - Bellevue, WA | 2012 - 2018  
+World’s largest top-level domain registry operator  
+**Stack:** Python, Go, C#, PostgreSQL, Django, Google Cloud, AWS, Docker  
+
+- Managed full lifecycle for Internet-critical systems
+- Successfully launched and operated over 200 TLDs
+- Scaled growth and maintained ICANN-mandated uptime
+- Grew the company 600x; #1 on Deloitte Fast 500
+
+---
+
+### Senior Engineering Manager, R&D  
+**Demand Media (RightSide / Leaf Group)** - Kirkland, WA | 2008 - 2012  
+**Stack:** C#, SQL Server, Redis  
+
+- Managed a team of 12 cross-discipline engineers
+- Designed the world's largest domain name registry
+
+---
+
+### Software Engineering Manager  
+**eNom, Inc** - Redmond, WA | 2000 - 2008  
+**Stack:** C++, C#, SQL Server  
+
+- Guided a team of 7 engineers as a manager and contributor
+- Designed scalable, fault-tolerant systems for DNS and other protocols
+
+---
+
+### Software Design Engineer  
+**Microsoft** - Redmond, WA | 1997 - 2000  
+
+- Contributed to early stages of Internet Explorer, Windows, and Office
+
+---
+
+### Programmer / Analyst  
+**Advanced Semiconductor** - Phoenix, AZ | 1994 - 1996  
+
+- Developed tools for semiconductor engineering processes
+
+## Patents
+
+- US11552923B2: Whitelist domain name registry
+- US20160173440A1: Communication using DNS repurposing
+- US20150100507A1: Domain Protected Marks List Service
+- US20080273077: Virtual Video Message Answering Machine Platform
+- US20080281676: Methods and Systems to Facilitate Keyword Bid Arbitrage
+
+## Education
+
+**Glendale College** - Mathematics / Computer Science | 1996

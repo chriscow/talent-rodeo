@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"os"
 
-	"talent-rodeo/cmd/web/templates/pages"
+	"talent-rodeo/cmd/web/components/pages"
 
 	"github.com/justinas/nosurf"
 	"github.com/sashabaranov/go-openai"
