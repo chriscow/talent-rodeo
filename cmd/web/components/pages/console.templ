@@ -1,0 +1,427 @@
+package pages
+
+templ scripts() {
+	<script>
+
+        htmx.logger = function(elt, event, data) { if(console) console.log(event, elt, data)}
+
+        var notyf = new Notyf();
+        document.body.addEventListener('htmx:responseError', function(event) {
+            var errorMessage;
+            try {
+                errorMessage = JSON.parse(event.detail.xhr.responseText).error;
+            } catch (error) {
+                errorMessage = event.detail.error;
+            }
+            notyf.error(`${errorMessage}`);
+
+            console.log('-------------------')
+            console.log("event:", event)
+            console.log('-------------------')
+        })
+
+        feather.replace()  // feather icons
+    </script>
+	<script src="/static/js/minimal-theme-switcher.js"></script>
+}
+
+// Base layout
+templ Layout(title string) {
+	<html>
+		<head>
+			<title>{ title }</title>
+			<link
+				rel="stylesheet"
+				href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.sand.min.css"
+			/>
+			<script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.js" integrity="sha384-oeUn82QNXPuVkGCkcrInrS1twIxKhkZiFfr2TdiuObZ3n3yIeMiqcRzkIcguaof1" crossorigin="anonymous"></script>
+			<script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js"></script>
+			<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+			<script src="https://cdn.jsdelivr.net/npm/notyf@3/notyf.min.js"></script>
+			<script src="https://unpkg.com/feather-icons"></script>
+		</head>
+		<body>
+			<nav class="container-fluid">
+				<ul>
+					<li><img src="/static/img/Cowboy_rider.jpg" alt="Logo" style="width: 48px;"/></li>
+					<li><h1>Recruiter Console</h1></li>
+				</ul>
+			</nav>
+			<main class="container">
+				{ children... }
+			</main>
+		</body>
+		@scripts()
+	</html>
+}
+
+// Session controls
+templ SessionControls() {
+	<script>
+    // Event management and handling
+    const createEventManager = () => ({
+        events: [],
+        
+        addEvent(event) {
+            // Add event ID if missing
+            if (!event.event_id) {
+                event.event_id = crypto.randomUUID();
+            }
+            
+            // Add timestamp
+            event.timestamp = new Date().toISOString();
+            
+            // Add to beginning of array
+            this.events.unshift(event);
+            
+            // Dispatch custom event for UI updates
+            document.dispatchEvent(new CustomEvent('event-added', {
+                detail: event
+            }));
+        },
+        
+        createTextMessage(text) {
+            return {
+                type: "conversation.item.create",
+                item: {
+                    type: "message",
+                    role: "user",
+                    content: [{
+                        type: "input_text",
+                        text: text
+                    }]
+                },
+                event_id: crypto.randomUUID()
+            };
+        },
+        
+        handleServerEvent(event) {
+            // Parse the event if it's a string
+            const eventData = typeof event === 'string' ? JSON.parse(event) : event;
+            this.addEvent({
+                ...eventData,
+                direction: 'received'
+            });
+        }
+    });
+    // OpenAI WebRTC client setup and management
+    const createOpenAIClient = () => ({
+        async startSession() {
+            try {
+                // Get ephemeral key from server
+                const tokenResponse = await fetch("/token");
+                const data = await tokenResponse.json();
+                const EPHEMERAL_KEY = data.client_secret.value;
+
+                // Set up WebRTC
+                const pc = new RTCPeerConnection();
+                
+                // Initialize audio
+                const audioElement = document.createElement("audio");
+                audioElement.autoplay = true;
+                
+                // Handle incoming audio stream
+                pc.ontrack = (e) => {
+                    audioElement.srcObject = e.streams[0];
+                };
+
+                // Set up microphone
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: true
+                });
+                pc.addTrack(stream.getTracks()[0]);
+
+                // Create data channel
+                const dc = pc.createDataChannel("oai-events");
+                
+                // Create and send offer
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                // Connect to OpenAI realtime API
+                const baseUrl = "https://api.openai.com/v1/realtime";
+                const model = "gpt-4o-realtime-preview-2024-12-17";
+                
+                const sdpResponse = await fetch(`${baseUrl}?model=${model}`, {
+                    method: "POST",
+                    body: offer.sdp,
+                    headers: {
+                        Authorization: `Bearer ${EPHEMERAL_KEY}`,
+                        "Content-Type": "application/sdp"
+                    }
+                });
+
+                const answer = {
+                    type: "answer",
+                    sdp: await sdpResponse.text()
+                };
+                await pc.setRemoteDescription(answer);
+
+                return {
+                    peerConnection: pc,
+                    dataChannel: dc,
+                    audioElement: audioElement
+                };
+            } catch (error) {
+                console.error("Failed to start OpenAI session:", error);
+                throw error;
+            }
+        }
+    });
+
+    // Define a reusable session manager
+    const createSessionManager = () => ({
+        message: '',
+        isSessionActive: false,
+        peerConnection: null,
+        dataChannel: null,
+        audioElement: null,
+
+        async startSession() {
+            // Create a new RTCPeerConnection with a STUN server configuration
+            this.peerConnection = new RTCPeerConnection({
+                iceServers: [
+                    {
+                        urls: 'stun:stun.l.google.com:19302' // Google's public STUN server
+                    }
+                ]
+            });
+        
+            // Setup audio element to play incoming audio
+            this.audioElement = document.createElement('audio');
+            this.audioElement.autoplay = true;
+        
+            // When a remote track is received, set it as the source for the audio element
+            this.peerConnection.ontrack = (e) => {
+                this.audioElement.srcObject = e.streams[0];
+            };
+        
+            // Get local audio stream from the user's microphone
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: true
+            });
+        
+            // Add each track from the local audio stream to the peer connection
+            stream.getTracks().forEach(track => {
+                this.peerConnection.addTrack(track, stream);
+            });
+        
+            // Create a data channel for sending and receiving custom events
+            this.dataChannel = this.peerConnection.createDataChannel('oai-events');
+        
+            // When a message is received on the data channel, dispatch a custom event
+            this.dataChannel.onmessage = (e) => {
+                const event = JSON.parse(e.data);
+                this.$dispatch('event-received', event);
+            };
+        
+            // Create an SDP offer for the peer connection
+            const offer = await this.peerConnection.createOffer();
+        
+            // Set the local description for the peer connection to the created offer
+            await this.peerConnection.setLocalDescription(offer);
+        
+            // Send the offer to the server to start a new session
+            const response = await fetch('/api/session/start', {
+                method: 'POST',
+                body: JSON.stringify(offer),
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+        
+            // Get the SDP answer from the server
+            const answer = await response.json();
+        
+            // Set the remote description for the peer connection to the received answer
+            await this.peerConnection.setRemoteDescription(answer);
+        
+            // Mark the session as active
+            this.isSessionActive = true;
+        }
+
+        stopSession() {
+            if (this.dataChannel) {
+                this.dataChannel.close();
+            }
+            if (this.peerConnection) {
+                this.peerConnection.close();
+            }
+            if (this.audioElement) {
+                this.audioElement.srcObject = null;
+            }
+            this.isSessionActive = false;
+        },
+
+        sendMessage() {
+            if (!this.message.trim() || !this.dataChannel) return;
+            
+            const event = {
+                type: 'conversation.item.create',
+                item: {
+                    type: 'message',
+                    role: 'user',
+                    content: [{
+                        type: 'input_text',
+                        text: this.message
+                    }]
+                }
+            };
+
+            this.dataChannel.send(JSON.stringify(event));
+            this.message = '';
+        }
+    });
+    </script>
+	<div
+		x-data="{
+            ...createSessionManager(),
+            ...createEventManager(),
+            ...createOpenAIClient(),
+            async initializeSession() {
+                try {
+                    const {peerConnection, dataChannel, audioElement} = await this.startSession();
+                    this.peerConnection = peerConnection;
+                    this.dataChannel = dataChannel;
+                    this.audioElement = audioElement;
+                    
+                    // Set up event handlers
+                    this.dataChannel.onmessage = (e) => {
+                        this.handleServerEvent(e.data);
+                    };
+                    
+                    this.dataChannel.onopen = () => {
+                        this.isSessionActive = true;
+                        notyf.success('Session connected');
+                    };
+                    
+                    this.dataChannel.onclose = () => {
+                        this.isSessionActive = false;
+                        notyf.error('Session disconnected');
+                    };
+                    
+                } catch (error) {
+                    notyf.error('Failed to start session: ' + error.message);
+                }
+            },
+            
+            sendMessage() {
+                if (!this.message.trim() || !this.dataChannel) return;
+                
+                const event = this.createTextMessage(this.message);
+                this.dataChannel.send(JSON.stringify(event));
+                this.addEvent({...event, direction: 'sent'});
+                
+                // Send response.create event
+                const responseEvent = {
+                    type: 'response.create',
+                    event_id: crypto.randomUUID()
+                };
+                this.dataChannel.send(JSON.stringify(responseEvent));
+                this.addEvent({...responseEvent, direction: 'sent'});
+                
+                this.message = '';
+            }
+        }"
+		class="grid"
+	>
+		<div id="session-status" x-show="isSessionActive" class="success">Connected</div>
+		<div id="session-status" x-show="!isSessionActive" class="warning">Disconnected</div>
+		<template x-if="!isSessionActive">
+			<button class="contrast" @click="initializeSession()">
+				Start Session
+			</button>
+		</template>
+		<template x-if="isSessionActive">
+			<div class="grid">
+				<input
+					type="text"
+					x-model="message"
+					placeholder="Send a message..."
+					@keyup.enter="sendMessage()"
+				/>
+				<div class="grid">
+					<button
+						@click="sendMessage()"
+						:disabled="!message.trim()"
+					>
+						Send Message
+					</button>
+					<button
+						class="secondary"
+						@click="stopSession()"
+					>
+						Disconnect
+					</button>
+				</div>
+			</div>
+		</template>
+	</div>
+}
+
+// Event log
+templ EventLog() {
+	<div class="event-log" x-data="{events: []}" @event-added.window="events.unshift($event.detail)">
+		<template x-for="event in events" :key="event.event_id">
+			<div class="event">
+				<div class="event-header">
+					<span x-text="event.direction + ': ' + event.type"></span>
+					<span x-text="new Date(event.timestamp).toLocaleTimeString()"></span>
+				</div>
+				<pre x-text="JSON.stringify(event, null, 2)"></pre>
+			</div>
+		</template>
+	</div>
+}
+
+// Single event display
+templ Event(eventType string, direction string, timestamp string, content string) {
+	<div class="event" x-data="{ expanded: false }">
+		<div class="grid" @click="expanded = !expanded">
+			<span>{ direction }: { eventType } | { timestamp }</span>
+			<button aria-label="Expand" x-text="expanded ? '▼' : '▲'"></button>
+		</div>
+		<pre x-show="expanded" x-cloak>{ content }</pre>
+	</div>
+}
+
+// Tools panel
+templ ToolPanel() {
+	<div id="tool-panel" class="container" x-data="{ functionCallOutput: null }">
+		<article>
+			<header>Color Palette Tool</header>
+			<div x-show="!functionCallOutput">
+				<p>Ask for advice on a color palette...</p>
+			</div>
+			<div x-show="functionCallOutput" x-cloak>
+				<template x-if="functionCallOutput">
+					<div>
+						<p x-text="'Theme: ' + functionCallOutput.theme"></p>
+						<div class="grid">
+							<template x-for="color in functionCallOutput.colors">
+								<div class="color-box" :style="'background-color: ' + color">
+									<span x-text="color"></span>
+								</div>
+							</template>
+						</div>
+					</div>
+				</template>
+			</div>
+		</article>
+	</div>
+}
+
+// Main app component
+templ App() {
+	@Layout("Recruiter Console") {
+		<div class="grid">
+			<div class="col-9">
+				@EventLog()
+				@SessionControls()
+			</div>
+			<div class="col-3">
+				@ToolPanel()
+			</div>
+		</div>
+	}
+}

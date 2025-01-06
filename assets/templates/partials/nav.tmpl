@@ -1,6 +1,32 @@
 {{define "partial:nav"}}
-<nav>
-    <a href="#">Example link</a>
-    <a href="#">Example link</a>
+<nav class="container-fluid">
+    <ul>
+        <h2><a style="text-decoration: none;" href="/">Talent Rodeo</a></h2>
+    </ul>
+    {{if .User}}
+    <ul>
+        <!-- <li><a href="#">Auth Link 1</a></li>
+        <li><a href="#">Auth Link 2</a></li> -->
+    </ul>
+    {{end}}
+    <ul>
+        <!-- <li>
+            <details class="dropdown" role="list">
+                <summary role="button" class="secondary">Theme</summary>
+                <ul>
+                    <li><a href="#" data-theme-switcher="auto">Auto</a></li>
+                    <li><a href="#" data-theme-switcher="light">Light</a></li>
+                    <li><a href="#" data-theme-switcher="dark">Dark</a></li>
+                </ul>
+            </details>
+        </li> -->
+        {{if .User}}
+        <li><a href="#" hx-post="/logout" hx-push-url="true" hx-target="body">Logout</a></li>
+        <li><a href="/profile"><img src="{{.User.AvatarURL}}" alt="avatar"
+                    style="border-radius: 50%; height:50px;" /></a></li>
+        {{else}}
+        <li><a href="/">Home</a></li>
+        {{end}}
+    </ul>
 </nav>
 {{end}}

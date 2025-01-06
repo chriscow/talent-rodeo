@@ -1,0 +1,67 @@
+package partials
+
+import "fmt"
+
+templ ResumeUploadForm(csrfToken, sessionID string) {
+	<form
+		hx-post="/upload"
+		hx-encoding="multipart/form-data"
+		hx-target="#result"
+		hx-indicator="#loading-spinner"
+		class="container"
+	>
+		<input type="hidden" name="csrf_token" value={ csrfToken }/>
+		<input type="hidden" id="session_id" name="session_id" value/>
+		<div class="grid">
+			<label for="phone">
+				Phone Number
+				<input
+					type="tel"
+					id="phone"
+					name="phone"
+					placeholder="+1 (555) 555-5555"
+					pattern="^\+?1?\d{10,}$"
+					required
+				/>
+			</label>
+			<label for="resume">
+				Resume (PDF or DOCX)
+				<input
+					type="file"
+					id="resume"
+					name="resume"
+					accept=".pdf,.docx"
+					required
+				/>
+			</label>
+		</div>
+		<button type="submit">Upload Resume</button>
+	</form>
+	<img id="loading-spinner" class="htmx-indicator" src="/static/img/puff.svg"/>
+	<div id="result"></div>
+	{{ url := fmt.Sprintf("/resume/status?session_id=%s", sessionID) }}
+	<div id="status" hx-ext="sse" sse-connect={ url } sse-swap={ sessionID }>
+		Waiting for status updates...
+	</div>
+	<script>
+    {{ url := fmt.Sprintf("/resume/status?session_id=%s", sessionID) }}
+    const es = new EventSource({ url });
+    es.onmessage = (event) => {
+        console.log(`Received: ${event.data}`);
+    };
+    </script>
+}
+
+templ ResumeAnalysis(yaml string) {
+	<article>
+		<h3>Resume Analysis</h3>
+		<pre><code>{ yaml }</code></pre>
+	</article>
+}
+
+templ UploadError(msg string) {
+	<article class="error">
+		<header>Error</header>
+		<p>{ msg }</p>
+	</article>
+}

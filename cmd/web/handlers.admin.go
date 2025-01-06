@@ -2,7 +2,7 @@ package main
 
 import (
 	"net/http"
-	"talent-rodeo/cmd/web/templates/pages"
+	"talent-rodeo/cmd/web/components/pages"
 
 	"github.com/justinas/nosurf"
 )
