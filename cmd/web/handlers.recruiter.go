@@ -1,6 +1,5 @@
 package main
 
-/*
 import (
 	"context"
 	"fmt"
@@ -20,62 +19,10 @@ import (
 	"github.com/tmaxmax/go-sse"
 )
 
-
 func isValidFileType(filename string) bool {
 	ext := strings.ToLower(filepath.Ext(filename))
 	return ext == ".docx"
 }
-
-// !!
-// !! this was to save the file to a temp file first
-// !!
-// func handleFileUpload(w http.ResponseWriter, r *http.Request) {
-// 	// Maximum file size - adjust as needed
-// 	r.ParseMultipartForm(10 << 20) // 10 MB
-
-// 	file, handler, err := r.FormFile("resume")
-// 	if err != nil {
-// 		http.Error(w, "Error retrieving the file: "+err.Error(), http.StatusBadRequest)
-// 		return
-// 	}
-// 	defer file.Close()
-
-// 	if !isValidFileType(handler.Filename) {
-// 		http.Error(w, "Invalid file type. Only .docx files are allowed", http.StatusBadRequest)
-// 		return
-// 	}
-
-// 	// Create a temp file
-// 	tempDir := os.TempDir()
-// 	tempFile, err := os.CreateTemp(tempDir, "resume-*.docx")
-// 	if err != nil {
-// 		http.Error(w, "Error creating temporary file: "+err.Error(), http.StatusInternalServerError)
-// 		return
-// 	}
-// 	defer os.Remove(tempFile.Name()) // Clean up temp file after we're done
-
-// 	// Copy the uploaded file to the temp file
-// 	_, err = io.Copy(tempFile, file)
-// 	if err != nil {
-// 		http.Error(w, "Error copying file: "+err.Error(), http.StatusInternalServerError)
-// 		return
-// 	}
-// 	tempFile.Close()
-
-// 	// Extract text from the temp file
-// 	text, err := extractTextFromDOCX(tempFile.Name())
-// 	if err != nil {
-// 		http.Error(w, "Error extracting text: "+err.Error(), http.StatusInternalServerError)
-// 		return
-// 	}
-
-// 	// Return the extracted text
-// 	w.Header().Set("Content-Type", "application/json")
-// 	json.NewEncoder(w).Encode(map[string]string{
-// 		"filename": handler.Filename,
-// 		"text":     text,
-// 	})
-// }
 
 func (app *application) resume(w http.ResponseWriter, r *http.Request) {
 	data := app.newTemplateData(r)
@@ -147,21 +94,11 @@ func (app *application) uploadResume(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.backgroundTask(r, func() error {
-		kv, err := app.getKV()
-		if err != nil {
-			return fmt.Errorf("uploadResume: failed to get KV: %w", err)
-		}
-
 		ctx := context.Background()
 		yaml, err := app.analyzeResume(ctx, textContent, "")
 		if err != nil {
 			app.logger.Error("uploadResume: failed to analyze resume", "error", err)
 			return fmt.Errorf("uploadResume: failed to analyze resume: %w", err)
-		}
-
-		if _, err := kv.PutString(ctx, "resume", yaml); err != nil {
-			app.logger.Error("uploadResume: failed to put string", "error", err)
-			return fmt.Errorf("uploadResume: failed to put string: %w", err)
 		}
 
 		var sessionID string
@@ -181,6 +118,7 @@ func (app *application) uploadResume(w http.ResponseWriter, r *http.Request) {
 
 		msg := &sse.Message{}
 		msg.AppendData("Hello, " + sessionID)
+		msg.AppendData(yaml)
 		app.sse.Publish(msg, sessionID) // Pass sessionID as the topic
 
 		app.logger.Info("uploadResume: resume analysis complete")
@@ -195,6 +133,13 @@ func (app *application) uploadResume(w http.ResponseWriter, r *http.Request) {
 	if err := response.Page(w, http.StatusOK, data, "pages/call-status.tmpl"); err != nil {
 		app.serverError(w, r, err)
 	}
+}
+
+func (app *application) sendStatus(sessionID, status, message string) {
+	msg := &sse.Message{}
+	msg.AppendData(status)
+	msg.AppendData(message)
+	app.sse.Publish(msg, sessionID)
 }
 
 func (app *application) analyzeResume(ctx context.Context, text string, sessionID string) (string, error) {
@@ -270,14 +215,6 @@ func extractPDF(file *os.File) (string, error) {
 	return "", fmt.Errorf("PDF extraction not implemented")
 }
 
-func (app *application) sendStatus(sessionID string, msgType string, message string) {
-	m := &sse.Message{}
-	m.AppendData(message)
-
-	app.sse.Publish(m, sessionID)
-}
-
-
 func (app *application) watch(w http.ResponseWriter, r *http.Request) {
 	sessionID := flow.Param(r.Context(), "session-id")
 	app.logger.Debug("watch", "sessionID", sessionID)
@@ -302,4 +239,3 @@ func (app *application) watch(w http.ResponseWriter, r *http.Request) {
 
 	app.sse.ServeHTTP(w, r)
 }
-*/

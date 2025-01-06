@@ -93,6 +93,5 @@ func (app *application) logout(w http.ResponseWriter, r *http.Request) {
 	delete(session.Values, "redirectPathAfterLogin")
 	session.Save(r, w)
 
-	w.Header().Set("Location", "/")
-	w.WriteHeader(http.StatusTemporaryRedirect)
+	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 }

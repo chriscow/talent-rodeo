@@ -6,78 +6,20 @@ import (
 	"net/http"
 	"time"
 
-	"talent-rodeo/cmd/web/templates/pages"
+	"talent-rodeo/internal/response"
 
-	"github.com/google/uuid"
 	"github.com/nats-io/nats.go/jetstream"
-	datastar "github.com/starfederation/datastar/sdk/go"
 )
 
 func (app *application) home(w http.ResponseWriter, r *http.Request) {
-	user := contextGetAuthenticatedUser(r)
-
-	if user != nil {
-		app.logger.Debug("home", "user name", user.Name)
-	} else {
-		app.logger.Warn("home", "auth-state", "no user")
-	}
-
-	pages.Index(user).Render(r.Context(), w)
-}
-
-func (app *application) watch(w http.ResponseWriter, r *http.Request) {
-	sse := datastar.NewSSE(w, r)
-
-	// Watch for updates
-	ctx := r.Context()
-	kv, err := app.getKV()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	session, err := app.sessionStore.Get(r, "session")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if session.ID == "" {
-		session.ID = uuid.New().String()
-		err = session.Save(r, w)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	}
-
-	watcher, err := kv.Watch(ctx, session.ID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer watcher.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case entry := <-watcher.Updates():
-			if entry == nil {
-				continue
-			}
-			// if err := json.Unmarshal(entry.Value(), mvc); err != nil {
-			// 	http.Error(w, err.Error(), http.StatusInternalServerError)
-			// 	return
-			// }
-			// sse.Send(msg.Value)
-			sse.MergeFragmentf(`<div id="kv-container">%s</div>`, entry.Value())
-		}
+	data := app.newTemplateData(r)
+	if err := response.Page(w, http.StatusOK, data, "pages/index.tmpl"); err != nil {
+		app.serverError(w, r, err)
 	}
 }
 
 func (app *application) getKV() (jetstream.KeyValue, error) {
-	nc, err := app.ns.Client()
+	nc, err := app.nats.Client()
 	if err != nil {
 		return nil, fmt.Errorf("error creating nats client: %w", err)
 	}
