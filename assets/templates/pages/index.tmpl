@@ -23,7 +23,7 @@
     <div id="result"></div>
     <h1>Session: {{ .SessionID }}</h1>
     <h3>User: {{ .User }}</h3>
-    <!-- <script>
+    <script>
         console.log("starting to watch for status updates on session {{ .SessionID }}");
         const es = new EventSource("/call/status/{{ .SessionID }}");
 
@@ -39,7 +39,7 @@
             console.error("SSE Error:", err);
             es.close();
         };
-    </script> -->
+    </script>
 </main>
 {{ else }}
 {{template "partial:login" .}}

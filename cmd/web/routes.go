@@ -14,9 +14,13 @@ func (app *application) routes() http.Handler {
 	mux := flow.New()
 	mux.NotFound = templ.Handler(errors.NotFound())
 
-	mux.Use(app.logAccess)
 	mux.Use(app.recoverPanic)
 	mux.Use(app.securityHeaders)
+
+	mux.Group(func(mux *flow.Mux) {
+	})
+
+	mux.Use(app.logAccess)
 
 	fileServer := http.FileServer(http.FS(assets.EmbeddedFiles))
 	mux.Handle("/static/...", fileServer, "GET")
@@ -25,7 +29,7 @@ func (app *application) routes() http.Handler {
 		mux.Use(app.preventCSRF)
 		mux.Use(app.authenticate)
 
-		mux.HandleFunc("/", app.home, "GET")
+		mux.HandleFunc("/", app.home, "GET", "POST") // we need post because of the logout form
 
 		mux.Group(func(mux *flow.Mux) {
 			mux.Use(app.requireAnonymousUser)
@@ -36,9 +40,7 @@ func (app *application) routes() http.Handler {
 
 		mux.Group(func(mux *flow.Mux) {
 			mux.Use(app.requireAuthenticatedUser)
-			mux.HandleFunc("/logout", app.logout, "GET")
-
-			// mux.HandleFunc("/logout", app.logout, "POST")
+			mux.HandleFunc("/logout", app.logout, "POST")
 		})
 
 		mux.Group(func(mux *flow.Mux) {

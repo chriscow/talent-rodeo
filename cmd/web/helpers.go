@@ -5,11 +5,26 @@ import (
 	"net/http"
 
 	"talent-rodeo/internal/version"
+
+	"github.com/justinas/nosurf"
 )
 
 func (app *application) newTemplateData(r *http.Request) map[string]any {
+	user := contextGetAuthenticatedUser(r)
+
+	var sessionID string
+	session, err := app.sessionStore.Get(r, "session")
+	if err == nil {
+		sessionID, _ = session.Values["sessionID"].(string)
+	}
+
+	token := nosurf.Token(r)
+
 	data := map[string]any{
-		"Version": version.Get(),
+		"Version":   version.Get(),
+		"User":      user,
+		"SessionID": sessionID,
+		"CSRFToken": token,
 	}
 
 	return data

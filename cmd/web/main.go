@@ -23,6 +23,7 @@ import (
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
 	natsserver "github.com/nats-io/nats-server/v2/server"
+	"github.com/tmaxmax/go-sse"
 )
 
 func main() {
@@ -78,7 +79,8 @@ type application struct {
 	mailer       *smtp.Mailer
 	sessionStore *sessions.CookieStore
 	wg           sync.WaitGroup
-	ns           *embeddednats.Server
+	nats         *embeddednats.Server
+	sse          *sse.Server
 }
 
 func run(logger *slog.Logger) error {
@@ -89,7 +91,7 @@ func run(logger *slog.Logger) error {
 	var cfg config
 
 	flag.StringVar(&cfg.baseURL, "base-url", os.Getenv("BASE_URL"), "base URL for the application")
-	flag.IntVar(&cfg.httpPort, "http-port", 4444, "port to listen on for HTTP requests")
+	flag.IntVar(&cfg.httpPort, "http-port", 2304, "port to listen on for HTTP requests")
 	flag.StringVar(&cfg.autoHTTPS.domain, "auto-https-domain", "", "domain to enable automatic HTTPS for")
 	flag.StringVar(&cfg.autoHTTPS.email, "auto-https-email", "admin@example.com", "contact email address for problems with LetsEncrypt certificates")
 	flag.BoolVar(&cfg.autoHTTPS.staging, "auto-https-staging", false, "use LetsEncrypt staging environment")
@@ -165,7 +167,8 @@ func run(logger *slog.Logger) error {
 		logger:       logger,
 		mailer:       mailer,
 		sessionStore: sessionStore,
-		ns:           ns,
+		nats:         ns,
+		sse:          &sse.Server{},
 	}
 
 	if cfg.autoHTTPS.domain != "" {
