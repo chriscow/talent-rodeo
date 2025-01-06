@@ -215,9 +215,9 @@ func extractPDF(file *os.File) (string, error) {
 	return "", fmt.Errorf("PDF extraction not implemented")
 }
 
-func (app *application) watch(w http.ResponseWriter, r *http.Request) {
+func (app *application) callStatus(w http.ResponseWriter, r *http.Request) {
 	sessionID := flow.Param(r.Context(), "session-id")
-	app.logger.Debug("watch", "sessionID", sessionID)
+	app.logger.Debug("callStatus-----------------------", "sessionID", sessionID)
 
 	// Start session-specific publisher
 	go func() {

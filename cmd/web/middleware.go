@@ -7,6 +7,7 @@ import (
 
 	"talent-rodeo/internal/response"
 
+	"github.com/google/uuid"
 	"github.com/justinas/nosurf"
 	"github.com/tomasen/realip"
 )
@@ -79,6 +80,16 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 			return
 		}
 
+		sessionID, ok := session.Values["sessionID"].(string)
+		if !ok || sessionID == "" {
+			sessionID = uuid.New().String()
+			session.Values["sessionID"] = sessionID
+			if err := session.Save(r, w); err != nil {
+				app.serverError(w, r, err)
+				return
+			}
+		}
+
 		userID, ok := session.Values["userID"].(int)
 		if ok {
 			user, found, err := app.db.GetUser(userID)
@@ -87,10 +98,12 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 				return
 			}
 
+			app.logger.Debug("authenticated user", "found", found)
 			if found {
 				r = contextSetAuthenticatedUser(r, user)
 			}
 		}
+
 		next.ServeHTTP(w, r)
 	})
 }
@@ -149,4 +162,62 @@ func (app *application) requireAnonymousUser(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (app *application) debugHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mw := response.NewMetricsResponseWriter(w)
+
+		// Log pre-handler state
+		app.logger.Debug("pre-handler",
+			"path", r.URL.Path,
+			"method", r.Method,
+			"headers", fmt.Sprintf("%+v", mw.Header()))
+
+		// Wrap the metrics writer to catch header operations
+		hw := &headerDebugWriter{
+			MetricsResponseWriter: mw,
+			logger:                app.logger,
+			path:                  r.URL.Path,
+		}
+
+		next.ServeHTTP(hw, r)
+
+		// Log post-handler state
+		app.logger.Debug("post-handler",
+			"path", r.URL.Path,
+			"method", r.Method,
+			"status", mw.StatusCode,
+			"size", mw.BytesCount,
+			"headers", fmt.Sprintf("%+v", mw.Header()))
+	})
+}
+
+type headerDebugWriter struct {
+	*response.MetricsResponseWriter
+	logger *slog.Logger
+	path   string
+}
+
+func (hw *headerDebugWriter) Header() http.Header {
+	h := hw.MetricsResponseWriter.Header()
+	hw.logger.Debug("header access",
+		"path", hw.path,
+		"headers", fmt.Sprintf("%+v", h))
+	return h
+}
+
+func (hw *headerDebugWriter) WriteHeader(statusCode int) {
+	hw.logger.Debug("writing header",
+		"path", hw.path,
+		"status", statusCode,
+		"headers", fmt.Sprintf("%+v", hw.Header()))
+	hw.MetricsResponseWriter.WriteHeader(statusCode)
+}
+
+func (hw *headerDebugWriter) Write(b []byte) (int, error) {
+	hw.logger.Debug("writing response",
+		"path", hw.path,
+		"headers", fmt.Sprintf("%+v", hw.Header()))
+	return hw.MetricsResponseWriter.Write(b)
 }

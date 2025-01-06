@@ -24,7 +24,7 @@
     <h1>Session: {{ .SessionID }}</h1>
     <h3>User: {{ .User }}</h3>
     <script>
-        console.log("starting to watch for status updates on session {{ .SessionID }}");
+        console.log("starting to watch for status updates on session ID: {{ .SessionID }}");
         const es = new EventSource("/call/status/{{ .SessionID }}");
 
         es.onopen = () => {
