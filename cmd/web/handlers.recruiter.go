@@ -11,9 +11,10 @@ import (
 	"talent-rodeo/cmd/web/components/partials"
 	"talent-rodeo/internal/response"
 
-	serversdkgo "github.com/VapiAI/server-sdk-go"
-	serversdkgoclient "github.com/VapiAI/server-sdk-go/client"
-	option "github.com/VapiAI/server-sdk-go/option"
+	// serversdkgo "github.com/VapiAI/server-sdk-go"
+	// serversdkgoclient "github.com/VapiAI/server-sdk-go/client"
+	// option "github.com/VapiAI/server-sdk-go/option"
+
 	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/providers/gemini"
 	"github.com/fumiama/go-docx"
@@ -102,54 +103,52 @@ func (app *application) uploadResume(w http.ResponseWriter, r *http.Request) {
 
 	app.backgroundTask(r, func() error {
 		app.sendStatus(sessionID, "status", "Analyzing resume...")
-		yaml, err := app.analyzeResume(textContent, "")
+		_, err := app.analyzeResume(textContent, "")
 		if err != nil {
 			app.logger.Error("uploadResume: failed to analyze resume", "error", err)
 			return fmt.Errorf("uploadResume: failed to analyze resume: %w", err)
 		}
 		app.sendStatus(sessionID, "status", "Resume analysis complete!")
 
-		client := serversdkgoclient.NewClient(
-			option.WithToken(
-				os.Getenv("VAPI_API_KEY"),
-			),
-		)
-
-		ctx := context.Background()
-		assistantID := "30709dea-4c26-457a-96a0-4ee7488f6b72"
-		fromPhone := "16bbd5bb-2e5a-4a3b-937b-0665e1648dff"
-
-		customerName := "Talent Rodeo"
-		customerNumber := phone
-
 		/*
-					ctx context.Context,
-			request *serversdkgo.CreateCallDto,
-			opts ...option.RequestOption,
-		*/
-		call, err := client.Calls.Create(ctx, &serversdkgo.CreateCallDto{
-			AssistantId: &assistantID,
-			AssistantOverrides: &serversdkgo.AssistantOverrides{
-				VariableValues: map[string]interface{}{
-					"resume": yaml,
+			client := serversdkgoclient.NewClient(
+				option.WithToken(
+					os.Getenv("VAPI_API_KEY"),
+				),
+			)
+
+			ctx := context.Background()
+			assistantID := "30709dea-4c26-457a-96a0-4ee7488f6b72"
+			fromPhone := "16bbd5bb-2e5a-4a3b-937b-0665e1648dff"
+
+			customerName := "Talent Rodeo"
+			customerNumber := phone
+
+
+			call, err := client.Calls.Create(ctx, &serversdkgo.CreateCallDto{
+				AssistantId: &assistantID,
+				AssistantOverrides: &serversdkgo.AssistantOverrides{
+					VariableValues: map[string]interface{}{
+						"resume": yaml,
+					},
 				},
-			},
 
-			PhoneNumberId: &fromPhone,
-			Customer: &serversdkgo.CreateCustomerDto{
-				Name:   &customerName,
-				Number: &customerNumber,
-			},
-		})
-		if err != nil {
-			// var unauthorizedErr *vapi.Unauthorized
-			// if errors.As(err, unauthorizedErr) {
-			// 	// Do something with the unauthorized request ...
-			// }
-			return err
-		}
+				PhoneNumberId: &fromPhone,
+				Customer: &serversdkgo.CreateCustomerDto{
+					Name:   &customerName,
+					Number: &customerNumber,
+				},
+			})
+			if err != nil {
+				// var unauthorizedErr *vapi.Unauthorized
+				// if errors.As(err, unauthorizedErr) {
+				// 	// Do something with the unauthorized request ...
+				// }
+				return err
+			}
 
-		println(call.Cost)
+			println(call.Cost)
+		*/
 
 		app.sendStatus(sessionID, "status", "Call created!")
 
