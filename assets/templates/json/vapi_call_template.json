@@ -1,0 +1,17 @@
+{
+    "id": "id",
+    "orgId": "orgId",
+    "assistantId": "assistantId",
+    "assistantOverrides": {
+        "key": "value_obj_or_array"
+    },
+    "phoneNumberId": "phoneNumberId",
+    "customer": {
+        "numberE164CheckEnabled": true,
+        "extension": "extension",
+        "number": "number",
+        "sipUri": "sipUri",
+        "name": "name"
+    },
+    "name": "name"
+}

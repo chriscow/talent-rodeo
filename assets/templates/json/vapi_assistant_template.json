@@ -1,0 +1,110 @@
+{
+    "name": "{{AGENT_NAME_HERE}}",
+    "voice": {
+        "model": "eleven_flash_v2_5",
+        "voiceId": "yM93hbw8Qtvdma2wCnJG",
+        "provider": "11labs",
+        "stability": 0.5,
+        "similarityBoost": 0.75,
+        "fillerInjectionEnabled": false
+    },
+    "model": {
+        "model": "gpt-4o",
+        "messages": [
+            {
+                "role": "system",
+                "content": "PROMPT_HERE"
+            }
+        ],
+        "provider": "openai",
+        "temperature": 1,
+        "emotionRecognitionEnabled": true
+    },
+    "transcriber": {
+        "model": "nova-2",
+        "language": "en",
+        "provider": "deepgram"
+    },
+    "firstMessage": "FIRST_MESSAGE_HERE",
+    "clientMessages": [],
+    "serverMessages": [
+        "end-of-call-report",
+        "function-call",
+        "tool-calls"
+    ],
+    "server": {
+        "url": "WEBHOOK_HERE",
+        "timeoutSeconds": 20
+    },
+    "endCallFunctionEnabled": true,
+    "endCallMessage": "END_CALL_MESSAGE_HERE",
+    "endCallPhrases": [
+        "goodbye"
+    ],
+    "voicemailDetection": {
+        "provider": "twilio",
+        "voicemailDetectionTypes": [
+            "machine_start",
+            "machine_end_beep",
+            "machine_end_silence",
+            "machine_end_other"
+        ],
+        "enabled": true,
+        "machineDetectionTimeout": 25,
+        "machineDetectionSpeechThreshold": 2500,
+        "machineDetectionSpeechEndThreshold": 2000,
+        "machineDetectionSilenceTimeout": 2000
+    },
+    "voicemailMessage": "VM_MESSAGE_HERE",
+    "startSpeakingPlan": {
+        "waitSeconds": 0.4,
+        "smartEndpointingEnabled": true,
+        "transcriptionEndpointingPlan": {
+            "onPunctuationSeconds": 0.1,
+            "onNoPunctuationSeconds": 1.5,
+            "onNumberSeconds": 0.5
+        }
+    },
+    "startSpeakingPlan": {
+        "waitSeconds": 0.4,
+        "smartEndpointingEnabled": true,
+        "transcriptionEndpointingPlan": {
+            "onPunctuationSeconds": 0.1,
+            "onNoPunctuationSeconds": 1.5,
+            "onNumberSeconds": 0.5
+        }
+    },
+    "analysisPlan": {
+        "summaryPrompt": "PROMPT_TO_SUMMARIZE_HERE",
+        "structuredDataPrompt": "PROMPT_TO_PARSE_DATA_HERE",
+        "structuredDataSchema": {
+            "type": "object",
+            "properties": {
+                "field_1": {
+                    "type": "string"
+                },
+                "field_2": {
+                    "type": "string"
+                },
+                "field_3": {
+                    "type": "number"
+                },
+                "field_4": {
+                    "type": "boolean"
+                }
+            },
+            "required": [
+                "field_1",
+                "field_3"
+            ]
+        },
+        "successEvaluationPrompt": "PROMPT_TO_EVAL_CALL_HERE",
+        "successEvaluationRubric": "NumericScale"
+    },
+    "silenceTimeoutSeconds": 30,
+    "maxDurationSeconds": 180,
+    "backgroundSound": "off",
+    "backchannelingEnabled": false,
+    "backgroundDenoisingEnabled": false,
+    "modelOutputInMessagesEnabled": false
+}
