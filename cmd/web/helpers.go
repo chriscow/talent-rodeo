@@ -15,7 +15,7 @@ func (app *application) newTemplateData(r *http.Request) map[string]any {
 	var sessionID string
 	session, err := app.sessionStore.Get(r, "session")
 	if err == nil {
-		sessionID, _ = session.Values["sessionID"].(string)
+		sessionID, _ = session.Values["SessionID"].(string)
 	}
 
 	token := nosurf.Token(r)
