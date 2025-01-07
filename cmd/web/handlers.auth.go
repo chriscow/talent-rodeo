@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/alexedwards/flow"
 	"github.com/markbates/goth/gothic"
@@ -33,26 +34,7 @@ func (app *application) socialCallback(w http.ResponseWriter, r *http.Request) {
 
 	user, err := gothic.CompleteUserAuth(w, r)
 	if err != nil {
-		app.logger.Info("CompleteUserAuth", "callback", app.config.baseURL+"/auth/linkedin/callback")
-		app.logger.Error("CompleteUserAuth", "error", err)
-
-		session, err2 := app.sessionStore.Get(r, "session")
-		if err2 != nil {
-			app.serverError(w, r, err)
-			return
-		}
-
-		app.logger.Info("CompleteUserAuth", "session", session.Values)
-		app.logger.Info("CompleteUserAuth", "gothic.State", gothic.GetState(r))
-		app.logger.Info("CompleteUserAuth", "gothic.SessionName", gothic.SessionName)
-		gs, err2 := app.sessionStore.Get(r, gothic.SessionName)
-		if err2 != nil {
-			app.logger.Error("sessionStore.Get [no session]", "gothic.SessionName", gothic.SessionName, "error", err2)
-		} else {
-			app.logger.Info("CompleteUserAuth", "gothic.Session", gs.Values)
-		}
-
-		app.serverError(w, r, err)
+		app.handleAuthError(w, r, err)
 		return
 	}
 
@@ -94,6 +76,52 @@ func (app *application) socialCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, redirectPath, http.StatusSeeOther)
+}
+
+func (app *application) handleAuthError(w http.ResponseWriter, r *http.Request, err error) {
+	// Log the original error
+	app.logger.Error("Auth error encountered", "error", err)
+
+	// Check if it's a known error that might be cookie-related
+	if strings.Contains(err.Error(), "session") ||
+		strings.Contains(err.Error(), "cookie") {
+
+		// Clear cookies
+		clearAuthCookies(w, r)
+
+		// Redirect back to the login page
+		http.Redirect(w, r, "/auth/linkedin", http.StatusTemporaryRedirect)
+		return
+	}
+
+	// Handle other types of errors
+	http.Error(w, "Authentication error", http.StatusInternalServerError)
+}
+
+func clearAuthCookies(w http.ResponseWriter, r *http.Request) {
+	// Clear the gothic session cookie
+	cookie := &http.Cookie{
+		Name:     gothic.SessionName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1, // This makes the browser delete the cookie immediately
+		HttpOnly: true,
+	}
+	http.SetCookie(w, cookie)
+
+	// Clear any provider-specific cookies that might exist
+	// The exact names might vary depending on your providers
+	// providerCookie := &http.Cookie{
+	// 	Name:     "gothic_provider_session",
+	// 	Value:    "",
+	// 	Path:     "/",
+	// 	MaxAge:   -1,
+	// 	HttpOnly: true,
+	// }
+	// http.SetCookie(w, providerCookie)
+
+	// You might also want to clear the actual session
+	gothic.Logout(w, r)
 }
 
 func (app *application) logout(w http.ResponseWriter, r *http.Request) {

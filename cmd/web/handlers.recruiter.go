@@ -10,6 +10,8 @@ import (
 	"strings"
 	"talent-rodeo/cmd/web/components/partials"
 	"talent-rodeo/internal/response"
+	"talent-rodeo/internal/vapi"
+	vapi "talent-rodeo/internal/vapi/call"
 
 	// serversdkgo "github.com/VapiAI/server-sdk-go"
 	// serversdkgoclient "github.com/VapiAI/server-sdk-go/client"
@@ -109,6 +111,8 @@ func (app *application) uploadResume(w http.ResponseWriter, r *http.Request) {
 			return fmt.Errorf("uploadResume: failed to analyze resume: %w", err)
 		}
 		app.sendStatus(sessionID, "status", "Resume analysis complete!")
+
+		req := vapi.DefaultAssistant()
 
 		/*
 			client := serversdkgoclient.NewClient(
