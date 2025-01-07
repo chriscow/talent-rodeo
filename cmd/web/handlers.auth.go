@@ -57,7 +57,7 @@ func (app *application) socialCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session.Values["userID"] = dbUser.ID
+	session.Values["UserID"] = dbUser.ID
 
 	r = contextSetAuthenticatedUser(r, dbUser)
 
@@ -90,7 +90,7 @@ func (app *application) logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	delete(session.Values, "userID")
+	delete(session.Values, "UserID")
 	delete(session.Values, "redirectPathAfterLogin")
 	session.Save(r, w)
 

@@ -16,6 +16,7 @@ const CSRFTokenKey contextKey = "csrf_token"
 
 func (app *application) recoverPanic(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// app.logger.Warn("recover panic middleware", "path", r.URL.Path)
 		defer func() {
 			err := recover()
 			if err != nil {
@@ -29,10 +30,14 @@ func (app *application) recoverPanic(next http.Handler) http.Handler {
 
 func (app *application) securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// app.logger.Warn("security headers middleware", "path", r.URL.Path)
 
 		w.Header().Set("Referrer-Policy", "origin-when-cross-origin")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "deny")
+
+		//cors
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 
 		next.ServeHTTP(w, r)
 	})
@@ -40,6 +45,7 @@ func (app *application) securityHeaders(next http.Handler) http.Handler {
 
 func (app *application) logAccess(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// app.logger.Warn("log access middleware", "path", r.URL.Path)
 		mw := response.NewMetricsResponseWriter(w)
 		next.ServeHTTP(mw, r)
 
@@ -59,6 +65,7 @@ func (app *application) logAccess(next http.Handler) http.Handler {
 }
 
 func (app *application) preventCSRF(next http.Handler) http.Handler {
+	// app.logger.Warn("prevent csrf middleware")
 	csrfHandler := nosurf.New(next)
 
 	csrfHandler.SetBaseCookie(http.Cookie{
@@ -74,23 +81,24 @@ func (app *application) preventCSRF(next http.Handler) http.Handler {
 
 func (app *application) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// app.logger.Warn("authenticate middleware", "path", r.URL.Path)
 		session, err := app.sessionStore.Get(r, "session")
 		if err != nil {
 			app.serverError(w, r, err)
 			return
 		}
 
-		sessionID, ok := session.Values["sessionID"].(string)
+		sessionID, ok := session.Values["SessionID"].(string)
 		if !ok || sessionID == "" {
 			sessionID = uuid.New().String()
-			session.Values["sessionID"] = sessionID
+			session.Values["SessionID"] = sessionID
 			if err := session.Save(r, w); err != nil {
 				app.serverError(w, r, err)
 				return
 			}
 		}
 
-		userID, ok := session.Values["userID"].(int)
+		userID, ok := session.Values["UserID"].(int)
 		if ok {
 			user, found, err := app.db.GetUser(userID)
 			if err != nil {
@@ -110,6 +118,7 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 
 func (app *application) requireSuperUser(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// app.logger.Warn("require super user middleware", "path", r.URL.Path)
 		authenticatedUser := contextGetAuthenticatedUser(r)
 
 		if authenticatedUser == nil || !authenticatedUser.IsSuperUser {
@@ -123,6 +132,7 @@ func (app *application) requireSuperUser(next http.Handler) http.Handler {
 
 func (app *application) requireAuthenticatedUser(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// app.logger.Warn("require authenticated user middleware", "path", r.URL.Path)
 		authenticatedUser := contextGetAuthenticatedUser(r)
 
 		if authenticatedUser == nil {
@@ -152,6 +162,7 @@ func (app *application) requireAuthenticatedUser(next http.Handler) http.Handler
 
 func (app *application) requireAnonymousUser(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// app.logger.Warn("require anonymous user middleware", "path", r.URL.Path)
 		authenticatedUser := contextGetAuthenticatedUser(r)
 
 		if authenticatedUser != nil {

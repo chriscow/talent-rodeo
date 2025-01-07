@@ -10,13 +10,13 @@ import (
 	"strings"
 	"talent-rodeo/cmd/web/components/partials"
 	"talent-rodeo/internal/response"
-	"time"
 
-	"github.com/alexedwards/flow"
+	serversdkgo "github.com/VapiAI/server-sdk-go"
+	serversdkgoclient "github.com/VapiAI/server-sdk-go/client"
+	option "github.com/VapiAI/server-sdk-go/option"
 	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/providers/gemini"
 	"github.com/fumiama/go-docx"
-	"github.com/tmaxmax/go-sse"
 )
 
 func isValidFileType(filename string) bool {
@@ -93,56 +93,82 @@ func (app *application) uploadResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	data := app.newTemplateData(r)
+	sessionID, ok := data["SessionID"].(string)
+	if !ok {
+		app.serverError(w, r, fmt.Errorf("uploadResume: failed to get session ID"))
+		return
+	}
+
 	app.backgroundTask(r, func() error {
-		ctx := context.Background()
-		yaml, err := app.analyzeResume(ctx, textContent, "")
+		app.sendStatus(sessionID, "status", "Analyzing resume...")
+		yaml, err := app.analyzeResume(textContent, "")
 		if err != nil {
 			app.logger.Error("uploadResume: failed to analyze resume", "error", err)
 			return fmt.Errorf("uploadResume: failed to analyze resume: %w", err)
 		}
+		app.sendStatus(sessionID, "status", "Resume analysis complete!")
 
-		var sessionID string
-		session, err := app.sessionStore.Get(r, "session")
+		client := serversdkgoclient.NewClient(
+			option.WithToken(
+				os.Getenv("VAPI_API_KEY"),
+			),
+		)
+
+		ctx := context.Background()
+		assistantID := "30709dea-4c26-457a-96a0-4ee7488f6b72"
+		fromPhone := "16bbd5bb-2e5a-4a3b-937b-0665e1648dff"
+
+		customerName := "Talent Rodeo"
+		customerNumber := phone
+
+		/*
+					ctx context.Context,
+			request *serversdkgo.CreateCallDto,
+			opts ...option.RequestOption,
+		*/
+		call, err := client.Calls.Create(ctx, &serversdkgo.CreateCallDto{
+			AssistantId: &assistantID,
+			AssistantOverrides: &serversdkgo.AssistantOverrides{
+				VariableValues: map[string]interface{}{
+					"resume": yaml,
+				},
+			},
+
+			PhoneNumberId: &fromPhone,
+			Customer: &serversdkgo.CreateCustomerDto{
+				Name:   &customerName,
+				Number: &customerNumber,
+			},
+		})
 		if err != nil {
-			app.logger.Error("uploadResume: failed to get session", "error", err)
-			return fmt.Errorf("uploadResume: failed to get session: %w", err)
+			// var unauthorizedErr *vapi.Unauthorized
+			// if errors.As(err, unauthorizedErr) {
+			// 	// Do something with the unauthorized request ...
+			// }
+			return err
 		}
 
-		sessionID, ok := session.Values["sessionID"].(string)
-		if !ok {
-			app.logger.Error("uploadResume: failed to get session ID",
-				"session", session.Values, "ok", ok)
+		println(call.Cost)
 
-			return fmt.Errorf("uploadResume: failed to get session ID")
-		}
-
-		msg := &sse.Message{}
-		msg.AppendData("Hello, " + sessionID)
-		msg.AppendData(yaml)
-		app.sse.Publish(msg, sessionID) // Pass sessionID as the topic
-
-		app.logger.Info("uploadResume: resume analysis complete")
+		app.sendStatus(sessionID, "status", "Call created!")
 
 		return nil
 	})
 
-	// Render the result
-	// partials.ResumeAnalysis(yaml).Render(r.Context(), w)
-	data := app.newTemplateData(r)
-
-	if err := response.Page(w, http.StatusOK, data, "pages/call-status.tmpl"); err != nil {
+	if err := response.NamedTemplate(w, http.StatusOK, data, "partials/call-status.tmpl"); err != nil {
 		app.serverError(w, r, err)
 	}
 }
 
 func (app *application) sendStatus(sessionID, status, message string) {
-	msg := &sse.Message{}
-	msg.AppendData(status)
-	msg.AppendData(message)
-	app.sse.Publish(msg, sessionID)
+	app.pusher.Trigger(sessionID, "call-status", map[string]string{
+		"status":  status,
+		"message": message,
+	})
 }
 
-func (app *application) analyzeResume(ctx context.Context, text string, sessionID string) (string, error) {
+func (app *application) analyzeResume(text string, sessionID string) (string, error) {
 	// Send status that we're starting
 	app.sendStatus(sessionID, "status", "Starting resume analysis...")
 
@@ -154,6 +180,7 @@ information.`
 
 	app.sendStatus(sessionID, "status", "Creating Gemini provider...")
 
+	ctx := context.Background()
 	llm, err := gemini.NewProvider(ctx, gemini.WithSystemPrompt(prompt))
 	if err != nil {
 		app.sendStatus(sessionID, "error", "Failed to create Gemini provider")
@@ -215,27 +242,24 @@ func extractPDF(file *os.File) (string, error) {
 	return "", fmt.Errorf("PDF extraction not implemented")
 }
 
-func (app *application) callStatus(w http.ResponseWriter, r *http.Request) {
-	sessionID := flow.Param(r.Context(), "session-id")
-	app.logger.Debug("callStatus-----------------------", "sessionID", sessionID)
+// func (app *application) events(w http.ResponseWriter, r *http.Request) {
+// 	sessionID := flow.Param(r.Context(), "session-id")
+// 	app.logger.Debug("callStatus-----------------------", "sessionID", sessionID)
 
-	// Start session-specific publisher
-	go func() {
-		ticker := time.NewTicker(time.Second)
-		for range ticker.C {
-			msg := &sse.Message{}
-			msg.AppendData(fmt.Sprintf("Session %s time: %s",
-				sessionID[:6], time.Now().Format(time.RFC3339)))
-			app.sse.Publish(msg, sessionID)
-		}
-	}()
+// 	// Start session-specific publisher
+// 	// go func() {
+// 	// 	ticker := time.NewTicker(time.Second)
+// 	// 	for range ticker.C {
+// 	// 		app.sendStatus(sessionID, "status", "Still working...")
+// 	// 	}
+// 	// }()
 
-	app.sse.OnSession = func(sess *sse.Session) (sse.Subscription, bool) {
-		return sse.Subscription{
-			Client: sess,
-			Topics: []string{sessionID},
-		}, true
-	}
+// 	app.sse.OnSession = func(sess *sse.Session) (sse.Subscription, bool) {
+// 		return sse.Subscription{
+// 			Client: sess,
+// 			Topics: []string{sessionID},
+// 		}, true
+// 	}
 
-	app.sse.ServeHTTP(w, r)
-}
+// 	app.sse.ServeHTTP(w, r)
+// }

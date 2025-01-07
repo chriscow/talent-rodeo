@@ -23,7 +23,7 @@ import (
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
 	natsserver "github.com/nats-io/nats-server/v2/server"
-	"github.com/tmaxmax/go-sse"
+	"github.com/pusher/pusher-http-go/v5"
 )
 
 func main() {
@@ -80,7 +80,7 @@ type application struct {
 	sessionStore *sessions.CookieStore
 	wg           sync.WaitGroup
 	nats         *embeddednats.Server
-	sse          *sse.Server
+	pusher       *pusher.Client
 }
 
 func run(logger *slog.Logger) error {
@@ -161,6 +161,14 @@ func run(logger *slog.Logger) error {
 		return fmt.Errorf("error setting up NATS: %w", err)
 	}
 
+	pusherClient := pusher.Client{
+		AppID:   "1921779",
+		Key:     "4a94faf46532a3c20d19",
+		Secret:  "d3550e3a2c707ebaadef",
+		Cluster: "us3",
+		Secure:  true,
+	}
+
 	app := &application{
 		config:       cfg,
 		db:           db,
@@ -168,7 +176,7 @@ func run(logger *slog.Logger) error {
 		mailer:       mailer,
 		sessionStore: sessionStore,
 		nats:         ns,
-		sse:          &sse.Server{},
+		pusher:       &pusherClient,
 	}
 
 	if cfg.autoHTTPS.domain != "" {
