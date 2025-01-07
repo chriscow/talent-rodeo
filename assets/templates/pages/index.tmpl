@@ -2,8 +2,7 @@
 {{ if .User }}
 <main class="container">
     <h1>Resume Upload</h1>
-    <form hx-post="/upload" hx-encoding="multipart/form-data" hx-target="body" hx-indicator="#loading-spinner"
-        class="container">
+    <form hx-post="/upload" hx-encoding="multipart/form-data" hx-target="main">
         <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
         <input type="hidden" id="session_id" name="session_id" value="{{ .SessionID }}">
         <div class="grid">
@@ -19,28 +18,20 @@
         </div>
         <button type="submit">Upload Resume</button>
     </form>
-    <img id="loading-spinner" class="htmx-indicator" src="/static/img/puff.svg">
-    <div id="result"></div>
-    <h1>Session: {{ .SessionID }}</h1>
-    <h3>User: {{ .User }}</h3>
-    <script>
-        console.log("starting to watch for status updates on session ID: {{ .SessionID }}");
-        const es = new EventSource("/call/status/{{ .SessionID }}");
-
-        es.onopen = () => {
-            console.log("Connected to the server");
-        };
-
-        es.onmessage = (event) => {
-            console.log(`Received: ${event.data}`);
-        };
-
-        es.onerror = (err) => {
-            console.error("SSE Error:", err);
-            es.close();
-        };
-    </script>
 </main>
+<script>
+    // Enable pusher logging - don't include this in production
+    Pusher.logToConsole = true;
+
+    var pusher = new Pusher('4a94faf46532a3c20d19', {
+        cluster: 'us3'
+    });
+
+    var channel = pusher.subscribe({{ .SessionID }}); // 'my-channel'
+    channel.bind('my-event', function (data) {
+        console.log(JSON.stringify(data));
+    });
+</script>
 {{ else }}
 {{template "partial:login" .}}
 {{ end }}
