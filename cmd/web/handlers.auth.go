@@ -33,6 +33,25 @@ func (app *application) socialCallback(w http.ResponseWriter, r *http.Request) {
 
 	user, err := gothic.CompleteUserAuth(w, r)
 	if err != nil {
+		app.logger.Info("CompleteUserAuth", "callback", app.config.baseURL+"/auth/linkedin/callback")
+		app.logger.Error("CompleteUserAuth", "error", err)
+
+		session, err2 := app.sessionStore.Get(r, "session")
+		if err2 != nil {
+			app.serverError(w, r, err)
+			return
+		}
+
+		app.logger.Info("CompleteUserAuth", "session", session.Values)
+		app.logger.Info("CompleteUserAuth", "gothic.State", gothic.GetState(r))
+		app.logger.Info("CompleteUserAuth", "gothic.SessionName", gothic.SessionName)
+		gs, err2 := app.sessionStore.Get(r, gothic.SessionName)
+		if err2 != nil {
+			app.logger.Error("sessionStore.Get [no session]", "gothic.SessionName", gothic.SessionName, "error", err2)
+		} else {
+			app.logger.Info("CompleteUserAuth", "gothic.Session", gs.Values)
+		}
+
 		app.serverError(w, r, err)
 		return
 	}
