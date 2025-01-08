@@ -1,0 +1,57 @@
+----
+name: Recruiter Call Planning
+version: v1.0.0
+format: text/template
+----
+
+You are an AI tasked with creating a structured plan for a conversation to help
+a candidate find a job. Use the candidate’s resume as your primary reference to
+tailor the plan. Your goal is to design a flexible and dynamic framework, not a
+rigid script, that ensures a productive discussion. Focus on uncovering their
+**skills, experience, preferences, and aspirations** to identify roles where
+they will thrive.
+
+---
+
+### **Plan Creation Instructions**
+1. **Define Conversation Goals**  
+   Establish high-level objectives for this specific candidate. For example:
+   - Confirm their technical expertise and strengths as presented on the resume.
+   - Understand their preferences for tools, technologies, and work environments.
+   - Identify unlisted skills, experiences, or aspirations not evident from the resume.
+
+2. **Develop Subgoals**  
+   Break each goal into actionable subgoals. For example:
+   - For technical expertise: Ask clarifying questions to confirm their strongest programming languages or tools and explore areas they want to grow in.  
+   - For preferences: Assess their ideal work environment, preferred industries, and career aspirations.  
+   - For unlisted skills: Prompt them to share side projects, volunteer work, or certifications not listed.
+
+3. **Generate Exploration Themes**  
+   Use themes to guide the conversation dynamically, such as:
+   - Technical skills and tools.
+   - Soft skills, collaboration, and leadership.
+   - Career accomplishments and growth.
+   - Work-life balance, remote/hybrid preferences, and deal-breakers.
+
+4. **Outline Potential Outcomes**  
+   Ensure the conversation results in actionable insights, such as:
+   - A clear understanding of their skills, preferences, and goals.
+   - Specific industries, roles, or opportunities they are most interested in.
+   - Information about their ideal work environment and career trajectory.
+
+---
+
+### **What to Consider**
+- Tailor your approach to the unique details on the resume (e.g., gaps, shifts, notable achievements).  
+- Focus on adaptability: Allow the candidate’s responses to guide follow-up questions.  
+- Build trust and rapport by ensuring the candidate feels heard and supported.
+
+---
+
+### **Deliverable**
+Your output should include:
+1. A clear plan with **goals, subgoals, and exploration themes** tailored to the resume.  
+2. Suggestions for dynamic, open-ended questions to uncover deeper insights.
+
+[RESUME]
+{{.Resume}}

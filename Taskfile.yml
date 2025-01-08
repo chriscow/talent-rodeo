@@ -60,15 +60,16 @@ tasks:
   #   desc: Build the cmd/web application
   #   cmds:
   #     - go build -o=/tmp/bin/web ./cmd/web
-  build:templ:
-    cmds:
-      - go run github.com/a-h/templ/cmd/templ@v0.2.793 generate -v
+
+  # build:templ:
+  #   cmds:
+  #     - go run github.com/a-h/templ/cmd/templ@v0.2.793 generate -v
 
   build:
     cmds:
       - go build -o=/tmp/bin/web ./cmd/web
-    deps:
-      - build:templ
+    # deps:
+    #   - build:templ
 
     parallel: true
 
@@ -78,9 +79,9 @@ tasks:
     cmds:
       - /tmp/bin/web --http-port=2304
 
-  live:templ:
-    cmds:
-      - go run github.com/a-h/templ/cmd/templ@v0.2.793 generate --watch --proxy="http://localhost:2304" --open-browser=false -v
+  # live:templ:
+  #   cmds:
+  #     - go run github.com/a-h/templ/cmd/templ@v0.2.793 generate --watch --proxy="http://localhost:2304" --open-browser=false -v
 
 
   live:server:
@@ -96,21 +97,21 @@ tasks:
         --misc.clean_on_exit true \
         -- --http-port=2304 
 
-  live:reload:
-    cmds:
-      - |
-        go run github.com/air-verse/air@v1.52.3 \
-        --build.cmd "go run github.com/a-h/templ/cmd/templ@v0.2.793 generate --notify-proxy" \
-        --build.bin "true" \
-        --build.delay "100" \
-        --build.exclude_dir "" \
-        --build.include_dir "$STATIC_DIR" \
-        --build.include_ext "js,css"
+  # live:reload:
+  #   cmds:
+  #     - |
+  #       go run github.com/air-verse/air@v1.52.3 \
+  #       --build.cmd "go run github.com/a-h/templ/cmd/templ@v0.2.793 generate --notify-proxy" \
+  #       --build.bin "true" \
+  #       --build.delay "100" \
+  #       --build.exclude_dir "" \
+  #       --build.include_dir "$STATIC_DIR" \
+  #       --build.include_ext "js,css"
 
   live:
     deps:
-      - live:templ
-      - live:reload
+      # - live:templ
+      # - live:reload
       - live:server  
           
 
