@@ -1,14 +1,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"talent-rodeo/assets"
 	"talent-rodeo/cmd/web/components/partials"
 	"talent-rodeo/internal/response"
+	"talent-rodeo/internal/rodeo"
 )
 
 func isValidFileType(filename string) bool {
@@ -22,6 +25,8 @@ func (app *application) resume(w http.ResponseWriter, r *http.Request) {
 	if err := response.Page(w, http.StatusOK, data, "resume.tmpl"); err != nil {
 		app.serverError(w, r, err)
 	}
+
+	assets.EmbeddedFiles.ReadFile("prompts/recruiter.convert-resume.txt")
 }
 
 func (app *application) uploadResume(w http.ResponseWriter, r *http.Request) {
@@ -70,11 +75,11 @@ func (app *application) uploadResume(w http.ResponseWriter, r *http.Request) {
 	defer tempFile.Close()
 
 	// Read file content
-	var textContent string
+	var resumeText string
 	if strings.HasSuffix(strings.ToLower(header.Filename), ".docx") {
-		textContent, err = extractDOCX(tempFile)
+		resumeText, err = rodeo.ExtractDOCX(tempFile)
 	} else if strings.HasSuffix(strings.ToLower(header.Filename), ".pdf") {
-		textContent, err = extractPDF(tempFile)
+		resumeText, err = rodeo.ExtractPDF(tempFile)
 	} else {
 		partials.UploadError("Unsupported file format").Render(r.Context(), w)
 		return
@@ -93,7 +98,8 @@ func (app *application) uploadResume(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.backgroundTask(r, func() error {
-		return app.startWorkflow(sessionID, textContent)
+		ctx := context.Background()
+		return rodeo.StartWorkflow(ctx, sessionID, resumeText, app)
 	})
 
 	if err := response.NamedTemplate(w, http.StatusOK, data, "partials/call-status.tmpl"); err != nil {
@@ -101,7 +107,7 @@ func (app *application) uploadResume(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (app *application) sendStatus(sessionID, level, message string) {
+func (app *application) SendStatus(sessionID, level, message string) {
 	app.pusher.Trigger(sessionID, "call-status", map[string]string{
 		"level":   level,
 		"message": message,

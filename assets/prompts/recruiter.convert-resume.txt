@@ -1,0 +1,5 @@
+Please create a short summary in YAML format of the resume with key facts, soft
+skills, programming languages, technology stacks. For each, add a field called
+ai_comment with your own observation on skill level and length of time since
+last used. Also any accomplishments, education and any other pertinent
+information.

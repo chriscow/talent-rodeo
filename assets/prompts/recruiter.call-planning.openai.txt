@@ -1,8 +1,8 @@
-----
+---
 name: Recruiter Call Planning
 version: v1.0.0
 format: text/template
-----
+---
 
 You are an AI tasked with creating a structured plan for a conversation to help
 a candidate find a job. Use the candidate’s resume as your primary reference to
@@ -31,7 +31,7 @@ they will thrive.
    - Technical skills and tools.
    - Soft skills, collaboration, and leadership.
    - Career accomplishments and growth.
-   - Work-life balance, remote/hybrid preferences, and deal-breakers.
+   - Work-life balance, remote/hybrid preferences, minimum salary expectations and other deal-breakers.
 
 4. **Outline Potential Outcomes**  
    Ensure the conversation results in actionable insights, such as:
@@ -53,5 +53,6 @@ Your output should include:
 1. A clear plan with **goals, subgoals, and exploration themes** tailored to the resume.  
 2. Suggestions for dynamic, open-ended questions to uncover deeper insights.
 
-[RESUME]
+You received the following resume via LinkedIn:
+
 {{.Resume}}
