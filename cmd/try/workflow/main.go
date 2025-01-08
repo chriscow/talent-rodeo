@@ -1,0 +1,113 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"talent-rodeo/internal/rodeo"
+
+	"github.com/joho/godotenv"
+)
+
+func main() {
+	if err := godotenv.Load(".env"); err != nil {
+		fmt.Println("Error loading .env file")
+		return
+	}
+
+	//
+	// The workflow generally consists of:
+	// 1. Convert resume to YAML
+	// 2. Generate a conversation plan for the recruiter
+	// 3. Create a system prompt for the recruiter that includes the plan and resume
+	// 4. Call the candidate
+	//
+	ctx := context.Background()
+	sessionID := "session-id"
+
+	if err := rodeo.StartWorkflow(ctx, sessionID, resumeText, nil); err != nil {
+		log.Fatalf("Failed to start workflow: %v", err)
+	}
+
+	log.Println("Workflow completed successfully!")
+}
+
+const resumeText = `name: Chris Cowherd
+contact:
+  phone: 425-829-5443
+  email: madcow@gmail.com
+  github: https://github.com/chriscow
+  linkedin: linkedin.com/in/chriscowherd
+summary:
+  title: Software Engineering Leader
+  experience_years: 30
+  description: >
+    Extensive experience in technical leadership, software development, cloud-native systems, AI & data analytics,
+    and scaling teams and products. Highly strategic, analytical, and collaborative.
+soft_skills:
+  - name: Transparent Leadership
+    ai_comment: Strongly demonstrated through inclusive team management; active in large-scale cross-functional teams.
+  - name: Strategic Thinking
+    ai_comment: Evident in career focus on scaling, compliance, and operational excellence.
+  - name: Team Building
+    ai_comment: Established and led teams of varying sizes across distributed regions.
+programming_languages:
+  - name: Python
+    ai_comment: Expert level, recently used in 2023 for backend and generative AI development.
+  - name: Go
+    ai_comment: Advanced, used frequently in recent roles for backend and distributed systems.
+  - name: C#
+    ai_comment: Proficient, with significant use in earlier roles but less recent.
+  - name: C++
+    ai_comment: Competent, utilized in earlier career roles.
+technology_stacks:
+  - name: OpenAI Integration
+    ai_comment: Currently employed in RAG pipelines, LLM optimization, and function orchestration.
+  - name: Cloud Technologies (AWS, GCP)
+    ai_comment: Extensive experience in deployment, scaling, and compliance.
+  - name: Docker
+    ai_comment: Used across roles for containerized deployments; expertise evident.
+  - name: SQL Databases (PostgreSQL, SQL Server)
+    ai_comment: Highly experienced in schema design, optimization, and compliance.
+key_accomplishments:
+  - description: >
+      Launched and operated over 200 TLDs without incident, achieving 600x growth from 2013 to 2016.
+    ai_comment: Indicates exceptional ability to manage large-scale projects with high operational demands.
+  - description: Developed distributed systems for advanced mathematical and AI research.
+    ai_comment: Demonstrates technical innovation and R&D expertise.
+  - description: Holder of multiple patents in DNS technology and advertisement systems.
+    ai_comment: Reflects thought leadership and innovation in the software domain.
+education:
+  - institution: Glendale College
+    field_of_study: Mathematics / Computer Science
+    graduation_year: 1996
+    ai_comment: Solid technical foundation supporting a career of engineering excellence.
+professional_experience:
+  - role: Backend Software Engineer, Generative AI
+    company: BlestX Ventures, LLC
+    location: Redmond, WA
+    years_active: 2023-Present
+    responsibilities: >
+      Leading research in generative AI for manufacturing processes, integrating OpenAI, and fine-tuning LLMs.
+    ai_comment: Recently active; reflects cutting-edge engagement with AI technologies.
+  - role: Chief Technology Officer
+    company: i2 Holdings
+    location: Seattle, WA
+    years_active: 2020-2022
+    responsibilities: >
+      Oversaw SaaS roll-ups in marketing tech AI; managed compliance, roadmaps, and team growth.
+    ai_comment: Strong leadership in SaaS and compliance initiatives.
+  - role: Principal Software Engineer
+    company: Stahurricane LLC
+    location: Bellevue, WA
+    years_active: 2018-2021
+    responsibilities: >
+      Designed systems for VR, mathematical visualization, and distributed ML inference.
+    ai_comment: Demonstrates deep technical skills and innovation.
+patents:
+  - US11552923B2: Whitelist domain name registry
+  - US20160173440A1: Communication using DNS repurposing
+  - US20150100507A1: Domain Protected Marks List Service
+  - US20080273077: Virtual Video Message Answering Machine Platform
+  - US20080281676: Methods and Systems to Facilitate Keyword Bid Arbitrage
+`
