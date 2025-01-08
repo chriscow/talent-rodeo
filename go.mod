@@ -13,7 +13,6 @@ toolchain go1.23.4
 // replace github.com/chriscow/minds/tools => ../thoughtnet/minds/tools
 
 require (
-	github.com/VapiAI/server-sdk-go v0.2.0
 	github.com/WqyJh/go-openai-realtime v0.3.4
 	github.com/a-h/templ v0.2.793
 	github.com/alexedwards/flow v0.1.0

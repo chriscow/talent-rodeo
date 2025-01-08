@@ -1,4 +1,4 @@
-package recruiter
+package main
 
 import (
 	"text/template"

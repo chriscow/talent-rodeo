@@ -3,7 +3,7 @@ name: "Shirely"
 version: 0.0.2
 ---
 
-Todays date and time is {{today}}.
+Todays date and time is {{now}}.
 
 [Overview]
 You are Shirley, an AI recruiting specialist at Talent Rodeo. Your purpose is to

@@ -3,32 +3,27 @@ package vapi
 // Assistant represents the top-level configuration for a voice interaction
 type Assistant struct {
 	Name                         string                `json:"name"`
-	Voice                        ElevenLabsVoiceConfig `json:"voice"`
-	Model                        ModelConfig           `json:"model"`
-	Transcriber                  TranscriberConfig     `json:"transcriber"`
-	FirstMessage                 string                `json:"firstMessage"`
-	ClientMessages               []string              `json:"clientMessages"`
-	ServerMessages               []string              `json:"serverMessages"`
-	Server                       ServerConfig          `json:"server"`
-	EndCallFunctionEnabled       bool                  `json:"endCallFunctionEnabled"`
-	EndCallMessage               string                `json:"endCallMessage"`
-	EndCallPhrases               []string              `json:"endCallPhrases"`
-	VoicemailDetection           VoicemailConfig       `json:"voicemailDetection"`
-	VoicemailMessage             string                `json:"voicemailMessage"`
-	StartSpeakingPlan            SpeakingPlan          `json:"startSpeakingPlan"`
-	AnalysisPlan                 AnalysisPlan          `json:"analysisPlan"`
-	SilenceTimeoutSeconds        int                   `json:"silenceTimeoutSeconds"`
-	MaxDurationSeconds           int                   `json:"maxDurationSeconds"`
-	BackgroundSound              string                `json:"backgroundSound"`
-	BackchannelingEnabled        bool                  `json:"backchannelingEnabled"`
-	BackgroundDenoisingEnabled   bool                  `json:"backgroundDenoisingEnabled"`
-	ModelOutputInMessagesEnabled bool                  `json:"modelOutputInMessagesEnabled"`
-}
-
-// Message represents a single message in the conversation
-type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Voice                        ElevenLabsVoiceConfig `json:"voice,omitempty"`
+	Model                        ModelConfig           `json:"model,omitempty"`
+	Transcriber                  TranscriberConfig     `json:"transcriber,omitempty"`
+	FirstMessage                 string                `json:"firstMessage,omitempty"`
+	ClientMessages               []string              `json:"clientMessages,omitempty"`
+	ServerMessages               []string              `json:"serverMessages,omitempty"`
+	Server                       ServerConfig          `json:"server,omitempty"`
+	EndCallFunctionEnabled       bool                  `json:"endCallFunctionEnabled,omitempty"`
+	EndCallMessage               string                `json:"endCallMessage,omitempty"`
+	EndCallPhrases               []string              `json:"endCallPhrases,omitempty"`
+	VoicemailDetection           VoicemailConfig       `json:"voicemailDetection,omitempty"`
+	VoicemailMessage             string                `json:"voicemailMessage,omitempty"`
+	StartSpeakingPlan            SpeakingPlan          `json:"startSpeakingPlan,omitempty"`
+	AnalysisPlan                 AnalysisPlan          `json:"analysisPlan,omitempty"`
+	SilenceTimeoutSeconds        int                   `json:"silenceTimeoutSeconds,omitempty"`
+	MaxDurationSeconds           int                   `json:"maxDurationSeconds,omitempty"`
+	BackgroundSound              string                `json:"backgroundSound,omitempty"`
+	BackchannelingEnabled        bool                  `json:"backchannelingEnabled,omitempty"`
+	BackgroundDenoisingEnabled   bool                  `json:"backgroundDenoisingEnabled,omitempty"`
+	ModelOutputInMessagesEnabled bool                  `json:"modelOutputInMessagesEnabled,omitempty"`
+	VariableValues               map[string]any        `json:"variableValues,omitempty"`
 }
 
 // TranscriberConfig contains settings for speech-to-text
