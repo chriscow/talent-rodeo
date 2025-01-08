@@ -3,6 +3,7 @@ package rodeo
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -48,12 +49,27 @@ func autoChat(tc minds.ThreadContext, maxTurns int) error {
 	yellow := color.New(color.FgYellow).SprintFunc()
 	var err error
 
+	registry := minds.NewToolRegistry()
+
 	endCallTool, err := NewEndCallTool(cancel)
 	if err != nil {
 		return fmt.Errorf("failed to create end call tool: %w", err)
 	}
 
-	recruiter, err := gemini.NewProvider(ctx, gemini.WithTool(endCallTool))
+	if err := registry.Register(endCallTool); err != nil {
+		return fmt.Errorf("failed to register end call tool: %w", err)
+	}
+
+	state := ConversationState{}
+	state.InitializeCall()
+
+	for _, tool := range NewConversationTools(&state) {
+		if err := registry.Register(tool); err != nil {
+			return fmt.Errorf("failed to register tool: %w", err)
+		}
+	}
+
+	recruiter, err := gemini.NewProvider(ctx, gemini.WithToolRegistry(registry))
 	if err != nil {
 		return fmt.Errorf("chat: failed to create Gemini provider: %w", err)
 	}
@@ -74,7 +90,7 @@ func autoChat(tc minds.ThreadContext, maxTurns int) error {
 
 	for maxTurns > 0 {
 		maxTurns--
-		if tc.Context().Err() != nil {
+		if ctx.Err() != nil {
 			return fmt.Errorf("chat: context error: %w", tc.Context().Err())
 		}
 
@@ -97,6 +113,14 @@ func autoChat(tc minds.ThreadContext, maxTurns int) error {
 		fmt.Printf("C > %s", yellow(candidateResp.String()))
 		tc = tc.AppendMessage(minds.Message{Role: minds.RoleUser, Content: candidateResp.String()})
 	}
+
+	// Marshal the state to JSON and print it to the console formatted pretty
+	stateJSON, err := json.Marshal(state)
+	if err != nil {
+		return fmt.Errorf("chat: failed to marshal state to JSON: %w", err)
+	}
+
+	fmt.Println(string(stateJSON))
 
 	return nil
 
