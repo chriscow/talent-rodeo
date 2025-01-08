@@ -1,4 +1,4 @@
-package main
+package rodeo
 
 import (
 	"text/template"

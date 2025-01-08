@@ -1,13 +1,16 @@
-package main
+package rodeo
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+
+	"github.com/chriscow/minds"
 )
 
 // generatePlan generates a plan for the LLM recruiter to follow when calling a candidate.
 // We have the LLM generate a dynamic plan that is customized to the candidate's resume.
-func (app *application) generatePlan(resumeText string) (string, error) {
+func generatePlan(ctx context.Context, llm minds.ContentGenerator, resumeText string) (string, error) {
 	prompt, err := CreateTemplate("prompts/recruiter.call-planning.openai.txt")
 	if err != nil {
 		return "", fmt.Errorf("generatePlan: failed to create template: %w", err)
@@ -21,5 +24,16 @@ func (app *application) generatePlan(resumeText string) (string, error) {
 		return "", fmt.Errorf("generatePlan: failed to execute template: %w", err)
 	}
 
-	return buf.String(), nil
+	req := minds.NewRequest(minds.Messages{{Role: minds.RoleUser, Content: buf.String()}})
+	resp, err := llm.GenerateContent(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("generatePlan: failed to generate content: %w", err)
+	}
+
+	plan, ok := resp.Text()
+	if !ok {
+		return "", fmt.Errorf("generatePlan: failed to get text from response")
+	}
+
+	return plan, nil
 }

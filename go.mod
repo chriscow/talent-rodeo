@@ -4,21 +4,21 @@ go 1.23.3
 
 toolchain go1.23.4
 
-// replace github.com/chriscow/minds => ../thoughtnet/minds/
+replace github.com/chriscow/minds => ../thoughtnet/minds
 
-// replace github.com/chriscow/minds/openai => ../thoughtnet/minds/openai
+replace github.com/chriscow/minds/openai => ../thoughtnet/minds/openai
 
-// replace github.com/chriscow/minds/gemini => ../thoughtnet/minds/gemini
+replace github.com/chriscow/minds/providers/gemini => ../thoughtnet/minds/providers/gemini
 
-// replace github.com/chriscow/minds/tools => ../thoughtnet/minds/tools
+replace github.com/chriscow/minds/tools => ../thoughtnet/minds/tools
 
 require (
 	github.com/WqyJh/go-openai-realtime v0.3.4
 	github.com/a-h/templ v0.2.793
 	github.com/alexedwards/flow v0.1.0
-	github.com/chriscow/minds v0.0.3
-	github.com/chriscow/minds/providers/gemini v0.0.3
+	github.com/chriscow/minds/providers/gemini v0.0.0-00010101000000-000000000000
 	github.com/delaneyj/toolbelt v0.3.15
+	github.com/fatih/color v1.16.0
 	github.com/fumiama/go-docx v0.0.0-20241231153056-9f8f327c74a5
 	github.com/go-playground/form/v4 v4.2.1
 	github.com/golang-migrate/migrate/v4 v4.18.1
@@ -46,7 +46,10 @@ require (
 	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67
 	golang.org/x/oauth2 v0.25.0
 	golang.org/x/text v0.21.0
+	gopkg.in/yaml.v2 v2.4.0
 )
+
+require github.com/mattn/go-colorable v0.1.13 // indirect
 
 require (
 	cloud.google.com/go v0.118.0 // indirect
@@ -59,6 +62,7 @@ require (
 	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/chewxy/math32 v1.11.1 // indirect
+	github.com/chriscow/minds v0.0.3
 	github.com/coder/websocket v1.8.12 // indirect
 	github.com/delaneyj/gostar v0.8.0 // indirect
 	github.com/denisbrodbeck/machineid v1.0.1 // indirect
@@ -120,7 +124,6 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250102185135-69823020774d // indirect
 	google.golang.org/grpc v1.69.2 // indirect
 	google.golang.org/protobuf v1.36.1 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	modernc.org/libc v1.61.2 // indirect
 	modernc.org/mathutil v1.6.0 // indirect
 	modernc.org/memory v1.8.0 // indirect

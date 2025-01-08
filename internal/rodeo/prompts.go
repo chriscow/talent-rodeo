@@ -1,4 +1,4 @@
-package main
+package rodeo
 
 import (
 	"fmt"
@@ -13,15 +13,20 @@ import (
 )
 
 type PromptHeader struct {
-	Name    string
-	Version string
-	Format  string
-	SHA256  string
+	Name    string `yaml:"name,omitempty"`
+	Version string `yaml:"version,omitempty"`
+	Format  string `yaml:"format,omitempty"`
+	SHA256  string `yaml:"sha256,omitempty"`
 }
 
 type Prompt struct {
 	Header   PromptHeader
 	Template *template.Template
+	body     string
+}
+
+func (p Prompt) Body() string {
+	return p.body
 }
 
 func (p Prompt) Execute(data interface{}) (string, error) {
@@ -51,11 +56,12 @@ func CreateTemplate(filepath string) (Prompt, error) {
 		return prompt, fmt.Errorf("SHA256 mismatch. Bump the version and update the SHA256")
 	} else if header.SHA256 == "" {
 		header.SHA256 = sha
-		if err := SavePromptTemplate(filepath, header, body); err != nil {
-			return prompt, err
-		}
+		// if err := SavePromptTemplate(filepath, header, body); err != nil {
+		// 	return prompt, fmt.Errorf("failed to save prompt template while updating hash: %w", err)
+		// }
 	}
 	prompt.Header = header
+	prompt.body = body
 
 	tmpl, err := template.New(header.Name).Parse(body)
 	if err != nil {
@@ -95,17 +101,21 @@ func SavePromptTemplate(filePath string, header PromptHeader, body string) error
 func extractYAMLHeader(templateStr string) (PromptHeader, string, error) {
 	const delimiter = "---"
 	var header PromptHeader
-	parts := strings.SplitN(templateStr, delimiter, 3)
-	if len(parts) != 3 {
-		return header, "", fmt.Errorf("invalid template format")
+	parts := strings.Split(templateStr, delimiter)
+	if len(parts) < 3 {
+		return header, "", nil
 	}
 
 	meta := strings.TrimSpace(parts[1])
-	body := strings.TrimSpace(parts[2])
+	if strings.HasPrefix(meta, "-") {
+		// the user put too many dashes or it was not the right format
+		return header, "", fmt.Errorf("invalid header format")
+	}
+	body := strings.Join(parts[2:], delimiter)
 
 	if err := yaml.Unmarshal([]byte(meta), &header); err != nil {
 		return header, "", err
 	}
 
-	return header, body, nil
+	return header, strings.TrimSpace(body), nil
 }
