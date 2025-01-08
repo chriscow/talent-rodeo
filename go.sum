@@ -18,8 +18,6 @@ github.com/CAFxX/httpcompression v0.0.9 h1:0ue2X8dOLEpxTm8tt+OdHcgA+gbDge0OqFQWG
 github.com/CAFxX/httpcompression v0.0.9/go.mod h1:XX8oPZA+4IDcfZ0A71Hz0mZsv/YJOgYygkFhizVPilM=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
-github.com/VapiAI/server-sdk-go v0.2.0 h1:epSuIkfsU5TL6rcI20NHVJ7L2RHLlhk08jh6OAaQIeU=
-github.com/VapiAI/server-sdk-go v0.2.0/go.mod h1:iLrUDuX2ejNvylKCMgYYJcCkTILKGvHUfmP/1HRwtzQ=
 github.com/WqyJh/go-openai-realtime v0.3.4 h1:VKTvilING9+F5nSgJ71lKENvn0QfBhr7OBZqBtDR5DU=
 github.com/WqyJh/go-openai-realtime v0.3.4/go.mod h1:nmUYODacQuObuh0DFSEIDfJM9L4ZFDRU/OEGYMryt60=
 github.com/a-h/templ v0.2.793 h1:Io+/ocnfGWYO4VHdR0zBbf39PQlnzVCVVD+wEEs6/qY=

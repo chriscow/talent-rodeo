@@ -1,49 +1,55 @@
 package vapi
 
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"net/http"
+)
+
 // CallRequest represents the top-level request structure
-type Call struct {
-	ID                 string             `json:"id"`
-	OrgID              string             `json:"orgId"`
-	AssistantID        string             `json:"assistantId"`
-	Assistant          Assistant          `json:"assistant"`
-	AssistantOverrides AssistantOverrides `json:"assistantOverrides"`
-	SquadID            string             `json:"squadId"`
-	Squad              Squad              `json:"squad"`
-	PhoneNumberID      string             `json:"phoneNumberId"`
-	Customer           Customer           `json:"customer"`
-	Name               string             `json:"name"`
+type CallConfig struct {
+	ID                 string    `json:"id"`
+	OrgID              string    `json:"orgId"`
+	AssistantID        string    `json:"assistantId"`
+	Assistant          Assistant `json:"assistant"`
+	AssistantOverrides Assistant `json:"assistantOverrides"`
+	SquadID            string    `json:"squadId"`
+	Squad              Squad     `json:"squad"`
+	PhoneNumberID      string    `json:"phoneNumberId"`
+	Customer           Customer  `json:"customer"`
+	Name               string    `json:"name"`
 }
 
-// // Assistant contains the core configuration
-// type Assistant struct {
-// 	Transcriber                  TranscriberConfig `json:"transcriber"`
-// 	Model                        ModelConfig       `json:"model"`
-// 	Voice                        VoiceConfig       `json:"voice"`
-// 	FirstMessage                 string            `json:"firstMessage"`
-// 	FirstMessageMode             string            `json:"firstMessageMode"`
-// 	HipaaEnabled                 bool              `json:"hipaaEnabled"`
-// 	ClientMessages               []string          `json:"clientMessages"`
-// 	ServerMessages               []string          `json:"serverMessages"`
-// 	SilenceTimeoutSeconds        int               `json:"silenceTimeoutSeconds"`
-// 	MaxDurationSeconds           int               `json:"maxDurationSeconds"`
-// 	BackgroundSound              string            `json:"backgroundSound"`
-// 	BackgroundDenoisingEnabled   bool              `json:"backgroundDenoisingEnabled"`
-// 	ModelOutputInMessagesEnabled bool              `json:"modelOutputInMessagesEnabled"`
-// 	TransportConfigurations      []TransportConfig `json:"transportConfigurations"`
-// 	Name                         string            `json:"name"`
-// 	VoicemailDetection           VoicemailConfig   `json:"voicemailDetection"`
-// 	VoicemailMessage             string            `json:"voicemailMessage"`
-// 	EndCallMessage               string            `json:"endCallMessage"`
-// 	EndCallPhrases               []string          `json:"endCallPhrases"`
-// 	Metadata                     map[string]string `json:"metadata"`
-// 	ArtifactPlan                 ArtifactPlan      `json:"artifactPlan"`
-// 	MessagePlan                  MessagePlan       `json:"messagePlan"`
-// 	StartSpeakingPlan            StartSpeakingPlan `json:"startSpeakingPlan"`
-// 	StopSpeakingPlan             StopSpeakingPlan  `json:"stopSpeakingPlan"`
-// 	MonitorPlan                  MonitorPlan       `json:"monitorPlan"`
-// 	CredentialIDs                []string          `json:"credentialIds"`
-// 	Server                       ServerConfig      `json:"server"`
-// }
+func CreateCall(call CallConfig) error {
+	// curl -X POST https://api.vapi.ai/call \
+	// -H "Authorization: Bearer <token>" \
+	// -H "Content-Type: application/json" \
+	// -d '{}'
+	b, err := json.Marshal(call)
+	if err != nil {
+		return err
+	}
+
+	buf := bytes.NewBuffer(b)
+	req, err := http.NewRequest("POST", "https://api.vapi.ai/call", buf)
+	if err != nil {
+		return fmt.Errorf("failed to create request for call: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to http client failed: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to create call: %w", err)
+	}
+
+	return nil
+}
 
 // Customer contains customer information
 type Customer struct {
