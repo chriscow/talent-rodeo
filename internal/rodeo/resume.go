@@ -10,10 +10,6 @@ import (
 	"github.com/fumiama/go-docx"
 )
 
-type StatusSender interface {
-	SendStatus(sessionID, level, message string)
-}
-
 func convertResume(ctx context.Context, llm minds.ContentGenerator, resumeText string, sessionID string, status StatusSender) (string, error) {
 	prompt, err := CreateTemplate("prompts/recruiter.convert-resume.txt")
 	if err != nil {

@@ -2,14 +2,13 @@ package rodeo
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"talent-rodeo/internal/vapi"
 
 	"github.com/chriscow/minds"
 )
 
-func callCandidate(ctx context.Context, sessionID, systemPrompt string, status StatusSender) (*CandidateInfo, error) {
+func callCandidate(ctx context.Context, sessionID, systemPrompt string, status StatusSender) ([]byte, error) {
 	status.SendStatus(sessionID, "info", "Calling candidate ...")
 
 	assistantID := "30709dea-4c26-457a-96a0-4ee7488f6b72"
@@ -42,7 +41,7 @@ func callCandidate(ctx context.Context, sessionID, systemPrompt string, status S
 		return nil, fmt.Errorf("callCandidate: failed to generate schema: %w", err)
 	}
 
-	body, err := vapi.CreateCall(ctx, vapi.CallConfig{
+	return vapi.CreateCall(ctx, vapi.CallConfig{
 		AssistantID:   &assistantID,
 		PhoneNumberID: &outboundPhoneID,
 		AssistantOverrides: &vapi.Assistant{
@@ -57,21 +56,6 @@ func callCandidate(ctx context.Context, sessionID, systemPrompt string, status S
 			Name:   "Chris Cowherd",
 		},
 	})
-
-	if err != nil {
-		status.SendStatus(sessionID, "error", "Failed to create call")
-		return nil, fmt.Errorf("callCandidate: failed to create call: %w", err)
-	}
-
-	var info CandidateInfo
-	if err := json.Unmarshal(body, &info); err != nil {
-		status.SendStatus(sessionID, "error", "Failed to unmarshal response")
-		return nil, fmt.Errorf("callCandidate: failed to unmarshal response: %w", err)
-	}
-
-	status.SendStatus(sessionID, "success", "Call created!")
-
-	return &info, nil
 }
 
 type EndCallArgs struct {
