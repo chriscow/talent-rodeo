@@ -23,16 +23,19 @@ type Block struct {
 	OrgID     string    `json:"orgId"`
 	UpdatedAt time.Time `json:"updatedAt"`
 
-	// This is the input schema for the block. This is the input the block needs to run. It’s given to the block as steps[0].input
+	// This is the input schema for the block. This is the input the block needs
+	// to run. It’s given to the block as steps[0].input
 	InputSchema *minds.Definition `json:"inputSchema,omitempty"`
 
-	// These are the pre-configured messages that will be spoken to the user while the block is running.
+	// These are the pre-configured messages that will be spoken to the user
+	// while the block is running.
 	Messages []Message `json:"messages,omitempty"`
 
 	// This is the name of the block. This is just for your reference.
 	Name *string `json:"name,omitempty"`
 
-	// This is the output schema for the block. This is the output the block will return to the workflow ({{stepName.output}}).
+	// This is the output schema for the block. This is the output the block
+	// will return to the workflow ({{stepName.output}}).
 	OutputSchema *minds.Definition `json:"outputSchema,omitempty"`
 
 	// type: "conversation" only: This is the instruction for the conversation.

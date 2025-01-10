@@ -22,10 +22,10 @@ func main() {
 	// 3. Create a system prompt for the recruiter that includes the plan and resume
 	// 4. Call the candidate
 	//
-	ctx := context.Background()
 	sessionID := "session-id"
+	ctx := context.WithValue(context.Background(), rodeo.SessionIDKey, sessionID)
 
-	if err := rodeo.StartWorkflow(ctx, sessionID, resumeText, nil); err != nil {
+	if err := rodeo.StartWorkflow(ctx, resumeText, nil); err != nil {
 		log.Fatalf("Failed to start workflow: %v", err)
 	}
 

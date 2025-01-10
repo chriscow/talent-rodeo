@@ -1,0 +1,8 @@
+We are building an AI conversational bot that can help candidates find jobs. The
+bot will be able to ask questions about the candidate's experience, skills, and
+preferences.
+
+The candidate emails the bot their resume and the bot calls them on the phone
+to ask them questions about their experience and preferences. The bot will
+then use this information to help the candidate find a job.
+
