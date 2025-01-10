@@ -3,7 +3,6 @@ package rodeo
 import (
 	"context"
 	"encoding/json"
-	"strings"
 
 	"github.com/chriscow/minds"
 )
@@ -23,7 +22,7 @@ import (
 	}
 */
 type AddKnownFactArgs struct {
-	Facts []string `json:"fact" description:"Additional new facts learned about the candidate"`
+	Facts []string `json:"fact" description:"New facts learned about the candidate"`
 }
 
 type addKnownFactsTool struct {
@@ -31,9 +30,9 @@ type addKnownFactsTool struct {
 }
 
 func (t *addKnownFactsTool) Type() string { return "function" }
-func (t *addKnownFactsTool) Name() string { return "add_known_fact" }
+func (t *addKnownFactsTool) Name() string { return "save_known_fact_about_candidate" }
 func (t *addKnownFactsTool) Description() string {
-	return "Add newly discovered facts about the candidate"
+	return "When the candidate provides facts, you can save this with this function. Call this every time you learn a new fact about the candidate."
 }
 
 func (t *addKnownFactsTool) Parameters() minds.Definition {
@@ -48,13 +47,16 @@ func (t *addKnownFactsTool) Call(ctx context.Context, input []byte) ([]byte, err
 	}
 	t.state.Candidate.KnownFacts = append(t.state.Candidate.KnownFacts, args.Facts...)
 
-	sb := strings.Builder{}
-	sb.WriteString("Fact(s) known about the candidate:\n")
-	for _, fact := range args.Facts {
-		sb.WriteString(fact)
-		sb.WriteString("\n")
+	result := map[string]interface{}{
+		"known_facts": args.Facts,
 	}
-	return []byte(sb.String()), nil
+
+	b, err := json.Marshal(result)
+	if err != nil {
+		return nil, err
+	}
+
+	return b, nil
 }
 
 type AddInferredPreferenceArgs struct {
@@ -66,9 +68,9 @@ type addInferredPreferenceTool struct {
 }
 
 func (t *addInferredPreferenceTool) Type() string { return "function" }
-func (t *addInferredPreferenceTool) Name() string { return "add_inferred_preference" }
+func (t *addInferredPreferenceTool) Name() string { return "save_candidates_inferred_job_preference" }
 func (t *addInferredPreferenceTool) Description() string {
-	return "Add a career preference inferred from the candidate's responses"
+	return "Add a career / job preference inferred from the candidate's responses"
 }
 
 func (t *addInferredPreferenceTool) Parameters() minds.Definition {
@@ -83,11 +85,14 @@ func (t *addInferredPreferenceTool) Call(ctx context.Context, input []byte) ([]b
 	}
 	t.state.Candidate.InferredPreferences = append(t.state.Candidate.InferredPreferences, args.Preferences...)
 
-	sb := strings.Builder{}
-	sb.WriteString("Inferred career preferences known:\n")
-	for _, pref := range args.Preferences {
-		sb.WriteString(pref)
-		sb.WriteString("\n")
+	result := map[string]interface{}{
+		"inferred_preferences": args.Preferences,
 	}
-	return []byte(sb.String()), nil
+
+	b, err := json.Marshal(result)
+	if err != nil {
+		return nil, err
+	}
+
+	return b, nil
 }
