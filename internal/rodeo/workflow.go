@@ -1,13 +1,13 @@
 package rodeo
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 )
 
-func StartWorkflow(ctx context.Context, sessionID, resumeText string, status StatusSender) error {
+const SessionIDKey = "sessionID"
+
+func StartWorkflow(ctx context.Context, resumeText string, status StatusSender) error {
 	if status == nil {
 		status = defaultStatus{}
 	}
@@ -37,50 +37,45 @@ func StartWorkflow(ctx context.Context, sessionID, resumeText string, status Sta
 	// 	return fmt.Errorf("startWorkflow: failed to generate plan: %w", err)
 	// }
 
-	prompt, err := CreateTemplate("prompts/recruiter.system.003.txt")
+	// recruiterTemplate, err := CreateTemplate("prompts/recruiter.system.003.txt")
+	// if err != nil {
+	// 	status.SendStatus(sessionID, "error", "Failed to create prompt template")
+	// 	return fmt.Errorf("startWorkflow: failed to create prompt template: %w", err)
+	// }
+
+	// recruiterPrompt := bytes.NewBuffer([]byte(plan))
+	// data := map[string]any{
+	// 	"Plan":   plan,
+	// 	"Resume": resumeYAML,
+	// }
+	// if err := recruiterTemplate.Template.Execute(recruiterPrompt, data); err != nil {
+	// 	status.SendStatus(sessionID, "error", "Failed to execute prompt template")
+	// 	return fmt.Errorf("startWorkflow: failed to execute prompt template: %w", err)
+	// }
+
+	// bodyBytes, err := callCandidate(ctx, sessionID, recruiterPrompt.String(), status)
+	// if err != nil {
+	// 	status.SendStatus(sessionID, "error", "Failed to call candidate")
+	// 	return fmt.Errorf("startWorkflow: failed to call candidate: %w", err)
+	// }
+
+	// status.SendStatus(sessionID, "success", "Workflow completed successfully!")
+
+	// println("----------------------")
+	// println("----------------------")
+	// println("----------------------")
+	// fmt.Println(string(bodyBytes))
+
+	// Generate the workflow
+	workflow, err := PlanConversationWorkflow(ctx, resumeText, status)
 	if err != nil {
-		status.SendStatus(sessionID, "error", "Failed to create prompt template")
-		return fmt.Errorf("startWorkflow: failed to create prompt template: %w", err)
+		return fmt.Errorf("StartWorkflow: failed to create block: %w", err)
 	}
 
-	systemPrompt := bytes.NewBuffer([]byte(plan))
-	data := map[string]any{
-		"Plan":   plan,
-		"Resume": resumeYAML,
-	}
-	if err := prompt.Template.Execute(systemPrompt, data); err != nil {
-		status.SendStatus(sessionID, "error", "Failed to execute prompt template")
-		return fmt.Errorf("startWorkflow: failed to execute prompt template: %w", err)
-	}
-
-	info, err := callCandidate(ctx, sessionID, systemPrompt.String(), status)
-	if err != nil {
-		status.SendStatus(sessionID, "error", "Failed to call candidate")
-		return fmt.Errorf("startWorkflow: failed to call candidate: %w", err)
-	}
-
-	status.SendStatus(sessionID, "success", "Workflow completed successfully!")
-
-	b, err := json.MarshalIndent(info, "", "  ")
-	if err != nil {
-		return fmt.Errorf("startWorkflow: failed to marshal JSON: %w", err)
-	}
-
-	fmt.Println(string(b))
+	fmt.Printf("Workflow: %v\n", workflow)
 
 	return nil
 
-	// prompt := "Hello?"
-
-	// text, _ := resp.Text()
-	// println("R > " + text)
-	// tc := minds.NewThreadContext(ctx)
-	// tc.AppendMessages(minds.Message{
-	// 	Role:    minds.RoleSystem,
-	// 	Content: systemPrompt.String(),
-	// })
-
-	// return autoChat(tc, 25)
 }
 
 const plan = `### **Conversation Plan for Chris Cowherd**

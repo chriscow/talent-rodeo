@@ -21,6 +21,8 @@ type StepMutation struct {
 	Conditions []Condition `json:"conditions,omitempty"`
 }
 
+// A step contains a Block and the input to the block as well as the destinations
+// for the step.  The destination is determined by the output of the block.
 type Step struct {
 	Type         StepType          `json:"type"`
 	Name         string            `json:"name"`

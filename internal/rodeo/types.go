@@ -76,7 +76,7 @@ type CandidateInfo struct {
 	PortfolioURL    string `json:"portfolio_url,omitempty" description:"URL to the candidate's portfolio or personal website"`
 
 	// Resume Information
-	Resume            string   `json:"resume" description:"The candidate's resume in markdown format"`
+	// Resume            string   `json:"resume" description:"The candidate's resume in markdown format"`
 	Skills            []string `json:"skills" description:"Specific skills extracted or inferred from the resume and call"`
 	ExperienceSummary string   `json:"experience_summary" description:"High-level summary of the candidate's experience"`
 
