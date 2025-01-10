@@ -30,8 +30,8 @@ func generatePlan(ctx context.Context, llm minds.ContentGenerator, resumeText st
 		return "", fmt.Errorf("generatePlan: failed to generate content: %w", err)
 	}
 
-	plan, ok := resp.Text()
-	if !ok {
+	plan := resp.String()
+	if plan == "" {
 		return "", fmt.Errorf("generatePlan: failed to get text from response")
 	}
 

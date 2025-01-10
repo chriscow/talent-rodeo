@@ -9,6 +9,7 @@ import (
 
 	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/providers/gemini"
+	"github.com/chriscow/minds/providers/openai"
 	"github.com/fatih/color"
 )
 
@@ -25,7 +26,7 @@ func chat(llm minds.ThreadHandler, tc minds.ThreadContext) error {
 			break
 		}
 
-		tc.AppendMessage(minds.Message{Role: minds.RoleUser, Content: s.Text()})
+		tc.AppendMessages(minds.Message{Role: minds.RoleUser, Content: s.Text()})
 
 		tc, err = llm.HandleThread(tc, nil)
 		if err != nil {
@@ -47,6 +48,7 @@ func autoChat(tc minds.ThreadContext, maxTurns int) error {
 
 	cyan := color.New(color.FgCyan).SprintFunc()
 	yellow := color.New(color.FgYellow).SprintFunc()
+	blue := color.New(color.FgBlue).SprintFunc()
 	var err error
 
 	registry := minds.NewToolRegistry()
@@ -60,16 +62,16 @@ func autoChat(tc minds.ThreadContext, maxTurns int) error {
 		return fmt.Errorf("failed to register end call tool: %w", err)
 	}
 
-	state := ConversationState{}
-	state.InitializeCall()
+	state := RecruiterTurn{}
 
-	for _, tool := range NewConversationTools(&state) {
-		if err := registry.Register(tool); err != nil {
-			return fmt.Errorf("failed to register tool: %w", err)
-		}
+	schema, err := minds.NewResponseSchema("CollectedInformation",
+		"Information collected about the candidate during the call",
+		state)
+	if err != nil {
+		return fmt.Errorf("chat: failed to create response schema: %w", err)
 	}
 
-	recruiter, err := gemini.NewProvider(ctx, gemini.WithToolRegistry(registry))
+	recruiter, err := openai.NewProvider(openai.WithResponseSchema(*schema))
 	if err != nil {
 		return fmt.Errorf("chat: failed to create Gemini provider: %w", err)
 	}
@@ -86,7 +88,7 @@ func autoChat(tc minds.ThreadContext, maxTurns int) error {
 
 	fmt.Println("Conversation")
 	fmt.Println("---------------------")
-	tc = tc.AppendMessage(minds.Message{Role: minds.RoleUser, Content: "Hello?"})
+	tc = tc.AppendMessages(minds.Message{Role: minds.RoleUser, Content: "Hello?"})
 
 	for maxTurns > 0 {
 		maxTurns--
@@ -95,27 +97,45 @@ func autoChat(tc minds.ThreadContext, maxTurns int) error {
 		}
 
 		req := minds.NewRequest(tc.Messages())
+		// req.Options.ToolChoice = "required"
 		recruiterResp, err := recruiter.GenerateContent(ctx, req)
 		if err != nil {
 			return fmt.Errorf("startWorkflow: failed to handle thread: %w", err)
 		}
 
-		tc.AppendMessage(minds.Message{Role: minds.RoleAssistant, Content: recruiterResp.String()})
+		if recruiterResp.String() == "" {
+			continue
+		}
 
-		fmt.Printf("R > %s", cyan(recruiterResp.String()))
+		update := RecruiterTurn{}
+		if err := json.Unmarshal([]byte(recruiterResp.String()), &update); err != nil {
+			return fmt.Errorf("chat: failed to unmarshal response: %w", err)
+		}
 
-		candidateReq := minds.NewRequest(reverseRoles(tc))
+		state.Merge(update)
+
+		prettyJSON, err := json.MarshalIndent(state, "", "  ")
+		if err != nil {
+			return fmt.Errorf("chat: failed to marshal JSON: %w", err)
+		}
+
+		fmt.Printf("[State] %s\n", blue(string(prettyJSON)))
+		fmt.Printf("R > %s\n", cyan(update.Response))
+		tc.AppendMessages(minds.Message{Role: minds.RoleSystem, Content: string(prettyJSON)})
+		tc.AppendMessages(minds.Message{Role: minds.RoleAssistant, Content: update.Response})
+
+		candidateReq := minds.NewRequest(reverseRoles(tc).Exclude(minds.RoleSystem, minds.RoleTool, minds.RoleFunction))
 		candidateResp, err := candidate.GenerateContent(tc.Context(), candidateReq)
 		if err != nil {
 			return fmt.Errorf("chat: failed to generate content: %w", err)
 		}
 
-		fmt.Printf("C > %s", yellow(candidateResp.String()))
-		tc = tc.AppendMessage(minds.Message{Role: minds.RoleUser, Content: candidateResp.String()})
+		fmt.Printf("C > %s\n", yellow(candidateResp.String()))
+		tc = tc.AppendMessages(minds.Message{Role: minds.RoleUser, Content: candidateResp.String()})
 	}
 
 	// Marshal the state to JSON and print it to the console formatted pretty
-	stateJSON, err := json.Marshal(state)
+	stateJSON, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return fmt.Errorf("chat: failed to marshal state to JSON: %w", err)
 	}

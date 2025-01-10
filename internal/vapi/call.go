@@ -2,62 +2,85 @@ package vapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 )
 
 // CallRequest represents the top-level request structure
 type CallConfig struct {
-	ID                 string    `json:"id"`
-	OrgID              string    `json:"orgId"`
-	AssistantID        string    `json:"assistantId"`
-	Assistant          Assistant `json:"assistant"`
-	AssistantOverrides Assistant `json:"assistantOverrides"`
-	SquadID            string    `json:"squadId"`
-	Squad              Squad     `json:"squad"`
-	PhoneNumberID      string    `json:"phoneNumberId"`
-	Customer           Customer  `json:"customer"`
-	Name               string    `json:"name"`
+	ID                 *string    `json:"id,omitempty"`
+	OrgID              *string    `json:"orgId,omitempty"`
+	AssistantID        *string    `json:"assistantId,omitempty"`
+	Assistant          *Assistant `json:"assistant,omitempty"`
+	AssistantOverrides *Assistant `json:"assistantOverrides,omitempty"`
+	SquadID            *string    `json:"squadId,omitempty"`
+	Squad              *Squad     `json:"squad,omitempty"`
+	PhoneNumberID      *string    `json:"phoneNumberId,omitempty"`
+	Customer           *Customer  `json:"customer,omitempty"`
+	Name               *string    `json:"name,omitempty"`
 }
 
-func CreateCall(call CallConfig) error {
+func CreateCall(ctx context.Context, call CallConfig) ([]byte, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	// curl -X POST https://api.vapi.ai/call \
 	// -H "Authorization: Bearer <token>" \
 	// -H "Content-Type: application/json" \
 	// -d '{}'
 	b, err := json.Marshal(call)
 	if err != nil {
-		return err
+		return nil, err
 	}
+
+	println(string(b))
 
 	buf := bytes.NewBuffer(b)
 	req, err := http.NewRequest("POST", "https://api.vapi.ai/call", buf)
 	if err != nil {
-		return fmt.Errorf("failed to create request for call: %w", err)
+		return nil, fmt.Errorf("failed to create request for call: %w", err)
+	}
+
+	apiKey := os.Getenv("VAPI_API_KEY")
+	if apiKey == "" {
+		return nil, fmt.Errorf("VAPI_API_KEY not set")
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to http client failed: %w", err)
+		return nil, fmt.Errorf("failed to http client failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var body bytes.Buffer
+	_, err = body.ReadFrom(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to create call: %w", err)
+		// read the response body
+
+		return nil, fmt.Errorf("failed to create call. code: %d msg: %s", resp.StatusCode, body.String())
 	}
 
-	return nil
+	return body.Bytes(), nil
 }
 
 // Customer contains customer information
 type Customer struct {
-	NumberE164CheckEnabled bool   `json:"numberE164CheckEnabled"`
-	Extension              string `json:"extension"`
-	Number                 string `json:"number"`
-	SipURI                 string `json:"sipUri"`
-	Name                   string `json:"name"`
+	NumberE164CheckEnabled *bool   `json:"numberE164CheckEnabled,omitempty"`
+	Extension              *string `json:"extension,omitempty"`
+	Number                 string  `json:"number"`
+	SipURI                 *string `json:"sipUri,omitempty"`
+	Name                   string  `json:"name"`
 }
 
 // Additional required types...
