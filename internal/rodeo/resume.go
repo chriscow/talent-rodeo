@@ -33,8 +33,8 @@ func convertResume(ctx context.Context, llm minds.ContentGenerator, resumeText s
 		return "", fmt.Errorf("analyzeResume: failed to generate content: %w", err)
 	}
 
-	analysis, ok := resp.Text()
-	if !ok {
+	analysis := resp.String()
+	if analysis == "" {
 		status.SendStatus(sessionID, "error", "Failed to get text from response")
 		return "", fmt.Errorf("analyzeResume: failed to get text from response")
 	}

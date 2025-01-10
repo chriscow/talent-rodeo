@@ -8,7 +8,7 @@ import (
 )
 
 type ConversationStage int
-type EngagementLevel int
+type EngagementLevel string
 
 const (
 	ConversationStageUnknown ConversationStage = iota
@@ -21,10 +21,10 @@ const (
 )
 
 const (
-	EngagementLevelUnknown EngagementLevel = iota
-	EngagementLevelHigh
-	EngagementLevelMedium
-	EngagementLevelLow
+	EngagementLevelUnknown EngagementLevel = "unknown"
+	EngagementLevelHigh    EngagementLevel = "high"
+	EngagementLevelMedium  EngagementLevel = "medium"
+	EngagementLevelLow     EngagementLevel = "low"
 )
 
 func (cs ConversationStage) String() string {
@@ -46,31 +46,60 @@ func (cs ConversationStage) String() string {
 	}
 }
 
-func (el EngagementLevel) String() string {
-	switch el {
-	case EngagementLevelHigh:
-		return "high"
-	case EngagementLevelMedium:
-		return "medium"
-	case EngagementLevelLow:
-		return "low"
-	default:
-		return "unknown"
-	}
-}
-
-// Structs for state management
-type CandidateInfo struct {
+type RecruiterTurn struct {
 	// KnownFacts are facts about the candidate that are known or discovered during the call
 	KnownFacts          []string        `json:"known_facts" description:"Facts about the candidate that are known or discovered during the call"`
 	InferredPreferences []string        `json:"inferred_preferences" description:"Career preferences inferred from the candidate's responses"`
 	PotentialConcerns   []string        `json:"potential_concerns" description:"Potential concerns about the candidate"`
-	EngagementLevel     EngagementLevel `json:"engagement_level" enum:"high,medium,low"  description:"The candidate's engagement level during the call"`
-	Resume              string          `json:"resume" description:"The candidate's resume in markdown format"`
-	Name                string          `json:"name" description:"The candidate's name"`
-	Email               string          `json:"email" description:"The candidate's email address"`
-	PhoneNumber         string          `json:"phone_number" description:"The candidate's phone number"`
-	Timezone            string          `json:"timezone" description:"The candidate's timezone"`
+	EngagementLevel     EngagementLevel `json:"engagement_level" enum:"unknown,high,medium,low"  description:"The candidate's engagement level during the call"`
+	Response            string          `json:"response" description:"The recruiter's response to the candidate"`
+}
+
+func (r *RecruiterTurn) Merge(other RecruiterTurn) {
+	r.KnownFacts = append(r.KnownFacts, other.KnownFacts...)
+	r.InferredPreferences = append(r.InferredPreferences, other.InferredPreferences...)
+	r.PotentialConcerns = append(r.PotentialConcerns, other.PotentialConcerns...)
+	r.EngagementLevel = other.EngagementLevel
+	r.Response = other.Response
+}
+
+// Structs for state management
+//
+
+type CandidateInfo struct {
+	// Basic Information
+	Name            string `json:"name" description:"The candidate's name"`
+	Email           string `json:"email" description:"The candidate's email address"`
+	PhoneNumber     string `json:"phone_number" description:"The candidate's phone number"`
+	Timezone        string `json:"timezone" description:"The candidate's timezone"`
+	LinkedInProfile string `json:"linkedin_profile,omitempty" description:"The candidate's LinkedIn profile URL if available"`
+	PortfolioURL    string `json:"portfolio_url,omitempty" description:"URL to the candidate's portfolio or personal website"`
+
+	// Resume Information
+	Resume            string   `json:"resume" description:"The candidate's resume in markdown format"`
+	Skills            []string `json:"skills" description:"Specific skills extracted or inferred from the resume and call"`
+	ExperienceSummary string   `json:"experience_summary" description:"High-level summary of the candidate's experience"`
+
+	// Insights from the Call
+	KnownFacts          []string `json:"known_facts" description:"Facts about the candidate that are known or discovered during the call"`
+	InferredPreferences []string `json:"inferred_preferences" description:"Career preferences inferred from the candidate's responses"`
+	UnlistedSkills      []string `json:"unlisted_skills,omitempty" description:"Skills or qualifications the candidate has but didn't include on the resume"`
+	CareerAspirations   string   `json:"career_aspirations" description:"Candidate's stated career goals and aspirations"`
+	WorkEnvironment     string   `json:"work_environment" description:"Preferred work environment (e.g., remote, hybrid, in-office)"`
+	IndustryPreferences []string `json:"industry_preferences,omitempty" description:"Preferred industries or sectors the candidate is interested in"`
+
+	// Potential Concerns and Challenges
+	PotentialConcerns []string `json:"potential_concerns" description:"Potential concerns about the candidate"`
+	DealBreakers      []string `json:"deal_breakers,omitempty" description:"Non-negotiable factors for the candidate (e.g., salary, location, work style)"`
+
+	// Engagement Metrics
+	EngagementLevel EngagementLevel `json:"engagement_level" enum:"high,medium,low" description:"The candidate's engagement level during the call"`
+	CallNotes       string          `json:"call_notes" description:"General notes or observations from the call"`
+
+	// Recommendations and Next Steps
+	RecommendedRoles    []string `json:"recommended_roles,omitempty" description:"Roles or job titles that align with the candidate's skills and preferences"`
+	TrainingSuggestions []string `json:"training_suggestions,omitempty" description:"Suggested areas for upskilling or certification"`
+	NextSteps           string   `json:"next_steps" description:"Recommended actions or follow-ups for the candidate"`
 }
 
 type GoalProgress struct {

@@ -2,45 +2,82 @@ package rodeo
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"talent-rodeo/internal/vapi"
 
 	"github.com/chriscow/minds"
 )
 
-func callCandidate(ctx context.Context, sessionID, systemPrompt string, status StatusSender) error {
+func callCandidate(ctx context.Context, sessionID, systemPrompt string, status StatusSender) (*CandidateInfo, error) {
 	status.SendStatus(sessionID, "info", "Calling candidate ...")
 
-	assistantID := "assistant-id"
-	phoneID := "phone-id"
+	assistantID := "30709dea-4c26-457a-96a0-4ee7488f6b72"
+	outboundPhoneID := "16bbd5bb-2e5a-4a3b-937b-0665e1648dff"
 
-	if err := vapi.CreateCall(vapi.CallConfig{
-		AssistantID:   assistantID,
-		PhoneNumberID: phoneID,
-		AssistantOverrides: vapi.Assistant{
-			Model: vapi.ModelConfig{
-				Model:     "gpt-4o",
-				MaxTokens: 300,
-				Messages: []vapi.Message{{
-					Role:    "system",
-					Content: systemPrompt,
-				}},
+	modelConfig := vapi.DefaultModelConfig
+	modelConfig.Messages = []vapi.Message{{
+		Role:    "system",
+		Content: systemPrompt,
+	}}
+
+	analysisPrompt := `
+	You are an AI assistant tasked with analyzing a transcript of a candidate's interview call. Your goal is to extract key information about the candidate.
+	
+	#### Instructions:
+	1. Carefully analyze the transcript of the call provided below.
+	2. Extract and structure all relevant information into the fields of the JSON.
+	3. If certain information is not explicitly mentioned but can be reasonably inferred, include it in the relevant field and mark it as "inferred."
+	4. Ensure all fields are filled to the best of your ability based on the transcript.
+	
+	#### **Output: Formatted CandidateInfo**
+	Provide the structured information as JSON formatted output.
+		
+	Focus on accuracy and completeness to ensure the structured output provides 
+	valuable insights for identifying job opportunities for the candidate.`
+
+	analysisSchema, err := minds.GenerateSchema(CandidateInfo{})
+	if err != nil {
+		status.SendStatus(sessionID, "error", "Failed to generate schema")
+		return nil, fmt.Errorf("callCandidate: failed to generate schema: %w", err)
+	}
+
+	body, err := vapi.CreateCall(ctx, vapi.CallConfig{
+		AssistantID:   &assistantID,
+		PhoneNumberID: &outboundPhoneID,
+		AssistantOverrides: &vapi.Assistant{
+			Model: &modelConfig,
+			AnalysisPlan: &vapi.AnalysisPlan{
+				StructuredDataPrompt: &analysisPrompt,
+				StructuredDataSchema: analysisSchema,
 			},
 		},
-	}); err != nil {
+		Customer: &vapi.Customer{
+			Number: "+14258295443",
+			Name:   "Chris Cowherd",
+		},
+	})
+
+	if err != nil {
 		status.SendStatus(sessionID, "error", "Failed to create call")
-		return fmt.Errorf("callCandidate: failed to create call: %w", err)
+		return nil, fmt.Errorf("callCandidate: failed to create call: %w", err)
+	}
+
+	var info CandidateInfo
+	if err := json.Unmarshal(body, &info); err != nil {
+		status.SendStatus(sessionID, "error", "Failed to unmarshal response")
+		return nil, fmt.Errorf("callCandidate: failed to unmarshal response: %w", err)
 	}
 
 	status.SendStatus(sessionID, "success", "Call created!")
 
-	return nil
+	return &info, nil
 }
 
 type EndCallArgs struct {
 	CallID      string `json:"call_id"`
 	Disposition string `json:"disposition" enum:"completed,missed,failed,other"`
-	Notes       string `json:"notes,omitempty"`
+	Notes       string `json:"notes"`
 }
 
 type endCallTool struct {

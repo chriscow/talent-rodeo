@@ -6,7 +6,7 @@ toolchain go1.23.4
 
 replace github.com/chriscow/minds => ../thoughtnet/minds
 
-replace github.com/chriscow/minds/openai => ../thoughtnet/minds/openai
+replace github.com/chriscow/minds/providers/openai => ../thoughtnet/minds/providers/openai
 
 replace github.com/chriscow/minds/providers/gemini => ../thoughtnet/minds/providers/gemini
 
@@ -16,7 +16,8 @@ require (
 	github.com/WqyJh/go-openai-realtime v0.3.4
 	github.com/a-h/templ v0.2.793
 	github.com/alexedwards/flow v0.1.0
-	github.com/chriscow/minds/providers/gemini v0.0.0-00010101000000-000000000000
+	github.com/chriscow/minds/providers/gemini v0.0.3
+	github.com/chriscow/minds/providers/openai v0.0.0-00010101000000-000000000000
 	github.com/delaneyj/toolbelt v0.3.15
 	github.com/fatih/color v1.16.0
 	github.com/fumiama/go-docx v0.0.0-20241231153056-9f8f327c74a5
@@ -42,20 +43,24 @@ require (
 	github.com/tmaxmax/go-sse v0.10.0
 	github.com/tomasen/realip v0.0.0-20180522021738-f0c99a92ddce
 	github.com/wneessen/go-mail v0.5.2
-	golang.org/x/crypto v0.31.0
+	golang.org/x/crypto v0.32.0
 	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67
 	golang.org/x/oauth2 v0.25.0
 	golang.org/x/text v0.21.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 
-require github.com/mattn/go-colorable v0.1.13 // indirect
+require (
+	github.com/dlclark/regexp2 v1.11.4 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/tiktoken-go/tokenizer v0.2.1 // indirect
+)
 
 require (
 	cloud.google.com/go v0.118.0 // indirect
-	cloud.google.com/go/ai v0.9.0 // indirect
-	cloud.google.com/go/auth v0.13.0 // indirect
-	cloud.google.com/go/auth/oauth2adapt v0.2.6 // indirect
+	cloud.google.com/go/ai v0.10.0 // indirect
+	cloud.google.com/go/auth v0.14.0 // indirect
+	cloud.google.com/go/auth/oauth2adapt v0.2.7 // indirect
 	cloud.google.com/go/compute/metadata v0.6.0 // indirect
 	cloud.google.com/go/longrunning v0.6.4 // indirect
 	github.com/CAFxX/httpcompression v0.0.9 // indirect
@@ -75,7 +80,7 @@ require (
 	github.com/go-rod/rod v0.116.2 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
 	github.com/google/generative-ai-go v0.19.0 // indirect
-	github.com/google/s2a-go v0.1.8 // indirect
+	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.4 // indirect
 	github.com/googleapis/gax-go/v2 v2.14.1 // indirect
 	github.com/gorilla/mux v1.7.4 // indirect
@@ -115,15 +120,15 @@ require (
 	go.opentelemetry.io/otel/metric v1.33.0 // indirect
 	go.opentelemetry.io/otel/trace v1.33.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
-	golang.org/x/net v0.33.0 // indirect
+	golang.org/x/net v0.34.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/time v0.9.0 // indirect
-	google.golang.org/api v0.214.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20250102185135-69823020774d // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250102185135-69823020774d // indirect
+	google.golang.org/api v0.216.0 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20250106144421-5f5ef82da422 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250106144421-5f5ef82da422 // indirect
 	google.golang.org/grpc v1.69.2 // indirect
-	google.golang.org/protobuf v1.36.1 // indirect
+	google.golang.org/protobuf v1.36.2 // indirect
 	modernc.org/libc v1.61.2 // indirect
 	modernc.org/mathutil v1.6.0 // indirect
 	modernc.org/memory v1.8.0 // indirect
