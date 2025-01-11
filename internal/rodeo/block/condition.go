@@ -21,7 +21,7 @@ type ConditionType string
 
 const (
 	ConditionTypeModelBased ConditionType = "model-based"
-	ConditionTypeRuleBased  ConditionType = "rule-based"
+	ConditionTypeRuleBased  ConditionType = "rule–-based"
 )
 
 type Condition struct {
@@ -42,6 +42,6 @@ type Condition struct {
 	// For rule-based conditions
 	// You can reference any variable in the context of the current  execution (step):
 	LeftSide  string       `json:"leftSide"`
-	Operator  RuleOperator `json:"operator"`
+	Operator  RuleOperator `json:"operator" enum:"eq,neq,gt,lt,gte,lte"`
 	RightSide string       `json:"rightSide"`
 }

@@ -17,7 +17,7 @@ const (
 )
 
 type Block struct {
-	Type      BlockType `json:"type"`
+	Type      BlockType `json:"type" enum:"conversation,tool-call,workflow"`
 	CreatedAt time.Time `json:"createdAt"`
 	ID        string    `json:"id"`
 	OrgID     string    `json:"orgId"`
@@ -36,9 +36,28 @@ type Block struct {
 
 	// This is the output schema for the block. This is the output the block
 	// will return to the workflow ({{stepName.output}}).
+	//
+	// These are accessible as variables:
+	//
+	// ({{output.propertyName}}) in context of the block execution (step)
+	// ({{stepName.output.propertyName}}) in context of the workflow (read
+	// caveat #1) ({{blockName.output.propertyName}}) in context of the workflow
+	// (read caveat #2)
+	//
+	//Caveats:
+	//
+	// a workflow can execute a step multiple times. example, if a loop is used
+	// in the graph. {{stepName.output.propertyName}} will reference the latest
+	// usage of the step.
+	//
+	// a workflow can execute a block multiple times. example, if a step is
+	// called multiple times or if a block is used in multiple steps.
+	// {{blockName.output.propertyName}} will reference the latest usage of the
+	// block. this liquid variable is just provided for convenience when
+	// creating blocks outside of a workflow with steps.
 	OutputSchema *minds.Definition `json:"outputSchema,omitempty"`
 
-	// type: "conversation" only: This is the instruction for the conversation.
+	// type: "conversation" only: This is the instruction for the LLM conversation.
 	Instruction string `json:"instruction,omitempty"`
 
 	// type: "workflow" only: These are the steps in the workflow.

@@ -352,16 +352,9 @@ You are creating a structured conversation plan for the "Skills Exploration" sta
 		},
 		Destinations: []block.StepDestination{
 			{
-				Type:     "step",
-				StepName: "Stage3Preferences",
-				Conditions: []block.Condition{
-					{
-						Type:      block.ConditionTypeRuleBased,
-						LeftSide:  "output.top_skills",
-						Operator:  block.RuleOperatorNotEqual,
-						RightSide: "[]",
-					},
-				},
+				Type:       "step",
+				StepName:   "Stage3Preferences",
+				Conditions: []block.Condition{},
 			},
 		},
 	}, nil
