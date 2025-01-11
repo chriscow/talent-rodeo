@@ -1,0 +1,413 @@
+<!-- assets/static/index.html -->
+<!DOCTYPE html>
+<html>
+
+<!-- assets/static/index.html -->
+
+<head>
+    <title>Mind Handlers Workflow Editor</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.css">
+    <script src="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.js"></script>
+    <style>
+        #drawflow {
+            width: 100%;
+            height: 800px;
+            background: #f8f9fa;
+            position: relative;
+        }
+
+        .toolbar {
+            padding: 10px;
+            background: #fff;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .node {
+            padding: 10px;
+            border-radius: 4px;
+            background: white;
+            border: 1px solid #ddd;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .node-header {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            border-radius: 4px;
+            color: white;
+            z-index: 1000;
+        }
+
+        .toast-success {
+            background: #28a745;
+        }
+
+        .toast-error {
+            background: #dc3545;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="toolbar">
+        <button onclick="addNode('sequential')">Add Sequential</button>
+        <button onclick="addNode('must')">Add Must</button>
+        <button onclick="addNode('first')">Add First</button>
+        <button onclick="addNode('for')">Add For</button>
+        <button onclick="addNode('range')">Add Range</button>
+        <button onclick="addNode('policy')">Add Policy</button>
+        <button onclick="saveWorkflow()">Save</button>
+        <button onclick="executeWorkflow()">Execute</button>
+    </div>
+    <div id="drawflow"></div>
+
+</body>
+<script defer>
+    let editor;
+    let ws;
+
+    document.addEventListener('DOMContentLoaded', function () {
+        editor = new Drawflow(document.getElementById('drawflow'));
+        editor.start();
+
+        // Register node types
+        editor.registerNode('sequential', sequentialTemplate);
+        editor.registerNode('must', mustTemplate);
+        editor.registerNode('first', firstTemplate);
+        editor.registerNode('for', forTemplate);
+        editor.registerNode('range', rangeTemplate);
+        editor.registerNode('policy', policyTemplate);
+
+        connectWebSocket();
+    });
+
+    function connectWebSocket() {
+        ws = new WebSocket('ws://' + window.location.host + '/ws');
+        ws.onmessage = handleWSMessage;
+        ws.onerror = () => console.error('WebSocket error');
+        ws.onclose = () => setTimeout(connectWebSocket, 1000); // Reconnect on close
+    }
+
+    function handleWSMessage(event) {
+        const msg = JSON.parse(event.data);
+        switch (msg.type) {
+            case 'workflow_saved':
+                alert('Workflow saved successfully');
+                break;
+            case 'execution_result':
+                console.log('Execution result:', msg.payload);
+                break;
+        }
+    }
+
+    function addNode(type) {
+        const nodeData = {
+            name: `${type}_${Date.now()}`,
+            type: type,
+            config: {}
+        };
+        editor.addNode(type, 1, 1, 100, 100, type, nodeData, type);
+    }
+
+    function saveWorkflow() {
+        const exportData = editor.export();
+        const workflow = convertToWorkflow(exportData);
+        ws.send(JSON.stringify({
+            type: 'save_workflow',
+            payload: workflow
+        }));
+    }
+
+    function executeWorkflow() {
+        const exportData = editor.export();
+        const workflow = convertToWorkflow(exportData);
+        ws.send(JSON.stringify({
+            type: 'execute',
+            payload: workflow
+        }));
+    }
+
+    function convertToWorkflow(exportData) {
+        const nodes = {};
+        const connections = exportData.drawflow.Home.data;
+
+        // Convert nodes
+        Object.entries(connections).forEach(([id, node]) => {
+            nodes[id] = {
+                id: id,
+                type: node.class,
+                name: node.data.name,
+                config: node.data.config,
+                children: []
+            };
+        });
+
+        // Build connections
+        Object.entries(connections).forEach(([id, node]) => {
+            Object.entries(node.outputs).forEach(([outputName, output]) => {
+                output.connections.forEach(conn => {
+                    nodes[id].children.push(conn.node);
+                });
+            });
+        });
+
+        // Find root node (node with no incoming connections)
+        const root = Object.keys(nodes).find(id => {
+            return !Object.values(connections).some(node =>
+                Object.values(node.outputs).some(output =>
+                    output.connections.some(conn => conn.node === id)
+                )
+            );
+        });
+
+        return {
+            nodes: nodes,
+            root: root
+        };
+    }
+
+    /*
+    # Minds Library Overview
+
+A Go library for working with Large Language Models (LLMs), providing a modular system of handlers for processing and managing conversational threads.
+
+## Key Components
+
+### ThreadHandler Interface
+```go
+type ThreadHandler interface {
+    HandleThread(thread ThreadContext, next ThreadHandler) (ThreadContext, error)
+}
+```
+
+### Core Handlers
+
+#### Sequential Handler
+Executes handlers in sequence. If any handler fails, stops and returns the error.
+
+```go
+sequential := handlers.Sequential("name", handler1, handler2, handler3)
+```
+
+Key features:
+- Linear execution of handlers
+- Middleware support via Use()
+- Early exit on errors
+
+#### Must Handler 
+Runs multiple handlers in parallel, requiring all to succeed.
+
+```go
+must := handlers.Must("validation", validateA, validateB, validateC)
+```
+
+Key features:
+- Parallel execution
+- All-or-nothing validation
+- Cancels other handlers on first failure
+
+#### First (Any) Handler
+Executes handlers in parallel, returns first successful result.
+
+```go
+first := handlers.First("attempt", tryThis, tryThat, tryOther)
+```
+
+Key features:
+- Parallel execution 
+- Returns on first success
+- Cancels remaining handlers after success
+
+#### For (Loop) Handler
+Repeats handler execution based on conditions.
+
+```go
+loop := handlers.For("name", iterations, handler, conditionFn)
+```
+
+Key features:
+- Fixed or infinite iterations
+- Conditional continuation
+- Middleware support
+
+#### Range Handler
+Processes a handler with a series of values.
+
+```go
+ranger := handlers.Range("process", handler, "val1", "val2", "val3")
+```
+
+Key features:
+- Iterates over value set
+- Value accessible in context
+- Middleware support
+
+#### Policy Handler
+Validates thread content against defined policies.
+
+```go
+policy := handlers.Policy(llm, "policy_name", "validation rules", resultHandler)
+```
+
+Key features:
+- LLM-based validation
+- Custom result handling
+- Policy enforcement
+
+### Core Types
+
+```go
+type ThreadContext interface {
+    Context() context.Context
+    UUID() string
+    Messages() Messages
+    Metadata() Metadata
+}
+
+type Message struct {
+    Role       Role       
+    Content    string     
+    Name       string     
+    Metadata   Metadata   
+    ToolCallID string     
+    ToolCalls  []ToolCall 
+}
+
+type ContentGenerator interface {
+    ModelName() string
+    GenerateContent(context.Context, Request) (Response, error)
+    Close()
+}
+```
+
+## Key Features
+
+- Chain of responsibility pattern for thread processing
+- Middleware support across handlers
+- Context cancellation propagation
+- Parallel and sequential execution patterns
+- Policy-based content validation
+- Extensible handler system
+
+## Provider Support
+- OpenAI
+- Gemini
+- Support for custom LLM providers
+*/
+    // Node templates
+    function sequentialTemplate() {
+        return `
+        <div class="node">
+            <div class="node-header">Sequential</div>
+            <input type="text" df-name placeholder="Handler Name">
+        </div>
+    `;
+    }
+
+    function mustTemplate() {
+        return `
+            <div class="node">
+                <div class="node-header">Must</div>
+                <input type="text" df-name placeholder="Handler Name">
+                <div class="drawflow-node-inputs">
+                    Input <div class="input" df-input></div>
+                </div>
+                <div class="drawflow-node-outputs">
+                    <div class="output-container">
+                        Parallel Handlers
+                        <div class="output" df-output="handler1"></div>
+                        <div class="output" df-output="handler2"></div>
+                        <div class="output" df-output="handler3"></div>
+                    </div>
+                </div>
+                <button class="add-handler" onclick="addParallelHandler(this)">+ Add Handler</button>
+            </div>
+        `;
+    }
+
+    function addParallelHandler(button) {
+        const node = button.closest('.node');
+        const outputContainer = node.querySelector('.output-container');
+        const outputs = outputContainer.querySelectorAll('.output');
+        const newOutput = document.createElement('div');
+        newOutput.className = 'output';
+        newOutput.setAttribute('df-output', `handler${outputs.length + 1}`);
+        outputContainer.appendChild(newOutput);
+        editor.updateNodeModule(node.id);
+    }
+
+    // Add styles
+    const style = document.createElement('style');
+    style.textContent = `
+        .output-container {
+            margin-top: 10px;
+            padding: 5px;
+            border: 1px dashed #ccc;
+            border-radius: 4px;
+        }
+        .output {
+            display: inline-block;
+            margin: 5px;
+            width: 15px;
+            height: 15px;
+            background: #4a9eff;
+            border-radius: 50%;
+        }
+        .add-handler {
+            margin-top: 10px;
+            padding: 5px;
+            background: #eee;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    `;
+    document.head.appendChild(style);
+
+    function firstTemplate() {
+        return `
+        <div class="node">
+            <div class="node-header">First</div>
+            <input type="text" df-name placeholder="Handler Name">
+        </div>
+    `;
+    }
+
+    function forTemplate() {
+        return `
+        <div class="node">
+            <div class="node-header">For</div>
+            <input type="text" df-name placeholder="Handler Name">
+        </div>
+    `;
+    }
+
+    function rangeTemplate() {
+        return `
+        <div class="node">
+            <div class="node-header">Range</div>
+            <input type="text" df-name placeholder="Handler Name">
+        </div>
+    `;
+    }
+
+    function policyTemplate() {
+        return `
+        <div class="node">
+            <div class="node-header">Policy</div>
+            <input type="text" df-name placeholder="Handler Name">
+        </div>
+    `;
+    }
+
+</script>
+
+</html>
