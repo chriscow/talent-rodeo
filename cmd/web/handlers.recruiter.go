@@ -98,8 +98,8 @@ func (app *application) uploadResume(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.backgroundTask(r, func() error {
-		ctx := context.Background()
-		return rodeo.StartWorkflow(ctx, sessionID, resumeText, app)
+		ctx := context.WithValue(r.Context(), rodeo.SessionIDKey, sessionID)
+		return rodeo.StartWorkflow(ctx, resumeText, app)
 	})
 
 	if err := response.NamedTemplate(w, http.StatusOK, data, "partials/call-status.tmpl"); err != nil {
