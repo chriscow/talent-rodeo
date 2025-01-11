@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Streaming</title>
+</head>
+
+<body>
+    <h1>Stream Audio</h1>
+    <button id="start">Start Recording</button>
+    <button id="stop" disabled>Stop Recording</button>
+
+    <script>
+        let mediaRecorder;
+        let websocket;
+
+        document.getElementById('start').addEventListener('click', async () => {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            websocket = new WebSocket('ws://localhost:8080/stream');
+
+            websocket.onopen = () => console.log('WebSocket connected');
+            websocket.onclose = () => console.log('WebSocket closed');
+            websocket.onerror = (err) => console.error('WebSocket error', err);
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (websocket.readyState === WebSocket.OPEN) {
+                    websocket.send(event.data);
+                }
+            };
+
+            mediaRecorder.start(250); // Emit audio chunks every 250ms
+            document.getElementById('start').disabled = true;
+            document.getElementById('stop').disabled = false;
+        });
+
+        document.getElementById('stop').addEventListener('click', () => {
+            mediaRecorder.stop();
+            websocket.close();
+            document.getElementById('start').disabled = false;
+            document.getElementById('stop').disabled = true;
+        });
+    </script>
+</body>
+
+</html>

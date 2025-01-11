@@ -449,8 +449,8 @@ func refinePrompt(ctx context.Context, prompt string, status StatusSender) (stri
 		return "", fmt.Errorf("refinePrompt: failed to create LLM provider: %w", err)
 	}
 
-	initialThread := minds.NewThreadContext(ctx).WithMessages(minds.Messages{
-		{Role: minds.RoleUser, Content: "Analyze the following draft LLM prompt: ```" + prompt + "```"},
+	initialThread := minds.NewThreadContext(ctx).WithMessages(minds.Message{
+		Role: minds.RoleUser, Content: "Analyze the following draft LLM prompt: ```" + prompt + "```",
 	})
 
 	pipeline := handlers.Sequential("conversation-refinement",
