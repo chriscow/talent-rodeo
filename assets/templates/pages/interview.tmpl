@@ -1,0 +1,249 @@
+{{ define "content" }}
+<article>
+    <header>
+        <h2>Initial Interview</h2>
+        <p>Let's start your job search journey. I'll ask you some questions to understand your background and goals
+            better.</p>
+    </header>
+
+    <div id="interview-container">
+        <div id="status-message"></div>
+
+        <div id="controls">
+            <button id="startButton" class="primary">
+                Start Interview
+            </button>
+            <button id="stopButton" class="secondary hidden">
+                Stop Recording
+            </button>
+            <button id="sendButton" class="contrast hidden">
+                Send Recording
+            </button>
+        </div>
+
+        <div id="transcript" class="hidden">
+            <h3>Conversation</h3>
+            <div id="conversation-log"></div>
+        </div>
+    </div>
+</article>
+{{ end }}
+
+{{ define "scripts" }}
+<script>
+    console.log("scripts loaded");
+    let mediaRecorder;
+    let audioChunks = [];
+    let isRecording = false;
+    let currentAudioBlob = null;
+
+    const startButton = document.getElementById('startButton');
+    const stopButton = document.getElementById('stopButton');
+    const sendButton = document.getElementById('sendButton');
+    const statusMessage = document.getElementById('status-message');
+    const conversationLog = document.getElementById('conversation-log');
+    const transcript = document.getElementById('transcript');
+
+    async function startRecording() {
+        try {
+            // Clear any previous recording state
+            audioChunks = [];
+            currentAudioBlob = null;
+            statusMessage.innerHTML = '';
+            sendButton.classList.add('hidden');
+
+            // Request high-quality audio
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    channelCount: 1,
+                    sampleRate: 44100,
+                    sampleSize: 16,
+                    volume: 1.0,
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            });
+
+            // Configure MediaRecorder for optimal quality
+            mediaRecorder = new MediaRecorder(stream, {
+                mimeType: 'audio/webm;codecs=opus',
+                audioBitsPerSecond: 128000
+            });
+
+            mediaRecorder.ondataavailable = (event) => {
+                audioChunks.push(event.data);
+            };
+
+            mediaRecorder.onstop = async () => {
+                // Just create the preview when stopping - don't send yet
+                createAudioPreview();
+            };
+
+            mediaRecorder.start();
+            isRecording = true;
+            startButton.classList.add('hidden');
+            stopButton.classList.remove('hidden');
+            statusMessage.innerHTML = '<p class="recording">Recording in progress...</p>';
+            transcript.classList.remove('hidden');
+        } catch (err) {
+            console.error('Error accessing microphone:', err);
+            statusMessage.innerHTML = '<p class="error">Error accessing microphone. Please ensure you have granted permission.</p>';
+        }
+    }
+
+    function createAudioPreview() {
+        currentAudioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+        const audioUrl = URL.createObjectURL(currentAudioBlob);
+
+        // Clear previous preview
+        statusMessage.innerHTML = '';
+
+        // Create new preview elements
+        const previewContainer = document.createElement('div');
+
+        // Add file size information
+        const fileSizeMB = (currentAudioBlob.size / (1024 * 1024)).toFixed(2);
+        const debugInfo = document.createElement('div');
+        debugInfo.innerHTML = `
+            <p>Audio file size: ${fileSizeMB} MB</p>
+            <p>MIME type: ${currentAudioBlob.type}</p>
+            <p>Preview your recording:</p>
+        `;
+
+        // Create audio player
+        const audioPreview = document.createElement('audio');
+        audioPreview.src = audioUrl;
+        audioPreview.controls = true;
+
+        // Add elements to container
+        previewContainer.appendChild(debugInfo);
+        previewContainer.appendChild(audioPreview);
+        statusMessage.appendChild(previewContainer);
+
+        // Show send button
+        sendButton.classList.remove('hidden');
+    }
+
+    async function stopRecording() {
+        if (mediaRecorder && isRecording) {
+            mediaRecorder.stop();
+            mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            isRecording = false;
+            startButton.classList.remove('hidden');
+            stopButton.classList.add('hidden');
+        }
+    }
+
+    async function convertAudio(audioBlob) {
+        const audioContext = new AudioContext();
+        const audioData = await audioBlob.arrayBuffer();
+        const audioBuffer = await audioContext.decodeAudioData(audioData);
+
+        // Create an offline context for processing
+        const offlineContext = new OfflineAudioContext(
+            1, // mono
+            audioBuffer.duration * 16000, // target sample rate
+            16000 // target sample rate
+        );
+
+        // Create source buffer
+        const source = offlineContext.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(offlineContext.destination);
+        source.start();
+
+        // Render audio
+        const renderedBuffer = await offlineContext.startRendering();
+
+        // Convert to 16-bit PCM WAV
+        const length = renderedBuffer.length * 2;
+        const buffer = new ArrayBuffer(44 + length); // WAV header is 44 bytes
+        const view = new DataView(buffer);
+
+        // Write WAV header
+        const writeString = (view, offset, string) => {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
+        };
+
+        writeString(view, 0, 'RIFF');
+        view.setUint32(4, 36 + length, true);
+        writeString(view, 8, 'WAVE');
+        writeString(view, 12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, 1, true);
+        view.setUint32(24, 16000, true);
+        view.setUint32(28, 32000, true);
+        view.setUint16(32, 2, true);
+        view.setUint16(34, 16, true);
+        writeString(view, 36, 'data');
+        view.setUint32(40, length, true);
+
+        // Write audio data
+        const data = new Float32Array(renderedBuffer.getChannelData(0));
+        let offset = 44;
+        for (let i = 0; i < data.length; i++) {
+            const sample = Math.max(-1, Math.min(1, data[i]));
+            view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+            offset += 2;
+        }
+
+        return new Blob([buffer], { type: 'audio/wav' });
+    }
+
+    async function sendRecording() {
+        if (!currentAudioBlob) {
+            console.error('No audio recording available');
+            return;
+        }
+
+        try {
+            statusMessage.innerHTML = '<p>Converting and sending audio...</p>';
+            sendButton.disabled = true;
+
+            // Convert the audio before sending
+            const convertedBlob = await convertAudio(currentAudioBlob);
+
+            const formData = new FormData();
+            formData.append('audio', convertedBlob);
+
+            const response = await fetch('/api/interview/audio', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error('Server response was not ok');
+            }
+
+            const data = await response.json();
+            updateConversation(data);
+            statusMessage.innerHTML = '<p>Ready to record again...</p>';
+            sendButton.classList.add('hidden');
+            sendButton.disabled = false;
+        } catch (err) {
+            console.error('Error sending audio:', err);
+            statusMessage.innerHTML = '<p class="error">Error processing audio. Please try again.</p>';
+            sendButton.disabled = false;
+        }
+    }
+
+    function updateConversation(data) {
+        const userMessage = document.createElement('p');
+        userMessage.innerHTML = `<strong>You:</strong> ${data.transcript}`;
+        conversationLog.appendChild(userMessage);
+
+        const aiMessage = document.createElement('p');
+        aiMessage.innerHTML = `<strong>AI:</strong> ${data.response}`;
+        conversationLog.appendChild(aiMessage);
+        conversationLog.scrollTop = conversationLog.scrollHeight;
+    }
+
+    startButton.addEventListener('click', startRecording);
+    stopButton.addEventListener('click', stopRecording);
+    sendButton.addEventListener('click', sendRecording);
+</script>
+{{ end }}

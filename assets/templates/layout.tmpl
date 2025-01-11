@@ -1,0 +1,55 @@
+{{define "layout"}}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .Title }}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <style>
+        .recording {
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="container">
+        <ul>
+            <li><strong>JobMatcher AI</strong></li>
+        </ul>
+    </nav>
+
+    <main class="container">
+        {{ template "content" . }}
+    </main>
+
+    <footer class="container">
+        <small>© 2024 JobMatcher AI</small>
+    </footer>
+
+    {{ block "scripts" . }}{{ end }}
+</body>
+
+</html>
+{{end}}

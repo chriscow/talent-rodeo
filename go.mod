@@ -52,8 +52,11 @@ require (
 
 require (
 	github.com/dlclark/regexp2 v1.11.4 // indirect
+	github.com/golang/mock v1.6.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/tiktoken-go/tokenizer v0.2.1 // indirect
+	github.com/twilio/twilio-go v1.23.9 // indirect
 )
 
 require (
@@ -67,7 +70,7 @@ require (
 	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/chewxy/math32 v1.11.1 // indirect
-	github.com/chriscow/minds v0.0.3
+	github.com/chriscow/minds v0.0.4
 	github.com/coder/websocket v1.8.12 // indirect
 	github.com/delaneyj/gostar v0.8.0 // indirect
 	github.com/denisbrodbeck/machineid v1.0.1 // indirect
