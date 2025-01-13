@@ -16,7 +16,6 @@ replace github.com/WqyJh/go-openai-realtime => /Users/chris/github.com/go-openai
 
 require (
 	github.com/WqyJh/go-openai-realtime v0.0.0-00010101000000-000000000000
-	github.com/a-h/templ v0.2.793
 	github.com/alexedwards/flow v0.1.0
 	github.com/chriscow/minds/providers/gemini v0.0.3
 	github.com/chriscow/minds/providers/openai v0.0.0-00010101000000-000000000000
@@ -38,7 +37,6 @@ require (
 	github.com/nats-io/nats-server/v2 v2.10.24
 	github.com/nats-io/nats.go v1.37.0
 	github.com/pusher/pusher-http-go/v5 v5.1.1
-	github.com/sashabaranov/go-openai v1.36.1
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/spf13/cobra v1.8.1
 	github.com/starfederation/datastar v0.21.3
@@ -54,10 +52,12 @@ require (
 )
 
 require (
+	github.com/a-h/templ v0.2.793 // indirect
 	github.com/dlclark/regexp2 v1.11.4 // indirect
 	github.com/golang/mock v1.6.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/sashabaranov/go-openai v1.36.1 // indirect
 	github.com/tiktoken-go/tokenizer v0.2.1 // indirect
 )
 

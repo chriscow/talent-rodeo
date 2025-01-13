@@ -4,10 +4,27 @@ import (
 	"bytes"
 	"html/template"
 	"net/http"
+	"path/filepath"
+	"strings"
 
 	"talent-rodeo/assets"
 	"talent-rodeo/internal/funcs"
 )
+
+func Partial(w http.ResponseWriter, status int, data any, partialPath string) error {
+	return PartialWithHeaders(w, status, data, nil, partialPath)
+}
+
+func PartialWithHeaders(w http.ResponseWriter, status int, data any, headers http.Header, partialPath string) error {
+	// For partials, we only need the partial template and any shared partials
+	patterns := []string{"partials/*.tmpl", partialPath}
+
+	// Get the template name from the path
+	// e.g., "templates/partials/messages_list.tmpl" -> "messages_list"
+	templateName := strings.TrimSuffix(filepath.Base(partialPath), ".tmpl")
+
+	return NamedTemplateWithHeaders(w, status, data, headers, templateName, patterns...)
+}
 
 func Page(w http.ResponseWriter, status int, data any, pagePath string) error {
 	return PageWithHeaders(w, status, data, nil, pagePath)
