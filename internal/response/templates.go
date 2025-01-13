@@ -41,28 +41,31 @@ func NamedTemplate(w http.ResponseWriter, status int, data any, templateName str
 }
 
 func NamedTemplateWithHeaders(w http.ResponseWriter, status int, data any, headers http.Header, templateName string, patterns ...string) error {
+	// Ensure patterns point to the correct directory
 	for i := range patterns {
 		patterns[i] = "templates/" + patterns[i]
 	}
 
+	// Parse the templates
 	ts, err := template.New("").Funcs(funcs.TemplateFuncs).ParseFS(assets.EmbeddedFiles, patterns...)
 	if err != nil {
+		// Log or return the error to the caller
 		return err
 	}
 
+	// Prepare a buffer for the output
 	buf := new(bytes.Buffer)
-
-	err = ts.ExecuteTemplate(buf, templateName, data)
-	if err != nil {
+	if err = ts.ExecuteTemplate(buf, templateName, data); err != nil {
+		// Log or return the error to the caller
 		return err
 	}
 
+	// Add headers and write response
 	for key, value := range headers {
 		w.Header()[key] = value
 	}
-
 	w.WriteHeader(status)
-	buf.WriteTo(w)
+	_, err = buf.WriteTo(w)
 
-	return nil
+	return err
 }

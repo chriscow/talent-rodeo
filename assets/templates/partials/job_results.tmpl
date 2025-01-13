@@ -1,0 +1,34 @@
+{{ define "job_results" }}
+{{ if .Error }}
+<article>
+    <header>
+        <strong>Error</strong>
+    </header>
+    <p>{{ .Error }}</p>
+</article>
+{{ else }}
+<h2>Found {{ len .Jobs }} jobs</h2>
+{{ range .Jobs }}
+<article class="job-card">
+    <div class="grid">
+        <div>
+            {{ if .CompanyLogo }}
+            <img src="{{ .CompanyLogo }}" alt="{{ .CompanyName }} logo" class="company-logo">
+            {{ end }}
+        </div>
+        <div>
+            <!-- Changed the h3 to wrap it in an anchor tag -->
+            <h3><a href="/jobs/{{ .ID }}" class="job-title">{{ .Position }}</a></h3>
+            <p>{{ .CompanyName }} • {{ .Location }}</p>
+            <p>Posted: {{ .PostingDate }}</p>
+            <a href="{{ .Link }}" target="_blank" role="button">View on LinkedIn</a>
+        </div>
+    </div>
+</article>
+{{ else }}
+<article>
+    <p>No jobs found matching your criteria.</p>
+</article>
+{{ end }}
+{{ end }}
+{{ end }}

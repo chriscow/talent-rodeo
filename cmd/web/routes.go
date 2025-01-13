@@ -21,6 +21,8 @@ func (app *application) routes() http.Handler {
 	fileServer := http.FileServer(http.FS(assets.EmbeddedFiles))
 	mux.Handle("/static/...", fileServer, "GET")
 
+	mux.HandleFunc("/clear-session", app.clearSession)
+
 	mux.Group(func(mux *flow.Mux) {
 		mux.Use(app.preventCSRF)
 		mux.Use(app.authenticate)
@@ -35,6 +37,8 @@ func (app *application) routes() http.Handler {
 
 		mux.Group(func(mux *flow.Mux) {
 			mux.Use(app.requireAuthenticatedUser)
+			mux.HandleFunc("/search", app.linkedInSearch, "GET")
+			mux.HandleFunc("/jobs/:id", app.jobDetail, "GET")
 			mux.HandleFunc("/upload", app.uploadResume, "POST")
 			mux.HandleFunc("/logout", app.logout, "POST")
 		})

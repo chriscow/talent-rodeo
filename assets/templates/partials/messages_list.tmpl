@@ -1,4 +1,5 @@
 {{define "partial:messages_list"}}
+
 {{range .Messages}}
 {{if eq .Role "user"}}
 <div class="message user-message">
@@ -8,5 +9,6 @@
 <div class="message bot-message">
     {{.Content}}
 </div>
+{{end}}
 {{end}}
 {{end}}
