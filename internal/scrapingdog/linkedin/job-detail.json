@@ -1,0 +1,286 @@
+[
+    {
+        "job_position": "SDE I",
+        "jobs_status": "",
+        "job_location": "San Francisco, CA",
+        "company_name": "Nium",
+        "company_linkedin_id": "https://www.linkedin.com/company/nium-global?trk=public_jobs_topcard-org-name",
+        "job_posting_time": "5 hours ago",
+        "base_pay": "$112,000.00/yr - $154,000.00/yr",
+        "job_description": "Nium, Global Leader in Payments Nium, the global leader in real-time, cross-border payments, was founded on the mission to deliver the global payments infrastructure of tomorrow, today. With the onset of the global economy, its payments infrastructure is shaping how banks, fintechs, and businesses everywhere collect, convert, and disburse funds instantly across borders.  Its payout network supports 100 currencies and spans 220+ markets, 100 of which in real-time. Funds can be disbursed to accounts, wallets, and cards and collected locally in 35 markets. Nium's growing card issuance business is already available in 34 countries. Nium holds regulatory licenses and authorizations in more than 40 countries, enabling seamless onboarding, rapid integration, and compliance – independent of geography. The company is co-headquartered in San Francisco and Singapore. About the Team Nium's Engineering team is responsible for building and maintaining the company's global financial infrastructure. We are a team of talented engineers who are passionate about creating innovative and scalable solutions that help Nium deliver on its mission of making money movement seamless and borderless.About the Role Our ideal candidate has deep experience in building scalable and reliable backend systems, services and APIs that deliver value to our customers. This role will make impactful contributions and will proactively identify gaps and future work for the team.Key Responsibilities Deliver and own large features end-to-endCollaborate with our product team to deliver high impact for our customersProactively identify ways to monitor the quality, reliability, and security of our systemsAbide by engineering best practicesRequirements 1-2 years of backend engineering experience, recommended not requiredExperience building and operating highly available backend distributed systemsProficiency in at least one of Java, Python, C++, C#, GolangStrong communication (written and verbal) and interpersonal skillsThrive in a collaborative and fast-paced environmentPassion for turning business and product ideas into engineering solutionsWhat we offer at Nium We Value Performance: Through competitive salaries, performance bonuses, sales commissions, equity for specific roles and recognition programs, we ensure that all our employees are well rewarded and incentivized for their hard work. We Care: The wellness of Nium’ers is our #1 priority. We offer medical coverage along with 24/7 employee assistance program, generous vacation programs including our year-end shut down. We also provide a flexible hybrid working environment (3 days per week in the office). We Upskill Ourselves: We are curious, and always want to learn more with a focus on upskilling ourselves. We provide role-specific training, internal workshops, and a learning stipend. We Constantly Innovate: Since our inception, Nium has received constant recognition and awards for how we approach both our business and talent opportunities. Check out CNBC World’s Top Fintech Companies 2024.  We Celebrate Together: We recognize that work is also about creating great relationships with each other. We celebrate together with company-wide social events, team bonding activities, happy hours, team offsites, and much more!  We Thrive With Diversity: Nium is truly a global company, with more than 33 nationalities, based in 18+ countries and more than 10 office locations. As an equal opportunity employer, we are committed to providing a safe and welcoming environment for everyone.  For more detailed region-specific benefits:  https://www.nium.com/careers#careers-perks    For more information, visit www.nium.com. Depending on your location, certain laws may regulate the way Nium manages the data of candidates. By submitting your job application, you are agreeing and acknowledging that you have read and understand our Candidate Privacy Notice located at www.nium.com/privacy/candidate-privacy-notice.Nium provides equal employment opportunities (EEO) to all employees and applicants for employment without regard to race, color, religion, gender, sexual orientation, national origin, age, disability, or veteran status. In addition to federal law requirements, Nium complies with applicable state and local laws governing non-discrimination in employment in every location in which the company operates. This policy applies to all terms and conditions of employment, including recruiting, hiring, placement, promotion, termination, layoff, recall, transfer, leaves of absence, compensation, and training. Nium expressly prohibits any form of workplace harassment based on race, color, religion, gender, sexual orientation, national origin, age, disability, or veteran status. Salary ranges are dependent on a variety of factors, including skills, qualifications, experience, and geographic location. Certain roles may offer additional incentives including but not limited to equity and bonus. Your recruiter is happy to share more information about the salary range specific to your working location and other factors at any stage of the hiring process!",
+        "Seniority_level": "Not Applicable",
+        "Employment_type": "Full-time",
+        "Job_function": "Engineering and Information Technology",
+        "Industries": "Financial Services",
+        "recruiter_details": [
+            {
+                "recruiter_name": "",
+                "recruiter_title": "",
+                "recruiter_profile_url": null
+            }
+        ],
+        "similar_jobs": [
+            {
+                "job_position": "Software Engineer, Web",
+                "job_company": "Notion",
+                "job_location": "San Francisco, CA\n          \n            $130,000.00\n            -\n            $250,000.00",
+                "job_posting_time": "8 hours ago",
+                "job_link": "https://www.linkedin.com/jobs/view/software-engineer-web-at-notion-4064900743?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=2brhkZ0tuV6kIo%2BYTex3Fg%3D%3D"
+            },
+            {
+                "job_position": "Software Engineer, Backend",
+                "job_company": "Lyft",
+                "job_location": "San Francisco County, CA",
+                "job_posting_time": "6 days ago",
+                "job_link": "https://www.linkedin.com/jobs/view/software-engineer-backend-at-lyft-4075120758?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=rskTVAEUK0uhRrg0XEFnjw%3D%3D"
+            },
+            {
+                "job_position": "Software Engineer",
+                "job_company": "Fieldguide",
+                "job_location": "San Francisco, CA\n          \n            $125,000.00\n            -\n            $175,000.00",
+                "job_posting_time": "6 months ago",
+                "job_link": "https://www.linkedin.com/jobs/view/software-engineer-at-fieldguide-3961092714?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=ZyEE%2FscjZLUXbCxm8iBl4w%3D%3D"
+            },
+            {
+                "job_position": "Software Engineer, Front End",
+                "job_company": "Meta",
+                "job_location": "San Francisco, CA\n          \n            $56.25\n            -\n            $173,000.00",
+                "job_posting_time": "3 weeks ago",
+                "job_link": "https://www.linkedin.com/jobs/view/software-engineer-front-end-at-meta-4120824528?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=6aqNU3H6R9%2Fp3TdJXFj5xA%3D%3D"
+            },
+            {
+                "job_position": "Software Engineer - Frontend",
+                "job_company": "Ever",
+                "job_location": "San Francisco, CA",
+                "job_posting_time": "6 months ago",
+                "job_link": "https://www.linkedin.com/jobs/view/software-engineer-frontend-at-ever-3958003857?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=M85FMSg4XJuALi1zQ1GEQA%3D%3D"
+            },
+            {
+                "job_position": "Software Engineer - Backend",
+                "job_company": "Ever",
+                "job_location": "San Francisco, CA",
+                "job_posting_time": "2 months ago",
+                "job_link": "https://www.linkedin.com/jobs/view/software-engineer-backend-at-ever-4068296788?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=rLB2n5jup0iGM6yAE3wwEw%3D%3D"
+            },
+            {
+                "job_position": "[2025] Software Engineer, Frontend - New Grad",
+                "job_company": "Roblox",
+                "job_location": "San Mateo, CA",
+                "job_posting_time": "1 week ago",
+                "job_link": "https://www.linkedin.com/jobs/view/2025-software-engineer-frontend-new-grad-at-roblox-4044371255?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=vh3b%2BGkM2qjb4yqz%2FbCoAg%3D%3D"
+            },
+            {
+                "job_position": "Software Engineer - Backend",
+                "job_company": "Julius AI",
+                "job_location": "San Francisco, CA",
+                "job_posting_time": "3 months ago",
+                "job_link": "https://www.linkedin.com/jobs/view/software-engineer-backend-at-julius-ai-4042418305?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=gCWpp%2FI%2F9hlq0F1VmEy1uA%3D%3D"
+            },
+            {
+                "job_position": "Software Engineer, New College Grad - 2025",
+                "job_company": "Visa",
+                "job_location": "Foster City, CA",
+                "job_posting_time": "6 days ago",
+                "job_link": "https://www.linkedin.com/jobs/view/software-engineer-new-college-grad-2025-at-visa-4118012456?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=hRQMK5HJWu76%2FmiSiVmfyw%3D%3D"
+            },
+            {
+                "job_position": "[2025] Software Engineer - New Graduate",
+                "job_company": "Roblox",
+                "job_location": "San Mateo, CA",
+                "job_posting_time": "5 days ago",
+                "job_link": "https://www.linkedin.com/jobs/view/2025-software-engineer-new-graduate-at-roblox-3994977152?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=OmHmwg%2FHepHD4Vq3MAYLtQ%3D%3D"
+            },
+            {
+                "job_position": "Front-end Engineer",
+                "job_company": "Kino AI",
+                "job_location": "San Francisco, CA\n          \n            $160,000.00\n            -\n            $220,000.00",
+                "job_posting_time": "2 months ago",
+                "job_link": "https://www.linkedin.com/jobs/view/front-end-engineer-at-kino-ai-4059300826?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=QlXr9NY%2BK0DAIkaI8UNUNQ%3D%3D"
+            },
+            {
+                "job_position": "Junior Full Stack Developer React/Python (1 year experience, remote)",
+                "job_company": "Team Remotely",
+                "job_location": "San Francisco, CA",
+                "job_posting_time": "4 hours ago",
+                "job_link": "https://www.linkedin.com/jobs/view/junior-full-stack-developer-react-python-1-year-experience-remote-at-team-remotely-4124729445?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=epmHZQD52%2FFvPfVumqrd5Q%3D%3D"
+            },
+            {
+                "job_position": "Junior Software Engineer",
+                "job_company": "Pronto",
+                "job_location": "San Francisco, CA\n          \n            $90.00\n            -\n            $120.00",
+                "job_posting_time": "7 months ago",
+                "job_link": "https://www.linkedin.com/jobs/view/junior-software-engineer-at-pronto-3941343616?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=MqHU1b93qste43D8BajFsA%3D%3D"
+            },
+            {
+                "job_position": "Software Engineer, Frontend",
+                "job_company": "Brex",
+                "job_location": "San Francisco, CA",
+                "job_posting_time": "1 week ago",
+                "job_link": "https://www.linkedin.com/jobs/view/software-engineer-frontend-at-brex-4053170632?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=Y8dnGby7e6IF7V%2FzD7JFag%3D%3D"
+            },
+            {
+                "job_position": "Software Engineer - Fullstack",
+                "job_company": "Ever",
+                "job_location": "San Francisco, CA",
+                "job_posting_time": "6 months ago",
+                "job_link": "https://www.linkedin.com/jobs/view/software-engineer-fullstack-at-ever-3958006298?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=hKy082sneRqqzeETSBdKCg%3D%3D"
+            },
+            {
+                "job_position": "Software Engineer (Front-End)",
+                "job_company": "Byterat",
+                "job_location": "San Francisco, CA\n          \n            $120,000.00\n            -\n            $140,000.00",
+                "job_posting_time": "4 months ago",
+                "job_link": "https://www.linkedin.com/jobs/view/software-engineer-front-end-at-byterat-4007053097?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=Z7XhyaRRaREm8i6xNOROZg%3D%3D"
+            },
+            {
+                "job_position": "Software Engineer - Recent College Graduate",
+                "job_company": "Kikoff",
+                "job_location": "San Francisco, CA",
+                "job_posting_time": "1 week ago",
+                "job_link": "https://www.linkedin.com/jobs/view/software-engineer-recent-college-graduate-at-kikoff-4060965617?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=UpoXvAk%2BvEd23j%2BeE5pjsA%3D%3D"
+            },
+            {
+                "job_position": "Fullstack Software Engineer, Payments",
+                "job_company": "Patreon",
+                "job_location": "San Francisco, CA",
+                "job_posting_time": "2 months ago",
+                "job_link": "https://www.linkedin.com/jobs/view/fullstack-software-engineer-payments-at-patreon-4074812988?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=hshQdQR3riHon1L58jxmUw%3D%3D"
+            },
+            {
+                "job_position": "Software Engineer",
+                "job_company": "Nudge",
+                "job_location": "San Francisco, CA",
+                "job_posting_time": "1 month ago",
+                "job_link": "https://www.linkedin.com/jobs/view/software-engineer-at-nudge-4086910955?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=m7qxNrtGAk4J6ki2m3qTVQ%3D%3D"
+            },
+            {
+                "job_position": "Graduate Software Engineer (2025 Start), San Francisco",
+                "job_company": "The Trade Desk",
+                "job_location": "San Francisco, CA",
+                "job_posting_time": "6 days ago",
+                "job_link": "https://www.linkedin.com/jobs/view/graduate-software-engineer-2025-start-san-francisco-at-the-trade-desk-4000100097?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=FFXDQEX5zv2FvGUC87MOeg%3D%3D"
+            },
+            {
+                "job_position": "Full Stack Software Engineer",
+                "job_company": "Intrinsic",
+                "job_location": "San Francisco, CA\n          \n            $130,000.00\n            -\n            $210,000.00",
+                "job_posting_time": "2 months ago",
+                "job_link": "https://www.linkedin.com/jobs/view/full-stack-software-engineer-at-intrinsic-4070619716?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=YCLcCxBm2Q5PoKPlLdyTAA%3D%3D"
+            },
+            {
+                "job_position": "Software Engineer, Backend",
+                "job_company": "Inkeep",
+                "job_location": "San Francisco, CA\n          \n            $100,000.00\n            -\n            $180,000.00",
+                "job_posting_time": "2 months ago",
+                "job_link": "https://www.linkedin.com/jobs/view/software-engineer-backend-at-inkeep-4061353581?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=x1m%2F0z6ZrDBpPbJmnkXXTA%3D%3D"
+            },
+            {
+                "job_position": "Software Engineer, Full Stack",
+                "job_company": "Candid Health",
+                "job_location": "San Francisco, CA\n          \n            $135,000.00\n            -\n            $230,000.00",
+                "job_posting_time": "6 months ago",
+                "job_link": "https://www.linkedin.com/jobs/view/software-engineer-full-stack-at-candid-health-3953795669?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=SjfXKa9nsfO0sgTApE1Cpw%3D%3D"
+            },
+            {
+                "job_position": "[New Grad] Software Engineer",
+                "job_company": "Atomus",
+                "job_location": "San Francisco, CA",
+                "job_posting_time": "4 weeks ago",
+                "job_link": "https://www.linkedin.com/jobs/view/new-grad-software-engineer-at-atomus-4101196274?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=lRqQbK%2FjbA4D5ANEoS3Tig%3D%3D"
+            },
+            {
+                "job_position": "Software Engineer (Backend)",
+                "job_company": "Column",
+                "job_location": "San Francisco, CA",
+                "job_posting_time": "3 months ago",
+                "job_link": "https://www.linkedin.com/jobs/view/software-engineer-backend-at-column-4028851961?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=sbwlVH1E7WAqPfHbvwDaCw%3D%3D"
+            },
+            {
+                "job_position": "Software Engineer - Backend",
+                "job_company": "Plaid",
+                "job_location": "San Francisco, CA",
+                "job_posting_time": "6 days ago",
+                "job_link": "https://www.linkedin.com/jobs/view/software-engineer-backend-at-plaid-4118015044?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=FWj6yrZoOpZobHfnDeMcUA%3D%3D"
+            },
+            {
+                "job_position": "Software Engineer - Fullstack",
+                "job_company": "Plaid",
+                "job_location": "San Francisco, CA",
+                "job_posting_time": "6 days ago",
+                "job_link": "https://www.linkedin.com/jobs/view/software-engineer-fullstack-at-plaid-4118009778?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=v8%2FyM6ISZdvgiBudyz6vlA%3D%3D"
+            }
+        ],
+        "people_also_viewed": [
+            {
+                "job_position": "Software Engineer, Frontend",
+                "job_company": "OpenAI",
+                "job_location": "San Francisco, CA",
+                "job_posting_time": "8 months ago",
+                "job_link": "https://www.linkedin.com/jobs/view/software-engineer-frontend-at-openai-3915651521?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=h4caOrhtrSCIiNcdXPvalg%3D%3D"
+            },
+            {
+                "job_position": "Software Engineer (API/Backend)",
+                "job_company": "Databento",
+                "job_location": "San Francisco, CA",
+                "job_posting_time": "2 months ago",
+                "job_link": "https://www.linkedin.com/jobs/view/software-engineer-api-backend-at-databento-4068119029?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=z49hgsrhNe6Y2VdoOZD0ZA%3D%3D"
+            },
+            {
+                "job_position": "Software Engineer, Full-Stack",
+                "job_company": "Loop",
+                "job_location": "San Francisco, CA",
+                "job_posting_time": "2 months ago",
+                "job_link": "https://www.linkedin.com/jobs/view/software-engineer-full-stack-at-loop-4068287701?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=ZUklD1FpPeeB7sjHIVN9tg%3D%3D"
+            },
+            {
+                "job_position": "Founding Software Engineer",
+                "job_company": "Tamarind Bio",
+                "job_location": "San Francisco, CA\n          \n            $125,000.00\n            -\n            $180,000.00",
+                "job_posting_time": "3 months ago",
+                "job_link": "https://www.linkedin.com/jobs/view/founding-software-engineer-at-tamarind-bio-4033645385?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=jZhxZLzStvto7DFtN5yUeA%3D%3D"
+            },
+            {
+                "job_position": "Software Engineer - Entry/Junior Level",
+                "job_company": "SynergisticIT",
+                "job_location": "San Francisco, CA",
+                "job_posting_time": "4 months ago",
+                "job_link": "https://www.linkedin.com/jobs/view/software-engineer-entry-junior-level-at-synergisticit-4045414070?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=ilHyGsuBsmYVOohJwspj4A%3D%3D"
+            },
+            {
+                "job_position": "Full Stack Engineer",
+                "job_company": "Roboflow",
+                "job_location": "San Francisco, CA\n          \n            $165,000.00\n            -\n            $165,000.00",
+                "job_posting_time": "1 year ago",
+                "job_link": "https://www.linkedin.com/jobs/view/full-stack-engineer-at-roboflow-3625989507?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=q8q4kB%2F1e3DQBRzAPsAHeQ%3D%3D"
+            },
+            {
+                "job_position": "Software Engineer, Frontend",
+                "job_company": "Zip",
+                "job_location": "San Francisco, CA\n          \n            $150,000.00\n            -\n            $220,000.00",
+                "job_posting_time": "1 week ago",
+                "job_link": "https://www.linkedin.com/jobs/view/software-engineer-frontend-at-zip-4098166100?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=Bp4YUzmpzUpuSVmfvr58nQ%3D%3D"
+            },
+            {
+                "job_position": "Backend Software Engineer",
+                "job_company": "Plenful",
+                "job_location": "San Francisco, CA",
+                "job_posting_time": "2 months ago",
+                "job_link": "https://www.linkedin.com/jobs/view/backend-software-engineer-at-plenful-4067278688?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=jByabsFKG7h8LYdM4Mq7AQ%3D%3D"
+            },
+            {
+                "job_position": "Full Stack Engineer",
+                "job_company": "Artisan",
+                "job_location": "San Francisco, CA\n          \n            $130,000.00\n            -\n            $210,000.00",
+                "job_posting_time": "2 months ago",
+                "job_link": "https://www.linkedin.com/jobs/view/full-stack-engineer-at-artisan-4072574495?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=vtKg3e0weCBtT%2Ff1oXNy9w%3D%3D"
+            },
+            {
+                "job_position": "Software Engineer, Backend",
+                "job_company": "OpenAI",
+                "job_location": "San Francisco, CA",
+                "job_posting_time": "8 months ago",
+                "job_link": "https://www.linkedin.com/jobs/view/software-engineer-backend-at-openai-3915648723?refId=MMvhRjxZc37nWKEAcd0PwA%3D%3D&trackingId=ks%2Bc72h6shbKPWRfCmPOiA%3D%3D"
+            }
+        ]
+    }
+]

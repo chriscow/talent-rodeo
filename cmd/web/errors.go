@@ -34,14 +34,18 @@ func (app *application) reportServerError(r *http.Request, err error) {
 }
 
 func (app *application) serverError(w http.ResponseWriter, r *http.Request, err error) {
+	// Log the error
 	app.reportServerError(r, err)
-	if err := response.Page(w, http.StatusOK, nil, "pages/500.tmpl"); err != nil {
-		app.serverError(w, r, err)
+
+	// Prevent infinite recursion by handling errors in rendering directly
+	if renderErr := response.Page(w, http.StatusOK, nil, "pages/errors/500.tmpl"); renderErr != nil {
+		// Fallback to plain text response if rendering fails
+		http.Error(w, "An unexpected error occurred while handling another error.", http.StatusInternalServerError)
 	}
 }
 
 func (app *application) notFound(w http.ResponseWriter, r *http.Request) {
-	if err := response.Page(w, http.StatusOK, nil, "pages/404.tmpl"); err != nil {
+	if err := response.Page(w, http.StatusOK, nil, "pages/errors/404.tmpl"); err != nil {
 		app.serverError(w, r, err)
 	}
 }
@@ -50,7 +54,7 @@ func (app *application) badRequest(w http.ResponseWriter, r *http.Request, err e
 	data := app.newTemplateData(r)
 	data["ErrorMessage"] = err.Error()
 
-	err = response.Page(w, http.StatusBadRequest, data, "pages/errors/400.tmpl")
+	err = response.Page(w, http.StatusBadRequest, data, "pages/errors/errors/400.tmpl")
 	if err != nil {
 		app.serverError(w, r, err)
 	}

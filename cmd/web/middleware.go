@@ -79,12 +79,58 @@ func (app *application) preventCSRF(next http.Handler) http.Handler {
 	return csrfHandler
 }
 
+func (app *application) clearSession(w http.ResponseWriter, r *http.Request) {
+	session, _ := app.sessionStore.Get(r, "session")
+
+	// Set MaxAge to -1 to expire the cookie immediately
+	session.Options.MaxAge = -1
+
+	// Save will remove the cookie since MaxAge < 0
+	err := session.Save(r, w)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+}
+
 func (app *application) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// app.logger.Warn("authenticate middleware", "path", r.URL.Path)
 		session, err := app.sessionStore.Get(r, "session")
 		if err != nil {
-			app.serverError(w, r, err)
+			app.logger.Error("session error",
+				"error", err,
+				"cookie", r.Header.Get("Cookie"))
+			// First, clear the corrupted cookie
+			cookie := &http.Cookie{
+				Name:     "session",
+				Value:    "",
+				Path:     "/",
+				MaxAge:   -1,
+				HttpOnly: true,
+				Secure:   false, // Set to true in production
+				SameSite: http.SameSiteLaxMode,
+			}
+			http.SetCookie(w, cookie)
+
+			// Create a fresh request without the corrupted cookie
+			r.Header.Del("Cookie")
+
+			// Now try to create a new session with the clean request
+			session, err = app.sessionStore.New(r, "session")
+			if err != nil {
+				app.serverError(w, r, err)
+				return
+			}
+
+			// Save the new session
+			err = session.Save(r, w)
+			if err != nil {
+				app.serverError(w, r, err)
+				return
+			}
+
+			next.ServeHTTP(w, r)
 			return
 		}
 
@@ -150,7 +196,7 @@ func (app *application) requireAuthenticatedUser(next http.Handler) http.Handler
 				return
 			}
 
-			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
 		}
 

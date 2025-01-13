@@ -1,0 +1,107 @@
+{{define "page:main"}}
+<style>
+    .job-card {
+        margin-bottom: 1rem;
+        padding: 1rem;
+        border: 1px solid var(--pico-border-color);
+        border-radius: var(--pico-border-radius);
+    }
+
+    .company-logo {
+        width: 50px;
+        height: 50px;
+        object-fit: contain;
+    }
+
+    .search-options {
+        display: none;
+    }
+
+    .search-options.active {
+        display: block;
+    }
+
+    .job-title {
+        color: var(--pico-primary);
+        /* Uses Pico CSS primary color */
+        text-decoration: none;
+    }
+
+    .job-title:hover {
+        text-decoration: underline;
+    }
+</style>
+<main class="container">
+    <h1>LinkedIn Job Search</h1>
+
+    <form hx-get="/search" hx-target="#results" hx-indicator="#spinner">
+        <div class="grid">
+            <div>
+                <label for="keyword">Keywords</label>
+                <input type="text" id="keyword" name="keyword" required placeholder="e.g. Python Developer">
+            </div>
+            <div>
+                <label for="location">Location</label>
+                <select id="location" name="geoId">
+                    <option value="103644278">United States</option>
+                    <!-- Add more locations as needed -->
+                </select>
+            </div>
+        </div>
+
+        <details>
+            <summary role="button" class="secondary">Advanced Search Options</summary>
+            <div class="grid">
+                <div>
+                    <label for="sortBy">Sort By</label>
+                    <select id="sortBy" name="sortBy">
+                        <option value="">All Time</option>
+                        <option value="day">Last 24 Hours</option>
+                        <option value="week">Last 7 Days</option>
+                        <option value="month">Last 30 Days</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="jobType">Job Type</label>
+                    <select id="jobType" name="jobType">
+                        <option value="">Any</option>
+                        <option value="full_time">Full Time</option>
+                        <option value="part_time">Part Time</option>
+                        <option value="contract">Contract</option>
+                        <option value="temporary">Temporary</option>
+                        <option value="volunteer">Volunteer</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="expLevel">Experience Level</label>
+                    <select id="expLevel" name="expLevel">
+                        <option value="">Any</option>
+                        <option value="internship">Internship</option>
+                        <option value="entry_level">Entry Level</option>
+                        <option value="associate">Associate</option>
+                        <option value="mid_senior_level">Mid-Senior Level</option>
+                        <option value="director">Director</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="workType">Work Type</label>
+                    <select id="workType" name="workType">
+                        <option value="">Any</option>
+                        <option value="at_work">On-site</option>
+                        <option value="remote">Remote</option>
+                        <option value="hybrid">Hybrid</option>
+                    </select>
+                </div>
+            </div>
+        </details>
+
+        <button type="submit">Search Jobs</button>
+    </form>
+
+    <div id="spinner" class="htmx-indicator" aria-busy="true"></div>
+
+    <div id="results">
+        <!-- Results will be loaded here -->
+    </div>
+</main>
+{{end}}

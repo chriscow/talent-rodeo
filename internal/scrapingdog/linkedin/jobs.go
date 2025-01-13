@@ -14,50 +14,47 @@ import (
 const remoteGEOID = "103644278"
 
 type JobListing struct {
-	Position       string `json:"job_position"`
-	Link           string `json:"job_link"`
-	ID             string `json:"job_id"`
-	CompanyName    string `json:"company_name"`
-	CompanyProfile string `json:"company_profile"`
-	Location       string `json:"job_location"`
-	PostingDate    string `json:"job_posting_date"`
-	CompanyLogo    string `json:"company_logo_url"`
+	Position       string `json:"job_position" db:"position"`
+	Link           string `json:"job_link" db:"link"`
+	ID             string `json:"job_id" db:"id"`
+	CompanyName    string `json:"company_name" db:"company_name"`
+	CompanyProfile string `json:"company_profile" db:"company_profile"`
+	Location       string `json:"job_location" db:"location"`
+	PostingDate    string `json:"job_posting_date" db:"posting_date"`
+	CompanyLogo    string `json:"company_logo_url" db:"company_logo"`
 }
 
-// For parsing the entire array of job listings
-// type JobListings []JobListing
-
 type JobDetail struct {
-	Position          string       `json:"job_position"`
-	Status            string       `json:"jobs_status"`
-	Location          string       `json:"job_location"`
-	CompanyName       string       `json:"company_name"`
-	CompanyLinkedInID string       `json:"company_linkedin_id"`
-	PostingTime       string       `json:"job_posting_time"`
-	BasePay           string       `json:"base_pay"`
-	Description       string       `json:"job_description"`
-	SeniorityLevel    string       `json:"Seniority_level"`
-	EmploymentType    string       `json:"Employment_type"`
-	JobFunction       string       `json:"Job_function"`
-	Industries        string       `json:"Industries"`
-	Recruiters        []Recruiter  `json:"recruiter_details"`
-	SimilarJobs       []RelatedJob `json:"similar_jobs"`
-	PeopleAlsoViewed  []RelatedJob `json:"people_also_viewed"`
+	Position          string       `json:"job_position" db:"position"`
+	Status            string       `json:"job_status" db:"status"`
+	Location          string       `json:"job_location" db:"location"`
+	CompanyName       string       `json:"company_name" db:"company_name"`
+	CompanyLinkedInID string       `json:"company_linkedin_id" db:"company_linkedin_id"`
+	PostingTime       string       `json:"job_posting_time" db:"posting_time"`
+	BasePay           string       `json:"base_pay" db:"base_pay"`
+	Description       string       `json:"job_description" db:"description"`
+	SeniorityLevel    string       `json:"seniority_level" db:"seniority_level"`
+	EmploymentType    string       `json:"employment_type" db:"employment_type"`
+	JobFunction       string       `json:"job_function" db:"job_function"`
+	Industries        string       `json:"industries" db:"industries"`
+	Recruiters        []Recruiter  `json:"recruiter_details" db:"recruiter_details"`
+	SimilarJobs       []RelatedJob `json:"similar_jobs" db:"similar_jobs"`
+	PeopleAlsoViewed  []RelatedJob `json:"people_also_viewed" db:"people_also_viewed"`
 }
 
 type Recruiter struct {
-	Photo      string `json:"recruiter_photo"`
-	Name       string `json:"recruiter_name"`
-	Title      string `json:"recruiter_title"`
-	ProfileURL string `json:"recruiter_profile_url"`
+	Photo      string  `json:"recruiter_photo" db:"photo_url"`
+	Name       string  `json:"recruiter_name" db:"name"`
+	Title      string  `json:"recruiter_title" db:"title"`
+	ProfileURL *string `json:"recruiter_profile_url" db:"profile_url"` // Use a pointer to handle null values
 }
 
 type RelatedJob struct {
-	Position    string `json:"job_position"`
-	Company     string `json:"job_company"`
-	Location    string `json:"job_location"`
-	PostingTime string `json:"job_posting_time"`
-	Link        string `json:"job_link"`
+	Position    string `json:"job_position" db:"position"`
+	Company     string `json:"job_company" db:"company"`
+	Location    string `json:"job_location" db:"location"`
+	PostingTime string `json:"job_posting_time" db:"posting_time"`
+	Link        string `json:"job_link" db:"link"`
 }
 
 // For parsing the array of job listings
@@ -124,35 +121,6 @@ func GetTranscriptKeywords(ctx context.Context, transcript string) ([]string, er
 
 // 	return jobListings, nil
 // }
-
-func GetJobDetail(ctx context.Context, jobID string) (JobDetail, error) {
-	req, err := http.NewRequest("GET", "https://api.scrapingdog.com/linkedinjobs/", nil)
-	if err != nil {
-		return JobDetail{}, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	q := req.URL.Query()
-	q.Add("api_key", os.Getenv("SCRAPINGDOG_API_KEY"))
-	q.Add("job_id", jobID)
-	req.URL.RawQuery = q.Encode()
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return JobDetail{}, fmt.Errorf("failed to make request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return JobDetail{}, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	var jobDetail JobDetail
-	if err := json.NewDecoder(resp.Body).Decode(&jobDetail); err != nil {
-		return JobDetail{}, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	return jobDetail, nil
-}
 
 func searchJobs(ctx context.Context, geoID, keyword, page string, options JobSearchOptions) ([]JobListing, error) {
 
