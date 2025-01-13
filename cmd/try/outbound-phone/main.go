@@ -1,8 +1,6 @@
 package main
 
 import (
-	"context"
-	"encoding/base64"
 	"fmt"
 	"log"
 	"net/http"
@@ -13,11 +11,8 @@ import (
 	twilioApi "github.com/twilio/twilio-go/rest/api/v2010"
 
 	// OpenAI Realtime
-	"github.com/WqyJh/go-openai-realtime"
-	openairt "github.com/WqyJh/go-openai-realtime"
 
 	// Gorilla
-	"github.com/gorilla/websocket"
 
 	// For environment variables
 	"github.com/joho/godotenv"
@@ -67,10 +62,19 @@ func main() {
 
 // initiateCall triggers an outbound Twilio call
 func initiateCall(w http.ResponseWriter, r *http.Request) {
-	toNumber := r.FormValue("phone")
-	fromNumber := os.Getenv("TWILIO_PHONE_NUMBER")
+	println("Initiating call...")
+	accountSid := os.Getenv("TWILIO_ACCOUNT_SID")
+	authToken := os.Getenv("TWILIO_AUTH_TOKEN") // the test account number // os.Getenv("TWILIO_API_SECRET")
 
-	client := twilio.NewRestClient()
+	client := twilio.NewRestClientWithParams(twilio.ClientParams{
+		Username: accountSid,
+		Password: authToken,
+	})
+
+	toNumber := r.FormValue("phone")
+	fromNumber := "+14258295443" // os.Getenv("TWILIO_PHONE_NUMBER") // "+15005550006"
+
+	// client := twilio.NewRestClient()
 	params := &twilioApi.CreateCallParams{}
 	params.SetTo(toNumber)
 	params.SetFrom(fromNumber)
@@ -86,22 +90,26 @@ func initiateCall(w http.ResponseWriter, r *http.Request) {
 
 // handleTwiML returns initial TwiML that streams audio and captures user speech
 func handleTwiML(w http.ResponseWriter, r *http.Request) {
+	println("Handling TwiML...")
+
 	w.Header().Set("Content-Type", "application/xml")
 	// <Stream> will send audio to our /stream endpoint via WebSocket
 	// <Gather> listens for speech from user
 	twiml := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Stream url="wss://%s/stream" track="both_tracks"/>
-    <Gather input="speech" action="/handle-speech" method="POST" timeout="5">
-        <Say>Hello! Please say something after the beep.</Say>
-    </Gather>
+	<Start>
+		<Stream url="wss://%s/stream" track="both_tracks"/>
+	</Start>
+	<Say>The stream has started.</Say>
 </Response>`, os.Getenv("APP_DOMAIN"))
 
+	println(twiml)
 	w.Write([]byte(twiml))
 }
 
 // handleSpeech receives recognized speech from Twilio <Gather> and can respond
 func handleSpeech(w http.ResponseWriter, r *http.Request) {
+	println("Handling speech...")
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Could not parse form", http.StatusBadRequest)
 		return
@@ -117,5 +125,6 @@ func handleSpeech(w http.ResponseWriter, r *http.Request) {
     <Hangup/>
 </Response>`, speechResult)
 
+	println(response)
 	w.Write([]byte(response))
 }

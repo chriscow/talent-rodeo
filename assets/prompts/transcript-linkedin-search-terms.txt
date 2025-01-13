@@ -1,0 +1,8 @@
+Given the complete transcript of a conversation between a software development
+talent recruiter and a candidate, identify the most relevant search keywords for
+a LinkedIn job search. Focus on the candidate's preferences, skills, ideal job
+titles, industries, and any other relevant factors. The output should include a
+mix of specific terms (e.g., 'Full-Stack Developer') and broad categories (e.g.,
+'Web Development') to optimize search results. Additionally, include alternative
+keywords or synonyms where applicable to maximize match potential.
+
