@@ -6,9 +6,8 @@ import (
 	"net/http"
 	"os"
 
-	"talent-rodeo/cmd/web/components/pages"
+	"talent-rodeo/internal/response"
 
-	"github.com/justinas/nosurf"
 	"github.com/sashabaranov/go-openai"
 )
 
@@ -18,12 +17,12 @@ type Message struct {
 }
 
 func (app *application) handleChat(w http.ResponseWriter, r *http.Request) {
-	csrfToken := nosurf.Token(r)
 
 	if r.Method == "GET" {
-		user := contextGetAuthenticatedUser(r)
-		component := pages.ChatIndex(csrfToken, user)
-		component.Render(r.Context(), w)
+		data := app.newTemplateData(r)
+		if err := response.Page(w, http.StatusOK, data, "pages/chat_index.tmpl"); err != nil {
+			app.serverError(w, r, err)
+		}
 		return
 	}
 
@@ -72,11 +71,18 @@ func (app *application) handleChat(w http.ResponseWriter, r *http.Request) {
 		Content: resp.Choices[0].Message.Content,
 	})
 
-	messagesComponent := pages.MessagesList(messages)
-	messagesComponent.Render(context.Background(), w)
+	// messagesComponent := pages.MessagesList(messages)
+	// messagesComponent.Render(context.Background(), w)
+	data := app.newTemplateData(r)
+
+	if err := response.Page(w, http.StatusOK, data, "pages/chat_index.tmpl"); err != nil {
+		app.serverError(w, r, err)
+	}
+
 }
 
 func (app *application) handleMessages(w http.ResponseWriter, r *http.Request) {
-	component := pages.MessagesList([]openai.ChatCompletionMessage{})
-	component.Render(context.Background(), w)
+	if err := response.Partial(w, http.StatusOK, nil, "partials/messages_list.tmpl"); err != nil {
+		app.serverError(w, r, err)
+	}
 }
