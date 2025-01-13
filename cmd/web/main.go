@@ -27,7 +27,7 @@ import (
 	"github.com/pusher/pusher-http-go/v5"
 )
 
-func main() {
+func main2() {
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found")
 		return
@@ -60,7 +60,7 @@ func main() {
 	}
 }
 
-func main2() {
+func main() {
 	logger := slog.New(tint.NewHandler(os.Stdout, &tint.Options{Level: slog.LevelDebug}))
 
 	err := run(logger)
@@ -133,7 +133,7 @@ func run(logger *slog.Logger) error {
 	flag.StringVar(&cfg.db.dsn, "db-dsn", "db.sqlite", "sqlite3 DSN")
 	flag.BoolVar(&cfg.db.automigrate, "db-automigrate", true, "run migrations on startup")
 	flag.StringVar(&cfg.notifications.email, "notifications-email", "", "contact email address for error notifications")
-	flag.StringVar(&cfg.session.secretKey, "session-secret-key", "flopalna4chu7nxzxlbcv34d7k5rrljw", "secret key for session cookie authentication")
+	flag.StringVar(&cfg.session.secretKey, "session-secret-key", os.Getenv("SESSION_SECRET"), "secret key for session cookie authentication")
 	flag.StringVar(&cfg.session.oldSecretKey, "session-old-secret-key", "", "previous secret key for session cookie authentication")
 	flag.StringVar(&cfg.smtp.host, "smtp-host", "example.smtp.host", "smtp host")
 	flag.IntVar(&cfg.smtp.port, "smtp-port", 25, "smtp port")
@@ -171,6 +171,10 @@ func run(logger *slog.Logger) error {
 	keyPairs := [][]byte{[]byte(cfg.session.secretKey), nil}
 	if cfg.session.oldSecretKey != "" {
 		keyPairs = append(keyPairs, []byte(cfg.session.oldSecretKey), nil)
+	}
+
+	if len(cfg.session.secretKey) < 32 {
+		return fmt.Errorf("SESSION_SECRET must be at least 32 bytes long")
 	}
 
 	sessionStore := sessions.NewCookieStore(keyPairs...)
@@ -218,6 +222,20 @@ func run(logger *slog.Logger) error {
 	}
 
 	return app.serveHTTP()
+}
+
+func (app *application) setupSessionStore(authKey, encryptKey []byte) {
+	store := sessions.NewCookieStore(authKey, encryptKey)
+
+	store.Options = &sessions.Options{
+		Path:     "/",
+		MaxAge:   86400 * 7, // 7 days
+		HttpOnly: true,
+		Secure:   false, // set to true in production
+		SameSite: http.SameSiteLaxMode,
+	}
+
+	app.sessionStore = store
 }
 
 func setupNATS(ctx context.Context) (*embeddednats.Server, error) {
