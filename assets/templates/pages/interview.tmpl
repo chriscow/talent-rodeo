@@ -1,4 +1,5 @@
 {{ define "content" }}
+<!-- pages/interview.tmpl -->
 <article>
     <header>
         <h2>Initial Interview</h2>
@@ -10,7 +11,7 @@
         <div id="status-message"></div>
 
         <div id="controls">
-            <button id="startButton" class="primary">
+            <button id="startButton" class="primary" disabled>
                 Start Interview
             </button>
             <button id="stopButton" class="secondary hidden">
@@ -31,12 +32,119 @@
 
 {{ define "scripts" }}
 <script>
-    console.log("scripts loaded");
+    // OpenAI WebSocket wrapper class to manage the connection and message handling
+    class OpenAIWebSocket {
+        constructor() {
+            this.ws = null;
+            this.isConnected = false;
+            this.messageQueue = [];
+            this.eventHandlers = new Map();
+            this.connect = this.connect.bind(this);
+            this.reconnectAttempts = 0;
+            this.maxReconnectAttempts = 5;
+        }
+
+        connect() {
+            return new Promise((resolve, reject) => {
+                try {
+                    this.ws = new WebSocket(`ws://${window.location.host}/ws`);
+
+                    this.ws.onopen = () => {
+                        console.log('WebSocket connected');
+                        this.isConnected = true;
+                        this.reconnectAttempts = 0;
+                        this.processMessageQueue();
+                        resolve();
+                    };
+
+                    this.ws.onclose = () => {
+                        console.log('WebSocket disconnected');
+                        this.isConnected = false;
+                        this.handleDisconnect();
+                    };
+
+                    this.ws.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                        reject(error);
+                    };
+
+                    this.ws.onmessage = (event) => {
+                        try {
+                            const serverEvent = JSON.parse(event.data);
+                            this.handleServerEvent(serverEvent);
+                        } catch (error) {
+                            console.error('Error processing server message:', error);
+                        }
+                    };
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        }
+
+        handleDisconnect() {
+            if (this.reconnectAttempts < this.maxReconnectAttempts) {
+                this.reconnectAttempts++;
+                console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+                setTimeout(() => this.connect(), 1000 * Math.pow(2, this.reconnectAttempts));
+            } else {
+                console.error('Max reconnection attempts reached');
+            }
+        }
+
+        handleServerEvent(event) {
+            const handlers = this.eventHandlers.get(event.type) || [];
+            handlers.forEach(handler => {
+                try {
+                    handler(event);
+                } catch (error) {
+                    console.error('Error in event handler:', error);
+                }
+            });
+        }
+
+        on(eventType, handler) {
+            if (!this.eventHandlers.has(eventType)) {
+                this.eventHandlers.set(eventType, []);
+            }
+            this.eventHandlers.get(eventType).push(handler);
+        }
+
+        sendMessage(message) {
+            if (this.isConnected) {
+                try {
+                    this.ws.send(JSON.stringify(message));
+                } catch (error) {
+                    console.error('Error sending message:', error);
+                    this.messageQueue.push(message);
+                }
+            } else {
+                this.messageQueue.push(message);
+            }
+        }
+
+        processMessageQueue() {
+            while (this.messageQueue.length > 0) {
+                const message = this.messageQueue.shift();
+                this.sendMessage(message);
+            }
+        }
+
+        close() {
+            if (this.ws) {
+                this.ws.close();
+            }
+        }
+    }
+
+    // Audio recording state management
     let mediaRecorder;
     let audioChunks = [];
     let isRecording = false;
     let currentAudioBlob = null;
+    const openai = new OpenAIWebSocket();
 
+    // DOM elements
     const startButton = document.getElementById('startButton');
     const stopButton = document.getElementById('stopButton');
     const sendButton = document.getElementById('sendButton');
@@ -44,15 +152,65 @@
     const conversationLog = document.getElementById('conversation-log');
     const transcript = document.getElementById('transcript');
 
+    // Initialize WebSocket connection
+    async function initializeSession() {
+        try {
+            await openai.connect();
+            startButton.disabled = false;
+
+            // Configure the session for audio interaction
+            openai.sendMessage({
+                type: 'session.update',
+                session: {
+                    modalities: ['text', 'audio'],
+                    voice: 'shimmer',
+                    outputAudioFormat: 'pcm16',
+                    inputAudioTranscription: {
+                        model: 'whisper-1'
+                    }
+                }
+            });
+        } catch (error) {
+            statusMessage.innerHTML = '<p class="error">Failed to connect to server. Please refresh the page.</p>';
+        }
+    }
+
+    // Set up OpenAI event handlers
+    openai.on('session.created', (event) => {
+        console.log('Session created:', event);
+    });
+
+    openai.on('conversation.item.input.audio.transcription.completed', (event) => {
+        const userMessage = document.createElement('p');
+        userMessage.innerHTML = `<strong>You:</strong> ${event.transcript}`;
+        conversationLog.appendChild(userMessage);
+    });
+
+    openai.on('response.text.done', (event) => {
+        const aiMessage = document.createElement('p');
+        aiMessage.innerHTML = `<strong>AI:</strong> ${event.text}`;
+        conversationLog.appendChild(aiMessage);
+        conversationLog.scrollTop = conversationLog.scrollHeight;
+
+        statusMessage.innerHTML = '<p>Ready to record again...</p>';
+        sendButton.classList.add('hidden');
+        sendButton.disabled = false;
+    });
+
+    openai.on('error', (event) => {
+        console.error('OpenAI error:', event);
+        statusMessage.innerHTML = `<p class="error">Error: ${event.message}</p>`;
+    });
+
     async function startRecording() {
         try {
-            // Clear any previous recording state
+            // Reset recording state
             audioChunks = [];
             currentAudioBlob = null;
             statusMessage.innerHTML = '';
             sendButton.classList.add('hidden');
 
-            // Request high-quality audio
+            // Request audio access with specific constraints
             const stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     channelCount: 1,
@@ -65,7 +223,7 @@
                 }
             });
 
-            // Configure MediaRecorder for optimal quality
+            // Initialize MediaRecorder
             mediaRecorder = new MediaRecorder(stream, {
                 mimeType: 'audio/webm;codecs=opus',
                 audioBitsPerSecond: 128000
@@ -76,7 +234,6 @@
             };
 
             mediaRecorder.onstop = async () => {
-                // Just create the preview when stopping - don't send yet
                 createAudioPreview();
             };
 
@@ -96,13 +253,10 @@
         currentAudioBlob = new Blob(audioChunks, { type: 'audio/wav' });
         const audioUrl = URL.createObjectURL(currentAudioBlob);
 
-        // Clear previous preview
-        statusMessage.innerHTML = '';
-
-        // Create new preview elements
+        // Create preview container
         const previewContainer = document.createElement('div');
 
-        // Add file size information
+        // Add debug information
         const fileSizeMB = (currentAudioBlob.size / (1024 * 1024)).toFixed(2);
         const debugInfo = document.createElement('div');
         debugInfo.innerHTML = `
@@ -111,17 +265,16 @@
             <p>Preview your recording:</p>
         `;
 
-        // Create audio player
+        // Add audio player
         const audioPreview = document.createElement('audio');
         audioPreview.src = audioUrl;
         audioPreview.controls = true;
 
-        // Add elements to container
+        // Update UI
+        statusMessage.innerHTML = '';
         previewContainer.appendChild(debugInfo);
         previewContainer.appendChild(audioPreview);
         statusMessage.appendChild(previewContainer);
-
-        // Show send button
         sendButton.classList.remove('hidden');
     }
 
@@ -135,25 +288,75 @@
         }
     }
 
+    async function sendRecording() {
+        if (!currentAudioBlob) {
+            console.error('No audio recording available');
+            return;
+        }
+
+        try {
+            statusMessage.innerHTML = '<p>Converting and sending audio...</p>';
+            sendButton.disabled = true;
+
+            // Convert audio to proper format
+            const convertedBlob = await convertAudio(currentAudioBlob);
+            const base64Audio = await blobToBase64(convertedBlob);
+
+            // Send audio to OpenAI
+            openai.sendMessage({
+                type: 'input.audio.buffer.append',
+                audio: base64Audio
+            });
+
+            openai.sendMessage({
+                type: 'input.audio.buffer.commit'
+            });
+
+            openai.sendMessage({
+                type: 'response.create',
+                response: {
+                    modalities: ['text']
+                }
+            });
+        } catch (err) {
+            console.error('Error sending audio:', err);
+            statusMessage.innerHTML = '<p class="error">Error processing audio. Please try again.</p>';
+            sendButton.disabled = false;
+        }
+    }
+
+    // Utility function to convert blob to base64
+    async function blobToBase64(blob) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const base64String = reader.result
+                    .replace('data:', '')
+                    .replace(/^.+,/, '');
+                resolve(base64String);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+    }
+
+    // Audio conversion to match OpenAI's requirements
     async function convertAudio(audioBlob) {
         const audioContext = new AudioContext();
         const audioData = await audioBlob.arrayBuffer();
         const audioBuffer = await audioContext.decodeAudioData(audioData);
 
-        // Create an offline context for processing
         const offlineContext = new OfflineAudioContext(
             1, // mono
             audioBuffer.duration * 16000, // target sample rate
             16000 // target sample rate
         );
 
-        // Create source buffer
         const source = offlineContext.createBufferSource();
         source.buffer = audioBuffer;
         source.connect(offlineContext.destination);
         source.start();
 
-        // Render audio
         const renderedBuffer = await offlineContext.startRendering();
 
         // Convert to 16-bit PCM WAV
@@ -194,56 +397,12 @@
         return new Blob([buffer], { type: 'audio/wav' });
     }
 
-    async function sendRecording() {
-        if (!currentAudioBlob) {
-            console.error('No audio recording available');
-            return;
-        }
-
-        try {
-            statusMessage.innerHTML = '<p>Converting and sending audio...</p>';
-            sendButton.disabled = true;
-
-            // Convert the audio before sending
-            const convertedBlob = await convertAudio(currentAudioBlob);
-
-            const formData = new FormData();
-            formData.append('audio', convertedBlob);
-
-            const response = await fetch('/api/interview/audio', {
-                method: 'POST',
-                body: formData
-            });
-
-            if (!response.ok) {
-                throw new Error('Server response was not ok');
-            }
-
-            const data = await response.json();
-            updateConversation(data);
-            statusMessage.innerHTML = '<p>Ready to record again...</p>';
-            sendButton.classList.add('hidden');
-            sendButton.disabled = false;
-        } catch (err) {
-            console.error('Error sending audio:', err);
-            statusMessage.innerHTML = '<p class="error">Error processing audio. Please try again.</p>';
-            sendButton.disabled = false;
-        }
-    }
-
-    function updateConversation(data) {
-        const userMessage = document.createElement('p');
-        userMessage.innerHTML = `<strong>You:</strong> ${data.transcript}`;
-        conversationLog.appendChild(userMessage);
-
-        const aiMessage = document.createElement('p');
-        aiMessage.innerHTML = `<strong>AI:</strong> ${data.response}`;
-        conversationLog.appendChild(aiMessage);
-        conversationLog.scrollTop = conversationLog.scrollHeight;
-    }
-
+    // Set up event listeners
     startButton.addEventListener('click', startRecording);
     stopButton.addEventListener('click', stopRecording);
     sendButton.addEventListener('click', sendRecording);
+
+    // Initialize the session when the page loads
+    initializeSession();
 </script>
 {{ end }}

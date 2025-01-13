@@ -19,6 +19,7 @@ import (
 // 4. Send ElevenLabs TTS audio back to Twilio
 
 func handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	println("Handling WebSocket...")
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool { return true },
 	}
