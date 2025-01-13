@@ -4,15 +4,13 @@ import (
 	"net/http"
 
 	"talent-rodeo/assets"
-	"talent-rodeo/cmd/web/templates/errors"
 
-	"github.com/a-h/templ"
 	"github.com/alexedwards/flow"
 )
 
 func (app *application) routes() http.Handler {
 	mux := flow.New()
-	mux.NotFound = templ.Handler(errors.NotFound())
+	mux.NotFound = http.HandlerFunc(app.notFound)
 
 	// mux.Use(app.debugHeaders)
 	mux.Use(app.recoverPanic)
@@ -43,8 +41,6 @@ func (app *application) routes() http.Handler {
 
 		mux.Group(func(mux *flow.Mux) {
 			mux.Use(app.requireSuperUser)
-
-			mux.HandleFunc("/admin", app.admin, "GET")
 			mux.HandleFunc("/chat", app.handleChat, "GET", "POST")
 			mux.HandleFunc("/messages", app.handleMessages, "GET")
 		})

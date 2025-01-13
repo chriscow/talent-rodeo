@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"talent-rodeo/assets"
-	"talent-rodeo/cmd/web/components/partials"
 	"talent-rodeo/internal/response"
 	"talent-rodeo/internal/rodeo"
 )
@@ -39,21 +38,21 @@ func (app *application) uploadResume(w http.ResponseWriter, r *http.Request) {
 
 	// Parse multipart form
 	if err := r.ParseMultipartForm(10 << 20); err != nil { // 10MB max
-		partials.UploadError("Failed to parse form").Render(r.Context(), w)
+		app.badRequest(w, r, fmt.Errorf("uploadResume: failed to parse form: %w", err))
 		return
 	}
 
 	// Get phone number
 	phone := r.FormValue("phone")
 	if phone == "" {
-		partials.UploadError("Phone number is required").Render(r.Context(), w)
+		app.badRequest(w, r, fmt.Errorf("uploadResume: phone number is required"))
 		return
 	}
 
 	// Get resume file
 	file, header, err := r.FormFile("resume")
 	if err != nil {
-		partials.UploadError("Failed to get resume file").Render(r.Context(), w)
+		app.badRequest(w, r, fmt.Errorf("uploadResume: failed to get resume file: %w", err))
 		return
 	}
 	defer file.Close()
@@ -61,7 +60,7 @@ func (app *application) uploadResume(w http.ResponseWriter, r *http.Request) {
 	tempDir := os.TempDir()
 	tempFile, err := os.CreateTemp(tempDir, "resume-*.docx")
 	if err != nil {
-		http.Error(w, "Error creating temporary file: "+err.Error(), http.StatusInternalServerError)
+		app.serverError(w, r, fmt.Errorf("uploadResume: failed to create temp file: %w", err))
 		return
 	}
 	defer os.Remove(tempFile.Name()) // Clean up temp file after we're done
@@ -69,7 +68,7 @@ func (app *application) uploadResume(w http.ResponseWriter, r *http.Request) {
 	// Copy the uploaded file to the temp file
 	_, err = io.Copy(tempFile, file)
 	if err != nil {
-		http.Error(w, "Error copying file: "+err.Error(), http.StatusInternalServerError)
+		app.serverError(w, r, fmt.Errorf("uploadResume: failed to copy file: %w", err))
 		return
 	}
 	defer tempFile.Close()
@@ -81,12 +80,12 @@ func (app *application) uploadResume(w http.ResponseWriter, r *http.Request) {
 	} else if strings.HasSuffix(strings.ToLower(header.Filename), ".pdf") {
 		resumeText, err = rodeo.ExtractPDF(tempFile)
 	} else {
-		partials.UploadError("Unsupported file format").Render(r.Context(), w)
+		app.badRequest(w, r, fmt.Errorf("uploadResume: invalid file type"))
 		return
 	}
 
 	if err != nil {
-		partials.UploadError("Failed to extract text from resume").Render(r.Context(), w)
+		app.serverError(w, r, fmt.Errorf("uploadResume: failed to extract text: %w", err))
 		return
 	}
 
