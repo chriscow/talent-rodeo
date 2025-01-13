@@ -9,10 +9,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 	"talent-rodeo/internal/response"
 	"time"
 
 	openairt "github.com/WqyJh/go-openai-realtime"
+	"github.com/gorilla/websocket"
 )
 
 type PageData struct {
@@ -172,6 +174,132 @@ func (h *Handler) HandleAudio(w http.ResponseWriter, r *http.Request) {
 				Response:   response,
 			})
 			return
+		}
+	}
+}
+
+// WebSocketConnection represents an active WebSocket connection
+type WebSocketConnection struct {
+	conn       *websocket.Conn
+	openaiConn *openairt.Conn
+	ctx        context.Context
+	cancel     context.CancelFunc
+	mu         sync.Mutex
+}
+
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true // In production, implement proper origin checking
+	},
+}
+
+// handleWebSocket upgrades HTTP connection to WebSocket and manages the session
+func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
+	// Upgrade the HTTP connection to WebSocket
+	wsConn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("WebSocket upgrade failed: %v", err)
+		return
+	}
+
+	// Create cancelable context for this connection
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Connect to OpenAI
+	openaiConn, err := h.client.Connect(ctx)
+	if err != nil {
+		log.Printf("OpenAI connection failed: %v", err)
+		wsConn.Close()
+		return
+	}
+
+	// Create WebSocket connection wrapper
+	conn := &WebSocketConnection{
+		conn:       wsConn,
+		openaiConn: openaiConn,
+		ctx:        ctx,
+		cancel:     cancel,
+	}
+
+	// Start message handling goroutines
+	go conn.handleClientMessages()
+	go conn.handleOpenAIMessages()
+}
+
+// handleClientMessages processes messages from the web client
+func (c *WebSocketConnection) handleClientMessages() {
+	defer func() {
+		c.cancel()
+		c.conn.Close()
+		c.openaiConn.Close()
+	}()
+
+	for {
+		// Read message from WebSocket
+		messageType, message, err := c.conn.ReadMessage()
+		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Printf("WebSocket read error: %v", err)
+			}
+			return
+		}
+
+		if openairt.MessageType(messageType) != openairt.MessageText {
+			log.Printf("Unexpected message type: %d", messageType)
+			continue
+		}
+
+		event, err := openairt.UnmarshalClientEvent(message)
+		if err != nil {
+			log.Printf("Failed to unmarshal client event: %v", err)
+			continue
+		}
+
+		// Forward the message to OpenAI
+		c.mu.Lock()
+		err = c.openaiConn.SendMessage(c.ctx, event)
+		c.mu.Unlock()
+
+		if err != nil {
+			log.Printf("Failed to forward message to OpenAI: %v", err)
+			return
+		}
+	}
+}
+
+// handleOpenAIMessages processes messages from OpenAI
+func (c *WebSocketConnection) handleOpenAIMessages() {
+	defer c.cancel()
+
+	for {
+		select {
+		case <-c.ctx.Done():
+			return
+		default:
+			// Read message from OpenAI
+			event, err := c.openaiConn.ReadMessage(c.ctx)
+			if err != nil {
+				log.Printf("OpenAI read error: %v", err)
+				return
+			}
+
+			// Convert the event to JSON
+			message, err := json.Marshal(event)
+			if err != nil {
+				log.Printf("Failed to marshal OpenAI event: %v", err)
+				continue
+			}
+
+			// Send the message to the web client
+			c.mu.Lock()
+			err = c.conn.WriteMessage(websocket.TextMessage, message)
+			c.mu.Unlock()
+
+			if err != nil {
+				log.Printf("WebSocket write error: %v", err)
+				return
+			}
 		}
 	}
 }

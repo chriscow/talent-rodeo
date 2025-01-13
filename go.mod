@@ -12,8 +12,10 @@ replace github.com/chriscow/minds/providers/gemini => ../thoughtnet/minds/provid
 
 replace github.com/chriscow/minds/tools => ../thoughtnet/minds/tools
 
+replace github.com/WqyJh/go-openai-realtime => /Users/chris/github.com/go-openai-realtime
+
 require (
-	github.com/WqyJh/go-openai-realtime v0.3.4
+	github.com/WqyJh/go-openai-realtime v0.0.0-00010101000000-000000000000
 	github.com/a-h/templ v0.2.793
 	github.com/alexedwards/flow v0.1.0
 	github.com/chriscow/minds/providers/gemini v0.0.3
@@ -42,6 +44,7 @@ require (
 	github.com/starfederation/datastar v0.21.3
 	github.com/tmaxmax/go-sse v0.10.0
 	github.com/tomasen/realip v0.0.0-20180522021738-f0c99a92ddce
+	github.com/twilio/twilio-go v1.23.9
 	github.com/wneessen/go-mail v0.5.2
 	golang.org/x/crypto v0.32.0
 	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67
@@ -56,7 +59,6 @@ require (
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/tiktoken-go/tokenizer v0.2.1 // indirect
-	github.com/twilio/twilio-go v1.23.9 // indirect
 )
 
 require (
