@@ -1,9 +1,16 @@
-{{define "page:main"}}
-
+{{define "job_detail"}}
+{{ if .Error }}
+<article>
+    <header>
+        <strong>Error</strong>
+    </header>
+    <p>{{ .Error }}</p>
+</article>
+{{ else }}
 <main class="container">
     <nav>
         <ul>
-            <li><a href="/" class="secondary">&larr; Back to Search</a></li>
+            <li><a href="#" onclick="window.history.back()" class="secondary">&larr; Back to Results</a></li>
         </ul>
     </nav>
 
@@ -51,5 +58,10 @@
         </footer>
     </article>
 </main>
+{{ end }}
+{{end}}
 
+{{/* If this template is used as a full page, it will be rendered in the main element */}}
+{{define "page:main"}}
+{{template "job_detail" .}}
 {{end}}

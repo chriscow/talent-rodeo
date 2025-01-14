@@ -18,7 +18,9 @@
         </div>
         <div>
             <!-- Changed the h3 to wrap it in an anchor tag -->
-            <h3><a href="/jobs/{{ .ID }}" class="job-title">{{ .Position }}</a></h3>
+            <h3><a hx-get="/jobs/{{ .ID }}" hx-indicator="#spinner" hx-push-url="true" hx-target="main"
+                    class="job-title">{{ .Position }}</a>
+            </h3>
             <p>{{ .CompanyName }} • {{ .Location }}</p>
             <p>Posted: {{ .PostingDate }}</p>
             <a href="{{ .Link }}" target="_blank" role="button">View on LinkedIn</a>

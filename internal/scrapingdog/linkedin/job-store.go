@@ -23,12 +23,12 @@ func (js *JobStore) SaveJobListings(ctx context.Context, searchID int64, listing
 		var jobListingID int64
 		err := tx.QueryRowContext(ctx, `
             INSERT INTO job_listings (
-                job_id, position, job_link, company_name, 
+                job_id, position, link, company_name, 
                 company_profile, location, posting_date, company_logo
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (job_id) DO UPDATE SET
                 position = excluded.position,
-                job_link = excluded.job_link,
+                link = excluded.link,
                 company_name = excluded.company_name,
                 company_profile = excluded.company_profile,
                 location = excluded.location,
@@ -93,7 +93,7 @@ func (js *JobStore) GetJobsByID(searchID int64) ([]JobListing, error) {
 func (js *JobStore) GetRecentJobs(ctx context.Context, limit int) ([]JobListing, error) {
 	rows, err := js.db.QueryContext(ctx, `
         SELECT DISTINCT 
-            j.job_id, j.position, j.job_link, j.company_name,
+            j.job_id, j.position, j.link, j.company_name,
             j.company_profile, j.location, j.posting_date, j.company_logo
         FROM job_listings j
         ORDER BY j.first_seen_at DESC
