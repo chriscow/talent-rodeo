@@ -36,7 +36,7 @@ func (app *application) linkedInSearch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) handleSearch(w http.ResponseWriter, r *http.Request) {
-	searchManager := linkedin.NewSearchManager(app.db.DB)
+	searchManager := linkedin.NewSearchManager(app.db.DB, app.logger)
 
 	keyword := r.FormValue("keyword")
 	geoId := r.FormValue("geoId")
@@ -76,7 +76,7 @@ func (app *application) jobDetail(w http.ResponseWriter, r *http.Request) {
 	jobID := flow.Param(r.Context(), "id")
 	// jobID := strings.TrimPrefix(r.URL.Path, "/jobs/")
 
-	searchManager := linkedin.NewSearchManager(app.db.DB)
+	searchManager := linkedin.NewSearchManager(app.db.DB, app.logger)
 
 	// Get the job details from your database
 	job, err := searchManager.GetJobDetail(r.Context(), jobID)
@@ -88,7 +88,12 @@ func (app *application) jobDetail(w http.ResponseWriter, r *http.Request) {
 	data := app.newTemplateData(r)
 	data["Job"] = job
 
-	if err := response.Page(w, http.StatusOK, data, "pages/job_detail.tmpl"); err != nil {
+	opts := &response.RenderOptions{}
+	if r.Header.Get("HX-Request") != "true" {
+		opts.Layout = "base"
+	}
+
+	if err := response.Render(w, http.StatusOK, data, "pages/job_detail.tmpl", opts); err != nil {
 		app.serverError(w, r, err)
 	}
 }

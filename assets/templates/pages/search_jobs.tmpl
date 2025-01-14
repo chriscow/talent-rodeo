@@ -34,7 +34,7 @@
 <main class="container">
     <h1>LinkedIn Job Search</h1>
 
-    <form hx-get="/search" hx-target="#results" hx-indicator="#spinner">
+    <form hx-get="/search" hx-target="#results" hx-indicator="#spinner" hx-push-url="true">
         <div class="grid">
             <div>
                 <label for="keyword">Keywords</label>
@@ -98,7 +98,7 @@
         <button type="submit">Search Jobs</button>
     </form>
 
-    <div id="spinner" class="htmx-indicator" aria-busy="true"></div>
+    <img src="/static/img/puff.svg" id="spinner" class="htmx-indicator" alt="Loading...">
 
     <div id="results">
         <!-- Results will be loaded here -->

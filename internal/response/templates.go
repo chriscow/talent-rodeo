@@ -36,6 +36,12 @@ func PageWithHeaders(w http.ResponseWriter, status int, data any, headers http.H
 	return NamedTemplateWithHeaders(w, status, data, headers, "base", patterns...)
 }
 
+// func PageWithHeaders(w http.ResponseWriter, status int, data any, headers http.Header, pagePath string) error {
+// 	patterns := []string{"base.tmpl", "partials/*.tmpl", pagePath}
+// 	templateName := strings.TrimSuffix(filepath.Base(pagePath), ".tmpl")
+// 	return NamedTemplateWithHeaders(w, status, data, headers, templateName, patterns...)
+// }
+
 func NamedTemplate(w http.ResponseWriter, status int, data any, templateName string, patterns ...string) error {
 	return NamedTemplateWithHeaders(w, status, data, nil, templateName, patterns...)
 }
@@ -68,4 +74,28 @@ func NamedTemplateWithHeaders(w http.ResponseWriter, status int, data any, heade
 	_, err = buf.WriteTo(w)
 
 	return err
+}
+
+// RenderOptions allows configuring how templates are rendered
+type RenderOptions struct {
+	Layout  string      // Optional layout template (e.g., "base")
+	Headers http.Header // Optional additional headers
+}
+
+// Render handles both partial and full-page rendering based on options
+func Render(w http.ResponseWriter, status int, data any, templatePath string, opts *RenderOptions) error {
+	if opts == nil {
+		opts = &RenderOptions{}
+	}
+
+	patterns := []string{"partials/*.tmpl", templatePath}
+
+	// If a layout is specified, include it and use it as the entry point
+	templateName := strings.TrimSuffix(filepath.Base(templatePath), ".tmpl")
+	if opts.Layout != "" {
+		patterns = append([]string{opts.Layout + ".tmpl"}, patterns...)
+		templateName = opts.Layout
+	}
+
+	return NamedTemplateWithHeaders(w, status, data, opts.Headers, templateName, patterns...)
 }
