@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -18,94 +19,111 @@ import (
 type SearchManager struct {
 	db       *sqlx.DB
 	jobStore *JobStore
+	logger   *slog.Logger
 }
 
-func NewSearchManager(db *sqlx.DB) *SearchManager {
-	return &SearchManager{db: db, jobStore: &JobStore{db: db}}
+func NewSearchManager(db *sqlx.DB, logger *slog.Logger) *SearchManager {
+	return &SearchManager{db: db, jobStore: &JobStore{db: db}, logger: logger}
 }
 
 func (sm *SearchManager) SearchJobs(ctx context.Context, keyword, geoID string, opts ...JobSearchOption) ([]JobListing, error) {
-	// Initialize search options with default page limit
 	options := JobSearchOptions{pageLimit: 1}
 	for _, opt := range opts {
 		opt(&options)
 	}
 
-	// Generate unique hash for this search configuration
 	searchHash := generateSearchHash(keyword, geoID, options)
 
-	// For SQLite, we need to modify the query syntax:
-	// 1. Use ? instead of $N for parameters
-	// 2. Use datetime() instead of CURRENT_TIMESTAMP
-	// 3. Use different syntax for time calculations
+	// Modified query to also return whether this was a new insert
 	const query = `
-        INSERT INTO job_searches (
-            keyword, geo_id, sort_by, job_type, exp_level, 
-            work_type, company_filter, last_searched_at, search_hash,
-            total_results
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, 0)
-        ON CONFLICT(search_hash) DO UPDATE SET 
-            last_searched_at = CASE 
-                WHEN datetime(last_searched_at, '+4 hours') < datetime('now')
-                THEN datetime('now')
-                ELSE last_searched_at 
-            END
-        RETURNING id, last_searched_at,
-                  CAST((julianday('now') - julianday(last_searched_at)) * 3600 AS INTEGER) as age_seconds
+INSERT INTO job_searches (
+    keyword, geo_id, sort_by, job_type, exp_level, 
+    work_type, company_filter, last_searched_at, search_hash,
+    total_results
+) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, 0)
+ON CONFLICT(search_hash) DO UPDATE SET 
+    last_searched_at = CASE 
+        WHEN datetime(last_searched_at, '+4 hours') < datetime('now')
+        THEN datetime('now')
+        ELSE last_searched_at 
+    END
+RETURNING 
+    id, 
+    last_searched_at,
+    CAST((julianday('now') - julianday(last_searched_at)) * 3600 AS INTEGER) as age_seconds,
+    (SELECT COUNT(*) FROM search_results WHERE search_id = job_searches.id) > 0 as has_cached_results
     `
 
 	var (
-		searchID     int64
-		lastSearched time.Time
-		ageSeconds   int64
+		searchID         int64
+		lastSearched     time.Time
+		ageSeconds       int64
+		hasCachedResults bool
 	)
 
-	// Execute the upsert and get the results
 	err := sm.db.QueryRowContext(ctx, query,
 		keyword, geoID, options.sortBy, options.jobType,
 		options.expLevel, options.workType,
-		options.filterByCompany, searchHash).Scan(&searchID, &lastSearched, &ageSeconds)
+		options.filterByCompany, searchHash).Scan(&searchID, &lastSearched, &ageSeconds, &hasCachedResults)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upsert search record: %w", err)
 	}
 
-	// Convert age from seconds to duration
 	age := time.Duration(ageSeconds) * time.Second
 
-	// If the search is less than 4 hours old, return cached results
-	if age < 4*time.Hour {
+	// Return cached results only if they exist and are fresh
+	if hasCachedResults && age < 4*time.Hour {
 		jobListings, err := sm.jobStore.GetJobsByID(searchID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get cached job listings: %w", err)
 		}
+
+		sm.logger.Info("Returning cached results", "search_id", searchID, "count", len(jobListings))
 		return jobListings, nil
 	}
 
-	// Adjust search strategy based on age
-	switch {
-	case age > 72*time.Hour:
-		options.sortBy = "month"
-	case age > 48*time.Hour:
-		options.sortBy = "week"
-	default:
-		options.sortBy = "day"
+	// For new searches or stale cached results, determine search scope
+	var searchScope string
+	if !hasCachedResults {
+		// New search - get everything from the past month
+		searchScope = "month"
+	} else {
+		// Existing but stale search - use age-based strategy
+		switch {
+		case age > 72*time.Hour:
+			searchScope = "month"
+		case age > 48*time.Hour:
+			searchScope = "week"
+		default:
+			searchScope = "day"
+		}
 	}
+	sm.logger.Debug("Determining search scope", "search_id", searchID, "age (seconds)", ageSeconds, "scope", searchScope)
+	options.sortBy = searchScope
 
-	// Perform the actual search
-	jobListings := make([]JobListing, 0, options.pageLimit*50) // Pre-allocate with estimated size
+	// Perform the search with determined scope
+	jobListings := make([]JobListing, 0, options.pageLimit*50)
 	for page := 1; page <= options.pageLimit; page++ {
 		pageStr := fmt.Sprintf("%d", page)
 		results, err := searchJobs(ctx, geoID, keyword, pageStr, options)
 		if err != nil {
 			return nil, fmt.Errorf("failed to search jobs on page %d: %w", page, err)
 		}
-
 		jobListings = append(jobListings, results...)
 	}
 
-	// Save the results
+	sm.logger.Debug("Search results", "search_id", searchID, "count", len(jobListings))
+
+	// Save the results and update total count
+	if _, err := sm.db.ExecContext(ctx, `
+        UPDATE job_searches 
+        SET total_results = ? 
+        WHERE id = ?
+    `, len(jobListings), searchID); err != nil {
+		log.Printf("failed to update total results count: %v", err)
+	}
+
 	if err := sm.jobStore.SaveJobListings(ctx, searchID, jobListings); err != nil {
-		// Log the error but don't fail the request
 		log.Printf("failed to save job listings for search %d: %v", searchID, err)
 	}
 
