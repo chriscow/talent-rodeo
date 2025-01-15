@@ -39,6 +39,7 @@ func (app *application) routes() http.Handler {
 			mux.Use(app.requireAuthenticatedUser)
 			mux.HandleFunc("/search", app.linkedInSearch, "GET")
 			mux.HandleFunc("/jobs/:id", app.jobDetail, "GET")
+			mux.HandleFunc("/jobs/:id/match", app.handleJobMatch, "GET")
 			mux.HandleFunc("/upload", app.uploadResume, "POST")
 			mux.HandleFunc("/logout", app.logout, "POST")
 		})

@@ -3,7 +3,7 @@ PRAGMA foreign_keys = ON;
 
 -- Create main jobs table
 CREATE TABLE IF NOT EXISTS jobs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id TEXT PRIMARY KEY,
     position TEXT NOT NULL,
     status TEXT,
     location TEXT,
@@ -135,3 +135,16 @@ BEGIN
     SET last_updated_at = CURRENT_TIMESTAMP 
     WHERE id = NEW.id;
 END;
+
+CREATE TABLE IF NOT EXISTS extracted_job_details (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id INTEGER NOT NULL,
+    must_have_requirements TEXT,
+    preferred_skills TEXT,
+    work_location TEXT,
+    company_culture TEXT,
+    additional_info TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+);

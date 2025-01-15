@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"talent-rodeo/internal/utils"
 
 	"github.com/chriscow/minds"
 	"github.com/fumiama/go-docx"
 )
 
 func convertResume(ctx context.Context, llm minds.ContentGenerator, resumeText string, sessionID string, status StatusSender) (string, error) {
-	prompt, err := CreateTemplate("prompts/recruiter.convert-resume.txt")
+	prompt, err := utils.CreateTemplate("prompts/recruiter.convert-resume.txt")
 	if err != nil {
 		status.SendStatus(sessionID, "error", "Failed to create template")
 		return "", fmt.Errorf("convertResume: failed to create template: %w", err)
