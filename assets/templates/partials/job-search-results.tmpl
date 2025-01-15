@@ -1,4 +1,4 @@
-{{ define "job_results" }}
+{{ define "job-search-results" }}
 {{ if .Error }}
 <article>
     <header>
@@ -10,20 +10,27 @@
 <h2>Found {{ len .Jobs }} jobs</h2>
 {{ range .Jobs }}
 <article class="job-card">
-    <div class="grid">
+    <div class="grid" style="grid-template-columns: 20% 5% 1fr">
         <div>
+            <style>
+                .company-logo {
+                    width: 100%;
+                    height: auto;
+                }
+            </style>
             {{ if .CompanyLogo }}
-            <img src="{{ .CompanyLogo }}" alt="{{ .CompanyName }} logo" class="company-logo">
+            <img class="company-logo" src="{{ .CompanyLogo }}" alt="{{ .CompanyName }} logo" class="company-logo">
             {{ end }}
         </div>
+        <div>&nbsp;</div>
         <div>
             <!-- Changed the h3 to wrap it in an anchor tag -->
-            <h3><a hx-get="/jobs/{{ .ID }}" hx-indicator="#spinner" hx-push-url="true" hx-target="main"
+            <h3><a hx-get="/job/{{ .ID }}" hx-indicator="#spinner" hx-push-url="true" hx-target="main"
                     class="job-title">{{ .Position }}</a>
             </h3>
             <p>{{ .CompanyName }} • {{ .Location }}</p>
             <p>Posted: {{ .PostingDate }}</p>
-            <a href="{{ .Link }}" target="_blank" role="button">View on LinkedIn</a>
+            <!-- <a href="{{ .Link }}" target="_blank" role="button">View on LinkedIn</a> -->
         </div>
     </div>
 </article>
