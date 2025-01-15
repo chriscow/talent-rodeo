@@ -25,22 +25,24 @@ type JobListing struct {
 }
 
 type JobDetail struct {
-	ID                string       `json:"-" db:"id"`
-	Position          string       `json:"job_position" db:"position"`
-	Status            string       `json:"job_status" db:"status"`
-	Location          string       `json:"job_location" db:"location"`
-	CompanyName       string       `json:"company_name" db:"company_name"`
-	CompanyLinkedInID string       `json:"company_linkedin_id" db:"company_linkedin_id"`
-	PostingTime       string       `json:"job_posting_time" db:"posting_time"`
-	BasePay           string       `json:"base_pay" db:"base_pay"`
-	Description       string       `json:"job_description" db:"description"`
-	SeniorityLevel    string       `json:"seniority_level" db:"seniority_level"`
-	EmploymentType    string       `json:"employment_type" db:"employment_type"`
-	JobFunction       string       `json:"job_function" db:"job_function"`
-	Industries        string       `json:"industries" db:"industries"`
-	Recruiters        []Recruiter  `json:"recruiter_details" db:"recruiter_details"`
-	SimilarJobs       []RelatedJob `json:"similar_jobs" db:"similar_jobs"`
-	PeopleAlsoViewed  []RelatedJob `json:"people_also_viewed" db:"people_also_viewed"`
+	ID                    string       `json:"-" db:"id"`
+	Position              string       `json:"job_position" db:"position"`
+	Status                string       `json:"job_status" db:"status"`
+	Location              string       `json:"job_location" db:"location"`
+	CompanyName           string       `json:"company_name" db:"company_name"`
+	CompanyLinkedInID     string       `json:"company_linkedin_id" db:"company_linkedin_id"`
+	PostingTime           string       `json:"job_posting_time" db:"posting_time"`
+	BasePay               string       `json:"base_pay" db:"base_pay"`
+	Description           string       `json:"job_description" db:"description"`
+	DescriptionHTML       *string      `json:"-" db:"description_html"`
+	DescriptionSummarized *string      `json:"-" db:"description_summarized"`
+	SeniorityLevel        string       `json:"seniority_level" db:"seniority_level"`
+	EmploymentType        string       `json:"employment_type" db:"employment_type"`
+	JobFunction           string       `json:"job_function" db:"job_function"`
+	Industries            string       `json:"industries" db:"industries"`
+	Recruiters            []Recruiter  `json:"recruiter_details" db:"recruiter_details"`
+	SimilarJobs           []RelatedJob `json:"similar_jobs" db:"similar_jobs"`
+	PeopleAlsoViewed      []RelatedJob `json:"people_also_viewed" db:"people_also_viewed"`
 }
 
 type Recruiter struct {

@@ -32,7 +32,10 @@ func NewSearchManager(db *sqlx.DB, logger *slog.Logger) *SearchManager {
 }
 
 func (sm *SearchManager) SearchJobs(ctx context.Context, keyword, geoID string, opts ...JobSearchOption) ([]JobListing, error) {
-	options := JobSearchOptions{pageLimit: 1}
+	options := JobSearchOptions{
+		pageLimit: 1,
+		sortBy:    "month",
+	}
 	for _, opt := range opts {
 		opt(&options)
 	}
@@ -76,6 +79,8 @@ RETURNING
 
 	age := time.Duration(ageSeconds) * time.Second
 
+	sm.logger.Info("Search record upserted", "search_id", searchID, "age (seconds)", ageSeconds, "has_cached_results", hasCachedResults)
+
 	// Return cached results only if they exist and are fresh
 	if hasCachedResults && age < 4*time.Hour {
 		jobListings, err := sm.jobStore.GetJobsByID(searchID)
@@ -83,37 +88,27 @@ RETURNING
 			return nil, fmt.Errorf("failed to get cached job listings: %w", err)
 		}
 
-		sm.logger.Info("Returning cached results", "search_id", searchID, "count", len(jobListings))
 		return jobListings, nil
 	}
 
-	// For new searches or stale cached results, determine search scope
-	var searchScope string
-	if !hasCachedResults {
-		// New search - get everything from the past month
-		searchScope = "month"
-	} else {
-		// Existing but stale search - use age-based strategy
-		switch {
-		case age > 72*time.Hour:
-			searchScope = "month"
-		case age > 48*time.Hour:
-			searchScope = "week"
-		default:
-			searchScope = "day"
-		}
-	}
-	sm.logger.Debug("Determining search scope", "search_id", searchID, "age (seconds)", ageSeconds, "scope", searchScope)
-	options.sortBy = searchScope
+	sm.logger.Debug("Determining search scope", "search_id", searchID, "age (seconds)", ageSeconds, "scope", options.sortBy, "pages", options.pageLimit)
 
 	// Perform the search with determined scope
-	jobListings := make([]JobListing, 0, options.pageLimit*50)
+	jobListings := make([]JobListing, 0, options.pageLimit*10)
 	for page := 1; page <= options.pageLimit; page++ {
+		sm.logger.Info("Searching page", "search_id", searchID, "page", page)
 		pageStr := fmt.Sprintf("%d", page)
 		results, err := searchJobs(ctx, geoID, keyword, pageStr, options)
 		if err != nil {
+			sm.logger.Error("Failed to search jobs", "search_id", searchID, "page", page, "error", err)
 			return nil, fmt.Errorf("failed to search jobs on page %d: %w", page, err)
 		}
+
+		if len(results) == 0 {
+			sm.logger.Info("No more results found", "search_id", searchID, "page", page)
+			break
+		}
+
 		jobListings = append(jobListings, results...)
 	}
 
@@ -149,12 +144,14 @@ func (sm *SearchManager) GetJobDetail(ctx context.Context, jobID string) (JobDet
 	err := sm.db.QueryRowContext(ctx, `
         SELECT 
             position, status, location, company_name,
-            company_linkedin_id, posting_time, base_pay, description,
+            company_linkedin_id, posting_time, base_pay, 
+			description, description_html, description_summarized,
             seniority_level, employment_type, function, industries
         FROM jobs 
         WHERE id = ?`, jobID).Scan(
 		&job.Position, &job.Status, &job.Location, &job.CompanyName,
-		&job.CompanyLinkedInID, &job.PostingTime, &job.BasePay, &job.Description,
+		&job.CompanyLinkedInID, &job.PostingTime, &job.BasePay,
+		&job.Description, &job.DescriptionHTML, &job.DescriptionSummarized,
 		&job.SeniorityLevel, &job.EmploymentType, &job.JobFunction, &job.Industries)
 
 	if err == nil {
@@ -199,6 +196,22 @@ func (sm *SearchManager) GetJobDetail(ctx context.Context, jobID string) (JobDet
 	sm.reformatJobDescription(ctx, &job)
 
 	return job, nil
+}
+
+func (sb *SearchManager) GetJobPostingDate(ctx context.Context, jobID string) (string, error) {
+	sb.logger.Info("Getting job posting date", "job_id", jobID)
+	defer sb.logger.Info("Job posting date retrieved", "job_id", jobID)
+
+	var postingDate string
+	err := sb.db.QueryRowContext(ctx, `
+		SELECT posting_date 
+		FROM job_listings 
+		WHERE job_id = ?`, jobID).Scan(&postingDate)
+
+	if err != nil {
+		sb.logger.Error("Failed to get job posting date", "job_id", jobID, "error", err)
+	}
+	return postingDate, err
 }
 
 func (sb *SearchManager) GetJobRequirements(ctx context.Context, jobID string) (ExtractedRequirements, error) {
@@ -449,10 +462,14 @@ func (sm *SearchManager) reformatJobDescription(ctx context.Context, job *JobDet
 	sm.logger.Info("Reformatting job description", "job_id", job.ID)
 	defer sm.logger.Info("Reformatting complete", "job_id", job.ID)
 
-	resp, err := gemini.Ask(ctx, "Please format this job description as an HTML snippet. You do not need <html><head> or <body> tags.\n\n"+job.Description)
+	prompt, _ := utils.CreateTemplate("prompts/job-format-description.txt")
+
+	resp, err := gemini.Ask(ctx, prompt.Body()+"Location:"+job.Location+"\n\n"+job.Description)
 	if err != nil {
 		return fmt.Errorf("failed to generate HTML snippet: %w", err)
 	}
+
+	resp = strings.TrimSpace(resp)
 
 	if strings.HasPrefix(resp, "```html") || strings.HasPrefix(resp, "```") {
 		resp = strings.TrimPrefix(resp, "```html")
@@ -464,7 +481,7 @@ func (sm *SearchManager) reformatJobDescription(ctx context.Context, job *JobDet
 
 	_, err = sm.db.ExecContext(ctx, `
 		UPDATE jobs 
-		SET description = ? 
+		SET description_html = ? 
 		WHERE id = ?`, resp, job.ID)
 
 	if err != nil {

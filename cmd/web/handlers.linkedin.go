@@ -9,6 +9,7 @@ import (
 	"talent-rodeo/internal/response"
 	"talent-rodeo/internal/scrapingdog/linkedin"
 	"talent-rodeo/internal/utils"
+	"time"
 
 	"github.com/alexedwards/flow"
 	"github.com/chriscow/minds"
@@ -33,7 +34,7 @@ func (app *application) linkedInSearch(w http.ResponseWriter, r *http.Request) {
 		} else {
 			data := app.newTemplateData(r)
 
-			if err := response.Page(w, http.StatusOK, data, "pages/search_jobs.tmpl"); err != nil {
+			if err := response.Page(w, http.StatusOK, data, "pages/job-search.tmpl"); err != nil {
 				app.serverError(w, r, err)
 			}
 		}
@@ -64,17 +65,30 @@ func (app *application) handleSearch(w http.ResponseWriter, r *http.Request) {
 		opts = append(opts, linkedin.WithWorkType(workType))
 	}
 
-	jobs, err := searchManager.SearchJobs(r.Context(), keyword, geoId, opts...)
+	opts = append(opts, linkedin.WithPageLimit(3))
 
 	data := app.newTemplateData(r)
-	data["Jobs"] = jobs
-	data["Error"] = err
 
+	jobs, err := searchManager.SearchJobs(r.Context(), keyword, geoId, opts...)
 	if err != nil {
-		data["Error"] = err.Error()
+		app.logger.Error("Error searching for jobs", "error", err)
+		data["Error"] = err
 	}
 
-	if err := response.Partial(w, http.StatusOK, data, "partials/job_results.tmpl"); err != nil {
+	for i := range jobs {
+		var postingDate time.Time
+		if postingDate, err = time.Parse("2006-01-02", jobs[i].PostingDate); err != nil {
+			app.serverError(w, r, err)
+			return
+		}
+
+		jobs[i].PostingDate = utils.RelativeTime(postingDate, time.Now())
+	}
+
+	data["Jobs"] = jobs
+
+	if err := response.Partial(w, http.StatusOK, data, "partials/job-search-results.tmpl"); err != nil {
+		app.logger.Error("Error rendering search results", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -91,6 +105,22 @@ func (app *application) jobDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	postingDateStr, err := searchManager.GetJobPostingDate(r.Context(), jobID)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	// convert postingDateStr, which is formatted '2025-01-14' to a time.Time
+	var postingDate time.Time
+	if postingDate, err = time.Parse("2006-01-02", postingDateStr); err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	relativeTime := utils.RelativeTime(postingDate, time.Now())
+	job.PostingTime = relativeTime
+
 	requirements, err := searchManager.GetJobRequirements(r.Context(), jobID)
 	if err != nil {
 		app.serverError(w, r, err)
@@ -99,7 +129,12 @@ func (app *application) jobDetail(w http.ResponseWriter, r *http.Request) {
 
 	data := app.newTemplateData(r)
 	data["Job"] = job
-	data["Description"] = template.HTML(job.Description)
+	if job.DescriptionHTML != nil {
+		data["Description"] = template.HTML(*job.DescriptionHTML)
+	} else {
+		data["Description"] = template.HTML(job.Description)
+	}
+
 	data["Requirements"] = requirements
 
 	opts := &response.RenderOptions{}
@@ -107,7 +142,7 @@ func (app *application) jobDetail(w http.ResponseWriter, r *http.Request) {
 		opts.Layout = "base"
 	}
 
-	if err := response.Render(w, http.StatusOK, data, "pages/job_detail.tmpl", opts); err != nil {
+	if err := response.Render(w, http.StatusOK, data, "pages/job-detail.tmpl", opts); err != nil {
 		app.serverError(w, r, err)
 	}
 }
@@ -181,7 +216,7 @@ func (app *application) handleJobMatch(w http.ResponseWriter, r *http.Request) {
 	data := app.newTemplateData(r)
 	data["Match"] = match
 
-	if err := response.Partial(w, http.StatusOK, data, "partials/job_match.tmpl"); err != nil {
+	if err := response.Partial(w, http.StatusOK, data, "partials/job-match-analysis.tmpl"); err != nil {
 		app.serverError(w, r, err)
 	}
 }

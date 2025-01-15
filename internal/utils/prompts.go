@@ -102,18 +102,18 @@ func extractYAMLHeader(templateStr string) (PromptHeader, string, error) {
 	var header PromptHeader
 	parts := strings.Split(templateStr, delimiter)
 	if len(parts) < 3 {
-		return header, "", nil
+		return header, templateStr, nil
 	}
 
 	meta := strings.TrimSpace(parts[1])
 	if strings.HasPrefix(meta, "-") {
 		// the user put too many dashes or it was not the right format
-		return header, "", fmt.Errorf("invalid header format")
+		return header, templateStr, fmt.Errorf("invalid header format")
 	}
 	body := strings.Join(parts[2:], delimiter)
 
 	if err := yaml.Unmarshal([]byte(meta), &header); err != nil {
-		return header, "", err
+		return header, templateStr, err
 	}
 
 	return header, strings.TrimSpace(body), nil

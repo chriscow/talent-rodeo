@@ -40,3 +40,5 @@ Example Output:
   "company_culture": "Values innovation, teamwork, and diversity",
   "additional_info": "None"
 }
+
+**IMPORTANT**: Do not mention the company's name or physical address in the extracted data.
