@@ -65,7 +65,7 @@ func (app *application) handleSearch(w http.ResponseWriter, r *http.Request) {
 		opts = append(opts, linkedin.WithWorkType(workType))
 	}
 
-	opts = append(opts, linkedin.WithPageLimit(3))
+	opts = append(opts, linkedin.WithPageLimit(1))
 
 	data := app.newTemplateData(r)
 
