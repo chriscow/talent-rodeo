@@ -72,8 +72,8 @@ type CandidateInfo struct {
 	Email           string `json:"email" description:"The candidate's email address"`
 	PhoneNumber     string `json:"phone_number" description:"The candidate's phone number"`
 	Timezone        string `json:"timezone" description:"The candidate's timezone"`
-	LinkedInProfile string `json:"linkedin_profile,omitempty" description:"The candidate's LinkedIn profile URL if available"`
-	PortfolioURL    string `json:"portfolio_url,omitempty" description:"URL to the candidate's portfolio or personal website"`
+	LinkedInProfile string `json:"linkedin_profile" description:"The candidate's LinkedIn profile URL if available"`
+	PortfolioURL    string `json:"portfolio_url" description:"URL to the candidate's portfolio or personal website"`
 
 	// Resume Information
 	// Resume            string   `json:"resume" description:"The candidate's resume in markdown format"`
@@ -83,22 +83,22 @@ type CandidateInfo struct {
 	// Insights from the Call
 	KnownFacts          []string `json:"known_facts" description:"Facts about the candidate that are known or discovered during the call"`
 	InferredPreferences []string `json:"inferred_preferences" description:"Career preferences inferred from the candidate's responses"`
-	UnlistedSkills      []string `json:"unlisted_skills,omitempty" description:"Skills or qualifications the candidate has but didn't include on the resume"`
+	UnlistedSkills      []string `json:"unlisted_skills" description:"Skills or qualifications the candidate has but didn't include on the resume"`
 	CareerAspirations   string   `json:"career_aspirations" description:"Candidate's stated career goals and aspirations"`
 	WorkEnvironment     string   `json:"work_environment" description:"Preferred work environment (e.g., remote, hybrid, in-office)"`
-	IndustryPreferences []string `json:"industry_preferences,omitempty" description:"Preferred industries or sectors the candidate is interested in"`
+	IndustryPreferences []string `json:"industry_preferences" description:"Preferred industries or sectors the candidate is interested in"`
 
 	// Potential Concerns and Challenges
 	PotentialConcerns []string `json:"potential_concerns" description:"Potential concerns about the candidate"`
-	DealBreakers      []string `json:"deal_breakers,omitempty" description:"Non-negotiable factors for the candidate (e.g., salary, location, work style)"`
+	DealBreakers      []string `json:"deal_breakers" description:"Non-negotiable factors for the candidate (e.g., salary, location, work style)"`
 
 	// Engagement Metrics
 	EngagementLevel EngagementLevel `json:"engagement_level" enum:"high,medium,low" description:"The candidate's engagement level during the call"`
 	CallNotes       string          `json:"call_notes" description:"General notes or observations from the call"`
 
 	// Recommendations and Next Steps
-	RecommendedRoles    []string `json:"recommended_roles,omitempty" description:"Roles or job titles that align with the candidate's skills and preferences"`
-	TrainingSuggestions []string `json:"training_suggestions,omitempty" description:"Suggested areas for upskilling or certification"`
+	RecommendedRoles    []string `json:"recommended_roles" description:"Roles or job titles that align with the candidate's skills and preferences"`
+	TrainingSuggestions []string `json:"training_suggestions" description:"Suggested areas for upskilling or certification"`
 	NextSteps           string   `json:"next_steps" description:"Recommended actions or follow-ups for the candidate"`
 }
 
