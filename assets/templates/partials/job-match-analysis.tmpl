@@ -1,0 +1,262 @@
+{{define "partials:job_match"}}
+<article class="match-analysis">
+    {{with .Match}}
+    <header>
+        <div class="grid">
+            <div>
+                <h3>{{.Position.Title}}</h3>
+                <p>{{.Position.Company}} • {{.Position.Location}}</p>
+            </div>
+            <div class="text-right">
+                <span class="match-score" data-score="{{.Metrics.SkillMatch.Overall}}">
+                    {{printf "%.0f%%" .Metrics.SkillMatch.Overall}} Match
+                </span>
+            </div>
+        </div>
+    </header>
+
+    {{/* Quick Summary Section */}}
+    <div class="summary-section">
+        <p><strong>Executive Summary:</strong> {{.Analysis.Summary.OneLine}}</p>
+
+        <div class="confidence-indicator" role="progressbar" aria-label="Data confidence score"
+            aria-valuenow="{{printf " %.0f" (mul .DataSources.DataCompleteness 100)}}">
+            <small>Analysis Confidence: {{printf "%.0f%%" (mul .DataSources.DataCompleteness 100)}}</small>
+            <progress value="{{.DataSources.DataCompleteness}}" max="1"></progress>
+        </div>
+    </div>
+
+    {{/* Core Metrics Grid */}}
+    <div class="grid">
+        {{/* Skills Match */}}
+        <div>
+            <h4>Skills Alignment</h4>
+            <div class="metrics-container">
+                <div class="metric">
+                    <label>Required Skills</label>
+                    <div class="progress-wrapper">
+                        <progress value="{{.Metrics.SkillMatch.Required}}" max="100"></progress>
+                        <span>{{printf "%.0f%%" .Metrics.SkillMatch.Required}}</span>
+                    </div>
+                </div>
+                <div class="metric">
+                    <label>Preferred Skills</label>
+                    <div class="progress-wrapper">
+                        <progress value="{{.Metrics.SkillMatch.Preferred}}" max="100"></progress>
+                        <span>{{printf "%.0f%%" .Metrics.SkillMatch.Preferred}}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{/* Experience Match */}}
+        <div>
+            <h4>Experience Alignment</h4>
+            <div class="metrics-container">
+                <div class="metric">
+                    <label>Years Required</label>
+                    <span>{{.Metrics.ExperienceMatch.YearsRequired}}</span>
+                </div>
+                <div class="metric">
+                    <label>Years Actual</label>
+                    <span>{{.Metrics.ExperienceMatch.YearsActual}}</span>
+                </div>
+                <div class="metric">
+                    <label>Relevance</label>
+                    <div class="progress-wrapper">
+                        <progress value="{{.Metrics.ExperienceMatch.Relevance}}" max="1"></progress>
+                        <span>{{printf "%.0f%%" (mul .Metrics.ExperienceMatch.Relevance 100)}}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{/* Qualifications Detail */}}
+    <div class="qualifications-section">
+        <h4>Key Qualifications</h4>
+        <div class="qualification-grid">
+            {{range .Qualifications}}
+            {{if .Required}}
+            <div class="qualification-item {{if .HasMatch}}matched{{else}}missing{{end}}"
+                data-confidence="{{.Confidence}}">
+                <div class="qualification-header">
+                    <strong>{{.Name}}</strong>
+                    {{if .HasMatch}}
+                    <span class="badge success">Matched</span>
+                    {{else}}
+                    <span class="badge warning">Gap</span>
+                    {{end}}
+                </div>
+                <p class="qualification-detail">{{.MatchDetails}}</p>
+                {{if lt .Confidence 0.8}}
+                <small class="confidence-note">Confidence: {{printf "%.0f%%" (mul .Confidence 100)}}</small>
+                {{end}}
+            </div>
+            {{end}}
+            {{end}}
+        </div>
+    </div>
+
+    {{/* Analysis Insights */}}
+    <div class="analysis-section">
+        <div class="grid">
+            <div>
+                <h4>Strengths</h4>
+                {{range .Analysis.Pros}}
+                <p class="insight positive">{{.}}</p>
+                {{end}}
+            </div>
+            <div>
+                <h4>Considerations</h4>
+                {{range .Analysis.Cons}}
+                <p class="insight negative">{{.}}</p>
+                {{end}}
+            </div>
+        </div>
+    </div>
+
+    {{if .Analysis.RedFlags}}
+    <div class="red-flags-section">
+        <h4>Important Notes</h4>
+        {{range .Analysis.RedFlags}}
+        <p class="red-flag">{{.}}</p>
+        {{end}}
+    </div>
+    {{end}}
+
+    {{/* Data Sources */}}
+    <footer>
+        <small>
+            Analysis based on:
+            {{range $index, $source := .DataSources.SourcesUsed}}
+            {{if $index}}, {{end}}
+            {{$source}}
+            {{end}}
+        </small>
+        <small>Last updated: {{.Analysis.LastUpdated | formatTime}}</small>
+    </footer>
+    {{end}}
+</article>
+
+<style>
+    .match-analysis {
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .match-score {
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: var(--primary);
+    }
+
+    .metrics-container {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .metric {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .progress-wrapper {
+        flex-grow: 1;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .progress-wrapper progress {
+        flex-grow: 1;
+    }
+
+    .qualification-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1rem;
+        margin: 1rem 0;
+    }
+
+    .qualification-item {
+        padding: 1rem;
+        border: 1px solid var(--muted-border-color);
+        border-radius: var(--border-radius);
+    }
+
+    .qualification-item.matched {
+        border-left: 4px solid var(--form-element-valid-border-color);
+    }
+
+    .qualification-item.missing {
+        border-left: 4px solid var(--form-element-invalid-border-color);
+    }
+
+    .qualification-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+    }
+
+    .badge {
+        font-size: 0.8rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: var(--border-radius);
+    }
+
+    .badge.success {
+        background-color: var(--form-element-valid-border-color);
+        color: var(--background-color);
+    }
+
+    .badge.warning {
+        background-color: var(--form-element-invalid-border-color);
+        color: var(--background-color);
+    }
+
+    .insight {
+        padding: 0.5rem;
+        border-radius: var(--border-radius);
+        margin: 0.5rem 0;
+    }
+
+    .insight.positive {
+        background-color: var(--form-element-valid-background-color);
+    }
+
+    .insight.negative {
+        background-color: var(--form-element-invalid-background-color);
+    }
+
+    .confidence-note {
+        color: var(--muted-color);
+        font-style: italic;
+    }
+
+    .red-flags-section {
+        margin-top: 2rem;
+        padding: 1rem;
+        background-color: var(--form-element-invalid-background-color);
+        border-radius: var(--border-radius);
+    }
+
+    .red-flag {
+        color: var(--form-element-invalid-color);
+        margin: 0.5rem 0;
+    }
+
+    footer {
+        margin-top: 2rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--muted-border-color);
+        display: flex;
+        justify-content: space-between;
+        color: var(--muted-color);
+    }
+</style>
+{{end}}

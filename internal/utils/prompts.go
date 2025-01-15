@@ -1,4 +1,4 @@
-package rodeo
+package utils
 
 import (
 	"fmt"
@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"talent-rodeo/assets"
-	"talent-rodeo/internal/utils"
 
 	"gopkg.in/yaml.v2"
 )
@@ -48,7 +47,7 @@ func CreateTemplate(filepath string) (Prompt, error) {
 	if err != nil {
 		return prompt, err
 	}
-	sha, err := utils.SHA256Hash([]byte(body))
+	sha, err := SHA256Hash([]byte(body))
 	if err != nil {
 		return prompt, err
 	}

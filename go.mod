@@ -55,6 +55,7 @@ require (
 	github.com/a-h/templ v0.2.793 // indirect
 	github.com/dlclark/regexp2 v1.11.4 // indirect
 	github.com/golang/mock v1.6.0 // indirect
+	github.com/gomarkdown/markdown v0.0.0-20241205020045-f7e15b2f3e62 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/sashabaranov/go-openai v1.36.1 // indirect

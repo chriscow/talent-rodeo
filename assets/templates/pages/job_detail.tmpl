@@ -28,10 +28,47 @@
             </div>
         </header>
 
+        <!-- Requirements Requirements Section -->
+        {{ if .Requirements }}
+        <section>
+            <h2>Requirements</h2>
+            <ul>
+                {{ if .Requirements.MustHaveRequirements }}
+                <li><strong>Must Have Requirements:</strong>
+                    <ul>
+                        {{ range .Requirements.MustHaveRequirements }}
+                        <li>{{ . }}</li>
+                        {{ end }}
+                    </ul>
+                </li>
+                {{ end }}
+                {{ if .Requirements.PreferredSkills }}
+                <li><strong>Preferred Skills:</strong>
+                    <ul>
+                        {{ range .Requirements.PreferredSkills }}
+                        <li>{{ . }}</li>
+                        {{ end }}
+                    </ul>
+                </li>
+                {{ end }}
+                {{ if .Requirements.WorkLocation }}
+                <li><strong>Work Location:</strong> {{ .Requirements.WorkLocation }}</li>
+                {{ end }}
+                {{ if .Requirements.CompanyCulture }}
+                <li><strong>Company Culture:</strong> {{ .Requirements.CompanyCulture }}</li>
+                {{ end }}
+                {{ if .Requirements.AdditionalInfo }}
+                <li><strong>Additional Information:</strong> {{ .Requirements.AdditionalInfo }}</li>
+                {{ end }}
+            </ul>
+        </section>
+        {{ end }}
+
+
         <section>
             <h2>Job Description</h2>
             <!-- Using white-space: pre-wrap to preserve formatting -->
-            <div style="white-space: pre-wrap;">{{ .Job.Description }}</div>
+            <div style="white-space: pre-wrap;">{{ .Description }}</div>
         </section>
 
         {{ if .Job.Recruiters }}

@@ -45,6 +45,9 @@ var TemplateFuncs = template.FuncMap{
 	"decr":        decr,
 	"formatInt":   formatInt,
 	"formatFloat": formatFloat,
+	"mul": func(a, b float32) float32 {
+		return a * b
+	},
 
 	// Boolean functions
 	"yesno": yesno,

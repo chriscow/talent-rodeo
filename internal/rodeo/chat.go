@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"talent-rodeo/internal/rodeo/block"
+	"talent-rodeo/internal/utils"
 
 	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/providers/gemini"
@@ -79,7 +80,7 @@ func autoChatOld(tc minds.ThreadContext, maxTurns int) error {
 		return fmt.Errorf("chat: failed to create Gemini provider: %w", err)
 	}
 
-	candidatePrompt, err := CreateTemplate("prompts/candidate1.system.txt")
+	candidatePrompt, err := utils.CreateTemplate("prompts/candidate1.system.txt")
 	if err != nil {
 		return fmt.Errorf("chat: failed to create template: %w", err)
 	}
