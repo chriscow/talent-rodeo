@@ -11,8 +11,13 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
+	"talent-rodeo/internal/utils"
 	"time"
 
+	"github.com/chriscow/minds"
+	"github.com/chriscow/minds/providers/gemini"
+	"github.com/chriscow/minds/providers/openai"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -182,17 +187,62 @@ func (sm *SearchManager) GetJobDetail(ctx context.Context, jobID string) (JobDet
 		return JobDetail{}, err
 	}
 
+	job.ID = jobID
+
 	// Save the new job detail to our database
 	err = sm.saveJobDetail(ctx, jobID, job)
 	if err != nil {
 		// Log the error but return the job detail anyway
-		log.Printf("error saving job detail: %v", err)
+		return JobDetail{}, fmt.Errorf("saving job detail: %w", err)
 	}
+
+	sm.reformatJobDescription(ctx, &job)
 
 	return job, nil
 }
 
-// Helper functions to keep the main function clean
+func (sb *SearchManager) GetJobRequirements(ctx context.Context, jobID string) (ExtractedRequirements, error) {
+	var requirements ExtractedRequirements
+	var mustHaves string
+	var preferredSkills string
+
+	err := sb.db.QueryRowContext(ctx, `
+		SELECT must_have_requirements, preferred_skills, 
+			work_location, company_culture, additional_info
+		FROM extracted_job_details 
+		WHERE job_id = ?`, jobID).Scan(
+		&mustHaves, &preferredSkills,
+		&requirements.WorkLocation, &requirements.CompanyCulture, &requirements.AdditionalInfo)
+
+	if err == nil {
+		if err := json.Unmarshal([]byte(mustHaves), &requirements.MustHaveRequirements); err != nil {
+			return ExtractedRequirements{}, fmt.Errorf("unmarshaling must-haves: %w", err)
+		}
+
+		if err := json.Unmarshal([]byte(preferredSkills), &requirements.PreferredSkills); err != nil {
+			return ExtractedRequirements{}, fmt.Errorf("unmarshaling preferred skills: %w", err)
+		}
+
+		return requirements, nil
+	}
+
+	if err != sql.ErrNoRows {
+		return ExtractedRequirements{}, fmt.Errorf("querying database: %w", err)
+	}
+
+	requirements, err = sb.fetchJobRequirementsFromLLM(ctx, jobID)
+	if err != nil {
+		return ExtractedRequirements{}, fmt.Errorf("fetching job requirements: %w", err)
+	}
+
+	err = sb.saveJobRequirements(ctx, jobID, requirements)
+	if err != nil {
+		return ExtractedRequirements{}, fmt.Errorf("saving job requirements: %w", err)
+	}
+
+	return requirements, nil
+}
+
 func (sm *SearchManager) getRecruiters(ctx context.Context, jobID string) ([]Recruiter, error) {
 	rows, err := sm.db.QueryContext(ctx, `
         SELECT photo_url, name, title, profile_url 
@@ -317,7 +367,7 @@ func (sm *SearchManager) saveJobDetail(ctx context.Context, jobID string, job Jo
 }
 
 // Moved the API call to its own function
-func (sm *SearchManager) fetchJobDetailFromAPI(ctx context.Context, jobID string) (JobDetail, error) {
+func (sm *SearchManager) fetchJobDetailFromAPI(_ context.Context, jobID string) (JobDetail, error) {
 	req, err := http.NewRequest("GET", "https://api.scrapingdog.com/linkedinjobs/", nil)
 	if err != nil {
 		return JobDetail{}, fmt.Errorf("failed to create request: %w", err)
@@ -352,6 +402,97 @@ func (sm *SearchManager) fetchJobDetailFromAPI(ctx context.Context, jobID string
 	}
 
 	return jobDetail[0], nil
+}
+
+func (sm *SearchManager) fetchJobRequirementsFromLLM(ctx context.Context, jobID string) (ExtractedRequirements, error) {
+	prompt, _ := utils.CreateTemplate("prompts/job-extract-requirements.txt")
+
+	llm, err := openai.NewProvider(openai.WithSystemPrompt(prompt.Body()))
+	if err != nil {
+		return ExtractedRequirements{}, fmt.Errorf("failed to create provider: %w", err)
+	}
+
+	job, err := sm.GetJobDetail(ctx, jobID)
+	if err != nil {
+		return ExtractedRequirements{}, fmt.Errorf("failed to get job detail: %w", err)
+	}
+
+	schema, err := minds.NewResponseSchema("job_requirements", "Extracts job requirements from a job description", ExtractedRequirements{})
+	if err != nil {
+		return ExtractedRequirements{}, fmt.Errorf("failed to create response schema: %w", err)
+	}
+
+	jobJSON, err := json.Marshal(job)
+	if err != nil {
+		return ExtractedRequirements{}, fmt.Errorf("failed to marshal job detail: %w", err)
+	}
+
+	req := minds.NewRequest(
+		minds.Messages{{Role: minds.RoleUser, Content: string(jobJSON)}},
+		minds.WithResponseSchema(*schema),
+	)
+
+	resp, err := llm.GenerateContent(ctx, req)
+	if err != nil {
+		return ExtractedRequirements{}, fmt.Errorf("failed to generate content: %w", err)
+	}
+
+	var requirements ExtractedRequirements
+	if err := json.Unmarshal([]byte(resp.String()), &requirements); err != nil {
+		return ExtractedRequirements{}, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	return requirements, nil
+}
+
+func (sm *SearchManager) reformatJobDescription(ctx context.Context, job *JobDetail) error {
+	sm.logger.Info("Reformatting job description", "job_id", job.ID)
+	defer sm.logger.Info("Reformatting complete", "job_id", job.ID)
+
+	resp, err := gemini.Ask(ctx, "Please format this job description as an HTML snippet. You do not need <html><head> or <body> tags.\n\n"+job.Description)
+	if err != nil {
+		return fmt.Errorf("failed to generate HTML snippet: %w", err)
+	}
+
+	if strings.HasPrefix(resp, "```html") || strings.HasPrefix(resp, "```") {
+		resp = strings.TrimPrefix(resp, "```html")
+		resp = strings.TrimPrefix(resp, "```")
+		resp = strings.TrimSuffix(resp, "```")
+	}
+
+	job.Description = resp
+
+	_, err = sm.db.ExecContext(ctx, `
+		UPDATE jobs 
+		SET description = ? 
+		WHERE id = ?`, resp, job.ID)
+
+	if err != nil {
+		return fmt.Errorf("failed to update job description: %w", err)
+	}
+
+	return nil
+}
+
+func (sm *SearchManager) saveJobRequirements(ctx context.Context, jobID string, requirements ExtractedRequirements) error {
+	mustHaves, err := json.Marshal(requirements.MustHaveRequirements)
+	if err != nil {
+		return fmt.Errorf("failed to marshal must-haves: %w", err)
+	}
+
+	preferredSkills, err := json.Marshal(requirements.PreferredSkills)
+	if err != nil {
+		return fmt.Errorf("failed to marshal preferred skills: %w", err)
+	}
+
+	_, err = sm.db.ExecContext(ctx, `
+		INSERT INTO extracted_job_details (
+			job_id, must_have_requirements, preferred_skills, 
+			work_location, company_culture, additional_info
+		) VALUES (?, ?, ?, ?, ?, ?)`,
+		jobID, string(mustHaves), string(preferredSkills),
+		requirements.WorkLocation, requirements.CompanyCulture, requirements.AdditionalInfo)
+	return err
 }
 
 func generateSearchHash(keyword, geoID string, opts JobSearchOptions) string {

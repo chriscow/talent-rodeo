@@ -47,6 +47,8 @@ DROP INDEX IF EXISTS idx_jobs_company_name;
 -- Drop triggers
 DROP TRIGGER IF EXISTS jobs_updated_at;
 
+DROP TABLE IF EXISTS extracted_job_details;
+
 -- Drop tables
 DROP TABLE IF EXISTS people_also_viewed;
 

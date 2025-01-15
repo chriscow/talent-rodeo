@@ -1,0 +1,12 @@
+Analyze this job description and extract only the core role information. 
+Return the results in JSON format matching this structure:
+{
+    "title": "",
+    "department": "",
+    "reports_to": "",
+    "company": "",
+    "industry": "",
+    "seniority_level": "",
+    "posting_url": "",
+    "posted_date": ""
+}`

@@ -25,6 +25,7 @@ type JobListing struct {
 }
 
 type JobDetail struct {
+	ID                string       `json:"-" db:"id"`
 	Position          string       `json:"job_position" db:"position"`
 	Status            string       `json:"job_status" db:"status"`
 	Location          string       `json:"job_location" db:"location"`
@@ -55,6 +56,14 @@ type RelatedJob struct {
 	Location    string `json:"job_location" db:"location"`
 	PostingTime string `json:"job_posting_time" db:"posting_time"`
 	Link        string `json:"job_link" db:"link"`
+}
+
+type ExtractedRequirements struct {
+	MustHaveRequirements []string `json:"must_have_requirements" db:"must_have_requirements"`
+	PreferredSkills      []string `json:"preferred_skills" db:"preferred_skills"`
+	WorkLocation         string   `json:"work_location" db:"work_location"`
+	CompanyCulture       string   `json:"company_culture" db:"company_culture"`
+	AdditionalInfo       string   `json:"additional_info" db:"additional_info"`
 }
 
 // For parsing the array of job listings
