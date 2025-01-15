@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     posting_time TEXT,
     base_pay TEXT,
     description TEXT,
+    description_html TEXT,
+    description_summarized TEXT,
     seniority_level TEXT,
     employment_type TEXT,
     function TEXT,
