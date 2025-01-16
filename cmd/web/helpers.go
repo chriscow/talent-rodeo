@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"os"
 
 	"talent-rodeo/internal/version"
 
@@ -21,10 +22,12 @@ func (app *application) newTemplateData(r *http.Request) map[string]any {
 	token := nosurf.Token(r)
 
 	data := map[string]any{
-		"Version":   version.Get(),
-		"User":      user,
-		"SessionID": sessionID,
-		"CSRFToken": token,
+		"Version":       version.Get(),
+		"User":          user,
+		"SessionID":     sessionID,
+		"CSRFToken":     token,
+		"PusherKey":     os.Getenv("PUSHER_KEY"),
+		"PusherCluster": os.Getenv("PUSHER_CLUSTER"),
 	}
 
 	return data

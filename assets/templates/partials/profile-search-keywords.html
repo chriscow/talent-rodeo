@@ -1,40 +1,4 @@
-{{define "partial:resume-keywords"}}
-
-<style>
-    .keyword-list {
-        max-width: 600px;
-        margin: 0 auto;
-    }
-
-    .keyword-item {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        margin-bottom: 0.5rem;
-        padding: 0.5rem;
-        border: 1px solid #ccc;
-        border-radius: 4px;
-    }
-
-    .keyword-item input {
-        margin-bottom: 0;
-    }
-
-    .drag-handle {
-        cursor: move;
-        user-select: none;
-    }
-
-    .keyword-item.drop-target {
-        border: 2px dashed #666;
-        background: #f0f0f0;
-        opacity: 0.1;
-    }
-
-    .keyword-item.dragging {
-        opacity: 0.5;
-    }
-</style>
+{{define "partial:profile-search-keywords"}}
 <article>
     <header>
         <h2>Manage Search Keywords</h2>
@@ -74,4 +38,42 @@
         }
     })
 </script>
+{{end}}
+
+{{define "css:profile-search-keywords"}}
+<style>
+    .keyword-list {
+        max-width: 600px;
+        margin: 0 auto;
+    }
+
+    .keyword-item {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 0.5rem;
+        padding: 0.5rem;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+    }
+
+    .keyword-item input {
+        margin-bottom: 0;
+    }
+
+    .drag-handle {
+        cursor: move;
+        user-select: none;
+    }
+
+    .keyword-item.drop-target {
+        border: 2px dashed #666;
+        background: #f0f0f0;
+        opacity: 0.1;
+    }
+
+    .keyword-item.dragging {
+        opacity: 0.5;
+    }
+</style>
 {{end}}

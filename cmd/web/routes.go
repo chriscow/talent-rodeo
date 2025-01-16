@@ -37,8 +37,10 @@ func (app *application) routes() http.Handler {
 
 		mux.Group(func(mux *flow.Mux) {
 			mux.Use(app.requireAuthenticatedUser)
-			mux.HandleFunc("/profile", app.profile, "GET")
-			mux.HandleFunc("/resume", app.handleResume, "GET", "POST")
+			mux.HandleFunc("/profile", app.profile, "GET", "POST")
+			mux.HandleFunc("/profile/resume", app.resetResume, "DELETE")
+
+			// mux.HandleFunc("/resume", app.handleResume, "GET", "POST")
 			mux.HandleFunc("/logout", app.logout, "POST")
 		})
 

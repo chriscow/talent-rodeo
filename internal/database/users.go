@@ -186,13 +186,22 @@ func (db *DB) UpdateUserKeywords(userID int, keywords []UserKeyword) error {
 
 	return tx.Commit()
 }
-
 func (db *DB) UpdateFullResume(userID int, fileName, resume string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 
-	query := `UPDATE users SET resume_filename = $1, full_resume = $2 WHERE id = $3`
+	var query string
+	var args []interface{}
 
-	_, err := db.ExecContext(ctx, query, fileName, resume, userID)
+	if fileName == "" {
+		query = `UPDATE users SET resume_filename=NULL, full_resume=NULL WHERE id = $1`
+		args = []interface{}{userID}
+	} else {
+		query = `UPDATE users SET resume_filename = $1, full_resume = $2 WHERE id = $3`
+		args = []interface{}{fileName, resume, userID}
+	}
+
+	_, err := db.ExecContext(ctx, query, args...)
+
 	return err
 }

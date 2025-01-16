@@ -36,6 +36,12 @@ var TemplateFuncs = template.FuncMap{
 	"pluralize": pluralize,
 	"slugify":   slugify,
 	"safeHTML":  safeHTML,
+	"nullOrEmpty": func(s *string) bool {
+		return s == nil || *s == ""
+	},
+	"hasValue": func(s *string) bool {
+		return s != nil && *s != ""
+	},
 
 	// Slice functions
 	"join": strings.Join,

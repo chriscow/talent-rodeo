@@ -1,0 +1,72 @@
+{{define "page-css"}}
+{{block "css:profile-resume" .}}{{end}}
+{{block "css:profile-search-keywords" .}}{{end}}
+{{end}}
+
+{{define "page:main"}}
+<main class="container">
+    <div class="grid">
+        {{template "partial:profile-resume" .}}
+        {{template "partial:profile-search-keywords" .}}
+    </div>
+
+    <article class="status-updates">
+        <img id="level-light" class="theme-light" src="/static/img/info.dark.24px.svg" alt="Status Level" width="24"
+            height="24">
+        <img id="level-dark" class="theme-dark" src="/static/img/info.light.24px.svg" alt="Status Level" width="24"
+            height="24">
+        <span id="message"></span>
+    </article>
+</main>
+<style>
+    :root[data-theme="light"] .theme-dark,
+    :root[data-theme="dark"] .theme-light {
+        display: none;
+    }
+
+    .status-updates {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .status-updates {
+        margin-top: 2rem;
+        padding: 1rem;
+        border-radius: var(--border-radius);
+        opacity: 0;
+        transition: opacity 0.3s ease-in;
+    }
+</style>
+
+<script>
+    Pusher.logToConsole = true;
+
+    var pusher = new Pusher("{{.PusherKey}}", {
+        cluster: "{{.PusherCluster}}"
+    });
+
+    var channel = pusher.subscribe("{{.SessionID}}");
+    let fadeTimeout;
+    const statusEl = document.querySelector('.status-updates');
+
+    channel.bind('status', function (data) {
+        if (statusEl.style.opacity === 0) {
+            setTimeout(() => statusEl.style.opacity = 1, 10);
+        }
+
+        clearTimeout(fadeTimeout);
+        statusEl.style.opacity = 1;
+
+        fadeTimeout = setTimeout(() => {
+            statusEl.style.opacity = 0;
+        }, 5000);
+
+        const icon = data.level === 'info' ? 'info' :
+            data.level === 'warn' ? 'alert-triangle' : 'x-octagon';
+        document.getElementById("level-light").src = `/static/img/${icon}.dark.24px.svg`;
+        document.getElementById("level-dark").src = `/static/img/${icon}.light.24px.svg`;
+        document.getElementById("message").innerText = data.message;
+    });
+</script>
+{{end}}
