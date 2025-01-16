@@ -184,20 +184,20 @@ HTML templates are stored in the `assets/templates` directory and use the standa
 
 |     |     |
 | --- | --- |
-| `assets/templates/base.tmpl` | The 'base' template containing the shared HTML markup for all your web pages. |
-| `assets/templates/pages/` | Directory containing files with the page-specific content for your web pages. See `assets/templates/pages/home.tmpl` for an example. |
-| `assets/templates/partials/` | Directory containing files with 'partials' to embed in your web pages or base template. See `assets/templates/partials/footer.tmpl` for an example. |
+| `assets/templates/base.html` | The 'base' template containing the shared HTML markup for all your web pages. |
+| `assets/templates/pages/` | Directory containing files with the page-specific content for your web pages. See `assets/templates/pages/home.html` for an example. |
+| `assets/templates/partials/` | Directory containing files with 'partials' to embed in your web pages or base template. See `assets/templates/partials/footer.html` for an example. |
 
 The HTML for web pages can be sent using the `response.Page()` function. For convenience, an `app.newTemplateData()` method is provided which returns a `map[string]any` map. You can add data to this map and pass it on to your templates.
 
-For example, to render the HTML in a `assets/templates/pages/example.tmpl` file:
+For example, to render the HTML in a `assets/templates/pages/example.html` file:
 
 ```
 func (app *application) yourHandler(w http.ResponseWriter, r *http.Request) {
     data := app.newTemplateData()
     data["hello"] = "world"
 
-    err := response.Page(w, http.StatusOK, data, "pages/example.tmpl")
+    err := response.Page(w, http.StatusOK, data, "pages/example.html")
     if err != nil {
         app.serverError(w, r, err)
     }
@@ -214,7 +214,7 @@ func (app *application) yourHandler(w http.ResponseWriter, r *http.Request) {
     headers := make(http.Header)
     headers.Set("X-Server", "Go")
 
-    err := response.PageWithHeaders(w, http.StatusOK, data, headers, "pages/example.tmpl")
+    err := response.PageWithHeaders(w, http.StatusOK, data, headers, "pages/example.html")
     if err != nil {
         app.serverError(w, r, err)
     }
@@ -345,7 +345,7 @@ func (app *application) createPerson(w http.ResponseWriter, r *http.Request) {
             Age: 21,
         }
 
-        err := response.Page(w, http.StatusOK, data, "/path/to/page.tmpl")
+        err := response.Page(w, http.StatusOK, data, "/path/to/page.html")
         if err != nil {
             app.serverError(w, r, err)
         }
@@ -397,7 +397,7 @@ func (app *application) createPerson(w http.ResponseWriter, r *http.Request) {
             Age: 21,
         }
 
-        err := response.Page(w, http.StatusOK, data, "/path/to/page.tmpl")
+        err := response.Page(w, http.StatusOK, data, "/path/to/page.html")
         if err != nil {
             app.serverError(w, r, err)
         }
@@ -419,7 +419,7 @@ func (app *application) createPerson(w http.ResponseWriter, r *http.Request) {
             data := app.newTemplateData()
             data["Form"] = form
 
-            err := response.Page(w, http.StatusUnprocessableEntity, data, "/path/to/page.tmpl")
+            err := response.Page(w, http.StatusUnprocessableEntity, data, "/path/to/page.html")
             if err != nil {
                 app.serverError(w, r, err)
             }
@@ -879,9 +879,9 @@ This is an example body
 {{end}}
 ```
 
-A further example can be found in the `assets/emails/example.tmpl` file. Note that your email templates automatically have access to the custom template functions defined in the `internal/funcs` package.
+A further example can be found in the `assets/emails/example.html` file. Note that your email templates automatically have access to the custom template functions defined in the `internal/funcs` package.
 
-Emails can be sent from your handlers using `app.mailer.Send()`. For example, to send an email to `alice@example.com` containing the contents of the `assets/emails/example.tmpl` file:
+Emails can be sent from your handlers using `app.mailer.Send()`. For example, to send an email to `alice@example.com` containing the contents of the `assets/emails/example.html` file:
 
 ```
 func (app *application) yourHandler(w http.ResponseWriter, r *http.Request) {
@@ -889,7 +889,7 @@ func (app *application) yourHandler(w http.ResponseWriter, r *http.Request) {
 
     data := map[string]any{"Name": "Alice"}
 
-    err := app.mailer.Send("alice@example.com", data, "example.tmpl")
+    err := app.mailer.Send("alice@example.com", data, "example.html")
     if err != nil {
         app.serverError(w, r, err)
         return
@@ -913,7 +913,7 @@ If you don't set a value for this, then no notifications will be sent (but the e
 
 Notifications will only be sent for any errors that are encountered as part of a request-response cycle (i.e. whenever a user sees an '500 Internal Server Error' response). Notifications are not sent for any errors that occur when starting or shutting down the application, so it's important to still use an uptime monitoring service in production.
 
-The code for this functionality is in the `sendErrorNotification()` method (in the `cmd/web/errors.go` file) and the email template for the notification is located at `assets/emails/error-notification.tmpl`.
+The code for this functionality is in the `sendErrorNotification()` method (in the `cmd/web/errors.go` file) and the email template for the notification is located at `assets/emails/error-notification.html`.
 
 You'll need to make sure that the application is [configured using valid SMTP credentials](#sending-emails) in order to send the email.
 
@@ -937,7 +937,7 @@ When you use `make run/live` to run the application, the application will automa
 
 ```
 .go
-.tpl, .tmpl, .html
+.tpl, .html, .html
 .css, .js, .sql
 .jpeg, .jpg, .gif, .png, .bmp, .svg, .webp, .ico
 ```

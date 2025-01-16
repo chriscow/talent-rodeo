@@ -37,7 +37,8 @@ func (app *application) routes() http.Handler {
 
 		mux.Group(func(mux *flow.Mux) {
 			mux.Use(app.requireAuthenticatedUser)
-			mux.HandleFunc("/upload", app.uploadResume, "POST")
+			mux.HandleFunc("/profile", app.profile, "GET")
+			mux.HandleFunc("/resume", app.handleResume, "GET", "POST")
 			mux.HandleFunc("/logout", app.logout, "POST")
 		})
 
@@ -46,6 +47,9 @@ func (app *application) routes() http.Handler {
 			mux.HandleFunc("/job/search", app.linkedInSearch, "GET")
 			mux.HandleFunc("/job/:id", app.jobDetail, "GET")
 			mux.HandleFunc("/job/:id/match", app.handleJobMatch, "GET")
+
+			mux.HandleFunc("/user/:id/keywords", app.editKeywords, "GET")
+			mux.HandleFunc("/user/:id/keywords", app.saveKeywords, "POST")
 
 			mux.HandleFunc("/chat", app.handleChat, "GET", "POST")
 			mux.HandleFunc("/messages", app.handleMessages, "GET")

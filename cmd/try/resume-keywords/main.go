@@ -8,7 +8,6 @@ import (
 	"talent-rodeo/internal/rodeo"
 
 	"github.com/chriscow/minds"
-	"github.com/chriscow/minds/providers/gemini"
 	"github.com/chriscow/minds/providers/openai"
 	"github.com/joho/godotenv"
 )
@@ -34,7 +33,7 @@ func main() {
 	// }
 	// log.Println(string(b))
 
-	keywords, err := getLinkedInSearchTerms()
+	keywords, err := rodeo.GetResumeKeywords(fullResume)
 	if err != nil {
 		log.Fatalf("failed to get LinkedIn search terms: %v", err)
 	}
@@ -42,51 +41,6 @@ func main() {
 	for _, kw := range keywords {
 		fmt.Println(kw)
 	}
-}
-
-func getLinkedInSearchTerms() ([]string, error) {
-	prompt := `
-	Given the the resume of a candidate, identify the most relevant search
-	keywords for a LinkedIn job search. Focus on the candidate's preferences,
-	skills, ideal job titles, industries, and any other relevant factors. The
-	output should include a mix of specific terms or key technologies (e.g.,
-	'Go', 'Golang') and broad categories (e.g., 'Web Development',
-	'Full-Stack Developer', 'Software Engineering Manager') to optimize
-	search results. Additionally, include alternative keywords or synonyms
-	where applicable to maximize match potential. Order them by relevance,
-	with the most important terms first.`
-
-	type output struct {
-		Keywords []string `json:"keywords"`
-	}
-
-	schema, err := minds.NewResponseSchema("linkedin_search_terms", "Extracted LinkedIn search terms from resume", output{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate schema: %v", err)
-	}
-
-	ctx := context.Background()
-	llm, err := gemini.NewProvider(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create provider: %v", err)
-	}
-
-	req := minds.NewRequest(
-		minds.Messages{{Role: minds.RoleUser, Content: prompt + "\n\n" + fullResume}},
-		minds.WithResponseSchema(*schema),
-	)
-
-	resp, err := llm.GenerateContent(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate content: %v", err)
-	}
-
-	var out output
-	if err := json.Unmarshal([]byte(resp.String()), &out); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %v", err)
-	}
-
-	return out.Keywords, nil
 }
 
 func getCandidateInfo() (*rodeo.CandidateInfo, error) {
