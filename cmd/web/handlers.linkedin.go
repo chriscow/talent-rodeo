@@ -20,7 +20,7 @@ import (
 
 // 	data := app.newTemplateData(r)
 
-// 	if err := response.Page(w, http.StatusOK, data, "pages/search_jobs.tmpl"); err != nil {
+// 	if err := response.Page(w, http.StatusOK, data, "pages/search_jobs.html"); err != nil {
 // 		app.serverError(w, r, err)
 // 	}
 // }
@@ -34,7 +34,7 @@ func (app *application) linkedInSearch(w http.ResponseWriter, r *http.Request) {
 		} else {
 			data := app.newTemplateData(r)
 
-			if err := response.Page(w, http.StatusOK, data, "pages/job-search.tmpl"); err != nil {
+			if err := response.Page(w, http.StatusOK, data, "pages/job-search.html"); err != nil {
 				app.serverError(w, r, err)
 			}
 		}
@@ -87,7 +87,7 @@ func (app *application) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 	data["Jobs"] = jobs
 
-	if err := response.Partial(w, http.StatusOK, data, "partials/job-search-results.tmpl"); err != nil {
+	if err := response.Partial(w, http.StatusOK, data, "partials/job-search-results.html"); err != nil {
 		app.logger.Error("Error rendering search results", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
@@ -142,7 +142,7 @@ func (app *application) jobDetail(w http.ResponseWriter, r *http.Request) {
 		opts.Layout = "base"
 	}
 
-	if err := response.Render(w, http.StatusOK, data, "pages/job-detail.tmpl", opts); err != nil {
+	if err := response.Render(w, http.StatusOK, data, "pages/job-detail.html", opts); err != nil {
 		app.serverError(w, r, err)
 	}
 }
@@ -216,7 +216,7 @@ func (app *application) handleJobMatch(w http.ResponseWriter, r *http.Request) {
 	data := app.newTemplateData(r)
 	data["Match"] = match
 
-	if err := response.Partial(w, http.StatusOK, data, "partials/job-match-analysis.tmpl"); err != nil {
+	if err := response.Partial(w, http.StatusOK, data, "partials/job-match-analysis.html"); err != nil {
 		app.serverError(w, r, err)
 	}
 }

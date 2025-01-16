@@ -13,7 +13,7 @@ import (
 
 func (app *application) home(w http.ResponseWriter, r *http.Request) {
 	data := app.newTemplateData(r)
-	if err := response.Page(w, http.StatusOK, data, "pages/index.tmpl"); err != nil {
+	if err := response.Page(w, http.StatusOK, data, "pages/dashboard.html"); err != nil {
 		app.serverError(w, r, err)
 	}
 }

@@ -45,7 +45,7 @@ func (h *Handler) InterviewPage(w http.ResponseWriter, r *http.Request) {
 		RequireConfirmation: true,
 	}
 
-	patterns := []string{"layout.tmpl", "partials/*.tmpl", "pages/interview.tmpl"}
+	patterns := []string{"layout.html", "partials/*.html", "pages/interview.html"}
 	if err := response.NamedTemplate(w, http.StatusOK, data, "layout", patterns...); err != nil {
 		log.Printf("Error rendering template: %v", err)
 		http.Error(w, "Error rendering template", http.StatusInternalServerError)
