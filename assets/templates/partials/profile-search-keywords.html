@@ -1,7 +1,8 @@
 {{define "partial:profile-search-keywords"}}
+{{if .Keywords}}
 <article>
     <header>
-        <h2>Manage Search Keywords</h2>
+        <h3>Manage Search Keywords</h3>
     </header>
     <form class="sortable" hx-post="/keywords/save" hx-trigger="end">
         <div class="htmx-indicator">Updating...</div>
@@ -38,7 +39,16 @@
         }
     })
 </script>
+{{else}}
+<article style="opacity: 0;">
+    <header>
+        <h3>Search Keywords</h3>
+    </header>
+    <p>Keywords will appear here after your phone call.</p>
+</article>
 {{end}}
+{{end}}
+
 
 {{define "css:profile-search-keywords"}}
 <style>
