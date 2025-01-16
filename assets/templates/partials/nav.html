@@ -10,7 +10,7 @@
     </ul>
     {{end}}
     <ul>
-        <!-- <li>
+        <li>
             <details class="dropdown" role="list">
                 <summary role="button" class="secondary">Theme</summary>
                 <ul>
@@ -19,7 +19,7 @@
                     <li><a href="#" data-theme-switcher="dark">Dark</a></li>
                 </ul>
             </details>
-        </li> -->
+        </li>
         {{if .User}}
         <li><a href="#" hx-post="/logout" hx-push-url="true" hx-target="body">Logout</a></li>
         <li><a href="/profile"><img src="{{.User.AvatarURL}}" alt="avatar"

@@ -7,30 +7,45 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"talent-rodeo/internal/database"
 	"talent-rodeo/internal/response"
 	"talent-rodeo/internal/rodeo"
+	"talent-rodeo/internal/validator"
+	"time"
 )
 
 func isValidFileType(filename string) bool {
 	ext := strings.ToLower(filepath.Ext(filename))
-	return ext == ".docx"
+	return ext == ".docx" || ext == ".pdf"
 }
 
-// func (app *application) resume(w http.ResponseWriter, r *http.Request) {
-// 	data := app.newTemplateData(r)
+func (app *application) resetResume(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		app.badRequest(w, r, fmt.Errorf("resetResume: method not allowed"))
+		return
+	}
 
-// 	if err := response.Page(w, http.StatusOK, data, "resume.html"); err != nil {
-// 		app.serverError(w, r, err)
-// 	}
+	if err := app.db.UpdateFullResume(contextGetAuthenticatedUser(r).ID, "", ""); err != nil {
+		app.serverError(w, r, fmt.Errorf("resetResume: failed to reset resume: %w", err))
+		return
+	}
 
-// 	assets.EmbeddedFiles.ReadFile("prompts/recruiter.convert-resume.txt")
-// }
+	w.Header().Set("HX-Refresh", "true")
+	w.WriteHeader(http.StatusNoContent)
+}
 
 func (app *application) handleResume(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	data := app.newTemplateData(r)
+	sessionID, ok := data["SessionID"].(string)
+	if !ok {
+		app.serverError(w, r, fmt.Errorf("uploadResume: failed to get session ID"))
 		return
 	}
 
@@ -42,20 +57,45 @@ func (app *application) handleResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get phone number
 	phone := r.FormValue("phone")
-	if phone == "" {
-		app.badRequest(w, r, fmt.Errorf("uploadResume: phone number is required"))
-		return
-	}
-
-	// Get resume file
 	file, header, err := r.FormFile("resume")
 	if err != nil {
 		app.badRequest(w, r, fmt.Errorf("uploadResume: failed to get resume file: %w", err))
 		return
 	}
 	defer file.Close()
+
+	type formData struct {
+		Phone     string `form:"phone"`
+		Filename  string `form:"resume"`
+		Validator validator.Validator
+	}
+
+	form := formData{
+		Phone:    phone,
+		Filename: header.Filename,
+	}
+
+	rx := regexp.MustCompile(`^\+?1?\d{10,}$`)
+	form.Validator.CheckField(validator.Matches(phone, rx), "Phone", "Your phone number is required")
+	form.Validator.CheckField(isValidFileType(header.Filename), "Resume", "Invalid file type. Please upload a DOCX or PDF file.")
+	data["Form"] = form
+
+	if form.Validator.HasErrors() {
+		for _, err := range form.Validator.Errors {
+			app.logger.Warn("uploadResume: invalid form data", "error", err)
+		}
+		for _, err := range form.Validator.FieldErrors {
+			app.logger.Warn("uploadResume: invalid field data", "error", err)
+		}
+
+		data["Errors"] = form.Validator.Errors
+
+		if err := response.Page(w, http.StatusOK, data, "pages/profile.html"); err != nil {
+			app.serverError(w, r, err)
+		}
+		return
+	}
 
 	tempDir := os.TempDir()
 	tempFile, err := os.CreateTemp(tempDir, "resume-*.docx")
@@ -95,20 +135,33 @@ func (app *application) handleResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := app.newTemplateData(r)
-	sessionID, ok := data["SessionID"].(string)
-	if !ok {
-		app.serverError(w, r, fmt.Errorf("uploadResume: failed to get session ID"))
-		return
-	}
+	user.FullResume = &resumeText
+	user.ResumeFilename = &header.Filename
+	r = contextSetAuthenticatedUser(r, user)
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, rodeo.SessionIDKey, sessionID)
 
 	app.backgroundTask(r, func() error {
 		sessionID := ctx.Value(rodeo.SessionIDKey).(string)
-		app.SendStatus(sessionID, "resume-status", "info", "Extracting keywords...")
-		defer app.SendStatus(sessionID, "resume-status", "success", "Keywords extracted")
+
+		timer := time.NewTicker(5 * time.Second)
+		count := 0
+		for {
+			select {
+			case <-timer.C:
+				count++
+				app.SendStatus(sessionID, "status", "error", fmt.Sprintf("tick %d", count))
+
+			case <-ctx.Done():
+				timer.Stop()
+				app.SendStatus(sessionID, "status", "success", "Done")
+				return nil
+			}
+		}
+
+		app.SendStatus(sessionID, "status", "info", "Extracting keywords...")
+		defer app.SendStatus(sessionID, "status", "success", "Keywords extracted")
 		keywords, err := rodeo.GetResumeKeywords(resumeText)
 		if err != nil {
 			return fmt.Errorf("uploadResume: failed to get keywords: %w", err)
@@ -132,16 +185,22 @@ func (app *application) handleResume(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 
-	if err := response.NamedTemplate(w, http.StatusOK, data, "partials/call-status.html"); err != nil {
+	app.logger.Info("uploadResume: resume uploaded", "filename", header.Filename, "phone", phone)
+	if err := response.Page(w, http.StatusOK, data, "pages/profile.html"); err != nil {
 		app.serverError(w, r, err)
 	}
 }
 
 func (app *application) SendStatus(sessionID, eventName, level, message string) {
-	app.pusher.Trigger(sessionID, "call-status", map[string]string{
+	app.logger.Info("SendStatus", "sessionID", sessionID, "eventName", eventName, "level", level, "message", message)
+	err := app.pusher.Trigger(sessionID, eventName, map[string]string{
 		"level":   level,
 		"message": message,
 	})
+
+	if err != nil {
+		app.logger.Error("SendStatus: failed to send status", "error", err)
+	}
 }
 
 // func (app *application) events(w http.ResponseWriter, r *http.Request) {
