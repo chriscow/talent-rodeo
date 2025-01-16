@@ -1,9 +1,9 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -13,8 +13,13 @@ import (
 	"talent-rodeo/internal/response"
 	"talent-rodeo/internal/rodeo"
 	"talent-rodeo/internal/validator"
-	"time"
 )
+
+type initialOnboarding struct {
+	Phone     string
+	Filename  string
+	Validator validator.Validator
+}
 
 func isValidFileType(filename string) bool {
 	ext := strings.ToLower(filepath.Ext(filename))
@@ -43,152 +48,108 @@ func (app *application) handleResume(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := app.newTemplateData(r)
-	sessionID, ok := data["SessionID"].(string)
-	if !ok {
-		app.serverError(w, r, fmt.Errorf("uploadResume: failed to get session ID"))
-		return
-	}
 
-	w.Header().Set("Content-Type", "text/html")
-
-	// Parse multipart form
 	if err := r.ParseMultipartForm(10 << 20); err != nil { // 10MB max
-		app.badRequest(w, r, fmt.Errorf("uploadResume: failed to parse form: %w", err))
+		app.badRequest(w, r, fmt.Errorf("failed to parse form: %w", err))
 		return
 	}
 
-	phone := r.FormValue("phone")
-	file, header, err := r.FormFile("resume")
+	form, file, header, err := app.parseResumeForm(r)
 	if err != nil {
-		app.badRequest(w, r, fmt.Errorf("uploadResume: failed to get resume file: %w", err))
+		app.badRequest(w, r, err)
 		return
 	}
 	defer file.Close()
 
-	type formData struct {
-		Phone     string `form:"phone"`
-		Filename  string `form:"resume"`
-		Validator validator.Validator
-	}
-
-	form := formData{
-		Phone:    phone,
-		Filename: header.Filename,
-	}
-
-	rx := regexp.MustCompile(`^\+?1?\d{10,}$`)
-	form.Validator.CheckField(validator.Matches(phone, rx), "Phone", "Your phone number is required")
-	form.Validator.CheckField(isValidFileType(header.Filename), "Resume", "Invalid file type. Please upload a DOCX or PDF file.")
-	data["Form"] = form
-
 	if form.Validator.HasErrors() {
-		for _, err := range form.Validator.Errors {
-			app.logger.Warn("uploadResume: invalid form data", "error", err)
-		}
-		for _, err := range form.Validator.FieldErrors {
-			app.logger.Warn("uploadResume: invalid field data", "error", err)
-		}
-
-		data["Errors"] = form.Validator.Errors
-
-		if err := response.Page(w, http.StatusOK, data, "pages/profile.html"); err != nil {
-			app.serverError(w, r, err)
-		}
+		app.handleFormErrors(w, r, form.Validator, data)
 		return
 	}
 
-	tempDir := os.TempDir()
-	tempFile, err := os.CreateTemp(tempDir, "resume-*.docx")
+	tempFile, err := app.saveTempFile(file)
 	if err != nil {
-		app.serverError(w, r, fmt.Errorf("uploadResume: failed to create temp file: %w", err))
+		app.serverError(w, r, err)
 		return
 	}
-	defer os.Remove(tempFile.Name()) // Clean up temp file after we're done
+	defer os.Remove(tempFile.Name())
 
-	// Copy the uploaded file to the temp file
-	_, err = io.Copy(tempFile, file)
+	resumeText, err := app.extractResumeText(tempFile, header.Filename)
 	if err != nil {
-		app.serverError(w, r, fmt.Errorf("uploadResume: failed to copy file: %w", err))
-		return
-	}
-	defer tempFile.Close()
-
-	// Read file content
-	var resumeText string
-	if strings.HasSuffix(strings.ToLower(header.Filename), ".docx") {
-		resumeText, err = rodeo.ExtractDOCX(tempFile)
-	} else if strings.HasSuffix(strings.ToLower(header.Filename), ".pdf") {
-		resumeText, err = rodeo.ExtractPDF(tempFile)
-	} else {
-		app.badRequest(w, r, fmt.Errorf("uploadResume: invalid file type"))
-		return
-	}
-
-	if err != nil {
-		app.serverError(w, r, fmt.Errorf("uploadResume: failed to extract text: %w", err))
+		app.serverError(w, r, err)
 		return
 	}
 
 	user := contextGetAuthenticatedUser(r)
-	if err := app.db.UpdateFullResume(user.ID, header.Filename, resumeText); err != nil {
-		app.serverError(w, r, fmt.Errorf("uploadResume: failed to save resume: %w", err))
+	if err := app.updateUserResume(user, header.Filename, resumeText); err != nil {
+		app.serverError(w, r, err)
 		return
 	}
 
-	user.FullResume = &resumeText
-	user.ResumeFilename = &header.Filename
-	r = contextSetAuthenticatedUser(r, user)
+	app.startOnboarding(r, user, resumeText)
 
-	ctx := context.Background()
-	ctx = context.WithValue(ctx, rodeo.SessionIDKey, sessionID)
-
-	app.backgroundTask(r, func() error {
-		sessionID := ctx.Value(rodeo.SessionIDKey).(string)
-
-		timer := time.NewTicker(5 * time.Second)
-		count := 0
-		for {
-			select {
-			case <-timer.C:
-				count++
-				app.SendStatus(sessionID, "status", "error", fmt.Sprintf("tick %d", count))
-
-			case <-ctx.Done():
-				timer.Stop()
-				app.SendStatus(sessionID, "status", "success", "Done")
-				return nil
-			}
-		}
-
-		app.SendStatus(sessionID, "status", "info", "Extracting keywords...")
-		defer app.SendStatus(sessionID, "status", "success", "Keywords extracted")
-		keywords, err := rodeo.GetResumeKeywords(resumeText)
-		if err != nil {
-			return fmt.Errorf("uploadResume: failed to get keywords: %w", err)
-		}
-
-		user := contextGetAuthenticatedUser(r)
-		userKW := make([]database.UserKeyword, len(keywords))
-		for i, kw := range keywords {
-			keyword := database.UserKeyword{
-				UserID:   user.ID,
-				Keyword:  kw,
-				Priority: i,
-			}
-			userKW[i] = keyword
-		}
-
-		if err := app.db.UpdateUserKeywords(user.ID, userKW); err != nil {
-			return fmt.Errorf("uploadResume: failed to save keywords: %w", err)
-		}
-
-		return nil
-	})
-
-	app.logger.Info("uploadResume: resume uploaded", "filename", header.Filename, "phone", phone)
+	app.logger.Info("Resume uploaded successfully", "filename", header.Filename, "phone", form.Phone)
 	if err := response.Page(w, http.StatusOK, data, "pages/profile.html"); err != nil {
 		app.serverError(w, r, err)
 	}
+}
+
+func (app *application) parseResumeForm(r *http.Request) (*initialOnboarding, io.ReadCloser, *multipart.FileHeader, error) {
+	phone := r.FormValue("phone")
+	file, header, err := r.FormFile("resume")
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to get resume file: %w", err)
+	}
+
+	form := &initialOnboarding{
+		Phone:     phone,
+		Filename:  header.Filename,
+		Validator: validator.Validator{},
+	}
+
+	phoneRegex := regexp.MustCompile(`^\+?1?\d{10,}$`)
+	form.Validator.CheckField(validator.Matches(phone, phoneRegex), "Phone", "Invalid phone number")
+	form.Validator.CheckField(isValidFileType(header.Filename), "Resume", "Invalid file type. Please upload a DOCX or PDF file.")
+
+	return form, file, header, nil
+}
+
+func (app *application) handleFormErrors(w http.ResponseWriter, r *http.Request, v validator.Validator, data map[string]interface{}) {
+	app.logger.Warn("Invalid form submission", "errors", v.Errors, "fieldErrors", v.FieldErrors)
+	data["Errors"] = v.Errors
+	if err := response.Page(w, http.StatusOK, data, "pages/profile.html"); err != nil {
+		app.serverError(w, r, err)
+	}
+}
+
+func (app *application) saveTempFile(file io.Reader) (*os.File, error) {
+	tempFile, err := os.CreateTemp(os.TempDir(), "resume-*.docx")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp file: %w", err)
+	}
+
+	if _, err := io.Copy(tempFile, file); err != nil {
+		return nil, fmt.Errorf("failed to copy file: %w", err)
+	}
+
+	return tempFile, nil
+}
+
+func (app *application) extractResumeText(file *os.File, filename string) (string, error) {
+	if strings.HasSuffix(strings.ToLower(filename), ".docx") {
+		return rodeo.ExtractDOCX(file)
+	} else if strings.HasSuffix(strings.ToLower(filename), ".pdf") {
+		return rodeo.ExtractPDF(file)
+	}
+	return "", fmt.Errorf("unsupported file type")
+}
+
+func (app *application) updateUserResume(user *database.User, filename, resumeText string) error {
+	if err := app.db.UpdateFullResume(user.ID, filename, resumeText); err != nil {
+		return fmt.Errorf("failed to save resume: %w", err)
+	}
+	user.FullResume = &resumeText
+	user.ResumeFilename = &filename
+	return nil
 }
 
 func (app *application) SendStatus(sessionID, eventName, level, message string) {
@@ -202,25 +163,3 @@ func (app *application) SendStatus(sessionID, eventName, level, message string) 
 		app.logger.Error("SendStatus: failed to send status", "error", err)
 	}
 }
-
-// func (app *application) events(w http.ResponseWriter, r *http.Request) {
-// 	sessionID := flow.Param(r.Context(), "session-id")
-// 	app.logger.Debug("callStatus-----------------------", "sessionID", sessionID)
-
-// 	// Start session-specific publisher
-// 	// go func() {
-// 	// 	ticker := time.NewTicker(time.Second)
-// 	// 	for range ticker.C {
-// 	// 		app.sendStatus(sessionID, "status", "Still working...")
-// 	// 	}
-// 	// }()
-
-// 	app.sse.OnSession = func(sess *sse.Session) (sse.Subscription, bool) {
-// 		return sse.Subscription{
-// 			Client: sess,
-// 			Topics: []string{sessionID},
-// 		}, true
-// 	}
-
-// 	app.sse.ServeHTTP(w, r)
-// }
