@@ -2,7 +2,7 @@
 <article id="resume">
     {{if hasValue .User.ResumeFilename}}
     <header>
-        <h2>Resume</h2>
+        <h3>Resume</h3>
     </header>
     <div class="grid" style="grid-template-columns: 60% 1fr">
         <span style="overflow: clip">
@@ -16,8 +16,13 @@
 
     {{else}}
     <header>
-        <h2>Resume Upload</h2>
+        <h3>Resume Upload</h3>
     </header>
+    <p>
+        After you upload your resume, you will receive a brief phone call
+        with an AI to go over the details of your desired next role.
+    </p>
+    <hr />
 
     <form method="post" action="/profile" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
@@ -25,8 +30,8 @@
 
         <label for="phone">
             Phone Number
-            <input type="tel" id="phone" name="phone" placeholder="+1 (555) 555-5555" pattern="^\+?1?\d{10,}$"
-                value="{{.Form.Phone}}" {{if .Form.Validator.FieldErrors.Phone}}aria-invalid="true" {{end}}>
+            <input type="tel" id="phone" name="phone" placeholder="+1 (555) 555-5555" value="{{.Form.Phone}}"
+                pattern="^\+?1?\d{10,}$" required {{if .Form.Validator.FieldErrors.Phone}}aria-invalid="true" {{end}}>
             <small id="invalid-helper" class='error'>{{.Form.Validator.FieldErrors.Phone}}</small>
         </label>
 
