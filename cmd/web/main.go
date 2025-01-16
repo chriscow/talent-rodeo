@@ -200,11 +200,14 @@ func run(logger *slog.Logger) error {
 		return fmt.Errorf("error setting up NATS: %w", err)
 	}
 
+	logger.Debug("pusher config", "app_id", os.Getenv("PUSHER_APP_ID"), "key",
+		os.Getenv("PUSHER_KEY"), "secret", os.Getenv("PUSHER_SECRET"), "cluster", os.Getenv("PUSHER_CLUSTER"))
+
 	pusherClient := pusher.Client{
-		AppID:   "1921779",
-		Key:     "4a94faf46532a3c20d19",
-		Secret:  "d3550e3a2c707ebaadef",
-		Cluster: "us3",
+		AppID:   os.Getenv("PUSHER_APP_ID"),
+		Key:     os.Getenv("PUSHER_KEY"),
+		Secret:  os.Getenv("PUSHER_SECRET"),
+		Cluster: os.Getenv("PUSHER_CLUSTER"),
 		Secure:  true,
 	}
 
@@ -265,36 +268,14 @@ func checkEnv() error {
 		fmt.Printf("Error loading .env file: %s\n", err.Error())
 	}
 
-	baseURL := os.Getenv("BASE_URL")
-	if baseURL == "" {
-		return fmt.Errorf("BASE_URL environment variable is required")
-	}
+	requiredKeys := []string{"BASE_URL", "SESSION_SECRET", "SMTP_USERNAME",
+		"SMTP_PASSWORD", "LINKEDIN_AUTH_CLIENT_ID", "LINKEDIN_AUTH_CLIENT_SECRET",
+		"OPENAI_API_KEY", "PUSHER_APP_ID", "PUSHER_KEY", "PUSHER_SECRET", "PUSHER_CLUSTER"}
 
-	sessionSecret := os.Getenv("SESSION_SECRET")
-	if sessionSecret == "" {
-		return fmt.Errorf("SESSION_SECRET environment variable is required")
-	}
-
-	smtpUser := os.Getenv("SMTP_USERNAME")
-	if smtpUser == "" {
-		return fmt.Errorf("SMTP_USERNAME environment variable is required")
-	}
-
-	smtpPwd := os.Getenv("SMTP_PASSWORD")
-	if smtpPwd == "" {
-		return fmt.Errorf("SMTP_PASSWORD environment variable is required")
-	}
-
-	if os.Getenv("LINKEDIN_AUTH_CLIENT_ID") == "" {
-		return fmt.Errorf("LINKEDIN_AUTH_CLIENT_ID environment variable is required")
-	}
-
-	if os.Getenv("LINKEDIN_AUTH_CLIENT_SECRET") == "" {
-		return fmt.Errorf("LINKEDIN_AUTH_CLIENT_SECRET environment variable is required")
-	}
-
-	if os.Getenv("OPENAI_API_KEY") == "" {
-		return fmt.Errorf("OPENAI_API_KEY environment variable is required")
+	for _, key := range requiredKeys {
+		if os.Getenv(key) == "" {
+			return fmt.Errorf("%s environment variable is required", key)
+		}
 	}
 
 	return nil

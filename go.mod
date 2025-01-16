@@ -24,6 +24,7 @@ require (
 	github.com/fumiama/go-docx v0.0.0-20241231153056-9f8f327c74a5
 	github.com/go-playground/form/v4 v4.2.1
 	github.com/golang-migrate/migrate/v4 v4.18.1
+	github.com/gomarkdown/markdown v0.0.0-20241205020045-f7e15b2f3e62
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/sessions v1.4.0
 	github.com/gorilla/websocket v1.5.3
@@ -37,6 +38,7 @@ require (
 	github.com/nats-io/nats-server/v2 v2.10.24
 	github.com/nats-io/nats.go v1.37.0
 	github.com/pusher/pusher-http-go/v5 v5.1.1
+	github.com/sashabaranov/go-openai v1.36.1
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/spf13/cobra v1.8.1
 	github.com/starfederation/datastar v0.21.3
@@ -55,10 +57,10 @@ require (
 	github.com/a-h/templ v0.2.793 // indirect
 	github.com/dlclark/regexp2 v1.11.4 // indirect
 	github.com/golang/mock v1.6.0 // indirect
-	github.com/gomarkdown/markdown v0.0.0-20241205020045-f7e15b2f3e62 // indirect
+	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
+	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/sashabaranov/go-openai v1.36.1 // indirect
 	github.com/tiktoken-go/tokenizer v0.2.1 // indirect
 )
 

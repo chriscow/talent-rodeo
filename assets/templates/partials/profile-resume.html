@@ -1,0 +1,42 @@
+{{define "partial:profile-resume"}}
+<article id="resume">
+    {{if hasValue .User.ResumeFilename}}
+    <header>
+        <h2>Resume</h2>
+    </header>
+    <div class="grid" style="grid-template-columns: 60% 1fr">
+        <span style="overflow: clip">
+            <img src="/static/img/check-square.24px.svg" />
+            &nbsp;
+            {{ .User.ResumeFilename }}
+        </span>
+        <button hx-delete="/profile/resume">Reset Resume</button>
+    </div>
+
+
+    {{else}}
+    <header>
+        <h2>Resume Upload</h2>
+    </header>
+
+    <form method="post" action="/profile" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+        <input type="hidden" id="session_id" name="session_id" value="{{ .SessionID }}">
+
+        <label for="phone">
+            Phone Number
+            <input type="tel" id="phone" name="phone" placeholder="+1 (555) 555-5555" pattern="^\+?1?\d{10,}$"
+                value="{{.Form.Phone}}" {{if .Form.Validator.FieldErrors.Phone}}aria-invalid="true" {{end}}>
+            <small id="invalid-helper" class='error'>{{.Form.Validator.FieldErrors.Phone}}</small>
+        </label>
+
+        <label for="resume">
+            Resume (PDF or DOCX)
+            <input type="file" id="resume" name="resume" accept=".pdf,.docx" required>
+        </label>
+
+        <button type="submit">Upload Resume</button>
+    </form>
+    {{end}}
+</article>
+{{end}}
