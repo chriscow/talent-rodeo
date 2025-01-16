@@ -20,7 +20,7 @@ func (app *application) handleChat(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == "GET" {
 		data := app.newTemplateData(r)
-		if err := response.Page(w, http.StatusOK, data, "pages/chat_index.tmpl"); err != nil {
+		if err := response.Page(w, http.StatusOK, data, "pages/chat_index.html"); err != nil {
 			app.serverError(w, r, err)
 		}
 		return
@@ -75,14 +75,14 @@ func (app *application) handleChat(w http.ResponseWriter, r *http.Request) {
 	// messagesComponent.Render(context.Background(), w)
 	data := app.newTemplateData(r)
 
-	if err := response.Page(w, http.StatusOK, data, "pages/chat_index.tmpl"); err != nil {
+	if err := response.Page(w, http.StatusOK, data, "pages/chat_index.html"); err != nil {
 		app.serverError(w, r, err)
 	}
 
 }
 
 func (app *application) handleMessages(w http.ResponseWriter, r *http.Request) {
-	if err := response.Partial(w, http.StatusOK, nil, "partials/messages_list.tmpl"); err != nil {
+	if err := response.Partial(w, http.StatusOK, nil, "partials/messages_list.html"); err != nil {
 		app.serverError(w, r, err)
 	}
 }

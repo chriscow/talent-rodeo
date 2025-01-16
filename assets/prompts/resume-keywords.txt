@@ -1,0 +1,10 @@
+Given the the resume of a candidate, identify the most relevant search keywords
+for a LinkedIn job search. Focus on the candidate's skills, tools and previous
+job titles. 
+
+The output should include a mix of specific terms or key technologies (e.g.,
+'Go', 'Golang', 'AWS') and broad categories (e.g., 'Web Development',
+'Full-Stack Developer', 'Software Engineering Manager') to optimize search
+results. Additionally, include alternative keywords or synonyms where applicable
+to maximize match potential. Order them by relevance, with the most important
+terms first.

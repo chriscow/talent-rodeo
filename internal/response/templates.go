@@ -17,11 +17,11 @@ func Partial(w http.ResponseWriter, status int, data any, partialPath string) er
 
 func PartialWithHeaders(w http.ResponseWriter, status int, data any, headers http.Header, partialPath string) error {
 	// For partials, we only need the partial template and any shared partials
-	patterns := []string{"partials/*.tmpl", partialPath}
+	patterns := []string{"partials/*.html", partialPath}
 
 	// Get the template name from the path
-	// e.g., "templates/partials/messages_list.tmpl" -> "messages_list"
-	templateName := strings.TrimSuffix(filepath.Base(partialPath), ".tmpl")
+	// e.g., "templates/partials/messages_list.html" -> "messages_list"
+	templateName := strings.TrimSuffix(filepath.Base(partialPath), ".html")
 
 	return NamedTemplateWithHeaders(w, status, data, headers, templateName, patterns...)
 }
@@ -31,14 +31,14 @@ func Page(w http.ResponseWriter, status int, data any, pagePath string) error {
 }
 
 func PageWithHeaders(w http.ResponseWriter, status int, data any, headers http.Header, pagePath string) error {
-	patterns := []string{"base.tmpl", "partials/*.tmpl", pagePath}
+	patterns := []string{"base.html", "partials/*.html", pagePath}
 
 	return NamedTemplateWithHeaders(w, status, data, headers, "base", patterns...)
 }
 
 // func PageWithHeaders(w http.ResponseWriter, status int, data any, headers http.Header, pagePath string) error {
-// 	patterns := []string{"base.tmpl", "partials/*.tmpl", pagePath}
-// 	templateName := strings.TrimSuffix(filepath.Base(pagePath), ".tmpl")
+// 	patterns := []string{"base.html", "partials/*.html", pagePath}
+// 	templateName := strings.TrimSuffix(filepath.Base(pagePath), ".html")
 // 	return NamedTemplateWithHeaders(w, status, data, headers, templateName, patterns...)
 // }
 
@@ -88,12 +88,12 @@ func Render(w http.ResponseWriter, status int, data any, templatePath string, op
 		opts = &RenderOptions{}
 	}
 
-	patterns := []string{"partials/*.tmpl", templatePath}
+	patterns := []string{"partials/*.html", templatePath}
 
 	// If a layout is specified, include it and use it as the entry point
-	templateName := strings.TrimSuffix(filepath.Base(templatePath), ".tmpl")
+	templateName := strings.TrimSuffix(filepath.Base(templatePath), ".html")
 	if opts.Layout != "" {
-		patterns = append([]string{opts.Layout + ".tmpl"}, patterns...)
+		patterns = append([]string{opts.Layout + ".html"}, patterns...)
 		templateName = opts.Layout
 	}
 

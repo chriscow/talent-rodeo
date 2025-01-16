@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"talent-rodeo/assets"
+	"talent-rodeo/internal/database"
 	"talent-rodeo/internal/response"
 	"talent-rodeo/internal/rodeo"
 )
@@ -18,17 +18,17 @@ func isValidFileType(filename string) bool {
 	return ext == ".docx"
 }
 
-func (app *application) resume(w http.ResponseWriter, r *http.Request) {
-	data := app.newTemplateData(r)
+// func (app *application) resume(w http.ResponseWriter, r *http.Request) {
+// 	data := app.newTemplateData(r)
 
-	if err := response.Page(w, http.StatusOK, data, "resume.tmpl"); err != nil {
-		app.serverError(w, r, err)
-	}
+// 	if err := response.Page(w, http.StatusOK, data, "resume.html"); err != nil {
+// 		app.serverError(w, r, err)
+// 	}
 
-	assets.EmbeddedFiles.ReadFile("prompts/recruiter.convert-resume.txt")
-}
+// 	assets.EmbeddedFiles.ReadFile("prompts/recruiter.convert-resume.txt")
+// }
 
-func (app *application) uploadResume(w http.ResponseWriter, r *http.Request) {
+func (app *application) handleResume(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -89,6 +89,12 @@ func (app *application) uploadResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user := contextGetAuthenticatedUser(r)
+	if err := app.db.UpdateFullResume(user.ID, header.Filename, resumeText); err != nil {
+		app.serverError(w, r, fmt.Errorf("uploadResume: failed to save resume: %w", err))
+		return
+	}
+
 	data := app.newTemplateData(r)
 	sessionID, ok := data["SessionID"].(string)
 	if !ok {
@@ -96,17 +102,42 @@ func (app *application) uploadResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, rodeo.SessionIDKey, sessionID)
+
 	app.backgroundTask(r, func() error {
-		ctx := context.WithValue(r.Context(), rodeo.SessionIDKey, sessionID)
-		return rodeo.StartWorkflow(ctx, resumeText, app)
+		sessionID := ctx.Value(rodeo.SessionIDKey).(string)
+		app.SendStatus(sessionID, "resume-status", "info", "Extracting keywords...")
+		defer app.SendStatus(sessionID, "resume-status", "success", "Keywords extracted")
+		keywords, err := rodeo.GetResumeKeywords(resumeText)
+		if err != nil {
+			return fmt.Errorf("uploadResume: failed to get keywords: %w", err)
+		}
+
+		user := contextGetAuthenticatedUser(r)
+		userKW := make([]database.UserKeyword, len(keywords))
+		for i, kw := range keywords {
+			keyword := database.UserKeyword{
+				UserID:   user.ID,
+				Keyword:  kw,
+				Priority: i,
+			}
+			userKW[i] = keyword
+		}
+
+		if err := app.db.UpdateUserKeywords(user.ID, userKW); err != nil {
+			return fmt.Errorf("uploadResume: failed to save keywords: %w", err)
+		}
+
+		return nil
 	})
 
-	if err := response.NamedTemplate(w, http.StatusOK, data, "partials/call-status.tmpl"); err != nil {
+	if err := response.NamedTemplate(w, http.StatusOK, data, "partials/call-status.html"); err != nil {
 		app.serverError(w, r, err)
 	}
 }
 
-func (app *application) SendStatus(sessionID, level, message string) {
+func (app *application) SendStatus(sessionID, eventName, level, message string) {
 	app.pusher.Trigger(sessionID, "call-status", map[string]string{
 		"level":   level,
 		"message": message,

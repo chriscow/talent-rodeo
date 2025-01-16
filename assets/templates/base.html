@@ -23,6 +23,9 @@
 <script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
 
+<!-- jsDelivr :: Sortable :: Latest (https://www.jsdelivr.com/package/npm/sortablejs) -->
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+
 <script src="https://cdn.jsdelivr.net/npm/notyf@3/notyf.min.js"></script>
 <script src="https://unpkg.com/feather-icons"></script>
 <script src="/static/js/modal.js"></script>
@@ -34,18 +37,17 @@
     {{block "partial:nav" .}}{{end}}
 
     {{block "page:main" .}}{{end}}
+
     {{/*
 
-    {{block "name" pipeline}} T1 {{end}}
-    A block is shorthand for defining a template
-    {{define "name"}} T1 {{end}}
-    and then executing it in place
-    {{template "name" pipeline}}
-
-    The typical use is to define a set of root templates that are
-    then customized by redefining the block templates within.
+    block is special - its like define and template combined, but with a fallback
+    mechanism. It defines a template and immediately uses it, but allows you to
+    override it later. Think of it as providing a default implementation that
+    can be replaced.
 
     */}}
+
+    {{block "partial:footer" .}}{{end}}
 </body>
 
 <script>

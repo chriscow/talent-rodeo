@@ -58,5 +58,7 @@ DROP TABLE IF EXISTS recruiters;
 
 DROP TABLE IF EXISTS jobs;
 
+DROP TABLE IF EXISTS user_keywords;
+
 -- Disable foreign key support
 PRAGMA foreign_keys = OFF;

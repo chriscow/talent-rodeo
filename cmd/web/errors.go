@@ -25,7 +25,7 @@ func (app *application) reportServerError(r *http.Request, err error) {
 		data["RequestURL"] = url
 		data["Trace"] = trace
 
-		err := app.mailer.Send(app.config.notifications.email, data, "error-notification.tmpl")
+		err := app.mailer.Send(app.config.notifications.email, data, "error-notification.html")
 		if err != nil {
 			trace = string(debug.Stack())
 			app.logger.Error(err.Error(), requestAttrs, "trace", trace)
@@ -38,14 +38,14 @@ func (app *application) serverError(w http.ResponseWriter, r *http.Request, err 
 	app.reportServerError(r, err)
 
 	// Prevent infinite recursion by handling errors in rendering directly
-	if renderErr := response.Page(w, http.StatusOK, nil, "pages/errors/500.tmpl"); renderErr != nil {
+	if renderErr := response.Page(w, http.StatusOK, nil, "pages/errors/500.html"); renderErr != nil {
 		// Fallback to plain text response if rendering fails
 		http.Error(w, "An unexpected error occurred while handling another error.", http.StatusInternalServerError)
 	}
 }
 
 func (app *application) notFound(w http.ResponseWriter, r *http.Request) {
-	if err := response.Page(w, http.StatusOK, nil, "pages/errors/404.tmpl"); err != nil {
+	if err := response.Page(w, http.StatusOK, nil, "pages/errors/404.html"); err != nil {
 		app.serverError(w, r, err)
 	}
 }
@@ -54,7 +54,7 @@ func (app *application) badRequest(w http.ResponseWriter, r *http.Request, err e
 	data := app.newTemplateData(r)
 	data["ErrorMessage"] = err.Error()
 
-	err = response.Page(w, http.StatusBadRequest, data, "pages/errors/errors/400.tmpl")
+	err = response.Page(w, http.StatusBadRequest, data, "pages/errors/400.html")
 	if err != nil {
 		app.serverError(w, r, err)
 	}

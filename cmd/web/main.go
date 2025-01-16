@@ -107,14 +107,15 @@ type config struct {
 }
 
 type application struct {
-	config       config
-	db           *database.DB
-	logger       *slog.Logger
-	mailer       *smtp.Mailer
-	sessionStore *sessions.CookieStore
-	wg           sync.WaitGroup
-	nats         *embeddednats.Server
-	pusher       *pusher.Client
+	config        config
+	db            *database.DB
+	logger        *slog.Logger
+	mailer        *smtp.Mailer
+	sessionStore  *sessions.CookieStore
+	wg            sync.WaitGroup
+	nats          *embeddednats.Server
+	pusher        *pusher.Client
+	keywordsMutex sync.RWMutex
 }
 
 func run(logger *slog.Logger) error {
