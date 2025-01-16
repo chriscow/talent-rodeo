@@ -76,8 +76,18 @@
         }, 5000);
 
         { {/* Dynamically update the icons based on the message level */ } }
-        const icon = data.level === 'info' ? 'info' :
-            data.level === 'warn' ? 'alert-triangle' : 'x-octagon';
+        const icon = (() => {
+            switch (data.level) {
+                case 'info':
+                    return 'info';
+                case 'success':
+                    return 'check-square';
+                case 'warn':
+                    return 'alert-triangle';
+                default:
+                    return 'x-octagon';
+            }
+        })();
         document.getElementById("level-light").src = `/static/img/${icon}.dark.24px.svg`;
         document.getElementById("level-dark").src = `/static/img/${icon}.light.24px.svg`;
 
