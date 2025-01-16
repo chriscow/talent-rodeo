@@ -31,7 +31,8 @@
         <label for="phone">
             Phone Number
             <input type="tel" id="phone" name="phone" placeholder="+1 (555) 555-5555" value="{{.Form.Phone}}"
-                pattern="^\+?1?\d{10,}$" required {{if .Form.Validator.FieldErrors.Phone}}aria-invalid="true" {{end}}>
+                pattern="^[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$" required {{if
+                .Form.Validator.FieldErrors.Phone}}aria-invalid="true" {{end}}>
             <small id="invalid-helper" class='error'>{{.Form.Validator.FieldErrors.Phone}}</small>
         </label>
 
