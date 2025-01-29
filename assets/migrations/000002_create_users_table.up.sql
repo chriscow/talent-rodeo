@@ -13,9 +13,10 @@ CREATE TABLE users (
     avatar_url TEXT,
     location TEXT,
     is_superuser BOOLEAN NOT NULL DEFAULT 0,
-
-
+    -- 
     resume_filename TEXT,
     full_resume TEXT,
-    summarized_resume TEXT
+    summarized_resume TEXT,
+    --
+    onboarding_step INTEGER NOT NULL DEFAULT 0
 );

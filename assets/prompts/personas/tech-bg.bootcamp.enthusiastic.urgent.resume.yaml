@@ -1,0 +1,108 @@
+resume_type: bootcamp_graduate
+candidate_name: Jordan Rivera
+contact:
+  email: jordan.rivera@gmail.com
+  phone: (310) 555-0199
+  github: github.com/jordanr-dev
+  portfolio: jordanrivera.dev
+  location: Los Angeles, CA
+
+summary: Full Stack Developer with MERN stack expertise and background in HR. Recent Hack Reactor graduate combining technical skills with strong communication and collaboration abilities. Passionate about creating user-centric web applications.
+
+education:
+  - institution: Hack Reactor
+    program: Advanced Software Engineering Immersive
+    completion: 2023
+    highlights:
+      - 800+ hours of hands-on coding
+      - Full stack JavaScript development
+      - Agile methodologies
+      - Data structures and algorithms
+      
+  - institution: UCLA
+    degree: BA Psychology
+    graduation: 2018
+    gpa: 3.7
+
+technical_projects:
+  - name: ConnectHub - Social Media Platform
+    role: Full Stack Developer
+    duration: Capstone Project
+    tech: [React, Node.js, Express, MongoDB, WebSocket]
+    highlights:
+      - Built real-time chat using WebSocket
+      - Implemented JWT authentication
+      - Created responsive UI with Tailwind
+      - Deployed on AWS with CI/CD
+      
+  - name: ShopSpace - E-commerce Platform
+    role: Frontend Lead
+    duration: Group Project
+    tech: [React, TypeScript, Express, PostgreSQL]
+    highlights:
+      - Led 3-person frontend team
+      - Implemented shopping cart and checkout
+      - Integrated Stripe payment processing
+      - Achieved 90% test coverage
+      
+  - name: MindfulMe - Mental Health App
+    role: Full Stack Developer
+    duration: Hackathon Winner
+    tech: [React Native, Node.js, MongoDB]
+    highlights:
+      - Won "Best Social Impact" award
+      - Built mood tracking features
+      - Integrated meditation API
+      
+technical_skills:
+  frontend:
+    - React/Hooks
+    - TypeScript
+    - Tailwind CSS
+    - HTML5/CSS3
+    - Responsive Design
+    - WCAG Accessibility
+    
+  backend:
+    - Node.js/Express
+    - MongoDB/Mongoose
+    - PostgreSQL
+    - RESTful APIs
+    - JWT Authentication
+    
+  tools:
+    - Git/GitHub
+    - VS Code
+    - Postman
+    - npm/yarn
+    - Chrome DevTools
+    
+  testing:
+    - Jest
+    - React Testing Library
+    - Integration Testing
+
+prior_experience:
+  - role: HR Coordinator
+    company: TechStart Inc
+    location: Los Angeles, CA
+    duration: 2018 - 2023
+    highlights:
+      - Managed hiring process for engineering teams
+      - Coordinated onboarding for 100+ employees
+      - Improved HR processes through automation
+      - Led diversity and inclusion initiatives
+
+certifications:
+  - AWS Cloud Practitioner (In Progress)
+  - FreeCodeCamp Full Stack Development
+
+additional:
+  - Mentor at local coding meetup
+  - Regular hackathon participant
+  - Tech blog contributor
+  - Open source contributor
+
+languages:
+  - English (Native)
+  - Spanish (Conversational)

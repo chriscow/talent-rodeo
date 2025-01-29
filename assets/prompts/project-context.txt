@@ -6,3 +6,19 @@ The candidate emails the bot their resume and the bot calls them on the phone
 to ask them questions about their experience and preferences. The bot will
 then use this information to help the candidate find a job.
 
+Using the transcript from the conversation we extract both inferred and explicit
+preferences in skills, location, job type, and company culture. We then use this with a
+combination of LLM, vector search and other techniques to match the candidate with
+jobs that are a good fit for them through an autonomous LLM agent workflow.
+
+We then present summaries of the best matched jobs, why they are a good fit, and
+identify any gaps in the candidate's experience that they may want to address. We
+can schedule a follow up call to discuss any pattens in gaps we find.
+
+The candidate can then choose which jobs are great fits and which are not so we can
+continue to refine the search. 
+
+The candidate can choose to have us generate a cover letter that is tailored to the
+job based on our conversation, resume and the job description. We can also help
+them prepare for interviews by providing questions that are likely to be asked
+based on the job description and the candidate's experience.

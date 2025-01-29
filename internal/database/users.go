@@ -205,3 +205,19 @@ func (db *DB) UpdateFullResume(userID int, fileName, resume string) error {
 
 	return err
 }
+
+type OnboardingStep string
+
+const (
+	OnboardingStepInitial OnboardingStep = "initial"
+)
+
+func (db *DB) UpdateUserOnboarding(userID int, step OnboardingStep) error {
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+
+	query := `UPDATE users SET onboarding_step = $1 WHERE id = $2`
+
+	_, err := db.ExecContext(ctx, query, step, userID)
+	return err
+}

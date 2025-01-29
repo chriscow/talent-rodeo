@@ -7,6 +7,21 @@ import (
 	"talent-rodeo/internal/rodeo"
 )
 
+func (app *application) restartOnboarding(w http.ResponseWriter, r *http.Request) {
+	user := contextGetAuthenticatedUser(r)
+	if user == nil {
+		app.badRequest(w, r, fmt.Errorf("restartOnboarding: user not found"))
+		return
+	}
+
+	if err := app.db.UpdateUserOnboarding(user.ID, database.OnboardingStepInitial); err != nil {
+		app.serverError(w, r, fmt.Errorf("restartOnboarding: failed to update onboarding: %w", err))
+		return
+	}
+
+	http.Redirect(w, r, "/profile", http.StatusSeeOther)
+}
+
 func (app *application) startOnboarding(r *http.Request, user *database.User, resumeText string) error {
 	data := app.newTemplateData(r)
 	sessionID, ok := data["SessionID"].(string)

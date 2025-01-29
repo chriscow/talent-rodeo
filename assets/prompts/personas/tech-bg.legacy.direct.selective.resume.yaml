@@ -1,0 +1,101 @@
+resume_type: senior_systems_engineer
+candidate_name: Thomas Anderson
+contact:
+  email: thomas.anderson@gmail.com
+  phone: (517) 555-0123
+  linkedin: linkedin.com/in/tanderson-tech
+  location: Detroit, MI
+
+summary: Systems Engineer with 30 years of experience specializing in enterprise architecture and system modernization. Expert in maintaining and evolving mission-critical applications. Strong focus on mentoring and knowledge transfer.
+
+education:
+  institution: Michigan State University
+  degree: BS Computer Science
+  graduation: 1993
+
+experience:
+  - role: Principal Systems Engineer
+    company: Enterprise Financial Systems
+    location: Detroit, MI
+    duration: 2005 - Present
+    highlights:
+      - Led successful mainframe to cloud migration project
+      - Managed 15-year-old mission-critical codebase
+      - Reduced system downtime from 4% to 1%
+      - Mentored 30+ junior developers
+      - Modernized legacy systems to microservices
+
+  - role: Senior Software Engineer
+    company: Manufacturing Solutions Inc
+    location: Grand Rapids, MI
+    duration: 1998 - 2005
+    highlights:
+      - Maintained core manufacturing control systems
+      - Implemented automated testing reducing bugs by 60%
+      - Led migration from Visual Basic to Java
+      - Optimized database performance for 24/7 operations
+
+  - role: Systems Developer
+    company: Tech Systems Corp
+    location: Lansing, MI
+    duration: 1993 - 1998
+    highlights:
+      - Developed Windows applications using C++
+      - Created DCOM-based distributed systems
+      - Built custom ETL processes
+
+technical_skills:
+  legacy_expertise:
+    - C++98/03/11
+    - Oracle PL/SQL
+    - Visual Basic 6
+    - Windows COM/DCOM
+    - SOAP/XML Services
+    
+  modern_technologies:
+    - Java 8-17
+    - Spring Framework
+    - REST APIs
+    - Docker
+    - Git
+    
+  database:
+    - Oracle Database
+    - SQL Server
+    - DB2
+    - Performance tuning
+    - ETL design
+    
+  cloud_knowledge:
+    - AWS basics
+    - Kubernetes concepts
+    - CI/CD fundamentals
+    - Agile methods
+    - Microservices architecture
+
+achievements:
+  - Successfully migrated 2M lines of legacy code
+  - Maintained 99.99% uptime for critical systems
+  - Saved $2M annually through modernization
+  - Created comprehensive documentation system
+
+certifications:
+  - Oracle Certified Professional
+  - AWS Cloud Practitioner
+  - ITIL Foundation
+
+publications:
+  - "Legacy System Modernization Patterns" - Conference Talk
+  - "Bridging the Gap: Old and New Technologies" - Tech Blog
+
+mentoring:
+  - Created developer mentorship program
+  - Led technical training sessions
+  - Documented best practices
+  - Knowledge transfer initiatives
+
+interests:
+  - Systems architecture
+  - Performance optimization
+  - Mentoring
+  - Continuous learning
