@@ -1,0 +1,78 @@
+resume_type: career_transition
+candidate_name: Sarah Rodriguez
+contact:
+  email: sarah.rodriguez@gmail.com
+  phone: (415) 555-0189
+  linkedin: linkedin.com/in/srodriguez-pm
+  location: San Francisco Bay Area
+
+summary: Strategic marketing leader with 8+ years of experience driving digital transformation and product launches. MBA candidate specializing in Technology Management. Seeking to leverage data-driven decision making, cross-functional leadership, and technical skills in a product management role.
+
+education:
+  - institution: UC Berkeley Extension
+    degree: MBA, Technology Management Focus
+    expected: December 2024
+    highlights:
+      - President, Product Management Club
+      - Capstone: AI-Driven Customer Journey Analysis
+      
+  - institution: University of California, Davis
+    degree: BA Marketing
+    graduation: 2014
+    gpa: 3.8
+    honors: Summa Cum Laude
+
+experience:
+  - role: Senior Marketing Manager
+    company: TechFlow Solutions
+    location: San Francisco, CA
+    duration: 2020 - Present
+    highlights:
+      - Led digital transformation initiative resulting in 40% improved campaign efficiency
+      - Managed $2M marketing automation project, implemented Salesforce Marketing Cloud
+      - Developed data-driven campaign tracking system using SQL and Power BI
+      - Coordinated 5 major product launches with engineering and sales teams
+      - Created automated workflow systems using Zapier, reducing manual tasks by 60%
+
+  - role: Marketing Operations Manager
+    company: GrowthScale Inc
+    location: Oakland, CA
+    duration: 2017 - 2020
+    highlights:
+      - Established marketing operations framework for Series B startup
+      - Led implementation of HubSpot CRM and marketing automation
+      - Increased lead qualification accuracy by 45% through automated scoring
+      - Managed team of 3 marketing specialists and 2 contractors
+
+  - role: Digital Marketing Specialist
+    company: InnovateMedia
+    location: San Jose, CA
+    duration: 2014 - 2017
+    highlights:
+      - Managed B2B social media and content marketing campaigns
+      - Implemented A/B testing framework for landing pages
+      - Created monthly performance dashboards using Google Analytics
+
+technical_skills:
+  data_analysis: [SQL, Power BI, Excel Advanced Analytics]
+  marketing_tech: [Salesforce, HubSpot, Marketo]
+  project_tools: [Jira, Confluence, Asana]
+  programming: [Python (basic), HTML/CSS (fundamental)]
+  automation: [Zapier, Power Automate]
+
+certifications:
+  - Salesforce Administrator (2021)
+  - Google Analytics Professional (2020)
+  - Agile Project Management (PMI-ACP) - In Progress
+  - Python for Data Science (Codecademy) - In Progress
+
+key_achievements:
+  - Reduced campaign analysis time by 70% through automation
+  - Led cross-functional team of 12 for marketing platform migration
+  - Achieved 150% of pipeline generation targets in 2022
+  - Speaker at MarTech West 2023: "Data-Driven Marketing Automation"
+
+languages:
+  - English (Native)
+  - Spanish (Fluent)
+  

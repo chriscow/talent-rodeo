@@ -1,0 +1,94 @@
+resume_type: fullstack_engineer
+candidate_name: Amy Liu
+contact:
+  email: amy.liu@gmail.com
+  phone: (510) 555-0177
+  github: github.com/amyliu-dev
+  location: San Francisco Bay Area
+
+summary: Full Stack Engineer with expertise in building scalable web applications and real-time analytics systems. Strong focus on performance optimization and sustainable engineering practices. Experienced in mentoring and technical leadership.
+
+education:
+  institution: UC Berkeley
+  degree: BS Software Engineering
+  graduation: 2016
+  honors: Magna Cum Laude
+
+experience:
+  - role: Senior Software Engineer
+    company: DataScale Technologies
+    location: San Francisco, CA
+    duration: 2020 - Present
+    highlights:
+      - Led migration from monolith to microservices architecture
+      - Built real-time analytics dashboard processing 1M+ events/day
+      - Improved site performance by 40% through optimization
+      - Mentored 4 junior developers and established coding standards
+      - Designed scalable data pipeline using Go and Protocol Buffers
+
+  - role: Full Stack Engineer
+    company: TechGrowth Inc
+    location: San Francisco, CA
+    duration: 2016 - 2020
+    highlights:
+      - Developed customer-facing features using React and Node.js
+      - Implemented CI/CD pipeline reducing deployment time by 60%
+      - Created automated testing framework improving coverage to 85%
+      - Optimized PostgreSQL queries reducing response time by 50%
+
+technical_skills:
+  frontend:
+    - React/Next.js
+    - Vue/Nuxt
+    - Performance optimization
+    - CSS/SASS/Tailwind
+    - Web vitals optimization
+    
+  backend:
+    - Node.js/Express
+    - Python/FastAPI
+    - Go microservices
+    - gRPC/Protocol Buffers
+    - API design
+
+  infrastructure:
+    - AWS (ECS, Lambda)
+    - GCP (Cloud Run)
+    - Terraform
+    - GitHub Actions
+    - Docker
+
+  data:
+    - PostgreSQL optimization
+    - Redis caching
+    - Time-series databases
+    - Data pipelines
+    - Basic ML integration
+
+achievements:
+  - Reduced p95 latency by 60%
+  - Scaled system to handle 10x traffic
+  - Implemented automated testing reducing bugs by 40%
+  - Led successful migration to microservices
+  - Designed real-time analytics system
+
+publications:
+  - "Scaling React Applications" - Tech Blog
+  - "Microservices Migration Patterns" - Conference Talk
+
+mentorship:
+  - Led internal training sessions
+  - Created engineering onboarding program
+  - Regular speaker at team knowledge sharing
+  - Mentor in Women Who Code
+
+interests:
+  - Distributed systems
+  - Performance optimization
+  - Developer experience
+  - Technical leadership
+  - Sustainable engineering
+
+languages:
+  - English (Native)
+  - Mandarin (Native)

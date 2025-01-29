@@ -1,16 +1,19 @@
 {{define "partial:profile-resume"}}
 <article id="resume">
     {{if hasValue .User.ResumeFilename}}
+
+
     <header>
         <h3>Resume</h3>
     </header>
+    <span style="overflow: clip">
+        <img src="/static/img/check-square.24px.svg" />
+        &nbsp;
+        {{ .User.ResumeFilename }}
+    </span>
     <div class="grid" style="grid-template-columns: 60% 1fr">
-        <span style="overflow: clip">
-            <img src="/static/img/check-square.24px.svg" />
-            &nbsp;
-            {{ .User.ResumeFilename }}
-        </span>
         <button hx-delete="/profile/resume">Reset Resume</button>
+        <button hx-put="/onboarding/restart">Restart Onboarding</button>
     </div>
 
 

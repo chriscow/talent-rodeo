@@ -12,10 +12,11 @@ import (
 )
 
 type PromptHeader struct {
-	Name    string `yaml:"name,omitempty"`
-	Version string `yaml:"version,omitempty"`
-	Format  string `yaml:"format,omitempty"`
-	SHA256  string `yaml:"sha256,omitempty"`
+	Name    string         `yaml:"name,omitempty"`
+	Version string         `yaml:"version,omitempty"`
+	Format  string         `yaml:"format,omitempty"`
+	SHA256  string         `yaml:"sha256,omitempty"`
+	Extra   map[string]any `yaml:",inline"`
 }
 
 type Prompt struct {

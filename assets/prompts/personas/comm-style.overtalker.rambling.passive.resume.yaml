@@ -1,0 +1,98 @@
+resume_type: frontend_specialist
+candidate_name: David Thompson
+contact:
+  email: david.thompson@gmail.com
+  phone: (503) 555-0144
+  github: github.com/david-codes
+  blog: techthoughts.dev
+  location: Portland, OR
+
+summary: Self-taught Full Stack JavaScript Developer with 10+ years of experience building modern web applications. Open source contributor and technical blogger. Specializing in React ecosystem, performance optimization, and developer tools.
+
+experience:
+  - role: Senior Frontend Engineer
+    company: WebScale Commerce
+    location: Remote
+    duration: 2019 - Present
+    highlights:
+      - Built scalable e-commerce platform serving 100K+ daily users
+      - Reduced page load times by 60% through code splitting and SSR
+      - Led migration from Redux to Zustand, reducing bundle size by 30%
+      - Mentored junior developers and established frontend best practices
+      - Created internal component library used across 5 product teams
+
+  - role: JavaScript Developer
+    company: TechStart Studios
+    location: Portland, OR
+    duration: 2016 - 2019
+    highlights:
+      - Developed real-time collaboration features using WebSocket
+      - Implemented PWA capabilities improving mobile engagement by 45%
+      - Created viral animation library with 50K+ GitHub stars
+      - Built custom Webpack plugins for optimization
+
+  - role: Frontend Developer
+    company: Digital Agency Co
+    location: Portland, OR
+    duration: 2013 - 2016
+    highlights:
+      - Built responsive websites for major retail clients
+      - Implemented A/B testing framework
+      - Reduced CSS bundle size by 70% using CSS-in-JS
+
+technical_skills:
+  frontend:
+    - React, Next.js, Vue.js
+    - TypeScript/JavaScript
+    - CSS-in-JS, Styled Components
+    - Redux, Zustand
+    - Web Components
+    - PWAs and Service Workers
+    
+  backend:
+    - Node.js/Express
+    - MongoDB
+    - Firebase/Firestore
+    - Redis
+    - REST/GraphQL APIs
+
+  testing:
+    - Jest
+    - Cypress
+    - React Testing Library
+    - Playwright
+
+  devops:
+    - GitHub Actions
+    - CircleCI
+    - Docker
+    - AWS (Lambda, S3, CloudFront)
+    - Vercel, Netlify
+
+open_source:
+  - name: jest-animation-mock
+    stars: 50K+
+    description: Animation testing utilities for Jest
+
+  - name: react-performance-tools
+    stars: 2K+
+    description: Chrome extension for React performance debugging
+
+speaking:
+  - ReactConf 2023: "State Management Evolution"
+  - JSConf 2022: "Building Viral JavaScript Libraries"
+
+writing:
+  - Technical blog with 5K+ monthly readers
+  - Contributing writer for JavaScript Weekly
+  - Author of "Modern React Patterns" course
+
+community:
+  - Mentor on CodeCamp platform (500+ sessions)
+  - Local JavaScript meetup organizer
+  - Regular open source contributor
+
+certifications:
+  - AWS Cloud Practitioner
+  - MongoDB Developer
+  

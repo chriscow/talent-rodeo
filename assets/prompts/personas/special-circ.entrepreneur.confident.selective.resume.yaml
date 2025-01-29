@@ -1,0 +1,93 @@
+resume_type: founder_transition
+candidate_name: Rachel Mitchell
+contact:
+  email: rachel.mitchell@gmail.com
+  phone: (206) 555-0122
+  linkedin: linkedin.com/in/rmitchell-tech
+  location: Seattle, WA
+
+summary: Technical Founder and Engineering Leader with proven track record of building and scaling B2B SaaS products. Successfully led startup from inception to acquisition. Expertise in modern cloud architecture, team building, and product development.
+
+education:
+  institution: University of Washington
+  degree: BA Computer Science
+  graduation: 2012
+
+experience:
+  - role: Founder & CTO
+    company: DataFlow Technologies (Acquired)
+    location: Seattle, WA
+    duration: 2020 - 2023
+    highlights:
+      - Founded and scaled B2B SaaS platform to $5M ARR
+      - Grew engineering team from 2 to 15 across 3 countries
+      - Architected scalable microservices platform using Go
+      - Led successful exit through strategic acquisition
+      - Managed product roadmap and technical strategy
+      - Built relationships with enterprise clients
+
+  - role: Lead Software Engineer
+    company: CloudScale Systems
+    location: Seattle, WA
+    duration: 2016 - 2020
+    highlights:
+      - Led development of cloud-native payment processing system
+      - Managed team of 6 engineers
+      - Reduced deployment cycle from weeks to days
+      - Implemented OAuth2/OIDC authentication system
+
+  - role: Full Stack Developer
+    company: TechStart Solutions
+    location: Seattle, WA
+    duration: 2012 - 2016
+    highlights:
+      - Developed customer-facing features for SaaS platform
+      - Improved test coverage from 40% to 90%
+      - Mentored junior developers
+
+technical_skills:
+  frontend:
+    - React/Next.js
+    - TypeScript
+    - Cypress E2E testing
+    - Performance optimization
+
+  backend:
+    - Go microservices
+    - PostgreSQL
+    - Redis caching
+    - gRPC/Protocol Buffers
+
+  cloud:
+    - Google Cloud Platform
+      - Cloud Run
+      - Cloud SQL
+      - Pub/Sub
+      - Cloud Storage
+    - Infrastructure as Code
+    - CI/CD (GitHub Actions)
+
+  product:
+    - Stripe Integration
+    - OAuth2/OIDC
+    - Datadog monitoring
+    - API design
+
+leadership:
+  - Built and led remote engineering team
+  - Managed $1M+ technical budget
+  - Established engineering processes
+  - Created technical hiring pipeline
+
+speaking:
+  - GopherCon 2022: "Scaling Go Microservices"
+  - Women in Tech Summit 2023: "From Engineer to Founder"
+
+patents:
+  - US11789012: Method for Distributed Data Processing
+
+interests:
+  - Technical mentorship
+  - Open source contribution
+  - Product strategy
+  - Engineering culture

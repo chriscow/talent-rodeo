@@ -1,0 +1,99 @@
+resume_type: phd_researcher
+candidate_name: Dr. Elena Kovacs
+contact:
+  email: elena.kovacs@gmail.com
+  phone: (617) 555-0144
+  linkedin: linkedin.com/in/dr-kovacs
+  google_scholar: scholar.google.com/citations?user=ekovacs
+  location: Cambridge, MA
+
+summary: Computational Biologist with PhD from MIT specializing in protein structure prediction and molecular dynamics. Published researcher with expertise in high-performance computing, deep learning, and scientific software development. Seeking industry research position.
+
+education:
+  - institution: Massachusetts Institute of Technology
+    degree: PhD Computational Biology
+    duration: 2019 - 2023
+    thesis: "Novel Deep Learning Approaches for Protein Structure Prediction"
+    advisor: Prof. Sarah Chen
+    
+  - institution: ETH Zurich
+    degree: MS Bioinformatics
+    duration: 2017 - 2019
+    thesis: "GPU-Accelerated Molecular Dynamics Simulations"
+    
+  - institution: University of Vienna
+    degree: BS Mathematics
+    duration: 2013 - 2017
+    honors: Summa Cum Laude
+
+research_experience:
+  - role: Doctoral Researcher
+    institution: MIT Computational Biology Lab
+    duration: 2019 - 2023
+    highlights:
+      - Developed novel protein structure prediction algorithm
+      - Led team of 3 PhD students and 2 undergraduate researchers
+      - Published 5 papers in Nature Methods and Bioinformatics
+      - Reduced prediction time by 60% using GPU optimization
+      - Collaborated with Pfizer and Moderna research teams
+
+  - role: Research Assistant
+    institution: ETH Zurich Bioinformatics Group
+    duration: 2017 - 2019
+    highlights:
+      - Implemented CUDA-accelerated molecular dynamics
+      - Optimized parallel computing workflows
+      - Created visualization tools for protein structures
+
+publications:
+  first_author:
+    - "Deep Learning Approaches to Protein Structure Prediction" - Nature Methods 2023
+    - "GPU-Accelerated Molecular Dynamics at Scale" - Bioinformatics 2022
+    - "Novel Loss Functions for Protein Structure Prediction" - ISMB 2021
+  
+  contributing_author:
+    - "Advances in Computational Drug Discovery" - Nature Biotech 2023
+    - "Distributed Computing in Molecular Biology" - Bioinformatics 2022
+
+technical_skills:
+  scientific_computing:
+    - Python (NumPy, SciPy, BioPython)
+    - CUDA GPU programming
+    - MPI parallel computing
+    - R statistical analysis
+    - Julia numerical computing
+    
+  infrastructure:
+    - AWS HPC clusters
+    - Docker/Singularity
+    - Git/CI/CD
+    - HPC cluster management
+    
+  machine_learning:
+    - PyTorch
+    - Scientific visualization
+    - Custom loss functions
+    - Hyperparameter optimization
+    
+  domain_specific:
+    - Molecular dynamics
+    - Protein structure prediction
+    - Computational chemistry
+    - Bioinformatics pipelines
+
+grants_and_awards:
+  - NSF Graduate Research Fellowship
+  - MIT Presidential Fellowship
+  - Best Paper Award, ISMB 2022
+
+teaching:
+  - Instructor, Computational Biology Workshop Series
+  - Teaching Assistant, Machine Learning for Bioinformatics
+  - Mentor to 5 undergraduate researchers
+
+languages:
+  - English (Fluent)
+  - German (Native)
+  - Hungarian (Native)
+  - Python, R, Julia (Expert)
+  - C++, CUDA (Advanced)

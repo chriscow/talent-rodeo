@@ -1,0 +1,97 @@
+resume_type: data_scientist
+candidate_name: Wei Zhang
+contact:
+  email: wei.zhang@gmail.com
+  phone: +1 (617) 555-0166
+  linkedin: linkedin.com/in/weizhang-ds
+  github: github.com/wei-zhang-ml
+  location: Boston, MA
+
+summary: Data Scientist with MS in Data Science from TU Munich specializing in machine learning and predictive analytics. Published researcher in computer vision and anomaly detection. Seeking roles in machine learning or data science with visa sponsorship (OPT eligible).
+
+education:
+  - institution: Technical University of Munich
+    degree: MS Data Science
+    graduation: 2023
+    gpa: 3.9
+    thesis: "Deep Learning Approaches for Industrial Anomaly Detection"
+    
+  - institution: Tsinghua University
+    degree: BS Computer Science
+    graduation: 2020
+    gpa: 3.95
+
+experience:
+  - role: Research Assistant
+    institution: TU Munich Computer Vision Lab
+    location: Munich, Germany
+    duration: 2021 - 2023
+    highlights:
+      - Published paper on anomaly detection in ICML 2023
+      - Developed novel computer vision algorithms using PyTorch
+      - Managed GPU cluster for research group
+      - Mentored junior researchers in deep learning
+
+  - role: Data Science Intern
+    company: AutoTech GmbH
+    location: Stuttgart, Germany
+    duration: Summer 2022
+    highlights:
+      - Built predictive maintenance system for manufacturing line
+      - Reduced equipment downtime by 35% using ML models
+      - Implemented real-time anomaly detection pipeline
+      - Created interactive Tableau dashboards for stakeholders
+
+  - role: Machine Learning Engineer Intern
+    company: Tech Solutions Co
+    location: Beijing, China
+    duration: 2019 - 2020
+    highlights:
+      - Developed recommendation system using collaborative filtering
+      - Improved click-through rate by 25%
+      - Optimized model training pipeline reducing time by 40%
+
+technical_skills:
+  machine_learning:
+    - PyTorch, TensorFlow
+    - scikit-learn
+    - Computer Vision
+    - Natural Language Processing
+    - Anomaly Detection
+    
+  data_engineering:
+    - Apache Spark
+    - Hadoop
+    - PostgreSQL
+    - Snowflake
+    - ETL Pipeline Design
+
+  cloud_platforms:
+    - AWS SageMaker
+    - Google Vertex AI
+    - MLflow
+    - DVC
+    - Docker
+
+  programming:
+    - Python (pandas, NumPy)
+    - R (tidyverse, caret)
+    - SQL
+    - Git
+
+  visualization:
+    - Tableau
+    - D3.js
+    - ggplot2
+    - Plotly
+
+publications:
+  - "Efficient Anomaly Detection in Manufacturing Systems Using Deep Learning" - ICML 2023
+  - "Real-time Computer Vision for Quality Control" - Under Review, ICLR 2024
+
+languages:
+  - Chinese (Native)
+  - English (Professional)
+  - German (Professional)
+
+visa_status: F-1 Student (OPT Eligible)
