@@ -1,0 +1,84 @@
+resume_type: senior_developer
+candidate_name: James Foster
+contact:
+  email: james.foster@gmail.com
+  phone: (512) 555-0133
+  linkedin: linkedin.com/in/jfoster-dev
+  location: Austin, TX
+
+summary: Senior Software Engineer with 15+ years of experience in distributed systems and cloud architecture. Expert in microservices, containerization, and high-scale applications. Seeking new opportunities for technical growth and leadership.
+
+education:
+  institution: Texas A&M University
+  degree: BS Software Engineering
+  graduation: 2008
+
+experience:
+  - role: Senior Software Engineer
+    company: Enterprise Solutions Corp
+    location: Austin, TX
+    duration: 2019 - Present
+    highlights:
+      - Led migration of monolithic application to microservices architecture
+      - Managed team of 8 developers across multiple project streams
+      - Scaled system to handle 10M+ daily active users
+      - Reduced infrastructure costs by 35% through optimization
+      - Implemented event-driven architecture using Kafka
+
+  - role: Lead Developer
+    company: TechScale Systems
+    location: Austin, TX
+    duration: 2015 - 2019
+    highlights:
+      - Designed and implemented distributed caching system
+      - Led adoption of container orchestration with Kubernetes
+      - Built CI/CD pipelines reducing deployment time by 70%
+      - Mentored junior developers in cloud-native practices
+
+  - role: Software Engineer
+    company: DataCore Technologies
+    location: Houston, TX
+    duration: 2011 - 2015
+    highlights:
+      - Developed high-throughput data processing pipeline
+      - Implemented real-time analytics dashboard
+      - Reduced API response times by 60%
+
+technical_skills:
+  backend:
+    - Java Spring Boot
+    - TypeScript/Node.js
+    - GraphQL API design
+    - Microservices architecture
+
+  cloud:
+    - AWS (ECS, EKS, Lambda)
+    - Kubernetes cluster management
+    - Terraform infrastructure as code
+    - Container orchestration
+
+  data:
+    - Kafka event streaming
+    - DynamoDB
+    - MongoDB
+    - Redis caching
+    - Elasticsearch/OpenSearch
+
+  devops:
+    - CI/CD pipeline design
+    - Infrastructure automation
+    - Performance optimization
+    - Monitoring and alerting
+
+achievements:
+  - Reduced deployment failures by 90%
+  - Implemented zero-downtime deployment
+  - Designed scalable microservices platform
+  - Led successful cloud migration project
+
+certifications:
+  - AWS Solutions Architect Professional
+  - Certified Kubernetes Administrator
+  - Java 11 Professional Developer
+
+salary_requirements: $160K-190K base + equity

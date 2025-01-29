@@ -1,0 +1,99 @@
+resume_type: senior_technical_expert
+candidate_name: Michael Patel
+contact:
+  email: michael.patel@gmail.com
+  phone: (650) 555-0177
+  linkedin: linkedin.com/in/mpatel-arch
+  github: github.com/mpatel-systems
+  location: San Francisco Bay Area
+
+summary: Principal Systems Architect with 20+ years of experience designing and implementing large-scale distributed systems. Expert in cloud-native architectures, platform engineering, and technical leadership. Regular speaker at major industry conferences.
+
+education:
+  institution: Stanford University
+  degree: MS Computer Engineering
+  graduation: 2003
+  focus: Distributed Systems
+
+experience:
+  - role: Principal Cloud Architect
+    company: Global Financial Technologies
+    location: San Francisco, CA
+    duration: 2018 - Present
+    highlights:
+      - Led $50M cloud transformation initiative for mission-critical trading systems
+      - Built and led platform engineering team of 25 engineers across 3 continents
+      - Reduced infrastructure costs by 40% through optimization and automation
+      - Implemented zero-trust security architecture for multi-region deployment
+      - Designed hybrid cloud strategy handling 10M+ daily transactions
+
+  - role: Senior Technical Architect
+    company: CloudScale Systems
+    location: Mountain View, CA
+    duration: 2014 - 2018
+    highlights:
+      - Architected cloud-native platform serving 200+ microservices
+      - Established SRE practice and SLO framework
+      - Reduced service deployment time from weeks to hours
+      - Led adoption of service mesh and container orchestration
+
+  - role: Lead Systems Engineer
+    company: TechForge Solutions
+    location: San Jose, CA
+    duration: 2010 - 2014
+    highlights:
+      - Designed high-throughput message processing system
+      - Led migration from monolith to microservices architecture
+      - Implemented continuous deployment pipeline
+
+technical_expertise:
+  architecture:
+    - Distributed systems design
+    - Microservices architecture
+    - Event-driven systems
+    - High-availability patterns
+    - System scalability
+
+  cloud_platforms:
+    - AWS (EKS, ECS, Lambda, Step Functions)
+    - GCP (GKE, Cloud Run)
+    - Multi-cloud strategy
+    - Cost optimization
+
+  infrastructure:
+    - Kubernetes platform engineering
+    - Service mesh (Istio, Consul)
+    - Terraform, CloudFormation
+    - GitOps workflows
+
+  observability:
+    - Prometheus
+    - Grafana
+    - OpenTelemetry
+    - ELK Stack
+
+  security:
+    - Zero Trust Architecture
+    - OAuth2/OIDC
+    - Secret management
+    - Compliance frameworks
+
+  languages:
+    - Go
+    - Python
+    - Java
+    - Shell scripting
+
+speaking_engagements:
+  - KubeCon North America 2023: "Scaling Platform Teams"
+  - AWS re:Invent 2022: "Enterprise Migration Patterns"
+  - HashiConf 2023: "Zero Trust in Practice"
+
+patents:
+  - US10123456: Distributed System for Scale-out Computing
+  - US10789012: Method for Secure Service Mesh Communication
+
+certifications:
+  - AWS Solutions Architect Professional
+  - CKA (Certified Kubernetes Administrator)
+  - CKAD (Certified Kubernetes Application Developer)

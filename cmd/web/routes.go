@@ -40,6 +40,8 @@ func (app *application) routes() http.Handler {
 			mux.HandleFunc("/profile", app.profile, "GET", "POST")
 			mux.HandleFunc("/profile/resume", app.resetResume, "DELETE")
 
+			mux.HandleFunc("/onboarding/restart", app.restartOnboarding, "PUT")
+
 			// mux.HandleFunc("/resume", app.handleResume, "GET", "POST")
 			mux.HandleFunc("/logout", app.logout, "POST")
 		})

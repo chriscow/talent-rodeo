@@ -1,0 +1,91 @@
+resume_type: senior_fullstack
+candidate_name: Marcus Wright
+contact:
+  email: marcus.wright@gmail.com
+  phone: (415) 555-0155
+  github: github.com/mwright-dev
+  location: San Francisco Bay Area
+
+summary: Senior Full Stack Engineer with 15 years of experience building high-scale web applications. Tech lead experienced in modern frontend frameworks, backend microservices, and cloud architecture. AWS Certified Solutions Architect with proven track record of reducing infrastructure costs.
+
+education:
+  institution: State University
+  degree: BS Computer Science
+  graduation: 2009
+
+experience:
+  - role: Tech Lead
+    company: ScaleCommerce Inc
+    location: San Francisco, CA
+    duration: 2020 - Present
+    compensation: $165K base + equity
+    highlights:
+      - Led team of 6 developers for Series B startup
+      - Built e-commerce platform handling $50M+ annual GMV
+      - Reduced AWS infrastructure costs by 35%
+      - Implemented microservices architecture using Go
+      - Optimized PostgreSQL performance for 10x growth
+
+  - role: Senior Software Engineer
+    company: Enterprise Systems Co
+    location: San Francisco, CA
+    duration: 2016 - 2020
+    highlights:
+      - Designed distributed caching system with Redis
+      - Led migration from monolith to microservices
+      - Implemented GraphQL API with Apollo
+      - Reduced deployment time by 70%
+
+  - role: Full Stack Developer
+    company: TechStart Solutions
+    location: San Jose, CA 
+    duration: 2012 - 2016
+    highlights:
+      - Built high-traffic consumer web application
+      - Optimized frontend performance
+      - Mentored junior developers
+
+technical_skills:
+  frontend:
+    - React/Vue/Angular
+    - TypeScript
+    - GraphQL/Apollo
+    - Webpack/Vite
+    - Performance optimization
+
+  backend:
+    - Node.js/Express
+    - Python (Django, FastAPI)
+    - Java Spring Boot
+    - Go microservices
+    - API design
+
+  database:
+    - PostgreSQL optimization
+    - MongoDB
+    - Redis caching
+    - Elasticsearch
+    - Query performance
+
+  devops:
+    - AWS (certified)
+    - Kubernetes/Docker
+    - Terraform/Ansible
+    - CI/CD pipelines
+    - Infrastructure optimization
+
+achievements:
+  - Scaled platform from 1K to 100K daily users
+  - Reduced page load time by 60%
+  - Cut infrastructure costs by $300K annually
+  - Led successful cloud migration
+
+certifications:
+  - AWS Solutions Architect Professional
+  - Kubernetes Administrator (CKA)
+  - MongoDB Professional Developer
+
+patents:
+  - US10234567: Method for Distributed Caching
+
+salary_requirements: $200K+ base + equity

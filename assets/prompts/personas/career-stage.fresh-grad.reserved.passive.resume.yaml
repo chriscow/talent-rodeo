@@ -1,0 +1,79 @@
+resume_type: entry_level
+candidate_name: Alex Chen
+contact:
+  email: alex.chen@gmail.com
+  phone: (206) 555-0123
+  linkedin: linkedin.com/in/alexchen23
+  github: github.com/alexchen-dev
+  location: Seattle, WA
+
+summary: Recent Computer Science graduate from the University of Washington with experience in full-stack development, machine learning, and test automation. Strong foundation in Python and Java development with practical experience through academic projects and internship.
+
+education:
+  institution: University of Washington
+  degree: Bachelor of Science in Computer Science
+  graduation: June 2023
+  gpa: 3.7
+  honors: Dean's List (2021-2023)
+
+experience:
+  - role: Software QA Engineering Intern
+    company: TechStart Solutions
+    location: Seattle, WA
+    duration: June 2023 - September 2023
+    highlights:
+      - Developed and maintained automated test suites using Selenium and Python
+      - Improved test coverage by 40% for core product features
+      - Collaborated with development team to identify and document bugs
+      - Participated in agile development process and sprint planning
+
+  - role: Teaching Assistant - Data Structures
+    institution: University of Washington
+    location: Seattle, WA
+    duration: January 2023 - June 2023
+    highlights:
+      - Assisted professor in teaching fundamental CS concepts to 120+ students
+      - Led weekly lab sessions and office hours
+      - Graded assignments and provided detailed feedback
+      - Developed supplementary learning materials
+
+projects:
+  - name: Student Retention Prediction Model
+    type: Capstone Project
+    duration: September 2022 - June 2023
+    technologies: [Python, scikit-learn, pandas, PostgreSQL]
+    highlights:
+      - Led team of 4 to develop ML model predicting student dropout risk
+      - Achieved 85% prediction accuracy on test dataset
+      - Implemented data pipeline for processing student records
+      - Presented findings to faculty panel and received excellence award
+
+  - name: Real-time Chat Application
+    type: Hackathon Winner
+    duration: April 2023
+    technologies: [React, Node.js, Socket.io, MongoDB]
+    highlights:
+      - Built full-stack chat application in 48 hours
+      - Implemented real-time messaging and user presence
+      - Won "Best Technical Implementation" award
+
+technical_skills:
+  languages: [Python, Java, JavaScript, HTML/CSS, SQL]
+  frameworks: [Django, FastAPI, Spring Boot, React]
+  tools: [Git, Docker, AWS (EC2, S3), GitHub Actions]
+  databases: [PostgreSQL, MongoDB]
+  testing: [pytest, JUnit, Selenium]
+
+certifications:
+  - AWS Cloud Practitioner (In Progress)
+  - MongoDB Basics
+
+interests:
+  - Machine Learning and Data Science
+  - Cloud Architecture
+  - Open Source Development
+  - Technical Writing
+
+languages:
+  - English (Native)
+  - Mandarin Chinese (Conversational)

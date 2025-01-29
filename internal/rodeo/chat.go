@@ -92,7 +92,7 @@ func autoChatOld(tc minds.ThreadContext, maxTurns int) error {
 
 	fmt.Println("Conversation")
 	fmt.Println("---------------------")
-	tc = tc.AppendMessages(minds.Message{Role: minds.RoleUser, Content: "Hello?"})
+	tc.AppendMessages(minds.Message{Role: minds.RoleUser, Content: "Hello?"})
 
 	for maxTurns > 0 {
 		maxTurns--
@@ -135,7 +135,7 @@ func autoChatOld(tc minds.ThreadContext, maxTurns int) error {
 		}
 
 		fmt.Printf("C > %s\n", yellow(candidateResp.String()))
-		tc = tc.AppendMessages(minds.Message{Role: minds.RoleUser, Content: candidateResp.String()})
+		tc.AppendMessages(minds.Message{Role: minds.RoleUser, Content: candidateResp.String()})
 	}
 
 	// Marshal the state to JSON and print it to the console formatted pretty
@@ -293,7 +293,7 @@ func autoChatWorkflow(tc minds.ThreadContext, wf block.Block, maxTurns int) erro
 
 		// The conversation so far is in tc.Messages().
 		// Append the step's Instruction as a system message so the Recruiter has context:
-		tc = tc.AppendMessages(minds.Message{
+		tc.AppendMessages(minds.Message{
 			Role:    minds.RoleSystem,
 			Content: instruction,
 		})
@@ -324,7 +324,7 @@ func autoChatWorkflow(tc minds.ThreadContext, wf block.Block, maxTurns int) erro
 		fmt.Printf("R > %s\n", cyan(update.Response))
 
 		// Add the recruiter’s final text to the conversation as an assistant message
-		tc = tc.AppendMessages(minds.Message{Role: minds.RoleAssistant, Content: update.Response})
+		tc.AppendMessages(minds.Message{Role: minds.RoleAssistant, Content: update.Response})
 
 		// 2) ---- CANDIDATE LLM: Simulate user’s reply
 		userResp, err := candidate.GenerateContent(ctx,
@@ -334,7 +334,7 @@ func autoChatWorkflow(tc minds.ThreadContext, wf block.Block, maxTurns int) erro
 		}
 
 		fmt.Printf("C > %s\n", yellow(userResp.String()))
-		tc = tc.AppendMessages(minds.Message{Role: minds.RoleUser, Content: userResp.String()})
+		tc.AppendMessages(minds.Message{Role: minds.RoleUser, Content: userResp.String()})
 
 		// 3) ---- DETERMINE NEXT STEP
 		// Evaluate the conditions for each destination in step.Destinations
