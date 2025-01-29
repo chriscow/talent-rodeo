@@ -121,7 +121,7 @@ func eval(ctx context.Context, recruiterPrompt, personaPrompt utils.Prompt, conv
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	flow.Use(middleware.Logging("conversation", middleware.WithLogger(logger)))
 
-	turn := handlers.Sequential(conversationID+"-seq", recruiter, reverseRoles("recruiter"), candidate, reverseRoles("candidate"))
+	turn := handlers.Sequential(conversationID+"-seq", recruiter, reverseRoles(), candidate, reverseRoles())
 
 	loop := handlers.For(conversationID+"-loop", 50, turn, func(tc minds.ThreadContext, iteration int) bool {
 		return !shouldEndCall
