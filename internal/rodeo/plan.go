@@ -453,7 +453,7 @@ func refinePrompt(ctx context.Context, prompt string, status StatusSender) (stri
 		Role: minds.RoleUser, Content: "Analyze the following draft LLM prompt: ```" + prompt + "```",
 	})
 
-	pipeline := handlers.Sequential("conversation-refinement",
+	pipeline := handlers.NewSequence("conversation-refinement",
 		iteratePrompt(llm, "rewriting", "Rewrite the prompt for clarity and effectiveness", status),
 		iteratePrompt(llm, "identify improvements in", "Identify potential improvements or additions", status),
 		iteratePrompt(llm, "refining", "Refine the prompt based on identified improvements", status),
