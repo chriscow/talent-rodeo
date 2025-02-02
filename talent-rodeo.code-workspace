@@ -1,0 +1,15 @@
+{
+	"folders": [
+		{
+			"path": "../../.."
+		},
+		{
+			"path": "../../../../thoughtnet/minds"
+		}
+	],
+    "settings": {
+        "emmet.includeLanguages": {
+            "templ": "html"
+        }
+    }
+}

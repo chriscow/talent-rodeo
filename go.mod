@@ -4,11 +4,11 @@ go 1.23.3
 
 toolchain go1.23.4
 
-replace github.com/chriscow/minds => ../thoughtnet/minds
-
 replace github.com/chriscow/minds/providers/openai => ../thoughtnet/minds/providers/openai
 
 replace github.com/chriscow/minds/providers/gemini => ../thoughtnet/minds/providers/gemini
+
+replace github.com/chriscow/minds => ../thoughtnet/minds
 
 replace github.com/chriscow/minds/tools => ../thoughtnet/minds/tools
 
@@ -17,8 +17,9 @@ replace github.com/WqyJh/go-openai-realtime => /Users/chris/github.com/go-openai
 require (
 	github.com/WqyJh/go-openai-realtime v0.0.0-00010101000000-000000000000
 	github.com/alexedwards/flow v0.1.0
-	github.com/chriscow/minds/providers/gemini v0.0.5
-	github.com/chriscow/minds/providers/openai v0.0.5
+	github.com/chriscow/minds v0.0.7
+	github.com/chriscow/minds/providers/gemini v0.0.0-00010101000000-000000000000
+	github.com/chriscow/minds/providers/openai v0.0.0-00010101000000-000000000000
 	github.com/delaneyj/toolbelt v0.3.15
 	github.com/fatih/color v1.16.0
 	github.com/fumiama/go-docx v0.0.0-20241231153056-9f8f327c74a5
@@ -75,7 +76,6 @@ require (
 	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/chewxy/math32 v1.11.1 // indirect
-	github.com/chriscow/minds v0.0.5
 	github.com/coder/websocket v1.8.12 // indirect
 	github.com/delaneyj/gostar v0.8.0 // indirect
 	github.com/denisbrodbeck/machineid v1.0.1 // indirect
