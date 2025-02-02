@@ -34,6 +34,7 @@ type User struct {
 	ResumeFilename   *string `db:"resume_filename"`
 	FullResume       *string `db:"full_resume"`
 	SummarizedResume *string `db:"summarized_resume"`
+	OnboardingStep   string  `db:"onboarding_step"`
 }
 
 type UserKeyword struct {

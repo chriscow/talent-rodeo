@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime/debug"
+	"strings"
 	"talent-rodeo/internal/response"
 )
 
@@ -16,7 +17,14 @@ func (app *application) reportServerError(r *http.Request, err error) {
 	)
 
 	requestAttrs := slog.Group("request", "method", method, "url", url)
-	app.logger.Error(message, requestAttrs, "trace", trace)
+	app.logger.Error(message, requestAttrs)
+
+	// Log each line of the stack trace separately
+	for _, line := range strings.Split(trace, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			app.logger.Error("stack trace", "line", line)
+		}
+	}
 
 	if app.config.notifications.email != "" {
 		data := app.newEmailData()
