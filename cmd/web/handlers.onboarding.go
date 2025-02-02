@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"talent-rodeo/internal/database"
+	"talent-rodeo/internal/response"
 	"talent-rodeo/internal/rodeo"
 )
 
@@ -19,7 +20,10 @@ func (app *application) restartOnboarding(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	http.Redirect(w, r, "/profile", http.StatusSeeOther)
+	data := app.newTemplateData(r)
+	if err := response.NamedTemplateWithHeaders(w, http.StatusOK, data, nil, "partial:profile-resume", "partials/*.html"); err != nil {
+		app.serverError(w, r, fmt.Errorf("restartOnboarding: failed to render template: %w", err))
+	}
 }
 
 func (app *application) startOnboarding(r *http.Request, user *database.User, resumeText string) error {

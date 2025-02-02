@@ -13,7 +13,7 @@
     </span>
     <div class="grid" style="grid-template-columns: 60% 1fr">
         <button hx-delete="/profile/resume">Reset Resume</button>
-        <button hx-put="/onboarding/restart">Restart Onboarding</button>
+        <button hx-put="/onboarding/restart" hx-target="#resume" hx-swap="outerHTML">Restart Onboarding</button>
     </div>
 
 
