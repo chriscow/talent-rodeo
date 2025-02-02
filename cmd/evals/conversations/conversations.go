@@ -3,29 +3,36 @@ package conversations
 import (
 	"bytes"
 	"context"
+	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
-	"log/slog"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"talent-rodeo/assets"
 	"talent-rodeo/cmd/evals/store"
+	"talent-rodeo/internal/funcs"
 	"talent-rodeo/internal/utils"
 	"time"
 
 	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/handlers"
-	"github.com/chriscow/minds/middleware"
 	"github.com/chriscow/minds/providers/openai"
+	"github.com/fatih/color"
 	"github.com/google/uuid"
+)
+
+var (
+	red    = color.New(color.FgRed)
+	green  = color.New(color.FgGreen)
+	yellow = color.New(color.FgYellow)
 )
 
 // RunConversations generates conversations between recruiter and multiple personas
 func RunConversations(ctx context.Context) {
 	// Load recruiter prompt
-	recruiterPrompt, err := utils.CreateTemplate("prompts/recruiter.system.004.txt")
+	recruiterPrompt, err := utils.CreateTemplate("prompts/recruiter.system.005.txt")
 	if err != nil {
 		log.Fatal("Failed to load recruiter prompt:", err)
 	}
@@ -58,6 +65,7 @@ func RunConversations(ctx context.Context) {
 
 		go eval(ctx, recruiterPrompt, personaPrompt, conversationID, runID, errCh, &wg)
 		wg.Wait()
+		break
 	}
 
 	close(errCh)
@@ -68,27 +76,100 @@ func RunConversations(ctx context.Context) {
 	}
 }
 
+type evalConfig struct {
+	recruiterPrompt utils.Prompt
+	personaPrompt   utils.Prompt
+	conversationID  string
+	runID           string
+}
+
 func eval(ctx context.Context, recruiterPrompt, personaPrompt utils.Prompt, conversationID, runID string, errCh chan error, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	resumeFilename := personaPrompt.Header.Extra["filename"].(string) + ".resume.yaml"
-	resume, err := assets.EmbeddedFiles.ReadFile(filepath.Join("prompts/personas", resumeFilename))
+	cfg := evalConfig{
+		recruiterPrompt: recruiterPrompt,
+		personaPrompt:   personaPrompt,
+		conversationID:  conversationID,
+		runID:           runID,
+	}
+
+	// Load and prepare the resume
+	resume, err := loadResume(cfg.personaPrompt)
 	if err != nil {
-		errCh <- fmt.Errorf("Error loading resume: %w", err)
+		errCh <- fmt.Errorf("failed to load resume: %w", err)
 		return
 	}
 
+	// Create the providers
+	recruiter, candidate, candidateName, shouldEndCall, systemPrompt, providerName, model, err := createProviders(cfg, resume)
+	if err != nil {
+		errCh <- fmt.Errorf("failed to create providers: %w", err)
+		return
+	}
+
+	// Initialize the database
+	db, err := store.InitDB()
+	if err != nil {
+		errCh <- fmt.Errorf("failed to initialize database: %w", err)
+		return
+	}
+	defer db.Close()
+
+	// Save initial conversation record
+	if err := store.SaveConversation(cfg.personaPrompt.Header, cfg.conversationID, cfg.runID, providerName, model); err != nil {
+		errCh <- fmt.Errorf("failed to save conversation: %w", err)
+		return
+	}
+
+	// Create and configure the conversation handler
+	handler, err := createConversationHandler(cfg, recruiter, candidate, shouldEndCall, systemPrompt, db)
+	if err != nil {
+		errCh <- fmt.Errorf("failed to create conversation handler: %w", err)
+		return
+	}
+
+	// Run the conversation
+	if err := runConversation(ctx, handler, cfg, candidateName); err != nil {
+		errCh <- fmt.Errorf("failed to run conversation: %w", err)
+		return
+	}
+
+	fmt.Println("✅ Generated conversation for ", cfg.conversationID)
+}
+
+func loadResume(personaPrompt utils.Prompt) (string, error) {
+	resumeFilename := personaPrompt.Header.Extra["filename"].(string) + ".resume.yaml"
+	resume, err := assets.EmbeddedFiles.ReadFile(filepath.Join("prompts/personas", resumeFilename))
+	if err != nil {
+		return "", fmt.Errorf("failed to read resume file: %w", err)
+	}
+	return string(resume), nil
+}
+
+func createProviders(cfg evalConfig, resume string) (recruiter, candidate *openai.Provider, candidateName string, shouldEndCall *bool, systemPrompt string, providerName, model string, err error) {
+	// Prepare recruiter prompt with resume
 	recuiterBuffer := bytes.Buffer{}
 	data := struct {
 		Resume string
 	}{
-		Resume: string(resume),
+		Resume: resume,
 	}
-	recruiterPrompt.Template.Execute(&recuiterBuffer, data)
+	cfg.recruiterPrompt.Template.Execute(&recuiterBuffer, data)
+	systemPrompt = recuiterBuffer.String()
 
-	shouldEndCall := false
-	endCall := minds.CallableFunc(func(_ context.Context, _ []byte) ([]byte, error) {
-		shouldEndCall = true
+	// Create end call tool
+	shouldEndCall = new(bool)
+	endCall := minds.CallableFunc(func(_ context.Context, input []byte) ([]byte, error) {
+		*shouldEndCall = true
+
+		var b struct {
+			Reason string `json:"reason"`
+		}
+		if err := json.Unmarshal(input, &b); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal end call reason: %w", err)
+		}
+
+		println(red.Sprintf("[CALL ENDED] reason: %s", b.Reason))
 		return []byte("call ended"), nil
 	})
 
@@ -96,67 +177,76 @@ func eval(ctx context.Context, recruiterPrompt, personaPrompt utils.Prompt, conv
 		Reason string `json:"reason"`
 	}{}, endCall)
 	if err != nil {
-		errCh <- fmt.Errorf("Error creating end call tool: %w", err)
-		return
+		return nil, nil, "", nil, "", "", "", fmt.Errorf("failed to create end call tool: %w", err)
 	}
 
-	recruiter, err := openai.NewProvider(openai.WithName("Shirely"), openai.WithSystemPrompt(recuiterBuffer.String()), openai.WithTool(endCallTool))
+	// Create recruiter provider
+	recruiterName := funcs.Slugify(cfg.recruiterPrompt.Header.Name)
+	providerName = "openai"
+	model = "gpt-4"
+	recruiter, err = openai.NewProvider(
+		openai.WithName(recruiterName),
+		openai.WithSystemPrompt(recuiterBuffer.String()),
+		openai.WithTool(endCallTool),
+		openai.WithModel(model),
+	)
 	if err != nil {
-		errCh <- fmt.Errorf("Error creating recruiter OpenAI provider: %w", err)
-		return
+		return nil, nil, "", nil, "", "", "", fmt.Errorf("failed to create recruiter provider: %w", err)
 	}
 
-	candidate, err := openai.NewProvider(openai.WithName(personaPrompt.Header.Name), openai.WithSystemPrompt(personaPrompt.Body()), openai.WithTool(endCallTool))
+	// Create candidate provider
+	candidateName = funcs.Slugify(cfg.personaPrompt.Header.Name)
+	candidate, err = openai.NewProvider(
+		openai.WithName(candidateName),
+		openai.WithSystemPrompt(cfg.personaPrompt.Body()),
+		openai.WithModel(model),
+		// openai.WithTool(endCallTool),
+	)
 	if err != nil {
-		errCh <- fmt.Errorf("Error creating candidate OpenAI provider: %w", err)
-		return
+		return nil, nil, "", nil, "", "", "", fmt.Errorf("failed to create candidate provider: %w", err)
 	}
 
-	tc := minds.NewThreadContext(ctx)
-	tc.AppendMessages(minds.Message{Role: minds.RoleUser, Content: "Hello?"})
-
-	// The conversation flow is a sequence of turns between the recruiter and the candidate
-	// The first message is "Hello?" from the user
-	flow := handlers.NewThreadFlow(conversationID)
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	flow.Use(middleware.Logging("conversation", middleware.WithLogger(logger)))
-
-	turn := handlers.Sequential(conversationID+"-seq", recruiter, reverseRoles(), candidate, reverseRoles())
-
-	loop := handlers.For(conversationID+"-loop", 50, turn, func(tc minds.ThreadContext, iteration int) bool {
-		return !shouldEndCall
-	})
-	flow.Handle(loop)
-
-	result, err := flow.HandleThread(tc, nil)
-	if err != nil {
-		errCh <- fmt.Errorf("Error handling thread: %w", err)
-		return
-	}
-
-	// Store conversation in database
-	store.SaveConversation(personaPrompt.Header, conversationID, runID, result.Messages())
-
-	fmt.Println("✅ Generated conversation for ", conversationID)
-
+	return recruiter, candidate, candidateName, shouldEndCall, systemPrompt, providerName, model, nil
 }
 
-func reverseRoles() minds.ThreadHandlerFunc {
-	return func(tc minds.ThreadContext, _ minds.ThreadHandler) (minds.ThreadContext, error) {
-		messages := tc.Messages()
-		for i := 0; i < len(messages); i++ {
-			switch messages[i].Role {
-			case minds.RoleUser:
-				messages[i].Role = minds.RoleAssistant
-			case minds.RoleAssistant:
-				messages[i].Role = minds.RoleUser
-			}
+func createConversationHandler(cfg evalConfig, recruiter, candidate *openai.Provider, shouldEndCall *bool, systemPrompt string, db *sql.DB) (minds.ThreadHandler, error) {
+	// Create the sequence handler
+	turn := handlers.NewSequence(cfg.conversationID+"-seq", recruiter, candidate)
 
-			if messages[i].Content == "" {
-				panic("empty message content")
-			}
-		}
+	// Add logging middleware
+	// logger := slog.New(tint.NewHandler(os.Stdout, &tint.Options{Level: slog.LevelDebug}))
+	// turn.Use(middleware.Logging("turn", middleware.WithLogger(logger)))
 
-		return tc.WithMessages(messages...), nil
-	}
+	// Add conversation logger middleware
+	turn.Use(ConversationLogger())
+
+	// Add persistence middleware
+	turn.Use(PersistMessage(PersistenceConfig{
+		DB:             db,
+		ConversationID: cfg.conversationID,
+		RunID:          cfg.runID,
+	}))
+
+	turn.Use(ReverseRoles())
+	turn.Use(ConversationSummarizer(recruiter, systemPrompt))
+
+	// Create the loop handler
+	loop := handlers.NewFor(cfg.conversationID+"-loop", 50, turn, func(tc minds.ThreadContext, iteration int) bool {
+		println(green.Sprintf("[ITERATION %d] end call: %t", iteration, *shouldEndCall))
+		return !*shouldEndCall
+	})
+
+	return loop, nil
+}
+
+func runConversation(ctx context.Context, handler minds.ThreadHandler, cfg evalConfig, candidateName string) error {
+	tc := minds.NewThreadContext(ctx)
+	tc.AppendMessages(minds.Message{
+		Role:    minds.RoleUser,
+		Name:    candidateName,
+		Content: "Hello?",
+	})
+
+	_, err := handler.HandleThread(tc, nil)
+	return err
 }
