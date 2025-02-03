@@ -1,0 +1,7 @@
+---
+description: Go Coding Guidelines
+globs: **/*.go
+---
+
+- Minimize Nesting
+- Refactor for smaller more testable functions
