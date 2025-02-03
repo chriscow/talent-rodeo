@@ -1,0 +1,72 @@
+{{define "title"}}Jobs - Profile{{end}}
+
+{{define "page:main"}}
+<main class="container">
+    <article>
+        <header class="grid">
+            <h1>Your Job Matches</h1>
+            <button hx-get="/preferences" class="secondary outline">
+                Edit Preferences
+            </button>
+        </header>
+
+        {{if .Jobs}}
+        <div class="grid">
+            {{range .Jobs}}
+            <article>
+                <header>
+                    <div class="grid">
+                        <div>
+                            <h2>{{.Position}}</h2>
+                            <p>{{.CompanyName}}</p>
+                        </div>
+                        <mark
+                            class="{{if gt .MatchScore 80}}success{{else if gt .MatchScore 60}}warning{{else}}error{{end}}">
+                            {{.MatchScore}}% Match
+                        </mark>
+                    </div>
+                </header>
+
+                <div class="grid">
+                    <p>
+                        <i data-feather="map-pin"></i>
+                        {{.Location}}
+                    </p>
+                    {{if .Salary}}
+                    <p>
+                        <i data-feather="dollar-sign"></i>
+                        {{.Salary}}
+                    </p>
+                    {{end}}
+                </div>
+
+                <h3>Why this matches you:</h3>
+                <ul>
+                    {{range .MatchReasons}}
+                    <li>{{.}}</li>
+                    {{end}}
+                </ul>
+
+                <footer class="grid">
+                    <a href="{{.URL}}" target="_blank" role="button">
+                        View on LinkedIn →
+                    </a>
+                    <button hx-post="/jobs/{{.ID}}/hide" class="secondary outline">
+                        Hide
+                    </button>
+                </footer>
+            </article>
+            {{end}}
+        </div>
+        {{else}}
+        <article>
+            <h2>We're finding jobs for you</h2>
+            <p>
+                Based on your resume and preferences, we're searching for the best matches.
+                Check back soon!
+            </p>
+        </article>
+        {{end}}
+    </article>
+</main>
+{{end}}

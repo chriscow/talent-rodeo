@@ -1,0 +1,41 @@
+{{define "title"}}Waiting for Call - Profile{{end}}
+
+{{define "page:main"}}
+<main class="container">
+    <article>
+        <header>
+            <h1>We'll be calling you shortly</h1>
+        </header>
+
+        <p>
+            Get ready for a brief conversation with our AI assistant about your career preferences.
+            The call should take about 5-10 minutes.
+        </p>
+
+        <article aria-label="What to expect" class="secondary">
+            <header>
+                <h2>What to expect:</h2>
+            </header>
+            <ul>
+                <li>Our AI assistant will introduce itself</li>
+                <li>You'll discuss your work preferences</li>
+                <li>The conversation will be natural and casual</li>
+                <li>You can ask questions at any time</li>
+            </ul>
+        </article>
+
+        <footer>
+            <button hx-post="/reschedule-call" class="secondary">
+                Reschedule Call
+            </button>
+        </footer>
+    </article>
+</main>
+
+<script>
+    // Refresh the page every 30 seconds to check call status
+    setTimeout(() => {
+        window.location.reload();
+    }, 30000);
+</script>
+{{end}}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -59,14 +60,23 @@ func (app *application) socialCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	session.Values["UserID"] = dbUser.ID
-
 	r = contextSetAuthenticatedUser(r, dbUser)
 
-	redirectPath, ok := session.Values["redirectPathAfterLogin"].(string)
-	if ok {
+	// Check onboarding state
+	state, err := app.db.GetOnboardingState(dbUser.ID)
+	if err != nil {
+		app.serverError(w, r, fmt.Errorf("failed to get onboarding state: %w", err))
+		return
+	}
+
+	// If onboarding is not complete, redirect to profile
+	redirectPath := "/"
+	if !state.IsComplete() {
+		redirectPath = "/profile"
+		app.logger.Info("redirecting to profile for onboarding", "user_id", dbUser.ID, "step", state.CurrentStep)
+	} else if path, ok := session.Values["redirectPathAfterLogin"].(string); ok {
+		redirectPath = path
 		delete(session.Values, "redirectPathAfterLogin")
-	} else {
-		redirectPath = "/"
 	}
 
 	err = session.Save(r, w)

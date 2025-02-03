@@ -1,0 +1,46 @@
+{{define "title"}}Schedule Call - Profile{{end}}
+
+{{define "page:main"}}
+<main class="container">
+    <article>
+        <header>
+            <h1>Great! We've processed your resume</h1>
+        </header>
+
+        <h2>Let's schedule a quick chat</h2>
+        <p>
+            We'll have a brief conversation to understand your career preferences better.
+            Our AI assistant will ask you about things like:
+        </p>
+
+        <ul>
+            <li>Work location preferences (remote, hybrid, in-office)</li>
+            <li>Company size and culture preferences</li>
+            <li>Career growth expectations</li>
+            <li>Salary expectations</li>
+            <li>Other important factors for your next role</li>
+        </ul>
+
+        <form hx-post="/schedule-call">
+            <label for="preferred_time">
+                Preferred Time
+                <select id="preferred_time" name="preferred_time" required>
+                    <option value="">Select a time...</option>
+                    <option value="asap">Call me right now</option>
+                    <option value="5min">In 5 minutes</option>
+                    <option value="15min">In 15 minutes</option>
+                    <option value="30min">In 30 minutes</option>
+                    <option value="60min">In 1 hour</option>
+                </select>
+            </label>
+
+            <footer class="grid">
+                <button type="button" hx-delete="/profile/resume" class="secondary">
+                    Upload Different Resume
+                </button>
+                <button type="submit">Schedule Call</button>
+            </footer>
+        </form>
+    </article>
+</main>
+{{end}}
