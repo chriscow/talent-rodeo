@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -26,39 +25,6 @@ import (
 	natsserver "github.com/nats-io/nats-server/v2/server"
 	"github.com/pusher/pusher-http-go/v5"
 )
-
-func main2() {
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found")
-		return
-	}
-
-	// Check for OpenAI API key
-	if os.Getenv("OPENAI_API_KEY") == "" {
-		log.Fatal("OPENAI_API_KEY environment variable is required")
-	}
-
-	// Initialize handlers
-	h, err := NewHandler()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Setup routes
-	http.HandleFunc("/", h.InterviewPage)
-	http.HandleFunc("/api/interview/audio", h.HandleAudio)
-
-	// Start server
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "2304"
-	}
-
-	log.Printf("Server starting on port %s", port)
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
-		log.Fatal(err)
-	}
-}
 
 func main() {
 	logger := slog.New(tint.NewHandler(os.Stdout, &tint.Options{Level: slog.LevelDebug}))

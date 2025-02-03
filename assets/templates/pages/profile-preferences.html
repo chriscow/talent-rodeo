@@ -1,0 +1,69 @@
+{{define "title"}}Preferences - Profile{{end}}
+
+{{define "page:main"}}
+<main class="container">
+    <article>
+        <header>
+            <h1>Thanks for the chat!</h1>
+        </header>
+
+        <h2>Here's what we learned about your preferences</h2>
+        <p>
+            Please review the information below and make any necessary adjustments.
+            This will help us find the best job matches for you.
+        </p>
+
+        <form hx-post="/preferences">
+            <fieldset>
+                <legend>Work Location</legend>
+                <div class="grid">
+                    {{range $type := .WorkLocations}}
+                    <label>
+                        <input type="checkbox" name="work_location" value="{{$type}}" {{if
+                            $type.IsSelected}}checked{{end}}>
+                        {{$type.Label}}
+                    </label>
+                    {{end}}
+                </div>
+            </fieldset>
+
+            <fieldset>
+                <legend>Company Size</legend>
+                <div class="grid">
+                    {{range $size := .CompanySizes}}
+                    <label>
+                        <input type="checkbox" name="company_size" value="{{$size}}" {{if
+                            $size.IsSelected}}checked{{end}}>
+                        {{$size.Label}}
+                    </label>
+                    {{end}}
+                </div>
+            </fieldset>
+
+            <fieldset>
+                <legend>Salary Range</legend>
+                <input type="range" min="50000" max="500000" step="10000" value="{{.SalaryRange}}">
+                <div class="grid">
+                    <small>$50k</small>
+                    <small>${{.SalaryRange}}k</small>
+                    <small>$500k+</small>
+                </div>
+            </fieldset>
+
+            <fieldset>
+                <legend>Culture Preferences</legend>
+                {{range $pref := .CulturePreferences}}
+                <label>
+                    {{$pref.Label}}
+                    <input type="range" min="1" max="5" value="{{$pref.Value}}">
+                </label>
+                {{end}}
+            </fieldset>
+
+            <footer>
+                <button type="submit">Save & Continue</button>
+            </footer>
+        </form>
+    </article>
+</main>
+{{end}}

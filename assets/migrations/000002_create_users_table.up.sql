@@ -1,6 +1,6 @@
 CREATE TABLE users (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-    created TIMESTAMP NOT NULL DEFAULT (datetime('now', 'utc')),
+    created TIMESTAMP NOT NULL DEFAULT(datetime('now', 'utc')),
     email TEXT NOT NULL UNIQUE,
     hashed_secret TEXT NOT NULL,
     provider TEXT NOT NULL,
@@ -16,7 +16,5 @@ CREATE TABLE users (
     -- 
     resume_filename TEXT,
     full_resume TEXT,
-    summarized_resume TEXT,
-    --
-    onboarding_step INTEGER NOT NULL DEFAULT 0
+    summarized_resume TEXT
 );
