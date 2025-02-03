@@ -63,6 +63,15 @@
 
     var notyf = new Notyf();
     document.body.addEventListener('htmx:responseError', function (event) {
+        // Allow 422 Unprocessable Entity responses to be handled by HTMX normally
+        if (event.detail.xhr.status === 422) {
+            // Replace the form content with the response
+            var targetElem = htmx.find(event.detail.elt, 'closest', 'form') || event.detail.elt;
+            targetElem.outerHTML = event.detail.xhr.response;
+            return;
+        }
+
+        // For other errors, show toast notification
         var errorMessage;
         try {
             errorMessage = JSON.parse(event.detail.xhr.responseText).error;

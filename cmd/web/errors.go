@@ -45,7 +45,14 @@ func (app *application) serverError(w http.ResponseWriter, r *http.Request, err 
 	// Log the error
 	app.reportServerError(r, err)
 
-	// Prevent infinite recursion by handling errors in rendering directly
+	// For HTMX requests, trigger a full page refresh
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("HX-Refresh", "true")
+		http.Error(w, "An unexpected error occurred.", http.StatusInternalServerError)
+		return
+	}
+
+	// For regular requests, render the error page
 	if renderErr := response.Page(w, http.StatusOK, nil, "pages/errors/500.html"); renderErr != nil {
 		// Fallback to plain text response if rendering fails
 		http.Error(w, "An unexpected error occurred while handling another error.", http.StatusInternalServerError)
