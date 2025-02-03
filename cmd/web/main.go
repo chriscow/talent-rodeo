@@ -70,6 +70,7 @@ type config struct {
 		clientID     string
 		clientSecret string
 	}
+	testing bool // Flag to indicate if the application is running in test mode
 }
 
 type application struct {
@@ -82,6 +83,7 @@ type application struct {
 	nats          *embeddednats.Server
 	pusher        *pusher.Client
 	keywordsMutex sync.RWMutex
+	natsShutdown  chan struct{}
 }
 
 func run(logger *slog.Logger) error {
@@ -158,10 +160,41 @@ func run(logger *slog.Logger) error {
 		auth.New(cfg.linkedin.clientID, cfg.linkedin.clientSecret, cfg.baseURL+"/auth/linkedin/callback"),
 	)
 
+	var ns *embeddednats.Server
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
-	ns, err := setupNATS(ctx)
+	// Create a channel to signal when NATS is shut down
+	natsShutdown := make(chan struct{})
+	defer func() {
+		if ns != nil {
+			logger.Info("shutting down NATS server")
+			// Close NATS first
+			ns.Close()
+			close(natsShutdown)
+			logger.Info("NATS server shutdown complete")
+		}
+		cancel()
+	}()
+
+	ns, err = func() (*embeddednats.Server, error) {
+		natsPort, err := toolbelt.FreePort()
+		if err != nil {
+			return nil, fmt.Errorf("error getting free port: %w", err)
+		}
+
+		ns, err := embeddednats.New(ctx, embeddednats.WithNATSServerOptions(&natsserver.Options{
+			JetStream: true,
+			Port:      natsPort,
+		}))
+
+		if err != nil {
+			return nil, fmt.Errorf("error creating embedded nats server: %w", err)
+		}
+
+		ns.WaitForServer()
+		return ns, nil
+	}()
+
 	if err != nil {
 		return fmt.Errorf("error setting up NATS: %w", err)
 	}
@@ -185,6 +218,7 @@ func run(logger *slog.Logger) error {
 		sessionStore: sessionStore,
 		nats:         ns,
 		pusher:       &pusherClient,
+		natsShutdown: natsShutdown,
 	}
 
 	if cfg.autoHTTPS.domain != "" {
@@ -206,26 +240,6 @@ func (app *application) setupSessionStore(authKey, encryptKey []byte) {
 	}
 
 	app.sessionStore = store
-}
-
-func setupNATS(ctx context.Context) (*embeddednats.Server, error) {
-	natsPort, err := toolbelt.FreePort()
-	if err != nil {
-		return nil, fmt.Errorf("error getting free port: %w", err)
-	}
-
-	ns, err := embeddednats.New(ctx, embeddednats.WithNATSServerOptions(&natsserver.Options{
-		JetStream: true,
-		Port:      natsPort,
-	}))
-
-	if err != nil {
-		return nil, fmt.Errorf("error creating embedded nats server: %w", err)
-	}
-
-	ns.WaitForServer()
-
-	return ns, nil
 }
 
 func checkEnv() error {
