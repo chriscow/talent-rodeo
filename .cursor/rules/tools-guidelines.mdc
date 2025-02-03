@@ -1,0 +1,52 @@
+---
+description: your-tools-guidelines
+globs: 
+---
+ # Guidelines for Creating and Using tools.py
+
+`tools.py` is your file for creating tools you can use to help me.
+
+These rules provide comprehensive guidelines for creating and utilizing tools in the project's tools.py file.
+
+## Initial Setup
+- Review existing tools.py before creating new tools
+- Create tools.py if it doesn't exist
+- Design tools for import and terminal command usage
+
+## Function Design Principles
+- Create tools for precision tasks or complex manual operations
+- Make functions generalizable and reusable
+- Accept broad input ranges
+- Use descriptive, general-purpose names
+- Split distinct tasks into separate functions
+
+## Implementation Requirements
+- Always print function output
+- Use `python -c "..."` for execution
+- No direct script execution
+- No additional .py scripts for execution
+- Handle errors gracefully
+
+## Function Parameters
+- Design for maximum flexibility
+- Accept general-case parameters
+- Support various data types
+- Enable broad use cases
+- Regular refactoring for improved generalization
+
+## Example
+Instead of:
+```python
+def get_apple_stock():
+    # specific to one stock
+```
+
+Use:
+```python
+def get_stock_data(ticker):
+    # works with any stock
+```
+
+## Post-Creation
+- Execute tools to fulfill user requests
+- Exception: when request is only for tool creation

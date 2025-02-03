@@ -1,0 +1,82 @@
+---
+description: htmx-and-css-guidelines
+globs: **/*.go,**/*.html,**/*.tmpl
+---
+ # HTMX and PicoCSS Guidelines
+
+This rule provides best practices for using html/template, HTMX, and PicoCSS in the project.
+
+## Server-Side Integration
+- Use html/template for server-side rendering
+- Implement encoding/json for JSON responses
+- Enable CSRF protection
+- Follow Go's error handling patterns
+- Implement graceful server shutdown
+- Use Go modules
+
+## HTMX Core Concepts
+- Default hx-swap is 'innerHTML'
+- Use semantic HTML5 elements
+- Leverage HTMX extensions when needed
+- Enable hx-boost for full page navigation
+- Implement proper request handling
+- Use context for cancellation/timeouts
+
+## When to Use HTMX
+
+### HTMX is Preferred for:
+- Small UI updates (toggles, counters)
+- Immediate form validation
+- Partial content updates
+- Interactive features (same page context)
+
+### Use Regular Forms for:
+- Major state transitions
+- Full page template returns
+- Page context changes
+- Full page refresh needs
+
+## Common Patterns
+
+### Page Transitions (Regular Forms)
+```html
+<form method="post" action="/action">
+    <button type="submit">Do Action</button>
+</form>
+```
+
+### Partial Updates (HTMX)
+```html
+<div id="user-prefs">
+    <form hx-post="/preferences" 
+          hx-target="#user-prefs">
+        ...
+    </form>
+</div>
+```
+
+### Form Validation (HTMX)
+```html
+<form hx-post="/validate" 
+      hx-target="this">
+    ...
+</form>
+```
+
+### Modals/Overlays (HTMX)
+```html
+<div id="modal-container"></div>
+<button hx-get="/modal" 
+        hx-target="#modal-container">
+    Open Modal
+</button>
+```
+
+## Best Practices
+- Avoid full page templates in HTMX responses (except body target)
+- Create dedicated partial templates
+- Use specific container IDs
+- Place modals/overlays outside main content
+- Return minimal validation markup
+- Use regular forms for major transitions
+- Prioritize user experience in HTMX vs. regular form decisions
