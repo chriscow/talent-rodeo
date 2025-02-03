@@ -1,8 +1,8 @@
 ---
-description: htmx-and-css-guidelines
-globs: **/*.go,**/*.html,**/*.tmpl
+description: 
+globs: 
 ---
- # HTMX and PicoCSS Guidelines
+# HTMX and PicoCSS Guidelines
 
 This rule provides best practices for using html/template, HTMX, and PicoCSS in the project.
 
@@ -79,4 +79,4 @@ This rule provides best practices for using html/template, HTMX, and PicoCSS in 
 - Place modals/overlays outside main content
 - Return minimal validation markup
 - Use regular forms for major transitions
-- Prioritize user experience in HTMX vs. regular form decisions
+- Prioritize user experience in HTMX vs. regular form decisions 

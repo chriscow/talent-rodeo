@@ -27,6 +27,7 @@ type User struct {
 	UserID            string `db:"user_id"`
 	AvatarURL         string `db:"avatar_url"`
 	Location          string `db:"location"`
+	Phone             string `db:"phone"`
 	AccessToken       string
 	AccessTokenSecret string
 	RefreshToken      string
@@ -221,5 +222,15 @@ func (db *DB) UpdateUserOnboarding(userID int, step onboarding.Step) error {
 	query := `UPDATE users SET onboarding_step = $1 WHERE id = $2`
 
 	_, err := db.ExecContext(ctx, query, step, userID)
+	return err
+}
+
+func (db *DB) UpdateUserPhone(userID int, phone string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+
+	query := `UPDATE users SET phone = $1 WHERE id = $2`
+
+	_, err := db.ExecContext(ctx, query, phone, userID)
 	return err
 }

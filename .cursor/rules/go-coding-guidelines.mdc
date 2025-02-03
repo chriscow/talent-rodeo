@@ -1,0 +1,14 @@
+---
+description: Go Coding Guidelines
+globs: **/*.go
+---
+You are using go version go1.23.4
+
+- Minimize Nesting
+- Refactor for smaller more testable functions
+- Always write tests for code you write to verify functionality using the standard library. Ask before using a third party library 
+- Always execute the tests you wrote to make sure your code works as you expect
+- Make sure we are getting sufficient code coverage
+- Use verbose debug logging to help diagnose issues
+
+- you have tools in [tools.py](mdc:talent-rodeo/talent-rodeo/talent-rodeo/talent-rodeo/tools.py) to help you run Go tests

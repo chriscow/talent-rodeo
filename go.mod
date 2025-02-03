@@ -42,7 +42,7 @@ require (
 	github.com/spf13/cobra v1.8.1
 	github.com/tmaxmax/go-sse v0.10.0
 	github.com/tomasen/realip v0.0.0-20180522021738-f0c99a92ddce
-	github.com/twilio/twilio-go v1.23.9
+	github.com/twilio/twilio-go v1.23.11
 	github.com/wneessen/go-mail v0.5.2
 	golang.org/x/crypto v0.32.0
 	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67
