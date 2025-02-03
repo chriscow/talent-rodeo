@@ -33,11 +33,34 @@ func (app *application) resetResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := app.db.UpdateFullResume(contextGetAuthenticatedUser(r).ID, "", ""); err != nil {
+	user := contextGetAuthenticatedUser(r)
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	if err := app.db.UpdateFullResume(user.ID, "", ""); err != nil {
 		app.serverError(w, r, fmt.Errorf("resetResume: failed to reset resume: %w", err))
 		return
 	}
 
+	// Reset the onboarding state
+	if err := app.db.UpdateOnboardingStep(user.ID, onboarding.StepInitial); err != nil {
+		app.serverError(w, r, fmt.Errorf("failed to reset onboarding state: %w", err))
+		return
+	}
+
+	// If it's an HTMX request, return the profile page content
+	if r.Header.Get("HX-Request") == "true" {
+		data := app.newTemplateData(r)
+		err := response.Page(w, http.StatusOK, data, "pages/profile.html")
+		if err != nil {
+			app.serverError(w, r, err)
+		}
+		return
+	}
+
+	// For non-HTMX requests, use HX-Refresh
 	w.Header().Set("HX-Refresh", "true")
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -208,5 +231,23 @@ func (app *application) SendStatus(sessionID, eventName, level, message string) 
 
 	if err != nil {
 		app.logger.Error("SendStatus: failed to send status", "error", err)
+	}
+}
+
+func (app *application) resumeUploadPage(w http.ResponseWriter, r *http.Request) {
+	user := contextGetAuthenticatedUser(r)
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	data := app.newTemplateData(r)
+	data["Form"] = &initialOnboarding{
+		Validator: validator.Validator{},
+	}
+
+	err := response.Page(w, http.StatusOK, data, "pages/profile-resume-upload.html")
+	if err != nil {
+		app.serverError(w, r, err)
 	}
 }

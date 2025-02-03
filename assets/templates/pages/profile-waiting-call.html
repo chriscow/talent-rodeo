@@ -25,9 +25,10 @@
         </article>
 
         <footer>
-            <button hx-post="/reschedule-call" class="secondary">
-                Reschedule Call
-            </button>
+            <form method="post" action="/reschedule-call">
+                <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+                <button type="submit" class="secondary">Reschedule Call</button>
+            </form>
         </footer>
     </article>
 </main>
