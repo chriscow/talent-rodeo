@@ -13,30 +13,7 @@
             and have a quick chat to understand your preferences better.
         </p>
 
-        <form hx-post="/profile" hx-encoding="multipart/form-data">
-            <div class="grid">
-                <label for="phone">
-                    Phone Number
-                    <input type="tel" id="phone" name="phone" required placeholder="+1 (555) 555-5555">
-                    {{with .Validator.FieldErrors.Phone}}
-                    <small class="error">{{.}}</small>
-                    {{end}}
-                </label>
-
-                <label for="resume">
-                    Resume (PDF or DOCX)
-                    <input type="file" id="resume" name="resume" required accept=".pdf,.docx">
-                    <small>PDF or DOCX up to 10MB</small>
-                    {{with .Validator.FieldErrors.Resume}}
-                    <small class="error">{{.}}</small>
-                    {{end}}
-                </label>
-            </div>
-
-            <footer>
-                <button type="submit">Continue</button>
-            </footer>
-        </form>
+        {{template "partial:resume-form" .}}
     </article>
 </main>
 {{end}}
