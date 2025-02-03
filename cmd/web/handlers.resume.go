@@ -24,45 +24,30 @@ type initialOnboarding struct {
 
 func isValidFileType(filename string) bool {
 	ext := strings.ToLower(filepath.Ext(filename))
-	return ext == ".docx" || ext == ".pdf"
+	return ext == ".pdf" || ext == ".docx"
 }
 
 func (app *application) resetResume(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
-		app.badRequest(w, r, fmt.Errorf("resetResume: method not allowed"))
-		return
-	}
-
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		http.Redirect(w, r, "/auth/linkedin", http.StatusFound)
 		return
 	}
 
-	if err := app.db.UpdateFullResume(user.ID, "", ""); err != nil {
-		app.serverError(w, r, fmt.Errorf("resetResume: failed to reset resume: %w", err))
+	// Reset resume fields
+	err := app.db.UpdateFullResume(user.ID, "", "")
+	if err != nil {
+		app.serverError(w, r, fmt.Errorf("failed to reset resume: %w", err))
 		return
 	}
 
-	// Reset the onboarding state
+	// Update onboarding state back to initial
 	if err := app.db.UpdateOnboardingStep(user.ID, onboarding.StepInitial); err != nil {
-		app.serverError(w, r, fmt.Errorf("failed to reset onboarding state: %w", err))
+		app.serverError(w, r, fmt.Errorf("failed to update onboarding state: %w", err))
 		return
 	}
 
-	// If it's an HTMX request, return the profile page content
-	if r.Header.Get("HX-Request") == "true" {
-		data := app.newTemplateData(r)
-		err := response.Page(w, http.StatusOK, data, "pages/profile.html")
-		if err != nil {
-			app.serverError(w, r, err)
-		}
-		return
-	}
-
-	// For non-HTMX requests, use HX-Refresh
-	w.Header().Set("HX-Refresh", "true")
-	w.WriteHeader(http.StatusNoContent)
+	http.Redirect(w, r, "/profile/resume/upload", http.StatusFound)
 }
 
 func (app *application) handleResume(w http.ResponseWriter, r *http.Request) {
@@ -235,19 +220,87 @@ func (app *application) SendStatus(sessionID, eventName, level, message string) 
 }
 
 func (app *application) resumeUploadPage(w http.ResponseWriter, r *http.Request) {
-	user := contextGetAuthenticatedUser(r)
-	if user == nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+	app.logger.Info("Handling resume upload request", "method", r.Method, "url", r.URL.String())
+
+	if r.Method == http.MethodGet {
+		data := app.newTemplateData(r)
+		if err := response.Page(w, http.StatusOK, data, "pages/resume-upload.html"); err != nil {
+			app.logger.Error("Failed to render resume upload page", "error", err)
+			app.serverError(w, r, fmt.Errorf("failed to render resume upload page: %w", err))
+		}
 		return
 	}
 
-	data := app.newTemplateData(r)
-	data["Form"] = &initialOnboarding{
-		Validator: validator.Validator{},
+	if r.Method != http.MethodPost {
+		app.logger.Info("Invalid method", "method", r.Method)
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
 	}
 
-	err := response.Page(w, http.StatusOK, data, "pages/profile-resume-upload.html")
-	if err != nil {
-		app.serverError(w, r, err)
+	// Max upload size of 10MB
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		app.logger.Error("Failed to parse multipart form", "error", err)
+		app.badRequest(w, r, fmt.Errorf("file too large: %w", err))
+		return
 	}
+
+	// Get phone number
+	phone := r.FormValue("phone")
+	if phone == "" {
+		app.logger.Info("Missing phone number")
+		app.badRequest(w, r, fmt.Errorf("phone number is required"))
+		return
+	}
+
+	// Get resume file
+	file, header, err := r.FormFile("resume")
+	if err != nil {
+		app.logger.Error("Failed to get resume file", "error", err)
+		app.badRequest(w, r, fmt.Errorf("resume file is required"))
+		return
+	}
+	defer file.Close()
+
+	// Validate file type
+	if !isValidFileType(header.Filename) {
+		app.logger.Info("Invalid file type", "filename", header.Filename)
+		app.badRequest(w, r, fmt.Errorf("invalid file type: only PDF and DOCX files are allowed"))
+		return
+	}
+
+	// Read file content
+	content, err := io.ReadAll(file)
+	if err != nil {
+		app.logger.Error("Failed to read file", "error", err)
+		app.serverError(w, r, fmt.Errorf("failed to read file: %w", err))
+		return
+	}
+
+	// Get authenticated user
+	user := contextGetAuthenticatedUser(r)
+	if user == nil {
+		app.logger.Info("User not authenticated, redirecting to login")
+		http.Redirect(w, r, "/auth/linkedin", http.StatusFound)
+		return
+	}
+
+	// Update user's resume
+	contentStr := string(content)
+	err = app.db.UpdateFullResume(user.ID, header.Filename, contentStr)
+	if err != nil {
+		app.logger.Error("Failed to update resume", "error", err, "user_id", user.ID)
+		app.serverError(w, r, fmt.Errorf("failed to update resume: %w", err))
+		return
+	}
+
+	// Update onboarding state
+	if err := app.db.UpdateOnboardingStep(user.ID, onboarding.StepResumeUploaded); err != nil {
+		app.logger.Error("Failed to update onboarding state", "error", err, "user_id", user.ID)
+		app.serverError(w, r, fmt.Errorf("failed to update onboarding state: %w", err))
+		return
+	}
+
+	app.logger.Info("Resume uploaded successfully", "user_id", user.ID, "filename", header.Filename)
+	http.Redirect(w, r, "/profile", http.StatusFound)
 }

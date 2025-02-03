@@ -34,6 +34,11 @@ tasks:
     cmds:
       - go test -v -race -buildvcs ./...
 
+  test:ui:
+    desc: Run UI tests using Playwright
+    cmds:
+      - python -c "from tools import run_ui_test; run_ui_test('{{.CLI_ARGS}}')"
+
   test-cover:
     desc: Run all tests and display coverage
     cmds:

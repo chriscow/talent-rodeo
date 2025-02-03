@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"talent-rodeo/internal/database"
@@ -83,7 +84,7 @@ func (app *application) rescheduleCall(w http.ResponseWriter, r *http.Request) {
 func (app *application) scheduleHandler(w http.ResponseWriter, r *http.Request) {
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		http.Redirect(w, r, "/auth/linkedin", http.StatusFound)
 		return
 	}
 
@@ -111,22 +112,22 @@ func (app *application) scheduleHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (app *application) schedulePreferencesSubmitHandler(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseForm()
-	if err != nil {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
+	user := contextGetAuthenticatedUser(r)
+	if user == nil {
+		http.Redirect(w, r, "/auth/linkedin", http.StatusFound)
 		return
 	}
 
-	user := contextGetAuthenticatedUser(r)
-	if user == nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+	err := r.ParseForm()
+	if err != nil {
+		app.badRequest(w, r, err)
 		return
 	}
 
 	form := scheduleFormData{}
 	err = request.DecodePostForm(r, &form)
 	if err != nil {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
+		app.badRequest(w, r, err)
 		return
 	}
 
@@ -139,7 +140,7 @@ func (app *application) schedulePreferencesSubmitHandler(w http.ResponseWriter, 
 	if form.HasErrors() {
 		data := app.newTemplateData(r)
 		data["Form"] = form
-		err = response.Page(w, http.StatusUnprocessableEntity, data, "pages/schedule.html")
+		err = response.Page(w, http.StatusBadRequest, data, "pages/schedule.html")
 		if err != nil {
 			app.serverError(w, r, err)
 		}
@@ -160,55 +161,130 @@ func (app *application) schedulePreferencesSubmitHandler(w http.ResponseWriter, 
 		return
 	}
 
-	session, err := app.sessionStore.Get(r, "session")
-	if err == nil {
-		session.AddFlash("Scheduling preferences updated successfully")
-		session.Save(r, w)
-	}
-
-	http.Redirect(w, r, "/schedule", http.StatusSeeOther)
+	http.Redirect(w, r, "/profile/schedule", http.StatusFound)
 }
 
 func (app *application) scheduleAppointmentHandler(w http.ResponseWriter, r *http.Request) {
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		http.Redirect(w, r, "/auth/linkedin", http.StatusFound)
 		return
 	}
 
-	var req struct {
-		DateTime string `json:"datetime"`
-		Timezone string `json:"timezone"`
-	}
+	app.logger.Debug("Starting appointment scheduling",
+		"user_id", user.ID,
+		"method", r.Method,
+		"content_type", r.Header.Get("Content-Type"))
 
-	err := json.NewDecoder(r.Body).Decode(&req)
+	err := r.ParseForm()
 	if err != nil {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
+		app.logger.Error("Failed to parse form", "error", err)
+		http.Error(w, fmt.Sprintf("Failed to parse form: %v", err), http.StatusBadRequest)
 		return
 	}
 
-	scheduledTime, err := time.Parse(time.RFC3339, req.DateTime)
+	// Log raw request details
+	app.logger.Debug("Raw request details",
+		"form", r.Form,
+		"post_form", r.PostForm,
+		"headers", r.Header)
+
+	// Handle both form data and JSON requests
+	var preferredTime string
+	var timezone string
+
+	if r.Header.Get("Content-Type") == "application/json" {
+		var req struct {
+			DateTime string `json:"datetime"`
+			Timezone string `json:"timezone"`
+		}
+
+		// Read the raw body for logging
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			app.logger.Error("Failed to read request body", "error", err)
+			http.Error(w, "Failed to read request body", http.StatusBadRequest)
+			return
+		}
+		app.logger.Debug("Raw JSON body", "body", string(body))
+
+		// Parse the JSON
+		err = json.Unmarshal(body, &req)
+		if err != nil {
+			app.logger.Error("Failed to decode JSON",
+				"error", err,
+				"body", string(body))
+			http.Error(w, fmt.Sprintf("Failed to decode JSON: %v", err), http.StatusBadRequest)
+			return
+		}
+		preferredTime = req.DateTime
+		timezone = req.Timezone
+	} else {
+		preferredTime = r.FormValue("datetime")
+		timezone = r.FormValue("timezone")
+	}
+
+	app.logger.Debug("Parsed form values",
+		"preferred_time", preferredTime,
+		"timezone", timezone)
+
+	if preferredTime == "" {
+		msg := "preferred time is required"
+		app.logger.Error(msg)
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+
+	if timezone == "" {
+		msg := "timezone is required"
+		app.logger.Error(msg)
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+
+	// Validate datetime
+	scheduledTime, err := time.Parse(time.RFC3339, preferredTime)
 	if err != nil {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
+		msg := fmt.Sprintf("invalid datetime format (expected RFC3339): %v", err)
+		app.logger.Error(msg,
+			"received_value", preferredTime,
+			"expected_format", "2006-01-02T15:04:05Z07:00")
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+
+	app.logger.Debug("Parsed scheduled time",
+		"scheduled_time", scheduledTime,
+		"location", scheduledTime.Location())
+
+	// Check if time is in the past
+	if scheduledTime.Before(time.Now()) {
+		msg := "cannot schedule appointments in the past"
+		app.logger.Error(msg,
+			"scheduled_time", scheduledTime,
+			"current_time", time.Now())
+		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
 
 	appointment := &database.Appointment{
 		UserID:        user.ID,
 		ScheduledTime: scheduledTime,
-		Timezone:      req.Timezone,
+		Timezone:      timezone,
 		Status:        database.AppointmentStatusScheduled,
 	}
 
 	err = app.db.CreateAppointment(appointment)
 	if err != nil {
-		app.serverError(w, r, err)
+		app.logger.Error("Failed to create appointment", "error", err)
+		http.Error(w, fmt.Sprintf("Failed to create appointment: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	// Update onboarding state to indicate call is scheduled
 	if err := app.db.UpdateOnboardingStep(user.ID, onboarding.StepPhoneCallScheduled); err != nil {
-		app.serverError(w, r, fmt.Errorf("failed to update onboarding state: %w", err))
+		app.logger.Error("Failed to update onboarding state", "error", err)
+		http.Error(w, fmt.Sprintf("Failed to update onboarding state: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -222,27 +298,21 @@ func (app *application) scheduleAppointmentHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// For non-HTMX requests, return JSON response
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"id":            appointment.ID,
-		"scheduledTime": appointment.ScheduledTime,
-		"timezone":      appointment.Timezone,
-		"status":        appointment.Status,
-	})
+	// For regular form submissions, redirect to profile
+	http.Redirect(w, r, "/profile", http.StatusFound)
 }
 
 func (app *application) cancelAppointmentHandler(w http.ResponseWriter, r *http.Request) {
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		http.Redirect(w, r, "/auth/linkedin", http.StatusFound)
 		return
 	}
 
 	idParam := flow.Param(r.Context(), "id")
 	id, err := strconv.Atoi(idParam)
 	if err != nil || id < 1 {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
+		app.badRequest(w, r, fmt.Errorf("invalid appointment ID"))
 		return
 	}
 
@@ -252,7 +322,7 @@ func (app *application) cancelAppointmentHandler(w http.ResponseWriter, r *http.
 		return
 	}
 	if appointment == nil || appointment.UserID != user.ID {
-		http.Error(w, "Not Found", http.StatusNotFound)
+		http.NotFound(w, r)
 		return
 	}
 

@@ -96,7 +96,7 @@ func (c *OpenAIClient) Connect() error {
 func (c *OpenAIClient) StartSession(ctx context.Context) error {
 	params := openairt.SessionUpdateEvent{
 		Session: openairt.ClientSession{
-			Instructions:      fmt.Sprintf(systemPrompt, resumeYAML),
+			Instructions:      resumeYAML,
 			Modalities:        []openairt.Modality{openairt.ModalityText, openairt.ModalityAudio},
 			MaxOutputTokens:   2500,
 			InputAudioFormat:  openairt.AudioFormatG711Ulaw,
@@ -442,15 +442,15 @@ Set a comfortable tone to encourage natural sharing.
 
 ## 2. **Reflective Counter-Questions**
 ### Goal:
-Foster engagement by asking candidates the same questions they’re asked.
+Foster engagement by asking candidates the same questions they're asked.
 
 ### Example Flow:
 - **LLM**: "What motivates you to keep pushing in your field?"
 - **Candidate**: "Solving tough challenges gives me a sense of accomplishment."
-- **LLM**: "I love that, [Name]. What was the most rewarding challenge you’ve solved so far?"
+- **LLM**: "I love that, [Name]. What was the most rewarding challenge you've solved so far?"
 
 ### Meta-Prompt for LLM:
-"Mirror the candidate’s enthusiasm or curiosity in your response. How can reflecting their own questions back to them deepen the conversation?"
+"Mirror the candidate's enthusiasm or curiosity in your response. How can reflecting their own questions back to them deepen the conversation?"
 
 ---
 
@@ -459,12 +459,12 @@ Foster engagement by asking candidates the same questions they’re asked.
 Personalize the conversation and establish rapport.
 
 ### Guidelines:
-- Use the candidate's name naturally: "That’s a fantastic example, [Name]."
+- Use the candidate's name naturally: "That's a fantastic example, [Name]."
 - Avoid overuse to maintain authenticity.
 - Reinforce compliments with their name: "Your experience with [skill] is impressive, [Name]."
 
 ### Meta-Prompt for LLM:
-"How can using the candidate’s name naturally enhance the sense of connection and engagement? Where does it fit best in the conversation?"
+"How can using the candidate's name naturally enhance the sense of connection and engagement? Where does it fit best in the conversation?"
 
 ---
 
@@ -477,7 +477,7 @@ Validate answers and encourage deeper sharing.
 - **LLM**: "Seeing others grow is such a fulfilling experience. How has mentoring shaped your own growth, [Name]?"
 
 ### Meta-Prompt for LLM:
-"Reflect on the candidate’s key statements to validate their perspective. How can this help them feel heard and encourage further sharing?"
+"Reflect on the candidate's key statements to validate their perspective. How can this help them feel heard and encourage further sharing?"
 
 ---
 
@@ -493,7 +493,7 @@ Encourage reflection and uncover intrinsic drivers.
 - "How does that align with your current goals?"
 
 ### Meta-Prompt for LLM:
-"What underlying motivations or values can be inferred from the candidate’s responses? How can you gently probe to explore these further?"
+"What underlying motivations or values can be inferred from the candidate's responses? How can you gently probe to explore these further?"
 
 ---
 
@@ -502,8 +502,8 @@ Encourage reflection and uncover intrinsic drivers.
 Clarify and dig deeper into intriguing or unclear remarks.
 
 ### Key Prompts:
-- "You mentioned [topic]. Can you elaborate on why it’s important to you?"
-- "That’s an interesting point. Could you tell me more about how it impacted your career?"
+- "You mentioned [topic]. Can you elaborate on why it's important to you?"
+- "That's an interesting point. Could you tell me more about how it impacted your career?"
 
 ### Meta-Prompt for LLM:
 "Identify vague or standout statements that may have deeper significance. How can you phrase follow-up questions to explore these effectively?"
@@ -515,8 +515,8 @@ Clarify and dig deeper into intriguing or unclear remarks.
 Resolve discrepancies with curiosity, not skepticism.
 
 ### Key Prompts:
-- "You’ve had several leadership roles, but I noticed some individual contributor positions too. What led to those shifts?"
-- "It seems like you’ve worn many hats in your career. How do those roles connect to your long-term vision?"
+- "You've had several leadership roles, but I noticed some individual contributor positions too. What led to those shifts?"
+- "It seems like you've worn many hats in your career. How do those roles connect to your long-term vision?"
 
 ### Meta-Prompt for LLM:
 "Examine potential inconsistencies with an open and non-judgmental mindset. How can follow-ups encourage clarity while maintaining trust?"
@@ -546,7 +546,7 @@ Understand deeper patterns by exploring cause and effect.
 - "How did your leadership approach evolve as your teams grew?"
 
 ### Meta-Prompt for LLM:
-"Explore the cause-and-effect relationships in the candidate’s journey. What insights can be drawn about their decision-making and growth?"
+"Explore the cause-and-effect relationships in the candidate's journey. What insights can be drawn about their decision-making and growth?"
 
 ---
 
@@ -559,7 +559,7 @@ Boost confidence and create a positive atmosphere.
 - Reinforce strengths throughout the conversation.
 
 ### Meta-Prompt for LLM:
-"Identify moments to provide genuine encouragement. How can subtle flattery reinforce the candidate’s confidence and openness?"
+"Identify moments to provide genuine encouragement. How can subtle flattery reinforce the candidate's confidence and openness?"
 
 ---
 
@@ -569,7 +569,7 @@ Create a blend of introspection and friendly conversation.
 
 ### Example Flow:
 - **Deep**: "What led you to choose leadership over remaining an individual contributor?"
-- **Warm**: "That sounds like a pivotal moment, [Name]. It’s clear you put a lot of thought into that decision."
+- **Warm**: "That sounds like a pivotal moment, [Name]. It's clear you put a lot of thought into that decision."
 
 ### Meta-Prompt for LLM:
 "Balance serious and lighthearted tones to maintain engagement. How can your responses foster both introspection and comfort?"
@@ -613,7 +613,7 @@ Reflect sincere interest in their journey.
 
 ### Techniques:
 - Ask open-ended follow-ups: "What did you take away from that experience that you still carry with you today?"
-- Relate questions to their broader story: "You’ve talked a lot about teamwork—what do you think makes a great team dynamic?"
+- Relate questions to their broader story: "You've talked a lot about teamwork—what do you think makes a great team dynamic?"
 
 ### Meta-Prompt for LLM:
 "Express genuine curiosity about their journey. What aspects of their story can you explore to uncover deeper meaning?"
@@ -625,11 +625,11 @@ Reflect sincere interest in their journey.
 Reference specific details to personalize the conversation.
 
 ### Examples:
-- "You’ve had such a diverse career path. What drove you to explore these different industries?"
+- "You've had such a diverse career path. What drove you to explore these different industries?"
 - "Your focus on privacy compliance is impressive—was there a moment that sparked your passion for this area?"
 
 ### Meta-Prompt for LLM:
-"Use details from the candidate’s resume or answers to personalize questions. How can this demonstrate attentiveness and care?"
+"Use details from the candidate's resume or answers to personalize questions. How can this demonstrate attentiveness and care?"
 
 ---
 
@@ -652,7 +652,7 @@ Invite narratives to uncover deeper emotions and values.
 
 ### Key Prompts:
 - "Could you walk me through one of your proudest achievements?"
-- "What’s a story from your career that always makes you smile?"
+- "What's a story from your career that always makes you smile?"
 
 ### Meta-Prompt for LLM:
 "Encourage storytelling to uncover rich details. How can you guide the candidate to share narratives that reveal their values?"
@@ -664,7 +664,7 @@ Invite narratives to uncover deeper emotions and values.
 Foster trust and positivity.
 
 ### Techniques:
-- Express gratitude: "Thanks for sharing that—it’s so valuable to hear about your perspective."
+- Express gratitude: "Thanks for sharing that—it's so valuable to hear about your perspective."
 - Acknowledge vulnerability: "I really appreciate you being so open about that experience."
 
 ### Meta-Prompt for LLM:
@@ -680,7 +680,7 @@ Show attentiveness by referencing earlier points.
 - "You mentioned earlier that you value collaboration. How does that influence how you approach new projects?"
 
 ### Meta-Prompt for LLM:
-"Maintain trust by referencing prior statements. How can this demonstrate attentiveness and reinforce the candidate’s sense of being understood?"
+"Maintain trust by referencing prior statements. How can this demonstrate attentiveness and reinforce the candidate's sense of being understood?"
 
 ---
 

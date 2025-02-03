@@ -5,8 +5,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"golang.org/x/crypto/acme"
-	"golang.org/x/crypto/acme/autocert"
 	"log/slog"
 	"net/http"
 	"os"
@@ -15,6 +13,9 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"golang.org/x/crypto/acme"
+	"golang.org/x/crypto/acme/autocert"
 )
 
 const (
@@ -128,38 +129,61 @@ func (app *application) serveAutoHTTPS() error {
 
 func (app *application) serve(srv *http.Server) error {
 	shutdownErrorChan := make(chan error)
+	serverErrorChan := make(chan error, 1)
+
+	go func() {
+		app.logger.Info("starting server", slog.Group("server", "addr", srv.Addr))
+		if srv.TLSConfig != nil {
+			serverErrorChan <- srv.ListenAndServeTLS("", "")
+		} else {
+			serverErrorChan <- srv.ListenAndServe()
+		}
+	}()
 
 	go func() {
 		quitChan := make(chan os.Signal, 1)
 		signal.Notify(quitChan, syscall.SIGINT, syscall.SIGTERM)
-		<-quitChan
+		sig := <-quitChan
+		app.logger.Info("received shutdown signal", "signal", sig.String())
 
+		// First, initiate server shutdown
 		ctx, cancel := context.WithTimeout(context.Background(), defaultShutdownPeriod)
 		defer cancel()
 
-		shutdownErrorChan <- srv.Shutdown(ctx)
+		app.logger.Info("attempting graceful shutdown")
+		err := srv.Shutdown(ctx)
+		if err != nil {
+			app.logger.Error("error during server shutdown", "error", err)
+		}
+
+		// Wait for NATS to shut down
+		if app.natsShutdown != nil {
+			app.logger.Info("waiting for NATS shutdown")
+			select {
+			case <-app.natsShutdown:
+				app.logger.Info("NATS shutdown complete")
+			case <-time.After(5 * time.Second):
+				app.logger.Error("timeout waiting for NATS shutdown")
+			}
+		}
+
+		shutdownErrorChan <- err
 	}()
 
-	app.logger.Info("starting server", slog.Group("server", "addr", srv.Addr))
-
-	if srv.TLSConfig != nil {
-		err := srv.ListenAndServeTLS("", "")
+	// Wait for either server error or shutdown
+	select {
+	case err := <-serverErrorChan:
 		if !errors.Is(err, http.ErrServerClosed) {
+			app.logger.Error("server error", "error", err)
 			return err
 		}
-	} else {
-		err := srv.ListenAndServe()
-		if !errors.Is(err, http.ErrServerClosed) {
+	case err := <-shutdownErrorChan:
+		if err != nil {
+			app.logger.Error("shutdown error", "error", err)
 			return err
 		}
-	}
-
-	err := <-shutdownErrorChan
-	if err != nil {
-		return err
 	}
 
 	app.logger.Info("stopped server", slog.Group("server", "addr", srv.Addr))
-
 	return nil
 }

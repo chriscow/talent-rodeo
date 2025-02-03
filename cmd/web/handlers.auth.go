@@ -10,7 +10,6 @@ import (
 )
 
 func (app *application) socialAuth(w http.ResponseWriter, r *http.Request) {
-
 	// goth looks for the provider in the query string, so we need to add it there
 	provider := flow.Param(r.Context(), "provider")
 	q := r.URL.Query()
@@ -73,10 +72,6 @@ func (app *application) socialCallback(w http.ResponseWriter, r *http.Request) {
 	redirectPath := "/"
 	if !state.IsComplete() {
 		redirectPath = "/profile"
-		app.logger.Info("redirecting to profile for onboarding", "user_id", dbUser.ID, "step", state.CurrentStep)
-	} else if path, ok := session.Values["redirectPathAfterLogin"].(string); ok {
-		redirectPath = path
-		delete(session.Values, "redirectPathAfterLogin")
 	}
 
 	err = session.Save(r, w)
@@ -85,71 +80,53 @@ func (app *application) socialCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, redirectPath, http.StatusSeeOther)
+	http.Redirect(w, r, redirectPath, http.StatusFound)
 }
 
 func (app *application) handleAuthError(w http.ResponseWriter, r *http.Request, err error) {
-	// Log the original error
-	app.logger.Error("Auth error encountered", "error", err)
-
-	// Check if it's a known error that might be cookie-related
-	if strings.Contains(err.Error(), "session") ||
-		strings.Contains(err.Error(), "cookie") {
-
-		// Clear cookies
-		clearAuthCookies(w, r)
-
-		// Redirect back to the login page
-		http.Redirect(w, r, "/auth/linkedin", http.StatusTemporaryRedirect)
+	if strings.Contains(err.Error(), "denied") {
+		http.Error(w, "You must grant access to continue.", http.StatusUnauthorized)
 		return
 	}
 
-	// Handle other types of errors
-	http.Error(w, "Authentication error", http.StatusInternalServerError)
-}
-
-func clearAuthCookies(w http.ResponseWriter, r *http.Request) {
-	// Clear the gothic session cookie
-	cookie := &http.Cookie{
-		Name:     gothic.SessionName,
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1, // This makes the browser delete the cookie immediately
-		HttpOnly: true,
-	}
-	http.SetCookie(w, cookie)
-
-	// Clear any provider-specific cookies that might exist
-	// The exact names might vary depending on your providers
-	// providerCookie := &http.Cookie{
-	// 	Name:     "gothic_provider_session",
-	// 	Value:    "",
-	// 	Path:     "/",
-	// 	MaxAge:   -1,
-	// 	HttpOnly: true,
-	// }
-	// http.SetCookie(w, providerCookie)
-
-	// You might also want to clear the actual session
-	gothic.Logout(w, r)
+	app.serverError(w, r, err)
 }
 
 func (app *application) logout(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	q.Set("provider", "linkedin")
-	r.URL.RawQuery = q.Encode()
-
-	gothic.Logout(w, r)
+	app.logger.Info("Handling logout request", "method", r.Method, "url", r.URL.String())
 
 	session, err := app.sessionStore.Get(r, "session")
 	if err != nil {
+		app.logger.Error("Failed to get session", "error", err)
 		app.serverError(w, r, err)
 		return
 	}
 
-	delete(session.Values, "UserID")
-	delete(session.Values, "redirectPathAfterLogin")
-	session.Save(r, w)
+	app.logger.Info("Current session values", "values", session.Values)
 
-	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+	// Clear all session values
+	for key := range session.Values {
+		delete(session.Values, key)
+	}
+
+	if app.config.testing {
+		// In testing mode, explicitly reset session values
+		session.Values = make(map[interface{}]interface{})
+	}
+
+	// Set MaxAge to -1 to expire the cookie immediately
+	session.Options.MaxAge = -1
+
+	// Save the session before redirecting
+	err = session.Save(r, w)
+	if err != nil {
+		app.logger.Error("Failed to save session", "error", err)
+		app.serverError(w, r, err)
+		return
+	}
+
+	app.logger.Info("Session cleared successfully, redirecting to login")
+
+	// Redirect to login page
+	http.Redirect(w, r, "/auth/linkedin", http.StatusFound)
 }
