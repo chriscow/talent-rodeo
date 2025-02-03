@@ -131,6 +131,15 @@ func (app *application) handleResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Save the phone number
+	if err := app.db.UpdateUserPhone(user.ID, form.Phone); err != nil {
+		form.Validator.AddFieldError("phone", "Failed to save phone number. Please try again.")
+		if err := response.NamedTemplate(w, http.StatusUnprocessableEntity, data, "partial:resume-form", "partials/resume-form.html"); err != nil {
+			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
+		}
+		return
+	}
+
 	// Update onboarding state
 	if err := app.db.UpdateOnboardingStep(user.ID, onboarding.StepResumeUploaded); err != nil {
 		form.Validator.AddFieldError("resume", "Failed to update onboarding state. Please try again.")

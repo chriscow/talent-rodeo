@@ -1,12 +1,10 @@
 ---
-description: your-tools-guidelines
+description: 
 globs: 
 ---
- # Guidelines for Creating and Using tools.py
+# Guidelines for Creating and Using tools.py
 
-`tools.py` is your file for creating tools you can use to help me.
-
-These rules provide comprehensive guidelines for creating and utilizing tools in the project's tools.py file.
+This rule provides comprehensive guidelines for creating and utilizing tools in the project's tools.py file.
 
 ## Initial Setup
 - Review existing tools.py before creating new tools
@@ -49,4 +47,4 @@ def get_stock_data(ticker):
 
 ## Post-Creation
 - Execute tools to fulfill user requests
-- Exception: when request is only for tool creation
+- Exception: when request is only for tool creation 
