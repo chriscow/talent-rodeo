@@ -1,0 +1,42 @@
+{{define "title"}}Upload Resume - Profile{{end}}
+
+{{define "page:main"}}
+<main class="container">
+    <article>
+        <header>
+            <h1>Welcome to Talent Rodeo</h1>
+        </header>
+
+        <h2>Let's start with your resume</h2>
+        <p>
+            Upload your resume and provide your phone number. We'll analyze your experience
+            and have a quick chat to understand your preferences better.
+        </p>
+
+        <form hx-post="/profile" hx-encoding="multipart/form-data">
+            <div class="grid">
+                <label for="phone">
+                    Phone Number
+                    <input type="tel" id="phone" name="phone" required placeholder="+1 (555) 555-5555">
+                    {{with .Validator.FieldErrors.Phone}}
+                    <small class="error">{{.}}</small>
+                    {{end}}
+                </label>
+
+                <label for="resume">
+                    Resume (PDF or DOCX)
+                    <input type="file" id="resume" name="resume" required accept=".pdf,.docx">
+                    <small>PDF or DOCX up to 10MB</small>
+                    {{with .Validator.FieldErrors.Resume}}
+                    <small class="error">{{.}}</small>
+                    {{end}}
+                </label>
+            </div>
+
+            <footer>
+                <button type="submit">Continue</button>
+            </footer>
+        </form>
+    </article>
+</main>
+{{end}}

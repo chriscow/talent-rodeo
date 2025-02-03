@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"talent-rodeo/internal/database"
+	"talent-rodeo/internal/onboarding"
 	"talent-rodeo/internal/response"
 	"talent-rodeo/internal/rodeo"
 )
@@ -15,7 +16,7 @@ func (app *application) restartOnboarding(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := app.db.UpdateUserOnboarding(user.ID, database.OnboardingStepInitial); err != nil {
+	if err := app.db.UpdateOnboardingStep(user.ID, onboarding.StepInitial); err != nil {
 		app.serverError(w, r, fmt.Errorf("restartOnboarding: failed to update onboarding: %w", err))
 		return
 	}

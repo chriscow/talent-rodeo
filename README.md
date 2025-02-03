@@ -1006,3 +1006,11 @@ Important: The version control system revision number will only be available aft
 ## Changing the module path
 
 The module path is currently set to `talent-rodeo`. If you want to change this please find and replace all instances of `talent-rodeo` in the codebase with your own module path.
+
+
+## To play a .ulaw file on macOS
+
+```bash
+brew install sox
+play -t ul -r 8000 -c 1 event_Arqp5eUAulHMySlmVvVtJ.ulaw
+```

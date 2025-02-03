@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"talent-rodeo/internal/database"
+	"talent-rodeo/internal/onboarding"
 	"talent-rodeo/internal/response"
 	"talent-rodeo/internal/rodeo"
 	"talent-rodeo/internal/validator"
@@ -85,11 +86,17 @@ func (app *application) handleResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Update onboarding state
+	if err := app.db.UpdateOnboardingStep(user.ID, onboarding.StepResumeUploaded); err != nil {
+		app.serverError(w, r, fmt.Errorf("failed to update onboarding state: %w", err))
+		return
+	}
+
 	app.startOnboarding(r, user, resumeText)
 
 	app.logger.Info("Resume uploaded successfully", "filename", header.Filename, "phone", form.Phone)
 	if err := response.Page(w, http.StatusOK, data, "pages/profile.html"); err != nil {
-		app.serverError(w, r, err)
+		app.serverError(w, r, fmt.Errorf("failed to render profile page: %w", err))
 	}
 }
 

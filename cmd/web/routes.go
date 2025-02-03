@@ -39,6 +39,10 @@ func (app *application) routes() http.Handler {
 			mux.Use(app.requireAuthenticatedUser)
 			mux.HandleFunc("/profile", app.profile, "GET", "POST")
 			mux.HandleFunc("/profile/resume", app.resetResume, "DELETE")
+			mux.HandleFunc("/schedule-call", app.scheduleCall, "POST")
+			mux.HandleFunc("/reschedule-call", app.rescheduleCall, "POST")
+			mux.HandleFunc("/interview", app.InterviewPage, "GET")
+			mux.HandleFunc("/api/interview/audio", app.HandleAudio, "POST")
 
 			mux.HandleFunc("/onboarding/restart", app.restartOnboarding, "PUT")
 
@@ -54,9 +58,6 @@ func (app *application) routes() http.Handler {
 
 			mux.HandleFunc("/user/:id/keywords", app.editKeywords, "GET")
 			mux.HandleFunc("/user/:id/keywords", app.saveKeywords, "POST")
-
-			mux.HandleFunc("/chat", app.handleChat, "GET", "POST")
-			mux.HandleFunc("/messages", app.handleMessages, "GET")
 		})
 	})
 

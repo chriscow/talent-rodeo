@@ -6,6 +6,8 @@ import (
 	"errors"
 	"time"
 
+	"talent-rodeo/internal/onboarding"
+
 	"github.com/markbates/goth"
 )
 
@@ -34,7 +36,12 @@ type User struct {
 	ResumeFilename   *string `db:"resume_filename"`
 	FullResume       *string `db:"full_resume"`
 	SummarizedResume *string `db:"summarized_resume"`
-	OnboardingStep   string  `db:"onboarding_step"`
+
+	// Onboarding fields
+	OnboardingStep          onboarding.Step `db:"onboarding_step"`
+	OnboardingStartedAt     *time.Time      `db:"onboarding_started_at"`
+	OnboardingCompletedAt   *time.Time      `db:"onboarding_completed_at"`
+	OnboardingStepUpdatedAt *time.Time      `db:"onboarding_step_updated_at"`
 }
 
 type UserKeyword struct {
@@ -207,13 +214,7 @@ func (db *DB) UpdateFullResume(userID int, fileName, resume string) error {
 	return err
 }
 
-type OnboardingStep string
-
-const (
-	OnboardingStepInitial OnboardingStep = "initial"
-)
-
-func (db *DB) UpdateUserOnboarding(userID int, step OnboardingStep) error {
+func (db *DB) UpdateUserOnboarding(userID int, step onboarding.Step) error {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 
