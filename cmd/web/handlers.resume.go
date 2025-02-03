@@ -49,54 +49,94 @@ func (app *application) handleResume(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := app.newTemplateData(r)
+	form := &initialOnboarding{
+		Validator: validator.Validator{},
+	}
+	data["Form"] = form
 
 	if err := r.ParseMultipartForm(10 << 20); err != nil { // 10MB max
-		app.badRequest(w, r, fmt.Errorf("failed to parse form: %w", err))
+		form.Validator.AddFieldError("resume", "File too large. Maximum size is 10MB")
+		if err := response.NamedTemplate(w, http.StatusUnprocessableEntity, data, "partial:resume-form", "partials/resume-form.html"); err != nil {
+			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
+		}
 		return
 	}
 
-	form, file, header, err := app.parseResumeForm(r)
+	file, header, err := r.FormFile("resume")
 	if err != nil {
-		app.badRequest(w, r, err)
+		form.Validator.AddFieldError("resume", "Please select a file")
+		if err := response.NamedTemplate(w, http.StatusUnprocessableEntity, data, "partial:resume-form", "partials/resume-form.html"); err != nil {
+			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
+		}
 		return
 	}
 	defer file.Close()
 
+	form.Phone = r.FormValue("phone")
+	form.Filename = header.Filename
+
+	phoneRegex := regexp.MustCompile(`^\+?1?\d{10,}$`)
+	form.Validator.CheckField(validator.Matches(form.Phone, phoneRegex), "phone", "Invalid phone number")
+	form.Validator.CheckField(isValidFileType(header.Filename), "resume", "Invalid file type. Please upload a DOCX or PDF file.")
+
 	if form.Validator.HasErrors() {
-		app.handleFormErrors(w, r, form.Validator, data)
+		if err := response.NamedTemplate(w, http.StatusUnprocessableEntity, data, "partial:resume-form", "partials/resume-form.html"); err != nil {
+			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
+		}
 		return
 	}
 
-	tempFile, err := app.saveTempFile(file)
+	tempFile, err := os.CreateTemp("", "resume-*."+filepath.Ext(header.Filename))
 	if err != nil {
-		app.serverError(w, r, err)
+		form.Validator.AddFieldError("resume", "Failed to process file. Please try again.")
+		if err := response.NamedTemplate(w, http.StatusUnprocessableEntity, data, "partial:resume-form", "partials/resume-form.html"); err != nil {
+			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
+		}
 		return
 	}
 	defer os.Remove(tempFile.Name())
 
+	_, err = io.Copy(tempFile, file)
+	if err != nil {
+		form.Validator.AddFieldError("resume", "Failed to process file. Please try again.")
+		if err := response.NamedTemplate(w, http.StatusUnprocessableEntity, data, "partial:resume-form", "partials/resume-form.html"); err != nil {
+			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
+		}
+		return
+	}
+
 	resumeText, err := app.extractResumeText(tempFile, header.Filename)
 	if err != nil {
-		app.serverError(w, r, err)
+		form.Validator.AddFieldError("resume", fmt.Sprintf("Failed to extract text from resume: %v", err))
+		if err := response.NamedTemplate(w, http.StatusUnprocessableEntity, data, "partial:resume-form", "partials/resume-form.html"); err != nil {
+			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
+		}
 		return
 	}
 
 	user := contextGetAuthenticatedUser(r)
 	if err := app.updateUserResume(user, header.Filename, resumeText); err != nil {
-		app.serverError(w, r, err)
+		form.Validator.AddFieldError("resume", "Failed to save resume. Please try again.")
+		if err := response.NamedTemplate(w, http.StatusUnprocessableEntity, data, "partial:resume-form", "partials/resume-form.html"); err != nil {
+			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
+		}
 		return
 	}
 
 	// Update onboarding state
 	if err := app.db.UpdateOnboardingStep(user.ID, onboarding.StepResumeUploaded); err != nil {
-		app.serverError(w, r, fmt.Errorf("failed to update onboarding state: %w", err))
+		form.Validator.AddFieldError("resume", "Failed to update onboarding state. Please try again.")
+		if err := response.NamedTemplate(w, http.StatusUnprocessableEntity, data, "partial:resume-form", "partials/resume-form.html"); err != nil {
+			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
+		}
 		return
 	}
 
 	app.startOnboarding(r, user, resumeText)
 
 	app.logger.Info("Resume uploaded successfully", "filename", header.Filename, "phone", form.Phone)
-	if err := response.Page(w, http.StatusOK, data, "pages/profile.html"); err != nil {
-		app.serverError(w, r, fmt.Errorf("failed to render profile page: %w", err))
+	if err := response.Page(w, http.StatusOK, data, "pages/profile-phone-call.html"); err != nil {
+		app.serverError(w, r, fmt.Errorf("failed to render next page: %w", err))
 	}
 }
 

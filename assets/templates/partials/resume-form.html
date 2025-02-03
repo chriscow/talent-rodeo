@@ -1,0 +1,39 @@
+{{define "partial:resume-form"}}
+<div id="resume-form">
+    {{if .Form.Validator.HasErrors}}
+    <article aria-label="Error message" role="alert"
+        style="color: var(--pico-form-element-invalid-active-border-color);">
+        Please correct the errors below and try again.
+    </article>
+    {{end}}
+
+    <form hx-post="/profile" hx-encoding="multipart/form-data" hx-target="#resume-form" hx-swap="outerHTML">
+        <div class="grid">
+            <label for="phone">
+                Phone Number
+                <input type="tel" id="phone" name="phone" required placeholder="+1 (555) 555-5555"
+                    value="{{.Form.Phone}}" {{with .Form.Validator.FieldErrors.phone}} aria-invalid="true"
+                    aria-describedby="phone-error" {{end}}>
+                {{with .Form.Validator.FieldErrors.phone}}
+                <small id="phone-error" role="alert">{{.}}</small>
+                {{end}}
+            </label>
+
+            <label for="resume">
+                Resume (PDF or DOCX)
+                <input type="file" id="resume" name="resume" required accept=".pdf,.docx"
+                    aria-describedby="resume-help{{if .Form.Validator.FieldErrors.resume}} resume-error{{end}}" {{with
+                    .Form.Validator.FieldErrors.resume}} aria-invalid="true" {{end}}>
+                {{with .Form.Validator.FieldErrors.resume}}
+                <small id="resume-error" role="alert">{{.}}</small>
+                {{end}}
+                <small id="resume-help">PDF or DOCX up to 10MB</small>
+            </label>
+        </div>
+
+        <footer>
+            <button type="submit">Continue</button>
+        </footer>
+    </form>
+</div>
+{{end}}
