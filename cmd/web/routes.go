@@ -39,12 +39,19 @@ func (app *application) routes() http.Handler {
 			mux.Use(app.requireAuthenticatedUser)
 			mux.HandleFunc("/profile", app.profile, "GET", "POST")
 			mux.HandleFunc("/profile/resume", app.resetResume, "DELETE")
+			mux.HandleFunc("/profile/resume/upload", app.resumeUploadPage, "GET")
 			mux.HandleFunc("/schedule-call", app.scheduleCall, "POST")
 			mux.HandleFunc("/reschedule-call", app.rescheduleCall, "POST")
 			mux.HandleFunc("/interview", app.InterviewPage, "GET")
 			mux.HandleFunc("/api/interview/audio", app.HandleAudio, "POST")
 
 			mux.HandleFunc("/onboarding/restart", app.restartOnboarding, "PUT")
+
+			// Scheduling routes
+			mux.HandleFunc("/schedule", app.scheduleHandler, "GET")
+			mux.HandleFunc("/schedule/preferences", app.schedulePreferencesSubmitHandler, "POST")
+			mux.HandleFunc("/schedule/appointment", app.scheduleAppointmentHandler, "POST")
+			mux.HandleFunc("/schedule/appointment/:id", app.cancelAppointmentHandler, "DELETE")
 
 			// mux.HandleFunc("/resume", app.handleResume, "GET", "POST")
 			mux.HandleFunc("/logout", app.logout, "POST")

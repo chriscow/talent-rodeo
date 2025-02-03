@@ -9,8 +9,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"phone-llm/internal/voice"
 	"strings"
+	"talent-rodeo/internal/voice"
 	"time"
 
 	"github.com/fatih/color"

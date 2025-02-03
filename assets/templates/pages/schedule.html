@@ -1,0 +1,254 @@
+{{define "title"}}Schedule Interview{{end}}
+
+{{define "main"}}
+<main class="container">
+    <article>
+        <header>
+            <h1>Schedule Your Interview</h1>
+        </header>
+
+        <!-- Scheduling Preferences Form -->
+        <article>
+            <header>
+                <h2>Your Scheduling Preferences</h2>
+            </header>
+            <form method="post" action="/schedule/preferences">
+                <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+
+                <label for="timezone">Your Timezone</label>
+                <select name="timezone" id="timezone" required>
+                    <option value="">Select your timezone</option>
+                    <!-- Will be populated by JavaScript -->
+                </select>
+                {{with .Form.FieldErrors.timezone}}
+                <small class="error">{{.}}</small>
+                {{end}}
+
+                <fieldset>
+                    <legend>Preferred Days</legend>
+                    <label>
+                        <input type="checkbox" name="preferred_days" value="monday" id="monday">
+                        Monday
+                    </label>
+                    <label>
+                        <input type="checkbox" name="preferred_days" value="tuesday" id="tuesday">
+                        Tuesday
+                    </label>
+                    <label>
+                        <input type="checkbox" name="preferred_days" value="wednesday" id="wednesday">
+                        Wednesday
+                    </label>
+                    <label>
+                        <input type="checkbox" name="preferred_days" value="thursday" id="thursday">
+                        Thursday
+                    </label>
+                    <label>
+                        <input type="checkbox" name="preferred_days" value="friday" id="friday">
+                        Friday
+                    </label>
+                    {{with .Form.FieldErrors.preferred_days}}
+                    <small class="error">{{.}}</small>
+                    {{end}}
+                </fieldset>
+
+                <div class="grid">
+                    <label for="preferred_time_start">
+                        Preferred Start Time
+                        <input type="time" name="preferred_time_start" id="preferred_time_start" required>
+                        {{with .Form.FieldErrors.preferred_time_start}}
+                        <small class="error">{{.}}</small>
+                        {{end}}
+                    </label>
+
+                    <label for="preferred_time_end">
+                        Preferred End Time
+                        <input type="time" name="preferred_time_end" id="preferred_time_end" required>
+                        {{with .Form.FieldErrors.preferred_time_end}}
+                        <small class="error">{{.}}</small>
+                        {{end}}
+                    </label>
+                </div>
+
+                <button type="submit">Save Preferences</button>
+            </form>
+        </article>
+
+        <!-- Calendar -->
+        <article>
+            <header>
+                <h2>Available Time Slots</h2>
+            </header>
+            <div id="calendar"></div>
+        </article>
+
+        <!-- Upcoming Appointments -->
+        {{if .Appointments}}
+        <article>
+            <header>
+                <h2>Your Upcoming Appointments</h2>
+            </header>
+            {{range .Appointments}}
+            <article class="appointment">
+                <header>
+                    <div class="grid">
+                        <h3>Interview</h3>
+                        <small>{{.Status}}</small>
+                    </div>
+                </header>
+                <p>Scheduled for: {{formatTime "Jan 2, 2006 3:04 PM MST" .ScheduledTime}}</p>
+                <small>Timezone: {{.Timezone}}</small>
+                {{if eq .Status "scheduled"}}
+                <form method="post" action="/schedule/appointment/{{.ID}}/cancel" style="margin: 0;">
+                    <input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
+                    <button type="submit" class="secondary outline"
+                        onclick="return confirm('Are you sure you want to cancel this appointment?')">
+                        Cancel
+                    </button>
+                </form>
+                {{end}}
+            </article>
+            {{end}}
+        </article>
+        {{end}}
+    </article>
+</main>
+
+<!-- JavaScript for Timezone and Calendar -->
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Populate timezone select
+        const timezones = Intl.supportedValuesOf('timeZone');
+        const tzSelect = document.getElementById('timezone');
+        const userTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+        timezones.forEach(tz => {
+            const opt = document.createElement('option');
+            opt.value = tz;
+            opt.textContent = tz;
+            if (tz === userTz) {
+                opt.selected = true;
+            }
+            tzSelect.appendChild(opt);
+        });
+
+        // Set current preferences if they exist
+        { { if .Preferences} }
+        document.getElementById('timezone').value = "{{.Preferences.Timezone}}";
+        { { range.Preferences.PreferredDays } }
+        document.getElementById("{{.}}".toLowerCase()).checked = true;
+        { { end } }
+        document.getElementById('preferred_time_start').value = "{{.Preferences.PreferredTimeStart}}";
+        document.getElementById('preferred_time_end').value = "{{.Preferences.PreferredTimeEnd}}";
+        { { end } }
+
+        // Initialize calendar
+        const calendarEl = document.getElementById('calendar');
+        const calendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: 'timeGridWeek',
+            slotMinTime: '09:00:00',
+            slotMaxTime: '17:00:00',
+            allDaySlot: false,
+            selectable: true,
+            selectMirror: true,
+            timeZone: userTz,
+            businessHours: {
+                daysOfWeek: [1, 2, 3, 4, 5], // Monday - Friday
+                startTime: '09:00',
+                endTime: '17:00',
+            },
+            select: function (info) {
+                if (confirm('Would you like to schedule an interview for ' + info.startStr + '?')) {
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.action = '/schedule/appointment';
+
+                    const csrfInput = document.createElement('input');
+                    csrfInput.type = 'hidden';
+                    csrfInput.name = 'csrf_token';
+                    csrfInput.value = '{{ .CSRFToken }}';
+                    form.appendChild(csrfInput);
+
+                    const datetimeInput = document.createElement('input');
+                    datetimeInput.type = 'hidden';
+                    datetimeInput.name = 'datetime';
+                    datetimeInput.value = info.startStr;
+                    form.appendChild(datetimeInput);
+
+                    const timezoneInput = document.createElement('input');
+                    timezoneInput.type = 'hidden';
+                    timezoneInput.name = 'timezone';
+                    timezoneInput.value = userTz;
+                    form.appendChild(timezoneInput);
+
+                    document.body.appendChild(form);
+                    form.submit();
+                }
+                calendar.unselect();
+            },
+            headerToolbar: {
+                left: 'prev,next today',
+                center: 'title',
+                right: 'timeGridWeek,timeGridDay'
+            }
+        });
+        calendar.render();
+
+        // Add existing appointments to calendar
+        { { range.Appointments } }
+        { { if eq.Status "scheduled" } }
+        calendar.addEvent({
+            title: 'Interview',
+            start: "{{formatTime "2006-01-02T15:04:05Z07:00" .ScheduledTime}}",
+            id: {{.ID }},
+        color: 'var(--pico-primary)'
+        });
+    { { end } }
+    { { end } }
+    });
+</script>
+
+<style>
+    /* Calendar customization for Pico CSS */
+    .fc {
+        --fc-button-bg-color: var(--pico-primary);
+        --fc-button-border-color: var(--pico-primary);
+        --fc-button-hover-bg-color: var(--pico-primary-hover);
+        --fc-button-hover-border-color: var(--pico-primary-hover);
+        --fc-button-active-bg-color: var(--pico-primary-focus);
+        --fc-button-active-border-color: var(--pico-primary-focus);
+    }
+
+    .fc .fc-button {
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
+    }
+
+    .fc .fc-toolbar-title {
+        font-size: 1.25rem;
+    }
+
+    .appointment {
+        margin-bottom: 1rem;
+        padding: 1rem;
+        border: 1px solid var(--pico-muted-border-color);
+        border-radius: var(--pico-border-radius);
+    }
+
+    .appointment header {
+        margin-bottom: 0.5rem;
+    }
+
+    .appointment h3 {
+        margin: 0;
+    }
+
+    .appointment form {
+        margin-top: 1rem;
+        text-align: right;
+    }
+
+    .error {
+        color: var(--pico-form-element-invalid-active-border-color);
+    }
+</style>
+{{end}}
