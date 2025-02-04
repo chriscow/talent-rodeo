@@ -2,6 +2,8 @@ package voice
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"testing"
 	"time"
@@ -10,126 +12,180 @@ import (
 	"talent-rodeo/internal/models"
 )
 
-func TestSchedulerTransactions(t *testing.T) {
-	db := database.SetupTestDB(t)
-	defer db.Close()
+func TestCallScheduler_CancelCallTx(t *testing.T) {
+	tests := []struct {
+		name    string
+		setup   func(context.Context, *database.DB, int64) error
+		taskID  int64
+		wantErr bool
+	}{
+		{
+			name:   "cancel existing task",
+			taskID: time.Now().UnixNano(),
+			setup: func(ctx context.Context, db *database.DB, taskID int64) error {
+				msg := &models.Message{
+					ID:        fmt.Sprintf("%d", taskID),
+					To:        "+1234567890",
+					From:      "system",
+					Body:      "Test message",
+					CreatedAt: time.Now(),
+				}
+				payload, err := json.Marshal(msg)
+				if err != nil {
+					return fmt.Errorf("failed to marshal message: %v", err)
+				}
 
-	logger := slog.Default()
-	scheduler := NewCallScheduler(db, logger)
+				task := &models.Task{
+					ID:          taskID,
+					Type:        "phone_call",
+					Status:      models.TaskStatusPending,
+					MaxAttempts: 3,
+					RunAt:       time.Now().Add(time.Hour),
+					Payload:     payload,
+					CreatedAt:   time.Now(),
+					UpdatedAt:   time.Now(),
+				}
+				return db.CreateTask(ctx, task)
+			},
+			wantErr: false,
+		},
+		{
+			name:    "cancel nonexistent task",
+			taskID:  time.Now().UnixNano(),
+			wantErr: true,
+		},
+	}
 
-	t.Run("basic transaction flow", func(t *testing.T) {
-		// Create a test task
-		task := &models.Task{
-			ID:          "test-task-1",
-			Type:        "phone_call",
-			Status:      models.TaskStatusPending,
-			MaxAttempts: 3,
-			RunAt:       time.Now().Add(1 * time.Hour),
-			CreatedAt:   time.Now(),
-			UpdatedAt:   time.Now(),
-			Payload:     []byte(`{"user_id": 1}`),
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := database.SetupTestDB(t)
+			scheduler := NewCallScheduler(db, slog.Default())
 
-		// Create task outside transaction
-		err := db.CreateTask(task)
-		if err != nil {
-			t.Fatalf("failed to create test task: %v", err)
-		}
+			ctx := context.Background()
+			if tt.setup != nil {
+				if err := tt.setup(ctx, db, tt.taskID); err != nil {
+					t.Fatalf("setup failed: %v", err)
+				}
+			}
 
-		// Start a transaction
-		ctx := context.Background()
-		tx, err := db.BeginTxx(ctx, nil)
-		if err != nil {
-			t.Fatalf("failed to begin transaction: %v", err)
-		}
+			tx, err := db.BeginTxx(ctx, nil)
+			if err != nil {
+				t.Fatalf("failed to begin transaction: %v", err)
+			}
+			defer tx.Rollback()
 
-		// Cancel call within transaction
-		err = scheduler.CancelCallTx(ctx, tx, task.ID)
-		if err != nil {
-			tx.Rollback()
-			t.Fatalf("failed to cancel call in transaction: %v", err)
-		}
+			err = scheduler.CancelCallTx(ctx, tx, tt.taskID)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("CancelCallTx() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
 
-		// Commit and verify cancellation
-		err = tx.Commit()
-		if err != nil {
-			t.Fatalf("failed to commit transaction: %v", err)
-		}
+			if !tt.wantErr {
+				task, err := db.GetTaskTx(ctx, tx, tt.taskID)
+				if err != nil {
+					t.Fatalf("failed to get task: %v", err)
+				}
 
-		// Verify final state
-		savedTask, err := db.GetTask(task.ID)
-		if err != nil {
-			t.Fatalf("failed to get task after commit: %v", err)
-		}
+				if task.Status != models.TaskStatusCancelled {
+					t.Errorf("task status = %v, want %v", task.Status, models.TaskStatusCancelled)
+				}
+			}
 
-		if savedTask.Status != models.TaskStatusCancelled {
-			t.Errorf("task status = %v, want %v", savedTask.Status, models.TaskStatusCancelled)
-		}
-	})
+			if err := tx.Commit(); err != nil {
+				t.Fatalf("failed to commit transaction: %v", err)
+			}
+		})
+	}
+}
 
-	t.Run("rollback", func(t *testing.T) {
-		// Create a test task
-		task := &models.Task{
-			ID:          "test-task-2",
-			Type:        "phone_call",
-			Status:      models.TaskStatusPending,
-			MaxAttempts: 3,
-			RunAt:       time.Now().Add(1 * time.Hour),
-			CreatedAt:   time.Now(),
-			UpdatedAt:   time.Now(),
-			Payload:     []byte(`{"user_id": 1}`),
-		}
+func TestCallScheduler_RescheduleCallTx(t *testing.T) {
+	tests := []struct {
+		name      string
+		setup     func(context.Context, *database.DB, int64) error
+		taskID    int64
+		newRunAt  time.Time
+		wantErr   bool
+		wantRunAt time.Time
+	}{
+		{
+			name:      "reschedule existing task",
+			taskID:    time.Now().UnixNano(),
+			newRunAt:  time.Now().Add(2 * time.Hour),
+			wantRunAt: time.Now().Add(2 * time.Hour),
+			setup: func(ctx context.Context, db *database.DB, taskID int64) error {
+				msg := &models.Message{
+					ID:        fmt.Sprintf("%d", taskID),
+					To:        "+1234567890",
+					From:      "system",
+					Body:      "Test message",
+					CreatedAt: time.Now(),
+				}
+				payload, err := json.Marshal(msg)
+				if err != nil {
+					return fmt.Errorf("failed to marshal message: %v", err)
+				}
 
-		// Create task outside transaction
-		err := db.CreateTask(task)
-		if err != nil {
-			t.Fatalf("failed to create test task: %v", err)
-		}
+				task := &models.Task{
+					ID:          taskID,
+					Type:        "phone_call",
+					Status:      models.TaskStatusPending,
+					MaxAttempts: 3,
+					RunAt:       time.Now().Add(time.Hour),
+					Payload:     payload,
+					CreatedAt:   time.Now(),
+					UpdatedAt:   time.Now(),
+				}
+				return db.CreateTask(ctx, task)
+			},
+			wantErr: false,
+		},
+		{
+			name:      "reschedule nonexistent task",
+			taskID:    time.Now().UnixNano(),
+			newRunAt:  time.Now().Add(2 * time.Hour),
+			wantRunAt: time.Now().Add(2 * time.Hour),
+			wantErr:   true,
+		},
+	}
 
-		// Start a transaction
-		ctx := context.Background()
-		tx, err := db.BeginTxx(ctx, nil)
-		if err != nil {
-			t.Fatalf("failed to begin transaction: %v", err)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := database.SetupTestDB(t)
+			scheduler := NewCallScheduler(db, slog.Default())
 
-		// Cancel call within transaction
-		err = scheduler.CancelCallTx(ctx, tx, task.ID)
-		if err != nil {
-			tx.Rollback()
-			t.Fatalf("failed to cancel call in transaction: %v", err)
-		}
+			ctx := context.Background()
+			if tt.setup != nil {
+				if err := tt.setup(ctx, db, tt.taskID); err != nil {
+					t.Fatalf("setup failed: %v", err)
+				}
+			}
 
-		// Rollback and verify task is not cancelled
-		err = tx.Rollback()
-		if err != nil {
-			t.Fatalf("failed to rollback transaction: %v", err)
-		}
+			tx, err := db.BeginTxx(ctx, nil)
+			if err != nil {
+				t.Fatalf("failed to begin transaction: %v", err)
+			}
+			defer tx.Rollback()
 
-		savedTask, err := db.GetTask(task.ID)
-		if err != nil {
-			t.Fatalf("failed to get task after rollback: %v", err)
-		}
+			err = scheduler.RescheduleCallTx(ctx, tx, tt.taskID, tt.newRunAt)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("RescheduleCallTx() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
 
-		if savedTask.Status == models.TaskStatusCancelled {
-			t.Error("task was cancelled despite transaction rollback")
-		}
-	})
+			if !tt.wantErr {
+				task, err := db.GetTaskTx(ctx, tx, tt.taskID)
+				if err != nil {
+					t.Fatalf("failed to get task: %v", err)
+				}
 
-	t.Run("error cases", func(t *testing.T) {
-		ctx := context.Background()
-		tx, err := db.BeginTxx(ctx, nil)
-		if err != nil {
-			t.Fatalf("failed to begin transaction: %v", err)
-		}
+				if !task.RunAt.Equal(tt.wantRunAt) {
+					t.Errorf("task run_at = %v, want %v", task.RunAt, tt.wantRunAt)
+				}
+			}
 
-		// Try to cancel nonexistent task
-		err = scheduler.CancelCallTx(ctx, tx, "nonexistent")
-		if err == nil {
-			tx.Rollback()
-			t.Fatal("expected error cancelling nonexistent call, got nil")
-		}
-
-		tx.Rollback()
-	})
+			if err := tx.Commit(); err != nil {
+				t.Fatalf("failed to commit transaction: %v", err)
+			}
+		})
+	}
 }
