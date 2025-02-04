@@ -18,16 +18,24 @@ import (
 	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/providers/gemini"
 	"github.com/chriscow/minds/providers/openai"
-	"github.com/jmoiron/sqlx"
 )
 
+// DBProvider is an interface that provides database operations
+type DBProvider interface {
+	GetContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
+	SelectContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+}
+
 type SearchManager struct {
-	db       *sqlx.DB
+	db       DBProvider
 	jobStore *JobStore
 	logger   *slog.Logger
 }
 
-func NewSearchManager(db *sqlx.DB, logger *slog.Logger) *SearchManager {
+func NewSearchManager(db DBProvider, logger *slog.Logger) *SearchManager {
 	return &SearchManager{db: db, jobStore: &JobStore{db: db}, logger: logger}
 }
 
@@ -115,11 +123,12 @@ RETURNING
 	sm.logger.Debug("Search results", "search_id", searchID, "count", len(jobListings))
 
 	// Save the results and update total count
-	if _, err := sm.db.ExecContext(ctx, `
+	_, err = sm.db.ExecContext(ctx, `
         UPDATE job_searches 
         SET total_results = ? 
         WHERE id = ?
-    `, len(jobListings), searchID); err != nil {
+    `, len(jobListings), searchID)
+	if err != nil {
 		log.Printf("failed to update total results count: %v", err)
 	}
 
@@ -320,63 +329,83 @@ func (sm *SearchManager) getPeopleAlsoViewed(ctx context.Context, jobID string) 
 }
 
 func (sm *SearchManager) saveJobDetail(ctx context.Context, jobID string, job JobDetail) error {
-	tx, err := sm.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer tx.Rollback()
-
-	// Insert main job details
-	_, err = tx.ExecContext(ctx, `
-        INSERT INTO jobs (
-            id, position, status, location, company_name,
-            company_linkedin_id, posting_time, base_pay, description,
-            seniority_level, employment_type, function, industries
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	// Insert job
+	_, err := sm.db.ExecContext(ctx, `
+		INSERT INTO jobs (
+			id, title, status, location, company_name,
+			company_linkedin_id, posting_time, base_pay, description,
+			description_html, description_summarized,
+			seniority_level, employment_type, job_function, industries
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (id) DO UPDATE SET
+			title = excluded.title,
+			status = excluded.status,
+			location = excluded.location,
+			company_name = excluded.company_name,
+			company_linkedin_id = excluded.company_linkedin_id,
+			posting_time = excluded.posting_time,
+			base_pay = excluded.base_pay,
+			description = excluded.description,
+			description_html = excluded.description_html,
+			description_summarized = excluded.description_summarized,
+			seniority_level = excluded.seniority_level,
+			employment_type = excluded.employment_type,
+			job_function = excluded.job_function,
+			industries = excluded.industries`,
 		jobID, job.Position, job.Status, job.Location, job.CompanyName,
 		job.CompanyLinkedInID, job.PostingTime, job.BasePay, job.Description,
+		job.DescriptionHTML, job.DescriptionSummarized,
 		job.SeniorityLevel, job.EmploymentType, job.JobFunction, job.Industries)
 	if err != nil {
-		return fmt.Errorf("insert job: %w", err)
+		return fmt.Errorf("failed to insert job: %w", err)
 	}
 
-	// Insert recruiters, similar jobs, and people also viewed...
-	// (similar pattern for each)
-
+	// Insert recruiters
 	for _, r := range job.Recruiters {
-		if r.Name == "" {
-			continue
-		}
-		_, err = tx.ExecContext(ctx, `
-		INSERT INTO recruiters (job_id, photo_url, name, title, profile_url)
-		VALUES (?, ?, ?, ?, ?)`,
+		_, err = sm.db.ExecContext(ctx, `
+			INSERT INTO recruiters (job_id, photo_url, name, title, profile_url)
+			VALUES (?, ?, ?, ?, ?)
+			ON CONFLICT (job_id, name) DO UPDATE SET
+				photo_url = excluded.photo_url,
+				title = excluded.title,
+				profile_url = excluded.profile_url`,
 			jobID, r.Photo, r.Name, r.Title, r.ProfileURL)
 		if err != nil {
-			return fmt.Errorf("insert recruiter: %w", err)
+			return fmt.Errorf("failed to insert recruiter: %w", err)
 		}
 	}
 
+	// Insert similar jobs
 	for _, j := range job.SimilarJobs {
-		_, err := tx.ExecContext(ctx, `
-		INSERT INTO similar_jobs (original_job_id, position, company, location, posting_time, link)
-		VALUES (?, ?, ?, ?, ?, ?)`,
+		_, err = sm.db.ExecContext(ctx, `
+			INSERT INTO similar_jobs (original_job_id, position, company, location, posting_time, link)
+			VALUES (?, ?, ?, ?, ?, ?)
+			ON CONFLICT (original_job_id, position, company) DO UPDATE SET
+				location = excluded.location,
+				posting_time = excluded.posting_time,
+				link = excluded.link`,
 			jobID, j.Position, j.Company, j.Location, j.PostingTime, j.Link)
 		if err != nil {
-			return fmt.Errorf("insert similar job: %w", err)
+			return fmt.Errorf("failed to insert similar job: %w", err)
 		}
 	}
 
+	// Insert people also viewed
 	for _, j := range job.PeopleAlsoViewed {
-		_, err := tx.ExecContext(ctx, `
-		INSERT INTO people_also_viewed (original_job_id, position, company, location, posting_time, link)
-		VALUES (?, ?, ?, ?, ?, ?)`,
+		_, err = sm.db.ExecContext(ctx, `
+			INSERT INTO people_also_viewed (original_job_id, position, company, location, posting_time, link)
+			VALUES (?, ?, ?, ?, ?, ?)
+			ON CONFLICT (original_job_id, position, company) DO UPDATE SET
+				location = excluded.location,
+				posting_time = excluded.posting_time,
+				link = excluded.link`,
 			jobID, j.Position, j.Company, j.Location, j.PostingTime, j.Link)
 		if err != nil {
-			return fmt.Errorf("insert people also viewed: %w", err)
+			return fmt.Errorf("failed to insert people also viewed: %w", err)
 		}
 	}
 
-	return tx.Commit()
+	return nil
 }
 
 // Moved the API call to its own function
