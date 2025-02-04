@@ -35,7 +35,7 @@ func (h *MockTaskHandler) TaskType() string {
 func setupTestProcessor(t *testing.T) (*Processor, *database.DB) {
 	t.Helper()
 	// Create an in-memory database for testing
-	db, err := database.New(":memory:", true)
+	db, err := database.New(":memory:", database.WithInMemory())
 	if err != nil {
 		t.Fatalf("failed to create test database: %v", err)
 	}
