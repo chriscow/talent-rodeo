@@ -2,25 +2,3 @@
 description: 
 globs: 
 ---
-# Python Environment Management
-
-This rule provides guidelines for managing Python virtual environments in the project.
-
-## Virtual Environment Setup and Usage
-
-- Location: `.venv` directory
-- Python Version: 3.11.x (do not use Python 3.13 due to dependency compatibility)
-- Activation: `source .venv/bin/activate`
-
-## Important Commands
-Always use full paths due to shell aliases:
-
-- Python execution: `.venv/bin/python`
-- Version check: `.venv/bin/python --version`
-- Install dependencies: `.venv/bin/pip install -r requirements.txt`
-- Running tools: `.venv/bin/python -c "import tools; ..."`
-
-## Key Requirements
-- Verify Python version shows 3.11.x before proceeding
-- Always use the virtual environment for all Python operations
-- Install all dependencies within the virtual environment 

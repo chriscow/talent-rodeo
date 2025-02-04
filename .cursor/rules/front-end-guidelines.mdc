@@ -1,6 +1,6 @@
 ---
-description: 
-globs: 
+description: Front End UI Guidelines
+globs: **/*.html,**/*.tmpl,**/*.css
 ---
 # HTMX and PicoCSS Guidelines
 
