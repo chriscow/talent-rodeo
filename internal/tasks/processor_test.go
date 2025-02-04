@@ -34,57 +34,9 @@ func (h *MockTaskHandler) TaskType() string {
 
 func setupTestProcessor(t *testing.T) (*Processor, *database.DB) {
 	t.Helper()
-	// Create an in-memory database for testing
-	db, err := database.New(":memory:", database.WithInMemory())
-	if err != nil {
-		t.Fatalf("failed to create test database: %v", err)
-	}
 
-	// Enable foreign key support
-	_, err = db.DB.Exec("PRAGMA foreign_keys = ON;")
-	if err != nil {
-		t.Fatalf("failed to enable foreign keys: %v", err)
-	}
-
-	// Create the tasks table
-	_, err = db.DB.Exec(`
-		CREATE TABLE IF NOT EXISTS tasks (
-			id TEXT PRIMARY KEY,
-			type TEXT NOT NULL,
-			payload BLOB,
-			status TEXT NOT NULL CHECK (
-				status IN (
-					'pending',
-					'running',
-					'complete',
-					'failed',
-					'retrying',
-					'cancelled'
-				)
-			),
-			attempts INTEGER NOT NULL DEFAULT 0,
-			max_attempts INTEGER NOT NULL DEFAULT 3,
-			run_at DATETIME NOT NULL,
-			error TEXT,
-			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		);
-
-		CREATE INDEX IF NOT EXISTS idx_tasks_status_run_at ON tasks (status, run_at)
-		WHERE
-			status IN ('pending', 'retrying');
-
-		CREATE TRIGGER IF NOT EXISTS tasks_updated_at 
-			AFTER UPDATE ON tasks
-		BEGIN
-			UPDATE tasks 
-			SET updated_at = CURRENT_TIMESTAMP
-			WHERE id = NEW.id;
-		END;
-	`)
-	if err != nil {
-		t.Fatalf("failed to create tasks table: %v", err)
-	}
+	// Use the test database helper
+	db := database.SetupTestDB(t)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
@@ -145,8 +97,8 @@ func TestProcessor_EnqueueTask(t *testing.T) {
 			t.Fatalf("failed to enqueue task: %v", err)
 		}
 
-		if task.ID == "" {
-			t.Error("task ID is empty")
+		if got := task.ID; got == 0 {
+			t.Error("task ID is zero")
 		}
 		if got := task.Type; got != "test_task" {
 			t.Errorf("task type = %q; want %q", got, "test_task")
@@ -173,7 +125,7 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 
 	// Create a test task
 	task := &models.Task{
-		ID:          "test-id",
+		ID:          time.Now().UnixNano(),
 		Type:        "test_task",
 		Payload:     []byte("{}"),
 		Status:      models.TaskStatusPending,
@@ -183,7 +135,7 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 		UpdatedAt:   time.Now(),
 	}
 
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(ctx, task); err != nil {
 		t.Fatalf("failed to create test task: %v", err)
 	}
 
@@ -196,7 +148,7 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 		processor.wg.Wait()
 
 		// Verify the task was processed
-		processedTask, err := db.GetTask(task.ID)
+		processedTask, err := db.GetTask(ctx, task.ID)
 		if err != nil {
 			t.Fatalf("failed to get processed task: %v", err)
 		}
@@ -216,14 +168,14 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 			t.Errorf("processed tasks count = %d; want %d", got, 1)
 		}
 		if got := handler.processedTasks[0].ID; got != task.ID {
-			t.Errorf("processed task ID = %q; want %q", got, task.ID)
+			t.Errorf("processed task ID = %d; want %d", got, task.ID)
 		}
 	})
 
 	t.Run("handle task processing error", func(t *testing.T) {
 		// Create a new task that will fail
 		failingTask := &models.Task{
-			ID:          "failing-task",
+			ID:          time.Now().UnixNano(),
 			Type:        "test_task",
 			Payload:     []byte("{}"),
 			Status:      models.TaskStatusPending,
@@ -233,7 +185,7 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 			UpdatedAt:   time.Now(),
 		}
 
-		if err := db.CreateTask(failingTask); err != nil {
+		if err := db.CreateTask(ctx, failingTask); err != nil {
 			t.Fatalf("failed to create failing task: %v", err)
 		}
 
@@ -248,7 +200,7 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 		processor.wg.Wait()
 
 		// Verify the task was marked for retry
-		processedTask, err := db.GetTask(failingTask.ID)
+		processedTask, err := db.GetTask(ctx, failingTask.ID)
 		if err != nil {
 			t.Fatalf("failed to get processed task: %v", err)
 		}
@@ -266,7 +218,7 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 		// Process again to exceed max attempts
 		// First, update the task's RunAt time to the past so it will be picked up
 		processedTask.RunAt = time.Now().Add(-time.Hour)
-		if err := db.UpdateTask(processedTask); err != nil {
+		if err := db.UpdateTask(ctx, processedTask); err != nil {
 			t.Fatalf("failed to update task run_at: %v", err)
 		}
 
@@ -278,7 +230,7 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 		processor.wg.Wait()
 
 		// Verify the task was marked as failed
-		processedTask, err = db.GetTask(failingTask.ID)
+		processedTask, err = db.GetTask(ctx, failingTask.ID)
 		if err != nil {
 			t.Fatalf("failed to get processed task: %v", err)
 		}
