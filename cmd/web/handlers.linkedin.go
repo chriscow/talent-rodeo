@@ -44,7 +44,7 @@ func (app *application) linkedInSearch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) handleSearch(w http.ResponseWriter, r *http.Request) {
-	searchManager := linkedin.NewSearchManager(app.db.DB, app.logger)
+	searchManager := linkedin.NewSearchManager(app.db, app.logger)
 
 	keyword := r.FormValue("keyword")
 	geoId := r.FormValue("geoId")
@@ -96,7 +96,7 @@ func (app *application) handleSearch(w http.ResponseWriter, r *http.Request) {
 func (app *application) jobDetail(w http.ResponseWriter, r *http.Request) {
 	jobID := flow.Param(r.Context(), "id")
 
-	searchManager := linkedin.NewSearchManager(app.db.DB, app.logger)
+	searchManager := linkedin.NewSearchManager(app.db, app.logger)
 
 	// Get the job details from your database
 	job, err := searchManager.GetJobDetail(r.Context(), jobID)
@@ -151,7 +151,7 @@ func (app *application) jobDetail(w http.ResponseWriter, r *http.Request) {
 func (app *application) handleJobMatch(w http.ResponseWriter, r *http.Request) {
 	jobID := flow.Param(r.Context(), "id")
 
-	searchManager := linkedin.NewSearchManager(app.db.DB, app.logger)
+	searchManager := linkedin.NewSearchManager(app.db, app.logger)
 
 	// Get the job details from your database
 	jobDetail, err := searchManager.GetJobDetail(r.Context(), jobID)

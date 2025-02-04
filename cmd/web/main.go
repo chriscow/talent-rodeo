@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"runtime/debug"
+	"strings"
 	"sync"
 
 	"talent-rodeo/internal/auth"
@@ -126,11 +127,57 @@ func run(logger *slog.Logger) error {
 		return nil
 	}
 
-	db, err := database.New(cfg.db.dsn, cfg.db.automigrate)
-	if err != nil {
-		return err
+	// Use environment DSN if available, fallback to flag value
+	if envDSN := os.Getenv("DB_DSN"); envDSN != "" {
+		cfg.db.dsn = envDSN
+		logger.Debug("using database DSN from environment",
+			"dsn_type", func() string {
+				if strings.HasPrefix(envDSN, "postgres") {
+					return "PostgreSQL"
+				}
+				return "SQLite"
+			}(),
+			"dsn_prefix", envDSN[:10]+"...")
 	}
-	defer db.Close()
+
+	var db *database.DB
+	if strings.HasPrefix(cfg.db.dsn, "postgres") {
+		logger.Info("initializing PostgreSQL database")
+		pgDB, err := database.NewPG(cfg.db.dsn, cfg.db.automigrate)
+		if err != nil {
+			logger.Error("failed to connect to PostgreSQL",
+				"error", err,
+				"dsn_prefix", cfg.db.dsn[:10]+"...")
+			return fmt.Errorf("failed to connect to PostgreSQL: %w", err)
+		}
+		logger.Debug("creating database instance from PostgreSQL connection")
+		db = database.NewFromPG(pgDB, logger)
+		logger.Info("PostgreSQL database initialized successfully")
+	} else {
+		logger.Info("initializing SQLite database", "path", cfg.db.dsn)
+		var err error
+		opts := []database.Option{
+			database.WithLogger(logger),
+			database.WithForeignKeys(),
+		}
+		if cfg.db.automigrate {
+			logger.Debug("enabling automatic migrations for SQLite")
+			opts = append(opts, database.WithTasksTable())
+		}
+		db, err = database.New(cfg.db.dsn, opts...)
+		if err != nil {
+			logger.Error("failed to connect to SQLite",
+				"error", err,
+				"path", cfg.db.dsn)
+			return fmt.Errorf("failed to connect to SQLite: %w", err)
+		}
+		logger.Info("SQLite database initialized successfully")
+	}
+	defer func() {
+		logger.Debug("closing database connection")
+		db.Close()
+		logger.Info("database connection closed")
+	}()
 
 	mailer, err := smtp.NewMailer(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.from)
 	if err != nil {
