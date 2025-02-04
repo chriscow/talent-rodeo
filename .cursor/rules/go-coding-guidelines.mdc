@@ -10,5 +10,6 @@ You are using go version go1.23.4
 - Always execute the tests you wrote to make sure your code works as you expect
 - Make sure we are getting sufficient code coverage
 - Use verbose debug logging to help diagnose issues
+- Always do a build to be sure nothing broke `go build -o /tmp/talent-rodeo ./cmd`
 
-- you have tools in [tools.py](mdc:talent-rodeo/talent-rodeo/talent-rodeo/talent-rodeo/tools.py) to help you run Go tests
+- you have tools in [tools.py](mdc:talent-rodeo/talent-rodeo/talent-rodeo/talent-rodeo/talent-rodeo/talent-rodeo/talent-rodeo/tools.py) available for many things. Please examine this file so you are aware of your tools.

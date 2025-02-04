@@ -1,14 +1,15 @@
--- Create tasks table for background job processing
 CREATE TABLE tasks (
-    id BIGSERIAL PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     type TEXT NOT NULL,
-    payload JSONB NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending' CHECK (
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status TEXT NOT NULL CHECK (
         status IN (
             'pending',
-            'in_progress',
-            'completed',
-            'failed'
+            'running',
+            'complete',
+            'failed',
+            'cancelled',
+            'retrying'
         )
     ),
     attempts INTEGER NOT NULL DEFAULT 0,
@@ -19,14 +20,12 @@ CREATE TABLE tasks (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create indexes for common queries
-CREATE INDEX idx_tasks_status ON tasks (status);
+-- Index for finding pending tasks
+CREATE INDEX tasks_pending_idx ON tasks (status, run_at)
+WHERE
+    status IN ('pending', 'retrying');
 
-CREATE INDEX idx_tasks_type ON tasks (type);
-
-CREATE INDEX idx_tasks_run_at ON tasks (run_at);
-
--- Create trigger for updating timestamps
+-- Use the standard update_timestamp function
 CREATE TRIGGER tasks_updated_at BEFORE
 UPDATE ON tasks FOR EACH ROW
 EXECUTE FUNCTION update_timestamp ();
