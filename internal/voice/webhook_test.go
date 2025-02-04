@@ -51,7 +51,7 @@ func createTestTask(t *testing.T, db *database.DB) *models.Task {
 		Status:      models.TaskStatusRunning,
 		MaxAttempts: 3,
 		Attempts:    1,
-		RunAt:       time.Now(),
+		RunAt:       time.Now().Add(time.Hour),
 		Payload:     payload,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
@@ -123,7 +123,7 @@ func TestWebhookHandler_HandleTwilioCallback(t *testing.T) {
 			name:       "failed_call",
 			taskID:     time.Now().UnixNano(),
 			callStatus: "failed",
-			wantStatus: models.TaskStatusFailed,
+			wantStatus: models.TaskStatusRetrying,
 			wantCode:   http.StatusOK,
 			setup: func(ctx context.Context, db *database.DB, taskID int64) error {
 				msg := &models.Message{

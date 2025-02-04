@@ -130,7 +130,7 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 		Payload:     []byte("{}"),
 		Status:      models.TaskStatusPending,
 		MaxAttempts: 3,
-		RunAt:       time.Now().Add(-time.Hour), // In the past so it's ready to process
+		RunAt:       time.Now().Add(10 * time.Millisecond), // Set to very near future
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}
@@ -138,6 +138,9 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 	if err := db.CreateTask(ctx, task); err != nil {
 		t.Fatalf("failed to create test task: %v", err)
 	}
+
+	// Wait for the task to be ready
+	time.Sleep(20 * time.Millisecond)
 
 	t.Run("process pending task successfully", func(t *testing.T) {
 		if err := processor.processPendingTasks(ctx); err != nil {
@@ -180,7 +183,7 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 			Payload:     []byte("{}"),
 			Status:      models.TaskStatusPending,
 			MaxAttempts: 2,
-			RunAt:       time.Now().Add(-time.Hour),
+			RunAt:       time.Now().Add(10 * time.Millisecond), // Set to very near future
 			CreatedAt:   time.Now(),
 			UpdatedAt:   time.Now(),
 		}
@@ -188,6 +191,9 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 		if err := db.CreateTask(ctx, failingTask); err != nil {
 			t.Fatalf("failed to create failing task: %v", err)
 		}
+
+		// Wait for the task to be ready
+		time.Sleep(20 * time.Millisecond)
 
 		// Make the handler return an error
 		handler.shouldError = true
@@ -216,11 +222,8 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 		}
 
 		// Process again to exceed max attempts
-		// First, update the task's RunAt time to the past so it will be picked up
-		processedTask.RunAt = time.Now().Add(-time.Hour)
-		if err := db.UpdateTask(ctx, processedTask); err != nil {
-			t.Fatalf("failed to update task run_at: %v", err)
-		}
+		// Wait for the retry time to pass (1 minute since it's the first attempt)
+		time.Sleep(70 * time.Second)
 
 		if err := processor.processPendingTasks(ctx); err != nil {
 			t.Fatalf("failed to process pending tasks: %v", err)
