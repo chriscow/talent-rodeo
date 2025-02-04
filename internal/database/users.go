@@ -18,16 +18,16 @@ type User struct {
 	HashedSecret string    `db:"hashed_secret"`
 	IsSuperUser  bool      `db:"is_superuser"`
 
-	Provider          string `db:"provider"`
-	Name              string `db:"name"`
-	FirstName         string `db:"first_name"`
-	LastName          string `db:"last_name"`
-	NickName          string `db:"nick_name"`
-	Description       string `db:"description"`
-	UserID            string `db:"user_id"`
-	AvatarURL         string `db:"avatar_url"`
-	Location          string `db:"location"`
-	Phone             string `db:"phone"`
+	Provider          string         `db:"provider"`
+	Name              string         `db:"name"`
+	FirstName         string         `db:"first_name"`
+	LastName          string         `db:"last_name"`
+	NickName          string         `db:"nick_name"`
+	Description       string         `db:"description"`
+	UserID            string         `db:"user_id"`
+	AvatarURL         string         `db:"avatar_url"`
+	Location          string         `db:"location"`
+	Phone             sql.NullString `db:"phone"`
 	AccessToken       string
 	AccessTokenSecret string
 	RefreshToken      string
@@ -230,7 +230,11 @@ func (db *DB) UpdateUserPhone(userID int, phone string) error {
 	defer cancel()
 
 	query := `UPDATE users SET phone = $1 WHERE id = $2`
-
-	_, err := db.ExecContext(ctx, query, phone, userID)
-	return err
+	db.logger.Debug("updating user phone", "user_id", userID, "phone", phone)
+	_, err := db.ExecContext(ctx, query, sql.NullString{String: phone, Valid: phone != ""}, userID)
+	if err != nil {
+		db.logger.Error("failed to update user phone", "error", err)
+		return err
+	}
+	return nil
 }
