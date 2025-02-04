@@ -1,7 +1,3 @@
----
-description: 
-globs: 
----
 # Guidelines for Creating and Using tools.py
 
 This rule provides comprehensive guidelines for creating and utilizing tools in the project's tools.py file.
