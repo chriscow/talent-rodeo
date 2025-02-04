@@ -21,21 +21,23 @@ type TaskHandler interface {
 
 // Processor manages the execution of background tasks
 type Processor struct {
-	db       *database.DB
-	handlers map[string]TaskHandler
-	logger   *slog.Logger
-	wg       sync.WaitGroup
-	mu       sync.RWMutex
-	done     chan struct{}
+	db           *database.DB
+	handlers     map[string]TaskHandler
+	logger       *slog.Logger
+	wg           sync.WaitGroup
+	mu           sync.RWMutex
+	done         chan struct{}
+	retryBackoff time.Duration // Duration to wait between retries
 }
 
 // NewProcessor creates a new task processor
 func NewProcessor(db *database.DB, logger *slog.Logger) *Processor {
 	return &Processor{
-		db:       db,
-		handlers: make(map[string]TaskHandler),
-		logger:   logger,
-		done:     make(chan struct{}),
+		db:           db,
+		handlers:     make(map[string]TaskHandler),
+		logger:       logger,
+		done:         make(chan struct{}),
+		retryBackoff: time.Minute, // Default to 1 minute
 	}
 }
 
@@ -45,6 +47,13 @@ func (p *Processor) RegisterHandler(handler TaskHandler) {
 	defer p.mu.Unlock()
 	p.logger.Debug("registering task handler", "type", handler.TaskType())
 	p.handlers[handler.TaskType()] = handler
+}
+
+// SetRetryBackoff sets the duration to wait between retries
+func (p *Processor) SetRetryBackoff(d time.Duration) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.retryBackoff = d
 }
 
 // Start begins processing tasks
@@ -205,17 +214,9 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 					)
 					t.Status = models.TaskStatusFailed
 				} else {
-					nextRunAt := time.Now().Add(time.Duration(t.Attempts) * time.Minute)
-					p.logger.Debug("task will be retried",
-						"task_id", t.ID,
-						"attempts", t.Attempts,
-						"max_attempts", t.MaxAttempts,
-						"next_run_at", nextRunAt,
-						"old_status", oldStatus,
-						"new_status", models.TaskStatusRetrying,
-					)
 					t.Status = models.TaskStatusRetrying
-					t.RunAt = nextRunAt
+					t.RunAt = time.Now().Add(p.retryBackoff * time.Duration(t.Attempts))
+					t.Error = fmt.Sprintf("Call failed with status: %s, will retry", t.Status)
 				}
 			} else {
 				oldStatus = t.Status
