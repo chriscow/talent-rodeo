@@ -23,7 +23,7 @@ type MockPhoneCallHandler struct {
 
 func NewMockPhoneCallHandler(t *testing.T) *MockPhoneCallHandler {
 	t.Helper()
-	db, err := database.New(":memory:", true)
+	db, err := database.New(":memory:", database.WithInMemory())
 	if err != nil {
 		t.Fatalf("failed to create test database: %v", err)
 	}

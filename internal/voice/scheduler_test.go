@@ -3,7 +3,6 @@ package voice
 import (
 	"context"
 	"log/slog"
-	"os"
 	"testing"
 	"time"
 
@@ -15,52 +14,7 @@ import (
 
 func setupTestDB(t *testing.T) *database.DB {
 	t.Helper()
-	db, err := database.New(":memory:", true)
-	if err != nil {
-		t.Fatalf("failed to create test database: %v", err)
-	}
-
-	// Create background_jobs table
-	_, err = db.Exec(`
-		CREATE TABLE IF NOT EXISTS background_jobs (
-			id TEXT PRIMARY KEY,
-			type TEXT NOT NULL,
-			payload BLOB,
-			status TEXT NOT NULL CHECK (
-				status IN (
-					'pending',
-					'running',
-					'complete',
-					'failed',
-					'retrying',
-					'cancelled'
-				)
-			),
-			attempts INTEGER NOT NULL DEFAULT 0,
-			max_attempts INTEGER NOT NULL DEFAULT 3,
-			run_at DATETIME NOT NULL,
-			error TEXT,
-			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		);
-
-		CREATE INDEX IF NOT EXISTS idx_background_jobs_status_run_at ON background_jobs (status, run_at)
-		WHERE
-			status IN ('pending', 'retrying');
-
-		CREATE TRIGGER IF NOT EXISTS background_jobs_updated_at 
-			AFTER UPDATE ON background_jobs
-		BEGIN
-			UPDATE background_jobs 
-			SET updated_at = CURRENT_TIMESTAMP
-			WHERE id = NEW.id;
-		END;
-	`)
-	if err != nil {
-		t.Fatalf("failed to create background_jobs table: %v", err)
-	}
-
-	return db
+	return database.SetupTestDB(t)
 }
 
 func TestCallScheduler_ScheduleCall(t *testing.T) {
@@ -70,54 +24,62 @@ func TestCallScheduler_ScheduleCall(t *testing.T) {
 	logger := slog.Default()
 	scheduler := NewCallScheduler(db, logger)
 
-	tests := []struct {
-		name          string
-		userID        int
-		scheduledTime time.Time
-		wantErr       bool
-	}{
-		{
-			name:          "valid future time",
-			userID:        1,
-			scheduledTime: time.Now().Add(1 * time.Hour),
-			wantErr:       false,
-		},
-		{
-			name:          "past time",
-			userID:        1,
-			scheduledTime: time.Now().Add(-1 * time.Hour),
-			wantErr:       true,
-		},
-	}
+	t.Run("valid future time", func(t *testing.T) {
+		futureTime := time.Now().Add(24 * time.Hour)
+		msg := &models.Message{
+			ID:        "test-msg-1",
+			To:        "+1234567890",
+			From:      "+0987654321",
+			Body:      "Test message",
+			CreatedAt: time.Now(),
+		}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := scheduler.ScheduleCall(context.Background(), tt.userID, tt.scheduledTime)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ScheduleCall() error = %v, wantErr %v", err, tt.wantErr)
-			}
+		taskID, err := scheduler.ScheduleCall(context.Background(), msg, futureTime)
+		if err != nil {
+			t.Errorf("ScheduleCall() error = %v, wantErr false", err)
+			return
+		}
 
-			if !tt.wantErr {
-				// Verify task was created
-				tasks, err := db.GetPendingTasks(1)
-				if err != nil {
-					t.Fatalf("failed to get pending tasks: %v", err)
-				}
+		// Verify task was created
+		task, err := db.GetTask(taskID)
+		if err != nil {
+			t.Errorf("failed to get task: %v", err)
+			return
+		}
 
-				found := false
-				for _, task := range tasks {
-					if task.Type == "phone_call" {
-						found = true
-						break
-					}
-				}
+		if task == nil {
+			t.Error("no tasks found in database")
+			return
+		}
 
-				if !found {
-					t.Error("task not found in database")
-				}
-			}
-		})
-	}
+		if task.Status != models.TaskStatusPending {
+			t.Errorf("task status = %v, want %v", task.Status, models.TaskStatusPending)
+		}
+
+		if task.RunAt.Unix() != futureTime.Unix() {
+			t.Errorf("task run_at = %v, want %v", task.RunAt, futureTime)
+		}
+
+		if task.MaxAttempts != 3 { // Verify max attempts is set correctly
+			t.Errorf("task max_attempts = %v, want 3", task.MaxAttempts)
+		}
+	})
+
+	t.Run("past time", func(t *testing.T) {
+		pastTime := time.Now().Add(-24 * time.Hour)
+		msg := &models.Message{
+			ID:        "test-msg-2",
+			To:        "+1234567890",
+			From:      "+0987654321",
+			Body:      "Test message",
+			CreatedAt: time.Now(),
+		}
+
+		_, err := scheduler.ScheduleCall(context.Background(), msg, pastTime)
+		if err == nil {
+			t.Error("ScheduleCall() error = nil, wantErr true")
+		}
+	})
 }
 
 func TestCallScheduler_CancelCall(t *testing.T) {
@@ -129,13 +91,14 @@ func TestCallScheduler_CancelCall(t *testing.T) {
 
 	// Create a test task
 	task := &models.Task{
-		ID:        uuid.New().String(),
-		Type:      "phone_call",
-		Status:    models.TaskStatusPending,
-		RunAt:     time.Now().Add(1 * time.Hour).UTC(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-		Payload:   []byte(`{"user_id": 1}`),
+		ID:          uuid.New().String(),
+		Type:        "phone_call",
+		Status:      models.TaskStatusPending,
+		MaxAttempts: 3, // Set valid max_attempts
+		RunAt:       time.Now().Add(1 * time.Hour),
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+		Payload:     []byte(`{"user_id": 1}`),
 	}
 
 	if err := db.CreateTask(task); err != nil {
@@ -185,11 +148,7 @@ func TestCallScheduler_RescheduleCall(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	// Create a logger that writes to stderr for better visibility in test output
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	}))
-
+	logger := slog.Default()
 	scheduler := NewCallScheduler(db, logger)
 
 	// Use a fixed reference time for testing
@@ -205,13 +164,14 @@ func TestCallScheduler_RescheduleCall(t *testing.T) {
 
 	// Create a test task
 	task := &models.Task{
-		ID:        uuid.New().String(),
-		Type:      "phone_call",
-		Status:    models.TaskStatusPending,
-		RunAt:     initialTime,
-		CreatedAt: now,
-		UpdatedAt: now,
-		Payload:   []byte(`{"user_id": 1}`),
+		ID:          uuid.New().String(),
+		Type:        "phone_call",
+		Status:      models.TaskStatusPending,
+		MaxAttempts: 3, // Set valid max_attempts
+		RunAt:       initialTime,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+		Payload:     []byte(`{"user_id": 1}`),
 	}
 
 	logger.Debug("creating test task",
