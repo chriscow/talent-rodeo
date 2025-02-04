@@ -12,9 +12,10 @@ import (
 
 // PhoneCallHandler processes phone call tasks
 type PhoneCallHandler struct {
-	twilio TwilioClient
-	logger *slog.Logger
-	config PhoneCallConfig
+	twilio   TwilioClient
+	logger   *slog.Logger
+	config   PhoneCallConfig
+	taskProc TaskProcessor
 }
 
 // PhoneCallConfig holds configuration for the phone call handler
@@ -29,12 +30,26 @@ type PhoneCallPayload struct {
 	Message     string `json:"message"`
 }
 
+// ScheduleCallParams contains parameters for scheduling a call
+type ScheduleCallParams struct {
+	PhoneNumber string    // The phone number to call
+	Message     string    // The message or script to use
+	ScheduledAt time.Time // When to make the call (in UTC)
+	TimeZone    string    // User's timezone
+}
+
+// TaskProcessor defines the interface for task processing
+type TaskProcessor interface {
+	EnqueueTask(ctx context.Context, task *models.Task) error
+}
+
 // NewPhoneCallHandler creates a new phone call handler
-func NewPhoneCallHandler(twilio TwilioClient, logger *slog.Logger, config PhoneCallConfig) *PhoneCallHandler {
+func NewPhoneCallHandler(twilio TwilioClient, logger *slog.Logger, config PhoneCallConfig, taskProc TaskProcessor) *PhoneCallHandler {
 	return &PhoneCallHandler{
-		twilio: twilio,
-		logger: logger,
-		config: config,
+		twilio:   twilio,
+		logger:   logger,
+		config:   config,
+		taskProc: taskProc,
 	}
 }
 
@@ -99,4 +114,83 @@ func (h *PhoneCallHandler) ProcessTask(ctx context.Context, task *models.Task) e
 	}
 
 	return fmt.Errorf("call did not connect within 30 seconds")
+}
+
+// ScheduleCall schedules a new phone call task
+func (h *PhoneCallHandler) ScheduleCall(ctx context.Context, params ScheduleCallParams) error {
+	h.logger.Debug("scheduling phone call",
+		"phone_number", params.PhoneNumber,
+		"scheduled_at", params.ScheduledAt,
+		"timezone", params.TimeZone,
+	)
+
+	// Validate parameters
+	if params.PhoneNumber == "" {
+		return fmt.Errorf("phone number is required")
+	}
+	if params.Message == "" {
+		return fmt.Errorf("message is required")
+	}
+	if params.ScheduledAt.IsZero() {
+		return fmt.Errorf("scheduled time is required")
+	}
+	if params.TimeZone == "" {
+		params.TimeZone = "UTC"
+	}
+
+	// Convert scheduled time to UTC if it's not already
+	location, err := time.LoadLocation(params.TimeZone)
+	if err != nil {
+		return fmt.Errorf("invalid timezone: %w", err)
+	}
+	scheduledUTC := params.ScheduledAt.In(location).UTC()
+
+	// Don't schedule calls in the past
+	if scheduledUTC.Before(time.Now().UTC()) {
+		return fmt.Errorf("cannot schedule calls in the past")
+	}
+
+	// Create task payload
+	payload := PhoneCallPayload{
+		PhoneNumber: params.PhoneNumber,
+		Message:     params.Message,
+	}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	// Create unique task ID
+	taskID := time.Now().UnixNano()
+
+	// Create the task
+	task := &models.Task{
+		ID:          taskID,
+		Type:        h.TaskType(),
+		Payload:     payloadBytes,
+		Status:      models.TaskStatusPending,
+		MaxAttempts: 3, // Allow up to 3 retry attempts
+		RunAt:       scheduledUTC,
+		CreatedAt:   time.Now().UTC(),
+		UpdatedAt:   time.Now().UTC(),
+	}
+
+	h.logger.Debug("creating phone call task",
+		"task_id", task.ID,
+		"run_at", task.RunAt,
+		"max_attempts", task.MaxAttempts,
+	)
+
+	// Enqueue the task
+	if err := h.taskProc.EnqueueTask(ctx, task); err != nil {
+		return fmt.Errorf("failed to enqueue task: %w", err)
+	}
+
+	h.logger.Info("phone call scheduled",
+		"task_id", task.ID,
+		"phone_number", params.PhoneNumber,
+		"scheduled_at", scheduledUTC,
+	)
+
+	return nil
 }

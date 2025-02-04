@@ -1,4 +1,4 @@
-ased on my review of the voice package implementation, here's how the audio routing works:
+Here's how the audio routing works:
 
 Session Management:
 - A Session manages the lifecycle of a voice chat interaction between Twilio and OpenAI

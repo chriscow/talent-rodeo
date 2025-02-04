@@ -16,6 +16,7 @@ import (
 
 // MockPhoneCallHandler is a test implementation of the phone call handler
 type MockPhoneCallHandler struct {
+	*PhoneCallHandler
 	db     *database.DB
 	logger *slog.Logger
 	twilio *MockTwilioClient
@@ -23,19 +24,28 @@ type MockPhoneCallHandler struct {
 
 func NewMockPhoneCallHandler(t *testing.T) *MockPhoneCallHandler {
 	t.Helper()
-	db, err := database.New(":memory:", database.WithInMemory())
-	if err != nil {
-		t.Fatalf("failed to create test database: %v", err)
-	}
+
+	db := database.SetupTestDB(t)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
 	}))
 
-	return &MockPhoneCallHandler{
-		db:     db,
-		logger: logger,
+	twilio := NewMockTwilioClient()
+	config := PhoneCallConfig{
+		FromNumber: "+1987654321",
+		WebhookURL: "http://example.com/webhook",
 	}
+	taskProc := &MockTaskProcessor{}
+
+	handler := &MockPhoneCallHandler{
+		PhoneCallHandler: NewPhoneCallHandler(twilio, logger, config, taskProc),
+		db:               db,
+		logger:           logger,
+		twilio:           twilio,
+	}
+
+	return handler
 }
 
 func (h *MockPhoneCallHandler) TaskType() string {
@@ -91,7 +101,7 @@ func TestPhoneCallHandler_ProcessTask(t *testing.T) {
 		}
 
 		task := &models.Task{
-			ID:      "test-task",
+			ID:      time.Now().UnixNano(),
 			Type:    "phone_call",
 			Payload: payloadBytes,
 			RunAt:   time.Now(),
@@ -114,7 +124,7 @@ func TestPhoneCallHandler_ProcessTask(t *testing.T) {
 		ctx := context.Background()
 
 		task := &models.Task{
-			ID:      "invalid-task",
+			ID:      time.Now().UnixNano(),
 			Type:    "phone_call",
 			Payload: []byte("{invalid json}"),
 			RunAt:   time.Now(),
@@ -142,7 +152,7 @@ func TestPhoneCallHandler_ProcessTask(t *testing.T) {
 		}
 
 		task := &models.Task{
-			ID:      "missing-phone-task",
+			ID:      time.Now().UnixNano(),
 			Type:    "phone_call",
 			Payload: payloadBytes,
 			RunAt:   time.Now(),
@@ -170,7 +180,7 @@ func TestPhoneCallHandler_ProcessTask(t *testing.T) {
 		}
 
 		task := &models.Task{
-			ID:      "missing-message-task",
+			ID:      time.Now().UnixNano(),
 			Type:    "phone_call",
 			Payload: payloadBytes,
 			RunAt:   time.Now(),
@@ -182,6 +192,128 @@ func TestPhoneCallHandler_ProcessTask(t *testing.T) {
 		}
 		if err != nil && !strings.Contains(err.Error(), "message is required") {
 			t.Errorf("ProcessTask() error = %v; want error containing 'message is required'", err)
+		}
+	})
+}
+
+// MockTaskProcessor implements TaskProcessor for testing
+type MockTaskProcessor struct {
+	enqueuedTasks []*models.Task
+}
+
+func (m *MockTaskProcessor) EnqueueTask(ctx context.Context, task *models.Task) error {
+	m.enqueuedTasks = append(m.enqueuedTasks, task)
+	return nil
+}
+
+func TestPhoneCallHandler_ScheduleCall(t *testing.T) {
+	t.Run("schedule valid call", func(t *testing.T) {
+		handler := NewMockPhoneCallHandler(t)
+		taskProc := &MockTaskProcessor{}
+		handler.taskProc = taskProc
+
+		// Schedule a call for 1 hour from now
+		scheduledAt := time.Now().Add(1 * time.Hour)
+		params := ScheduleCallParams{
+			PhoneNumber: "+1234567890",
+			Message:     "Test message",
+			ScheduledAt: scheduledAt,
+			TimeZone:    "UTC",
+		}
+
+		err := handler.ScheduleCall(context.Background(), params)
+		if err != nil {
+			t.Fatalf("ScheduleCall() error = %v", err)
+		}
+
+		// Verify task was enqueued
+		if len(taskProc.enqueuedTasks) != 1 {
+			t.Fatalf("expected 1 enqueued task, got %d", len(taskProc.enqueuedTasks))
+		}
+
+		task := taskProc.enqueuedTasks[0]
+		if task.Type != "phone_call" {
+			t.Errorf("task type = %q, want phone_call", task.Type)
+		}
+		if task.Status != models.TaskStatusPending {
+			t.Errorf("task status = %q, want pending", task.Status)
+		}
+		if task.MaxAttempts != 3 {
+			t.Errorf("task max attempts = %d, want 3", task.MaxAttempts)
+		}
+
+		// Verify payload
+		var payload PhoneCallPayload
+		if err := json.Unmarshal(task.Payload, &payload); err != nil {
+			t.Fatalf("failed to unmarshal payload: %v", err)
+		}
+		if payload.PhoneNumber != params.PhoneNumber {
+			t.Errorf("payload phone number = %q, want %q", payload.PhoneNumber, params.PhoneNumber)
+		}
+		if payload.Message != params.Message {
+			t.Errorf("payload message = %q, want %q", payload.Message, params.Message)
+		}
+	})
+
+	t.Run("handle missing phone number", func(t *testing.T) {
+		handler := NewMockPhoneCallHandler(t)
+		taskProc := &MockTaskProcessor{}
+		handler.taskProc = taskProc
+
+		params := ScheduleCallParams{
+			Message:     "Test message",
+			ScheduledAt: time.Now().Add(1 * time.Hour),
+			TimeZone:    "UTC",
+		}
+
+		err := handler.ScheduleCall(context.Background(), params)
+		if err == nil {
+			t.Error("ScheduleCall() error = nil, want error for missing phone number")
+		}
+		if len(taskProc.enqueuedTasks) > 0 {
+			t.Error("task was enqueued despite validation error")
+		}
+	})
+
+	t.Run("handle past schedule time", func(t *testing.T) {
+		handler := NewMockPhoneCallHandler(t)
+		taskProc := &MockTaskProcessor{}
+		handler.taskProc = taskProc
+
+		params := ScheduleCallParams{
+			PhoneNumber: "+1234567890",
+			Message:     "Test message",
+			ScheduledAt: time.Now().Add(-1 * time.Hour),
+			TimeZone:    "UTC",
+		}
+
+		err := handler.ScheduleCall(context.Background(), params)
+		if err == nil {
+			t.Error("ScheduleCall() error = nil, want error for past schedule time")
+		}
+		if len(taskProc.enqueuedTasks) > 0 {
+			t.Error("task was enqueued despite validation error")
+		}
+	})
+
+	t.Run("handle invalid timezone", func(t *testing.T) {
+		handler := NewMockPhoneCallHandler(t)
+		taskProc := &MockTaskProcessor{}
+		handler.taskProc = taskProc
+
+		params := ScheduleCallParams{
+			PhoneNumber: "+1234567890",
+			Message:     "Test message",
+			ScheduledAt: time.Now().Add(1 * time.Hour),
+			TimeZone:    "Invalid/Timezone",
+		}
+
+		err := handler.ScheduleCall(context.Background(), params)
+		if err == nil {
+			t.Error("ScheduleCall() error = nil, want error for invalid timezone")
+		}
+		if len(taskProc.enqueuedTasks) > 0 {
+			t.Error("task was enqueued despite validation error")
 		}
 	})
 }

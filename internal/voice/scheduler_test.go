@@ -2,14 +2,14 @@ package voice
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"testing"
 	"time"
 
 	"talent-rodeo/internal/database"
 	"talent-rodeo/internal/models"
-
-	"github.com/google/uuid"
 )
 
 func setupTestDB(t *testing.T) *database.DB {
@@ -18,126 +18,178 @@ func setupTestDB(t *testing.T) *database.DB {
 }
 
 func TestCallScheduler_ScheduleCall(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-
-	logger := slog.Default()
-	scheduler := NewCallScheduler(db, logger)
-
-	t.Run("valid future time", func(t *testing.T) {
-		futureTime := time.Now().Add(24 * time.Hour)
-		msg := &models.Message{
-			ID:        "test-msg-1",
-			To:        "+1234567890",
-			From:      "+0987654321",
-			Body:      "Test message",
-			CreatedAt: time.Now(),
-		}
-
-		taskID, err := scheduler.ScheduleCall(context.Background(), msg, futureTime)
-		if err != nil {
-			t.Errorf("ScheduleCall() error = %v, wantErr false", err)
-			return
-		}
-
-		// Verify task was created
-		task, err := db.GetTask(taskID)
-		if err != nil {
-			t.Errorf("failed to get task: %v", err)
-			return
-		}
-
-		if task == nil {
-			t.Error("no tasks found in database")
-			return
-		}
-
-		if task.Status != models.TaskStatusPending {
-			t.Errorf("task status = %v, want %v", task.Status, models.TaskStatusPending)
-		}
-
-		if task.RunAt.Unix() != futureTime.Unix() {
-			t.Errorf("task run_at = %v, want %v", task.RunAt, futureTime)
-		}
-
-		if task.MaxAttempts != 3 { // Verify max attempts is set correctly
-			t.Errorf("task max_attempts = %v, want 3", task.MaxAttempts)
-		}
-	})
-
-	t.Run("past time", func(t *testing.T) {
-		pastTime := time.Now().Add(-24 * time.Hour)
-		msg := &models.Message{
-			ID:        "test-msg-2",
-			To:        "+1234567890",
-			From:      "+0987654321",
-			Body:      "Test message",
-			CreatedAt: time.Now(),
-		}
-
-		_, err := scheduler.ScheduleCall(context.Background(), msg, pastTime)
-		if err == nil {
-			t.Error("ScheduleCall() error = nil, wantErr true")
-		}
-	})
-}
-
-func TestCallScheduler_CancelCall(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-
-	logger := slog.Default()
-	scheduler := NewCallScheduler(db, logger)
-
-	// Create a test task
-	task := &models.Task{
-		ID:          uuid.New().String(),
-		Type:        "phone_call",
-		Status:      models.TaskStatusPending,
-		MaxAttempts: 3, // Set valid max_attempts
-		RunAt:       time.Now().Add(1 * time.Hour),
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
-		Payload:     []byte(`{"user_id": 1}`),
-	}
-
-	if err := db.CreateTask(task); err != nil {
-		t.Fatalf("failed to create test task: %v", err)
-	}
-
 	tests := []struct {
 		name    string
-		taskID  string
+		msg     *models.Message
+		runAt   time.Time
 		wantErr bool
 	}{
 		{
-			name:    "valid task",
-			taskID:  task.ID,
+			name: "valid_future_time",
+			msg: &models.Message{
+				ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
+				To:        "+1234567890",
+				From:      "system",
+				Body:      "Test message",
+				CreatedAt: time.Now(),
+			},
+			runAt:   time.Now().Add(24 * time.Hour).UTC(),
 			wantErr: false,
 		},
 		{
-			name:    "nonexistent task",
-			taskID:  "nonexistent",
+			name: "past_time",
+			msg: &models.Message{
+				ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
+				To:        "+1234567890",
+				From:      "system",
+				Body:      "Test message",
+				CreatedAt: time.Now(),
+			},
+			runAt:   time.Now().Add(-24 * time.Hour).UTC(),
+			wantErr: true,
+		},
+		{
+			name: "valid_message",
+			msg: &models.Message{
+				ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
+				To:        "+1234567890",
+				From:      "system",
+				Body:      "Test message",
+				CreatedAt: time.Now(),
+			},
+			runAt:   time.Now().Add(time.Hour).UTC(),
+			wantErr: false,
+		},
+		{
+			name: "missing_phone",
+			msg: &models.Message{
+				ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
+				From:      "system",
+				Body:      "Test message",
+				CreatedAt: time.Now(),
+			},
+			runAt:   time.Now().Add(time.Hour).UTC(),
 			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := scheduler.CancelCall(context.Background(), tt.taskID)
+			db := database.SetupTestDB(t)
+			scheduler := NewCallScheduler(db, slog.Default())
+
+			taskID, err := scheduler.ScheduleCall(context.Background(), tt.msg, tt.runAt)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("CancelCall() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("ScheduleCall() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
 
 			if !tt.wantErr {
-				// Verify task was cancelled
-				updatedTask, err := db.GetTask(tt.taskID)
+				task, err := db.GetTask(context.Background(), taskID)
 				if err != nil {
 					t.Fatalf("failed to get task: %v", err)
 				}
 
-				if updatedTask.Status != models.TaskStatusCancelled {
-					t.Errorf("task status = %v, want %v", updatedTask.Status, models.TaskStatusCancelled)
+				// Compare times in UTC to avoid timezone issues
+				if !task.RunAt.Equal(tt.runAt) {
+					t.Errorf("task run_at = %v, want %v", task.RunAt, tt.runAt)
+				}
+
+				// Verify task type and status
+				if task.Type != "phone_call" {
+					t.Errorf("task type = %v, want phone_call", task.Type)
+				}
+				if task.Status != models.TaskStatusPending {
+					t.Errorf("task status = %v, want %v", task.Status, models.TaskStatusPending)
+				}
+			}
+		})
+	}
+}
+
+func TestCallScheduler_CancelCall(t *testing.T) {
+	tests := []struct {
+		name    string
+		setup   func(context.Context, *database.DB, int64) error
+		taskID  int64
+		wantErr bool
+	}{
+		{
+			name:    "cancel_nonexistent_task",
+			taskID:  time.Now().UnixNano(),
+			wantErr: true,
+		},
+		{
+			name:    "cancel_existing_task",
+			taskID:  time.Now().UnixNano(),
+			wantErr: false,
+			setup: func(ctx context.Context, db *database.DB, taskID int64) error {
+				msg := &models.Message{
+					ID:        fmt.Sprintf("%d", taskID),
+					To:        "+1234567890",
+					From:      "system",
+					Body:      "Test message",
+					CreatedAt: time.Now().UTC(),
+				}
+				payload, err := json.Marshal(msg)
+				if err != nil {
+					return fmt.Errorf("failed to marshal message: %v", err)
+				}
+
+				task := &models.Task{
+					ID:          taskID,
+					Type:        "phone_call",
+					Status:      models.TaskStatusPending,
+					MaxAttempts: 3,
+					RunAt:       time.Now().Add(time.Hour).UTC(),
+					Payload:     payload,
+					CreatedAt:   time.Now().UTC(),
+					UpdatedAt:   time.Now().UTC(),
+				}
+				if err := db.CreateTask(ctx, task); err != nil {
+					return fmt.Errorf("failed to create task: %w", err)
+				}
+
+				// Verify task was created
+				created, err := db.GetTask(ctx, taskID)
+				if err != nil {
+					return fmt.Errorf("failed to verify task creation: %w", err)
+				}
+				if created == nil {
+					return fmt.Errorf("task not found after creation")
+				}
+
+				return nil
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := database.SetupTestDB(t)
+			scheduler := NewCallScheduler(db, slog.Default())
+
+			ctx := context.Background()
+			if tt.setup != nil {
+				if err := tt.setup(ctx, db, tt.taskID); err != nil {
+					t.Fatalf("setup failed: %v", err)
+				}
+			}
+
+			err := scheduler.CancelCall(ctx, tt.taskID)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("CancelCall() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if !tt.wantErr {
+				task, err := db.GetTask(ctx, tt.taskID)
+				if err != nil {
+					t.Fatalf("failed to get task: %v", err)
+				}
+
+				if task.Status != models.TaskStatusCancelled {
+					t.Errorf("task status = %v, want %v", task.Status, models.TaskStatusCancelled)
 				}
 			}
 		})
@@ -145,112 +197,135 @@ func TestCallScheduler_CancelCall(t *testing.T) {
 }
 
 func TestCallScheduler_RescheduleCall(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-
-	logger := slog.Default()
-	scheduler := NewCallScheduler(db, logger)
-
-	// Use a fixed reference time for testing
-	now := time.Now().UTC()
-	initialTime := now.Add(1 * time.Hour).Truncate(time.Second)
-	newTime := now.Add(2 * time.Hour).Truncate(time.Second)
-
-	logger.Debug("test setup",
-		"now", now,
-		"initial_time", initialTime,
-		"new_time", newTime,
-	)
-
-	// Create a test task
-	task := &models.Task{
-		ID:          uuid.New().String(),
-		Type:        "phone_call",
-		Status:      models.TaskStatusPending,
-		MaxAttempts: 3, // Set valid max_attempts
-		RunAt:       initialTime,
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
-		Payload:     []byte(`{"user_id": 1}`),
-	}
-
-	logger.Debug("creating test task",
-		"task_id", task.ID,
-		"run_at", task.RunAt,
-	)
-
-	if err := db.CreateTask(task); err != nil {
-		t.Fatalf("failed to create test task: %v", err)
-	}
-
-	// Verify task was created correctly
-	createdTask, err := db.GetTask(task.ID)
-	if err != nil {
-		t.Fatalf("failed to get created task: %v", err)
-	}
-	logger.Debug("created task state",
-		"task_id", createdTask.ID,
-		"run_at", createdTask.RunAt,
-	)
-
 	tests := []struct {
 		name    string
-		taskID  string
+		setup   func(context.Context, *database.DB, int64) error
+		taskID  int64
 		newTime time.Time
 		wantErr bool
 	}{
 		{
-			name:    "valid future time",
-			taskID:  task.ID,
-			newTime: newTime,
+			name:    "reschedule_nonexistent_task",
+			taskID:  time.Now().UnixNano(),
+			newTime: time.Now().Add(time.Hour).UTC(),
+			wantErr: true,
+		},
+		{
+			name:    "reschedule_to_past_time",
+			taskID:  time.Now().UnixNano(),
+			newTime: time.Now().Add(-time.Hour).UTC(),
+			wantErr: true,
+			setup: func(ctx context.Context, db *database.DB, taskID int64) error {
+				msg := &models.Message{
+					ID:        fmt.Sprintf("%d", taskID),
+					To:        "+1234567890",
+					From:      "system",
+					Body:      "Test message",
+					CreatedAt: time.Now().UTC(),
+				}
+				payload, err := json.Marshal(msg)
+				if err != nil {
+					return fmt.Errorf("failed to marshal message: %v", err)
+				}
+
+				task := &models.Task{
+					ID:          taskID,
+					Type:        "phone_call",
+					Status:      models.TaskStatusPending,
+					MaxAttempts: 3,
+					RunAt:       time.Now().Add(2 * time.Hour).UTC(),
+					Payload:     payload,
+					CreatedAt:   time.Now().UTC(),
+					UpdatedAt:   time.Now().UTC(),
+				}
+				if err := db.CreateTask(ctx, task); err != nil {
+					return fmt.Errorf("failed to create task: %w", err)
+				}
+
+				// Verify task was created
+				created, err := db.GetTask(ctx, taskID)
+				if err != nil {
+					return fmt.Errorf("failed to verify task creation: %w", err)
+				}
+				if created == nil {
+					return fmt.Errorf("task not found after creation")
+				}
+
+				return nil
+			},
+		},
+		{
+			name:    "reschedule_successfully",
+			taskID:  time.Now().UnixNano(),
+			newTime: time.Now().Add(2 * time.Hour).UTC(),
 			wantErr: false,
-		},
-		{
-			name:    "past time",
-			taskID:  task.ID,
-			newTime: now.Add(-1 * time.Hour),
-			wantErr: true,
-		},
-		{
-			name:    "nonexistent task",
-			taskID:  "nonexistent",
-			newTime: now.Add(1 * time.Hour),
-			wantErr: true,
+			setup: func(ctx context.Context, db *database.DB, taskID int64) error {
+				msg := &models.Message{
+					ID:        fmt.Sprintf("%d", taskID),
+					To:        "+1234567890",
+					From:      "system",
+					Body:      "Test message",
+					CreatedAt: time.Now().UTC(),
+				}
+				payload, err := json.Marshal(msg)
+				if err != nil {
+					return fmt.Errorf("failed to marshal message: %v", err)
+				}
+
+				task := &models.Task{
+					ID:          taskID,
+					Type:        "phone_call",
+					Status:      models.TaskStatusPending,
+					MaxAttempts: 3,
+					RunAt:       time.Now().Add(time.Hour).UTC(),
+					Payload:     payload,
+					CreatedAt:   time.Now().UTC(),
+					UpdatedAt:   time.Now().UTC(),
+				}
+				if err := db.CreateTask(ctx, task); err != nil {
+					return fmt.Errorf("failed to create task: %w", err)
+				}
+
+				// Verify task was created
+				created, err := db.GetTask(ctx, taskID)
+				if err != nil {
+					return fmt.Errorf("failed to verify task creation: %w", err)
+				}
+				if created == nil {
+					return fmt.Errorf("task not found after creation")
+				}
+
+				return nil
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			logger.Debug("running test case",
-				"test", tt.name,
-				"task_id", tt.taskID,
-				"new_time", tt.newTime,
-			)
+			db := database.SetupTestDB(t)
+			scheduler := NewCallScheduler(db, slog.Default())
 
-			err := scheduler.RescheduleCall(context.Background(), tt.taskID, tt.newTime)
+			ctx := context.Background()
+			if tt.setup != nil {
+				if err := tt.setup(ctx, db, tt.taskID); err != nil {
+					t.Fatalf("setup failed: %v", err)
+				}
+			}
+
+			err := scheduler.RescheduleCall(ctx, tt.taskID, tt.newTime)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("RescheduleCall() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
 
 			if !tt.wantErr {
-				// Verify task was rescheduled
-				updatedTask, err := db.GetTask(tt.taskID)
+				task, err := db.GetTask(ctx, tt.taskID)
 				if err != nil {
 					t.Fatalf("failed to get task: %v", err)
 				}
 
-				logger.Debug("comparing times",
-					"got_run_at", updatedTask.RunAt,
-					"want_run_at", tt.newTime,
-					"got_run_at_unix", updatedTask.RunAt.Unix(),
-					"want_run_at_unix", tt.newTime.Unix(),
-				)
-
-				// Compare times truncated to seconds to avoid subsecond differences
-				gotTime := updatedTask.RunAt.Truncate(time.Second)
-				wantTime := tt.newTime.Truncate(time.Second)
-				if !gotTime.Equal(wantTime) {
-					t.Errorf("task RunAt = %v, want %v", gotTime, wantTime)
+				if !task.RunAt.Equal(tt.newTime) {
+					t.Errorf("task run_at = %v, want %v", task.RunAt, tt.newTime)
 				}
 			}
 		})

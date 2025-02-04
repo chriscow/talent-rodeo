@@ -2,8 +2,6 @@ package tasks
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -12,32 +10,6 @@ import (
 	"talent-rodeo/internal/database"
 	"talent-rodeo/internal/models"
 )
-
-// TaskStatus represents the current state of a task
-type TaskStatus string
-
-const (
-	TaskStatusPending   TaskStatus = "pending"
-	TaskStatusRunning   TaskStatus = "running"
-	TaskStatusComplete  TaskStatus = "complete"
-	TaskStatusFailed    TaskStatus = "failed"
-	TaskStatusRetrying  TaskStatus = "retrying"
-	TaskStatusCancelled TaskStatus = "cancelled"
-)
-
-// Task represents a background task that needs to be processed
-type Task struct {
-	ID          string
-	Type        string
-	Payload     []byte
-	Status      TaskStatus
-	Attempts    int
-	MaxAttempts int
-	RunAt       time.Time
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	Error       string
-}
 
 // TaskHandler processes a specific type of task
 type TaskHandler interface {
@@ -110,7 +82,7 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 	defer p.mu.RUnlock()
 
 	// Get pending tasks from database
-	tasks, err := p.db.GetPendingTasks(10) // Process up to 10 tasks at a time
+	tasks, err := p.db.GetPendingTasks(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get pending tasks: %w", err)
 	}
@@ -137,17 +109,31 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 		}
 
 		// Update task status to running within transaction
+		oldStatus := task.Status
 		task.Status = models.TaskStatusRunning
-		task.Attempts++
-		p.logger.Debug("updating task status to running",
+		task.Attempts++ // Always increment attempts when processing starts
+		p.logger.Debug("updating task status",
 			"task_id", task.ID,
 			"type", task.Type,
+			"old_status", oldStatus,
+			"new_status", task.Status,
 			"attempts", task.Attempts,
 			"max_attempts", task.MaxAttempts,
 		)
-		if err := p.db.UpdateTaskTx(ctx, tx, &task); err != nil {
+		if err := p.db.UpdateTaskTx(ctx, tx, task); err != nil {
 			tx.Rollback()
 			p.logger.Error("failed to update task status",
+				"error", err,
+				"task_id", task.ID,
+				"old_status", oldStatus,
+				"new_status", task.Status,
+			)
+			continue
+		}
+
+		// Commit the initial transaction before spawning the goroutine
+		if err := tx.Commit(); err != nil {
+			p.logger.Error("failed to commit initial transaction",
 				"error", err,
 				"task_id", task.ID,
 			)
@@ -204,14 +190,18 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 					"type", t.Type,
 					"attempts", t.Attempts,
 					"max_attempts", t.MaxAttempts,
+					"old_status", t.Status,
 				)
 
 				t.Error = err.Error()
+				oldStatus = t.Status
 				if t.Attempts >= t.MaxAttempts {
 					p.logger.Debug("task exceeded max attempts, marking as failed",
 						"task_id", t.ID,
 						"attempts", t.Attempts,
 						"max_attempts", t.MaxAttempts,
+						"old_status", oldStatus,
+						"new_status", models.TaskStatusFailed,
 					)
 					t.Status = models.TaskStatusFailed
 				} else {
@@ -221,23 +211,29 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 						"attempts", t.Attempts,
 						"max_attempts", t.MaxAttempts,
 						"next_run_at", nextRunAt,
+						"old_status", oldStatus,
+						"new_status", models.TaskStatusRetrying,
 					)
 					t.Status = models.TaskStatusRetrying
 					t.RunAt = nextRunAt
 				}
 			} else {
+				oldStatus = t.Status
+				t.Status = models.TaskStatusComplete
+				t.Error = ""
 				p.logger.Debug("task completed successfully",
 					"task_id", t.ID,
 					"type", t.Type,
 					"attempts", t.Attempts,
+					"old_status", oldStatus,
+					"new_status", t.Status,
 				)
-				t.Status = models.TaskStatusComplete
-				t.Error = ""
 			}
 
 			p.logger.Debug("updating task after processing",
 				"task_id", t.ID,
-				"status", t.Status,
+				"old_status", oldStatus,
+				"new_status", t.Status,
 				"attempts", t.Attempts,
 				"error", t.Error != "",
 			)
@@ -257,26 +253,14 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 				)
 			}
 		}()
-
-		// Commit the initial transaction after spawning the goroutine
-		if err := tx.Commit(); err != nil {
-			p.logger.Error("failed to commit initial transaction",
-				"error", err,
-				"task_id", task.ID,
-			)
-		}
 	}
 
 	return nil
 }
 
 // generateTaskID creates a unique ID for a task
-func generateTaskID() (string, error) {
-	bytes := make([]byte, 16)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(bytes), nil
+func generateTaskID() (int64, error) {
+	return time.Now().UnixNano(), nil
 }
 
 // EnqueueTask adds a new task to be processed
@@ -312,7 +296,7 @@ func (p *Processor) EnqueueTask(ctx context.Context, taskType string, payload []
 		"payload_size", len(task.Payload),
 	)
 
-	if err := p.db.CreateTask(task); err != nil {
+	if err := p.db.CreateTask(ctx, task); err != nil {
 		p.logger.Error("failed to create task",
 			"error", err,
 			"task_id", task.ID,
