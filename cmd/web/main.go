@@ -137,17 +137,28 @@ func run(logger *slog.Logger) error {
 				}
 				return "SQLite"
 			}(),
-			"dsn_prefix", envDSN[:10]+"...")
+			"dsn", envDSN)
 	}
 
 	var db *database.DB
 	if strings.HasPrefix(cfg.db.dsn, "postgres") {
-		logger.Info("initializing PostgreSQL database")
+		logger.Info("initializing PostgreSQL database", "dsn", cfg.db.dsn)
+		// Force sslmode=disable
+		if !strings.Contains(cfg.db.dsn, "sslmode=") {
+			if strings.Contains(cfg.db.dsn, "?") {
+				cfg.db.dsn += "&sslmode=disable"
+			} else {
+				cfg.db.dsn += "?sslmode=disable"
+			}
+		} else if !strings.Contains(cfg.db.dsn, "sslmode=disable") {
+			cfg.db.dsn = strings.Replace(cfg.db.dsn, "sslmode=prefer", "sslmode=disable", 1)
+		}
+		logger.Debug("using DSN with SSL mode", "dsn", cfg.db.dsn)
 		pgDB, err := database.NewPG(cfg.db.dsn, cfg.db.automigrate)
 		if err != nil {
 			logger.Error("failed to connect to PostgreSQL",
 				"error", err,
-				"dsn_prefix", cfg.db.dsn[:10]+"...")
+				"dsn", cfg.db.dsn)
 			return fmt.Errorf("failed to connect to PostgreSQL: %w", err)
 		}
 		logger.Debug("creating database instance from PostgreSQL connection")

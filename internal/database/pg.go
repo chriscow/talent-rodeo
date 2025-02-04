@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"talent-rodeo/assets"
@@ -16,29 +17,35 @@ import (
 	_ "github.com/lib/pq"
 )
 
-type PG struct {
-	*sqlx.DB
-	logger *slog.Logger
-}
-
 // NewFromPG creates a new DB instance from an existing PostgreSQL connection
-func NewFromPG(pg *PG, logger *slog.Logger) *DB {
+func NewFromPG(pg *sqlx.DB, logger *slog.Logger) *DB {
 	logger.Debug("creating new DB instance from PostgreSQL connection")
 	return &DB{
-		dbtx:   pg.DB,
+		dbtx:   pg,
 		logger: logger,
 	}
 }
 
-func NewPG(dsn string, automigrate bool) (*PG, error) {
+func NewPG(dsn string, automigrate bool) (*sqlx.DB, error) {
 	logger := slog.Default()
 	logger.Debug("initializing PostgreSQL connection", "dsn_prefix", dsn[:10]+"...")
+
+	// Ensure sslmode=disable is set
+	if !strings.Contains(dsn, "sslmode=") {
+		if strings.Contains(dsn, "?") {
+			dsn += "&sslmode=disable"
+		} else {
+			dsn += "?sslmode=disable"
+		}
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 
-	logger.Debug("attempting to connect to PostgreSQL")
-	db, err := sqlx.ConnectContext(ctx, "postgres", dsn)
+	// Format DSN for database connection
+	dbDSN := "postgres://" + dsn
+	logger.Debug("attempting to connect to PostgreSQL", "dsn", dbDSN)
+	db, err := sqlx.ConnectContext(ctx, "postgres", dbDSN)
 	if err != nil {
 		logger.Error("failed to connect to PostgreSQL", "error", err)
 		return nil, err
@@ -60,7 +67,7 @@ func NewPG(dsn string, automigrate bool) (*PG, error) {
 		}
 
 		logger.Debug("creating migrator instance")
-		migrator, err := migrate.NewWithSourceInstance("iofs", iofsDriver, dsn)
+		migrator, err := migrate.NewWithSourceInstance("iofs", iofsDriver, dbDSN)
 		if err != nil {
 			logger.Error("failed to create migrator", "error", err)
 			return nil, err
@@ -85,5 +92,5 @@ func NewPG(dsn string, automigrate bool) (*PG, error) {
 		return nil, err
 	}
 
-	return &PG{DB: db, logger: logger}, nil
+	return db, nil
 }
