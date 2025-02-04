@@ -118,6 +118,8 @@ func TestProcessor_EnqueueTask(t *testing.T) {
 
 func TestProcessor_ProcessPendingTasks(t *testing.T) {
 	processor, db := setupTestProcessor(t)
+	// Set a short retry interval for testing
+	processor.SetRetryBackoff(10 * time.Millisecond)
 	ctx := context.Background()
 
 	handler := &MockTaskHandler{taskType: "test_task"}
@@ -222,8 +224,8 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 		}
 
 		// Process again to exceed max attempts
-		// Wait for the retry time to pass (1 minute since it's the first attempt)
-		time.Sleep(70 * time.Second)
+		// Wait for the retry time to pass (10ms since it's the first attempt)
+		time.Sleep(20 * time.Millisecond)
 
 		if err := processor.processPendingTasks(ctx); err != nil {
 			t.Fatalf("failed to process pending tasks: %v", err)
