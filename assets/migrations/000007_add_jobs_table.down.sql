@@ -1,5 +1,9 @@
-DROP TRIGGER IF EXISTS background_jobs_updated_at;
+DROP TRIGGER IF EXISTS tasks_updated_at ON tasks;
 
-DROP INDEX IF EXISTS idx_background_jobs_status_run_at;
+DROP INDEX IF EXISTS idx_tasks_status;
 
-DROP TABLE IF EXISTS background_jobs;
+DROP INDEX IF EXISTS idx_tasks_type;
+
+DROP INDEX IF EXISTS idx_tasks_run_at;
+
+DROP TABLE IF EXISTS tasks;
