@@ -1,59 +1,35 @@
 package database
 
 import (
-	"context"
-	"errors"
+	"io"
+	"log/slog"
 	"time"
 
-	"talent-rodeo/assets"
-
-	"github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jmoiron/sqlx"
-
-	_ "github.com/golang-migrate/migrate/v4/database/sqlite3"
 	_ "github.com/mattn/go-sqlite3"
 )
 
-const defaultTimeout = 3 * time.Second
+const defaultTimeout = 5 * time.Second
 
+// DB represents a SQLite database connection
 type DB struct {
 	*sqlx.DB
+	logger     *slog.Logger
+	testWriter io.Writer
+	inMemory   bool
 }
 
-func New(dsn string, automigrate bool) (*DB, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
-	defer cancel()
-
-	db, err := sqlx.ConnectContext(ctx, "sqlite3", dsn)
-	if err != nil {
-		return nil, err
+// logDebug logs a debug message if a logger is configured
+func (db *DB) logDebug(msg string, args ...any) {
+	if db.logger != nil {
+		db.logger.Debug(msg, args...)
 	}
+}
 
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(25)
-	db.SetConnMaxIdleTime(5 * time.Minute)
-	db.SetConnMaxLifetime(2 * time.Hour)
-
-	if automigrate {
-		iofsDriver, err := iofs.New(assets.EmbeddedFiles, "migrations")
-		if err != nil {
-			return nil, err
-		}
-
-		migrator, err := migrate.NewWithSourceInstance("iofs", iofsDriver, "sqlite3://"+dsn)
-		if err != nil {
-			return nil, err
-		}
-
-		err = migrator.Up()
-		switch {
-		case errors.Is(err, migrate.ErrNoChange):
-			break
-		case err != nil:
-			return nil, err
-		}
+// logError logs an error message with additional arguments
+func (db *DB) logError(msg string, err error, args ...any) {
+	if db.logger != nil {
+		allArgs := append([]any{"error", err}, args...)
+		db.logger.Error(msg, allArgs...)
 	}
-
-	return &DB{db}, nil
 }

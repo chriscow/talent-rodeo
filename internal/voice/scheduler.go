@@ -2,6 +2,7 @@ package voice
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
@@ -9,7 +10,7 @@ import (
 	"talent-rodeo/internal/database"
 	"talent-rodeo/internal/models"
 
-	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 )
 
 // CallScheduler manages scheduling and initiating phone calls
@@ -26,69 +27,78 @@ func NewCallScheduler(db *database.DB, logger *slog.Logger) *CallScheduler {
 	}
 }
 
-// ScheduleCall schedules a call for a specific time
-func (s *CallScheduler) ScheduleCall(ctx context.Context, userID int, scheduledTime time.Time) error {
-	s.logger.Debug("scheduling call",
-		"user_id", userID,
-		"scheduled_time", scheduledTime,
-		"scheduled_time_utc", scheduledTime.UTC(),
-		"current_time", time.Now(),
-		"current_time_utc", time.Now().UTC(),
-	)
-
-	// Validate the scheduled time is in the future
-	if scheduledTime.Before(time.Now()) {
-		s.logger.Debug("rejecting past scheduled time",
-			"scheduled_time", scheduledTime,
-			"current_time", time.Now(),
-		)
-		return fmt.Errorf("scheduled time must be in the future")
+// ScheduleCall schedules a call to be made at the specified time
+func (s *CallScheduler) ScheduleCall(ctx context.Context, msg *models.Message, runAt time.Time) (string, error) {
+	if runAt.Before(time.Now()) {
+		return "", fmt.Errorf("cannot schedule call in the past")
 	}
 
-	// Create a task for the scheduled call
+	// Serialize message to JSON
+	payload, err := json.Marshal(msg)
+	if err != nil {
+		return "", fmt.Errorf("failed to serialize message: %w", err)
+	}
+
 	task := &models.Task{
-		ID:        uuid.New().String(),
-		Type:      "phone_call",
-		Status:    models.TaskStatusPending,
-		RunAt:     scheduledTime.UTC(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-		Payload:   []byte(fmt.Sprintf(`{"user_id": %d}`, userID)),
+		ID:          msg.ID, // Use message ID as task ID for traceability
+		Type:        "phone_call",
+		Payload:     payload,
+		Status:      models.TaskStatusPending,
+		MaxAttempts: 3,
+		RunAt:       runAt,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
 	}
 
-	s.logger.Debug("creating task",
-		"task_id", task.ID,
-		"type", task.Type,
-		"status", task.Status,
-		"run_at", task.RunAt,
-		"created_at", task.CreatedAt,
-		"updated_at", task.UpdatedAt,
-	)
-
-	// Save the task
 	if err := s.db.CreateTask(task); err != nil {
-		s.logger.Error("failed to create task",
-			"error", err,
-			"task_id", task.ID,
-		)
-		return fmt.Errorf("failed to create task: %w", err)
+		return "", fmt.Errorf("failed to create task: %w", err)
 	}
 
-	s.logger.Info("call scheduled",
-		"user_id", userID,
-		"scheduled_time", scheduledTime,
-		"task_id", task.ID,
+	return task.ID, nil
+}
+
+// CancelCall cancels a call
+func (s *CallScheduler) CancelCall(ctx context.Context, taskID string) error {
+	s.logger.Debug("starting call cancellation",
+		"task_id", taskID,
 	)
+
+	// Start transaction
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		s.logger.Error("failed to begin transaction",
+			"error", err,
+			"task_id", taskID,
+		)
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	// Cancel call within transaction
+	if err := s.CancelCallTx(ctx, tx, taskID); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		s.logger.Error("failed to commit transaction",
+			"error", err,
+			"task_id", taskID,
+		)
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
 
 	return nil
 }
 
-// CancelCall cancels a scheduled call
-func (s *CallScheduler) CancelCall(ctx context.Context, taskID string) error {
-	s.logger.Debug("cancelling call", "task_id", taskID)
+// CancelCallTx cancels a call within an existing transaction
+func (s *CallScheduler) CancelCallTx(ctx context.Context, tx *sqlx.Tx, taskID string) error {
+	s.logger.Debug("cancelling call in transaction",
+		"task_id", taskID,
+	)
 
-	// Get the task
-	task, err := s.db.GetTask(taskID)
+	// Get the task within transaction
+	task, err := s.db.GetTaskTx(ctx, tx, taskID)
 	if err != nil {
 		s.logger.Error("failed to get task",
 			"error", err,
@@ -121,13 +131,13 @@ func (s *CallScheduler) CancelCall(ctx context.Context, taskID string) error {
 	task.Status = models.TaskStatusCancelled
 	task.UpdatedAt = time.Now().UTC()
 
-	s.logger.Debug("updating task",
+	s.logger.Debug("updating task in transaction",
 		"task_id", task.ID,
 		"new_status", task.Status,
 		"updated_at", task.UpdatedAt,
 	)
 
-	if err := s.db.UpdateTask(task); err != nil {
+	if err := s.db.UpdateTaskTx(ctx, tx, task); err != nil {
 		s.logger.Error("failed to update task",
 			"error", err,
 			"task_id", taskID,
@@ -135,7 +145,7 @@ func (s *CallScheduler) CancelCall(ctx context.Context, taskID string) error {
 		return fmt.Errorf("failed to update task: %w", err)
 	}
 
-	s.logger.Info("call cancelled",
+	s.logger.Info("call cancelled in transaction",
 		"task_id", taskID,
 	)
 
@@ -144,7 +154,42 @@ func (s *CallScheduler) CancelCall(ctx context.Context, taskID string) error {
 
 // RescheduleCall reschedules a call to a new time
 func (s *CallScheduler) RescheduleCall(ctx context.Context, taskID string, newTime time.Time) error {
-	s.logger.Debug("rescheduling call",
+	s.logger.Debug("starting call rescheduling",
+		"task_id", taskID,
+		"new_time", newTime,
+	)
+
+	// Start transaction
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		s.logger.Error("failed to begin transaction",
+			"error", err,
+			"task_id", taskID,
+		)
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	// Reschedule call within transaction
+	if err := s.RescheduleCallTx(ctx, tx, taskID, newTime); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		s.logger.Error("failed to commit transaction",
+			"error", err,
+			"task_id", taskID,
+		)
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+// RescheduleCallTx reschedules a call to a new time within an existing transaction
+func (s *CallScheduler) RescheduleCallTx(ctx context.Context, tx *sqlx.Tx, taskID string, newTime time.Time) error {
+	s.logger.Debug("rescheduling call in transaction",
 		"task_id", taskID,
 		"new_time", newTime,
 		"new_time_utc", newTime.UTC(),
@@ -152,8 +197,8 @@ func (s *CallScheduler) RescheduleCall(ctx context.Context, taskID string, newTi
 		"current_time_utc", time.Now().UTC(),
 	)
 
-	// Get the task
-	task, err := s.db.GetTask(taskID)
+	// Get the task within transaction
+	task, err := s.db.GetTaskTx(ctx, tx, taskID)
 	if err != nil {
 		s.logger.Error("failed to get task",
 			"error", err,
@@ -195,13 +240,13 @@ func (s *CallScheduler) RescheduleCall(ctx context.Context, taskID string, newTi
 	task.RunAt = newTime.UTC()
 	task.UpdatedAt = time.Now().UTC()
 
-	s.logger.Debug("updating task",
+	s.logger.Debug("updating task in transaction",
 		"task_id", task.ID,
 		"new_run_at", task.RunAt,
 		"updated_at", task.UpdatedAt,
 	)
 
-	if err := s.db.UpdateTask(task); err != nil {
+	if err := s.db.UpdateTaskTx(ctx, tx, task); err != nil {
 		s.logger.Error("failed to update task",
 			"error", err,
 			"task_id", taskID,
@@ -209,7 +254,7 @@ func (s *CallScheduler) RescheduleCall(ctx context.Context, taskID string, newTi
 		return fmt.Errorf("failed to update task: %w", err)
 	}
 
-	s.logger.Info("call rescheduled",
+	s.logger.Info("call rescheduled in transaction",
 		"task_id", taskID,
 		"new_time", newTime,
 	)

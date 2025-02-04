@@ -3,7 +3,6 @@ package database
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
@@ -12,17 +11,25 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// CreateTask creates a new task in the database
+// CreateTask creates a new task
 func (db *DB) CreateTask(task *models.Task) error {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 
 	query := `
 		INSERT INTO tasks (
-			id, type, payload, status, attempts, max_attempts, run_at, error, created_at, updated_at
-		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10
-		)`
+			id,
+			type,
+			payload,
+			status,
+			attempts,
+			max_attempts,
+			run_at,
+			error,
+			created_at,
+			updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`
 
 	_, err := db.ExecContext(ctx, query,
 		task.ID,
@@ -36,7 +43,6 @@ func (db *DB) CreateTask(task *models.Task) error {
 		task.CreatedAt,
 		task.UpdatedAt,
 	)
-
 	if err != nil {
 		return fmt.Errorf("failed to create task: %w", err)
 	}
@@ -87,17 +93,16 @@ func (db *DB) UpdateTask(task *models.Task) error {
 
 // GetTask retrieves a task by ID
 func (db *DB) GetTask(id string) (*models.Task, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
-	defer cancel()
+	db.logDebug("getting task", "id", id)
 
 	var task models.Task
-	query := `SELECT * FROM tasks WHERE id = $1`
-
-	err := db.GetContext(ctx, &task, query, id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
+	err := db.Get(&task, "SELECT * FROM tasks WHERE id = ?", id)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			db.logDebug("task not found", "id", id)
+			return nil, fmt.Errorf("failed to get task: %w", err)
+		}
+		db.logError("failed to get task", err, "id", id)
 		return nil, fmt.Errorf("failed to get task: %w", err)
 	}
 
@@ -154,14 +159,22 @@ func (db *DB) DeleteTask(id string) error {
 	return nil
 }
 
-// CreateTaskTx creates a new task within an existing transaction
+// CreateTaskTx creates a new task within a transaction
 func (db *DB) CreateTaskTx(ctx context.Context, tx *sqlx.Tx, task *models.Task) error {
 	query := `
 		INSERT INTO tasks (
-			id, type, payload, status, attempts, max_attempts, run_at, error, created_at, updated_at
-		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10
-		)`
+			id,
+			type,
+			payload,
+			status,
+			attempts,
+			max_attempts,
+			run_at,
+			error,
+			created_at,
+			updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`
 
 	_, err := tx.ExecContext(ctx, query,
 		task.ID,
@@ -175,7 +188,6 @@ func (db *DB) CreateTaskTx(ctx context.Context, tx *sqlx.Tx, task *models.Task) 
 		task.CreatedAt,
 		task.UpdatedAt,
 	)
-
 	if err != nil {
 		return fmt.Errorf("failed to create task in transaction: %w", err)
 	}
@@ -221,19 +233,20 @@ func (db *DB) UpdateTaskTx(ctx context.Context, tx *sqlx.Tx, task *models.Task) 
 	return nil
 }
 
-// GetTaskTx retrieves a task by ID within an existing transaction
+// GetTaskTx gets a task by ID within a transaction
 func (db *DB) GetTaskTx(ctx context.Context, tx *sqlx.Tx, id string) (*models.Task, error) {
 	var task models.Task
-	query := `SELECT * FROM tasks WHERE id = $1`
-
-	err := tx.GetContext(ctx, &task, query, id)
-	if errors.Is(err, sql.ErrNoRows) {
+	err := tx.GetContext(ctx, &task, `
+		SELECT *
+		FROM tasks
+		WHERE id = ?
+	`, id)
+	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get task in transaction: %w", err)
 	}
-
 	return &task, nil
 }
 
