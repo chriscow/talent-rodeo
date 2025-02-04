@@ -1,85 +1,120 @@
--- Enable foreign key support
-PRAGMA foreign_keys = ON;
+-- Create companies table
+CREATE TABLE companies (
+    id BIGSERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    website TEXT,
+    industry TEXT,
+    company_size TEXT,
+    company_type TEXT,
+    headquarters TEXT,
+    founded INTEGER,
+    specialties TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
--- Create main jobs table
-CREATE TABLE IF NOT EXISTS jobs (
-    id TEXT PRIMARY KEY,
-    position TEXT NOT NULL,
-    status TEXT,
-    location TEXT,
-    company_name TEXT NOT NULL,
+-- Create jobs table
+CREATE TABLE jobs (
+    id BIGSERIAL PRIMARY KEY,
+    company_id BIGINT NOT NULL REFERENCES companies (id),
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    location TEXT NOT NULL,
+    work_type TEXT,
+    employment_type TEXT,
+    seniority_level TEXT,
+    job_function TEXT,
+    industries TEXT,
+    linkedin_job_id TEXT UNIQUE,
+    applies_count INTEGER,
+    original_listed_time TIMESTAMP,
+    experience_level TEXT,
+    salary_min DECIMAL,
+    salary_max DECIMAL,
+    salary_currency TEXT,
+    salary_period TEXT,
+    benefits TEXT,
+    remote_allowed BOOLEAN,
+    skills_required TEXT,
+    education_required TEXT,
+    responsibilities TEXT,
+    qualifications TEXT,
+    description_html TEXT,
+    description_summarized TEXT,
     company_linkedin_id TEXT,
     posting_time TEXT,
     base_pay TEXT,
-    description TEXT,
-    description_html TEXT,
-    description_summarized TEXT,
-    seniority_level TEXT,
-    employment_type TEXT,
-    function TEXT,
-    industries TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create job applications table
+CREATE TABLE job_applications (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users (id),
+    job_id BIGINT NOT NULL REFERENCES jobs (id),
+    status TEXT NOT NULL CHECK (
+        status IN (
+            'interested',
+            'applied',
+            'interviewing',
+            'offered',
+            'rejected',
+            'accepted',
+            'declined'
+        )
+    ),
+    notes TEXT,
+    applied_date TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create job_skills table for tracking required skills
+CREATE TABLE job_skills (
+    id BIGSERIAL PRIMARY KEY,
+    job_id BIGINT NOT NULL REFERENCES jobs (id),
+    skill TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Create recruiters table
-CREATE TABLE IF NOT EXISTS recruiters (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    job_id INTEGER NOT NULL,
+CREATE TABLE recruiters (
+    id BIGSERIAL PRIMARY KEY,
+    job_id BIGINT NOT NULL REFERENCES jobs (id),
     photo_url TEXT,
     name TEXT NOT NULL,
     title TEXT,
-    profile_url TEXT,
-    FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE CASCADE
+    profile_url TEXT
 );
 
 -- Create similar jobs table
-CREATE TABLE IF NOT EXISTS similar_jobs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    original_job_id INTEGER NOT NULL,
+CREATE TABLE similar_jobs (
+    id BIGSERIAL PRIMARY KEY,
+    original_job_id BIGINT NOT NULL REFERENCES jobs (id),
     position TEXT NOT NULL,
     company TEXT NOT NULL,
     location TEXT,
     posting_time TEXT,
-    link TEXT,
-    FOREIGN KEY (original_job_id) REFERENCES jobs (id) ON DELETE CASCADE
+    link TEXT
 );
 
 -- Create people also viewed table
-CREATE TABLE IF NOT EXISTS people_also_viewed (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    original_job_id INTEGER NOT NULL,
+CREATE TABLE people_also_viewed (
+    id BIGSERIAL PRIMARY KEY,
+    original_job_id BIGINT NOT NULL REFERENCES jobs (id),
     position TEXT NOT NULL,
     company TEXT NOT NULL,
     location TEXT,
     posting_time TEXT,
-    link TEXT,
-    FOREIGN KEY (original_job_id) REFERENCES jobs (id) ON DELETE CASCADE
+    link TEXT
 );
 
--- Create indexes for common queries
-CREATE INDEX IF NOT EXISTS idx_jobs_company_name ON jobs (company_name);
-
-CREATE INDEX IF NOT EXISTS idx_jobs_position ON jobs (position);
-
-CREATE INDEX IF NOT EXISTS idx_jobs_location ON jobs (location);
-
-CREATE INDEX IF NOT EXISTS idx_similar_jobs_company ON similar_jobs (company);
-
-CREATE INDEX IF NOT EXISTS idx_people_also_viewed_company ON people_also_viewed (company);
-
--- Create trigger to update the updated_at timestamp
-CREATE TRIGGER IF NOT EXISTS jobs_updated_at 
-    AFTER UPDATE ON jobs
-BEGIN
-    UPDATE jobs 
-    SET updated_at = CURRENT_TIMESTAMP
-    WHERE id = NEW.id;
-END;
-
-
-CREATE TABLE IF NOT EXISTS job_searches (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+-- Create job searches table
+CREATE TABLE job_searches (
+    id BIGSERIAL PRIMARY KEY,
     keyword TEXT NOT NULL,
     geo_id TEXT NOT NULL,
     sort_by TEXT,
@@ -87,77 +122,128 @@ CREATE TABLE IF NOT EXISTS job_searches (
     exp_level TEXT,
     work_type TEXT,
     company_filter TEXT,
-    last_searched_at DATETIME NOT NULL,
+    last_searched_at TIMESTAMP NOT NULL,
     total_results INTEGER,
-    search_hash TEXT NOT NULL,
-    UNIQUE(search_hash)
+    search_hash TEXT NOT NULL UNIQUE
 );
 
-CREATE INDEX IF NOT EXISTS idx_job_searches_hash ON job_searches(search_hash);
-CREATE INDEX IF NOT EXISTS idx_job_searches_last_searched ON job_searches(last_searched_at);
-
--- Create jobs table to store LinkedIn job listings
-CREATE TABLE IF NOT EXISTS job_listings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    job_id TEXT NOT NULL UNIQUE,              -- LinkedIn's job ID
-    position TEXT NOT NULL,                   -- Job title/position
-    link TEXT,                           -- Full URL to job posting
-    company_name TEXT NOT NULL,               -- Company name
-    company_profile TEXT,                     -- LinkedIn company profile URL
-    location TEXT,                           -- Job location
-    posting_date TEXT,                        -- Original posting date from LinkedIn
-    company_logo TEXT,                        -- Company logo URL
-    first_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- When we first discovered this job
-    last_updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP -- When we last updated this job
+-- Create job listings table
+CREATE TABLE job_listings (
+    id BIGSERIAL PRIMARY KEY,
+    job_id TEXT NOT NULL UNIQUE,
+    position TEXT NOT NULL,
+    link TEXT,
+    company_name TEXT NOT NULL,
+    company_profile TEXT,
+    location TEXT,
+    posting_date TEXT,
+    company_logo TEXT,
+    first_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create indexes for common query patterns
-CREATE INDEX IF NOT EXISTS idx_job_listings_company_name 
-    ON job_listings(company_name);
-CREATE INDEX IF NOT EXISTS idx_job_listings_location 
-    ON job_listings(location);
-CREATE INDEX IF NOT EXISTS idx_job_listings_posting_date 
-    ON job_listings(posting_date);
-
--- Create a junction table to connect searches with results
-CREATE TABLE IF NOT EXISTS search_results (
-    search_id INTEGER NOT NULL,
-    job_listing_id INTEGER NOT NULL,
-    found_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (search_id, job_listing_id),
-    FOREIGN KEY (search_id) REFERENCES job_searches(id) ON DELETE CASCADE,
-    FOREIGN KEY (job_listing_id) REFERENCES job_listings(id) ON DELETE CASCADE
+-- Create search results junction table
+CREATE TABLE search_results (
+    search_id BIGINT NOT NULL REFERENCES job_searches (id) ON DELETE CASCADE,
+    job_listing_id BIGINT NOT NULL REFERENCES job_listings (id) ON DELETE CASCADE,
+    found_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (search_id, job_listing_id)
 );
 
--- Create a trigger to update last_updated_at timestamp
-CREATE TRIGGER IF NOT EXISTS update_job_listing_timestamp 
-    AFTER UPDATE ON job_listings
-BEGIN
-    UPDATE job_listings 
-    SET last_updated_at = CURRENT_TIMESTAMP 
-    WHERE id = NEW.id;
-END;
-
-CREATE TABLE IF NOT EXISTS extracted_job_details (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    job_id INTEGER NOT NULL,
+-- Create extracted job details table
+CREATE TABLE extracted_job_details (
+    id BIGSERIAL PRIMARY KEY,
+    job_id BIGINT NOT NULL REFERENCES jobs (id) ON DELETE CASCADE,
     must_have_requirements TEXT,
     preferred_skills TEXT,
     work_location TEXT,
     company_culture TEXT,
     additional_info TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS user_keywords (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
+-- Create user keywords table
+CREATE TABLE user_keywords (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     keyword TEXT NOT NULL,
     priority INTEGER NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    UNIQUE(user_id, keyword)
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (user_id, keyword)
 );
+
+-- Create indexes
+CREATE INDEX idx_jobs_company ON jobs (company_id);
+
+CREATE INDEX idx_jobs_location ON jobs (location);
+
+CREATE INDEX idx_jobs_work_type ON jobs (work_type);
+
+CREATE INDEX idx_jobs_employment_type ON jobs (employment_type);
+
+CREATE INDEX idx_jobs_seniority ON jobs (seniority_level);
+
+CREATE INDEX idx_jobs_function ON jobs (job_function);
+
+CREATE INDEX idx_jobs_linkedin_id ON jobs (linkedin_job_id);
+
+CREATE INDEX idx_jobs_experience ON jobs (experience_level);
+
+CREATE INDEX idx_jobs_remote ON jobs (remote_allowed);
+
+CREATE INDEX idx_jobs_title ON jobs (title);
+
+CREATE INDEX idx_applications_user ON job_applications (user_id);
+
+CREATE INDEX idx_applications_job ON job_applications (job_id);
+
+CREATE INDEX idx_applications_status ON job_applications (status);
+
+CREATE INDEX idx_skills_job ON job_skills (job_id);
+
+CREATE INDEX idx_skills_skill ON job_skills (skill);
+
+CREATE INDEX idx_similar_jobs_company ON similar_jobs (company);
+
+CREATE INDEX idx_people_also_viewed_company ON people_also_viewed (company);
+
+CREATE INDEX idx_job_searches_hash ON job_searches (search_hash);
+
+CREATE INDEX idx_job_searches_last_searched ON job_searches (last_searched_at);
+
+CREATE INDEX idx_job_listings_company_name ON job_listings (company_name);
+
+CREATE INDEX idx_job_listings_location ON job_listings (location);
+
+CREATE INDEX idx_job_listings_posting_date ON job_listings (posting_date);
+
+-- Create triggers for updating timestamps
+CREATE TRIGGER companies_updated_at BEFORE
+UPDATE ON companies FOR EACH ROW
+EXECUTE FUNCTION update_timestamp ();
+
+CREATE TRIGGER jobs_updated_at BEFORE
+UPDATE ON jobs FOR EACH ROW
+EXECUTE FUNCTION update_timestamp ();
+
+CREATE TRIGGER job_applications_updated_at BEFORE
+UPDATE ON job_applications FOR EACH ROW
+EXECUTE FUNCTION update_timestamp ();
+
+CREATE TRIGGER job_skills_updated_at BEFORE
+UPDATE ON job_skills FOR EACH ROW
+EXECUTE FUNCTION update_timestamp ();
+
+CREATE TRIGGER job_listings_updated_at BEFORE
+UPDATE ON job_listings FOR EACH ROW
+EXECUTE FUNCTION update_timestamp ();
+
+CREATE TRIGGER extracted_job_details_updated_at BEFORE
+UPDATE ON extracted_job_details FOR EACH ROW
+EXECUTE FUNCTION update_timestamp ();
+
+CREATE TRIGGER user_keywords_updated_at BEFORE
+UPDATE ON user_keywords FOR EACH ROW
+EXECUTE FUNCTION update_timestamp ();

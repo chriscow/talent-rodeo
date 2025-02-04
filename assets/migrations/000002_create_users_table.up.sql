@@ -1,6 +1,6 @@
 CREATE TABLE users (
-    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-    created TIMESTAMP NOT NULL DEFAULT(datetime('now', 'utc')),
+    id BIGSERIAL PRIMARY KEY,
+    created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     email TEXT NOT NULL UNIQUE,
     hashed_secret TEXT NOT NULL,
     provider TEXT NOT NULL,
@@ -12,9 +12,18 @@ CREATE TABLE users (
     user_id TEXT,
     avatar_url TEXT,
     location TEXT,
-    is_superuser BOOLEAN NOT NULL DEFAULT 0,
+    is_superuser BOOLEAN NOT NULL DEFAULT false,
     -- 
     resume_filename TEXT,
     full_resume TEXT,
     summarized_resume TEXT
 );
+
+-- Create function for updating timestamps if it doesn't exist
+CREATE OR REPLACE FUNCTION update_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';

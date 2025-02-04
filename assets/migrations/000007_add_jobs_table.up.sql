@@ -1,39 +1,32 @@
--- Enable foreign key support
-PRAGMA foreign_keys = ON;
-
--- Create background_jobs table
-CREATE TABLE IF NOT EXISTS background_jobs (
-    id TEXT PRIMARY KEY,
+-- Create tasks table for background job processing
+CREATE TABLE tasks (
+    id BIGSERIAL PRIMARY KEY,
     type TEXT NOT NULL,
-    payload BLOB,
-    status TEXT NOT NULL CHECK (
+    payload JSONB NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (
         status IN (
             'pending',
-            'running',
-            'complete',
-            'failed',
-            'retrying',
-            'cancelled'
+            'in_progress',
+            'completed',
+            'failed'
         )
     ),
     attempts INTEGER NOT NULL DEFAULT 0,
     max_attempts INTEGER NOT NULL DEFAULT 3,
-    run_at DATETIME NOT NULL,
+    run_at TIMESTAMP NOT NULL,
     error TEXT,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create index for finding pending jobs
-CREATE INDEX idx_background_jobs_status_run_at ON background_jobs (status, run_at)
-WHERE
-    status IN ('pending', 'retrying');
+-- Create indexes for common queries
+CREATE INDEX idx_tasks_status ON tasks (status);
 
--- Create trigger to update the updated_at timestamp
-CREATE TRIGGER background_jobs_updated_at 
-    AFTER UPDATE ON background_jobs
-BEGIN
-    UPDATE background_jobs 
-    SET updated_at = CURRENT_TIMESTAMP
-    WHERE id = NEW.id;
-END;
+CREATE INDEX idx_tasks_type ON tasks (type);
+
+CREATE INDEX idx_tasks_run_at ON tasks (run_at);
+
+-- Create trigger for updating timestamps
+CREATE TRIGGER tasks_updated_at BEFORE
+UPDATE ON tasks FOR EACH ROW
+EXECUTE FUNCTION update_timestamp ();
