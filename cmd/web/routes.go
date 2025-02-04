@@ -45,6 +45,7 @@ func (app *application) routes() http.Handler {
 			mux.HandleFunc("/profile/schedule", app.scheduleHandler, "GET")
 			mux.HandleFunc("/profile/schedule/preferences", app.schedulePreferencesSubmitHandler, "POST")
 			mux.HandleFunc("/profile/schedule/appointment", app.scheduleAppointmentHandler, "POST")
+			mux.HandleFunc("/reschedule-call", app.rescheduleCall, "POST")
 			mux.HandleFunc("/interview", app.InterviewPage, "GET")
 			mux.HandleFunc("/interview/start", app.InterviewStart, "GET")
 			mux.HandleFunc("/interview/end", app.InterviewEnd, "POST")

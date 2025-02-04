@@ -233,7 +233,7 @@ func (app *application) resumeUploadPage(w http.ResponseWriter, r *http.Request)
 
 	if r.Method == http.MethodGet {
 		data := app.newTemplateData(r)
-		if err := response.Page(w, http.StatusOK, data, "pages/resume-upload.html"); err != nil {
+		if err := response.Page(w, http.StatusOK, data, "pages/profile-resume-upload.html"); err != nil {
 			app.logger.Error("Failed to render resume upload page", "error", err)
 			app.serverError(w, r, fmt.Errorf("failed to render resume upload page: %w", err))
 		}
