@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
 	"time"
 
 	"talent-rodeo/internal/models"
@@ -11,27 +12,52 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+var (
+	taskMutex sync.Mutex
+)
+
 // CreateTask creates a new task
-func (db *DB) CreateTask(task *models.Task) error {
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
-	defer cancel()
+func (db *DB) CreateTask(ctx context.Context, task *models.Task) error {
+	if task.Type == "" {
+		return fmt.Errorf("task type is required")
+	}
+	if task.RunAt.IsZero() {
+		return fmt.Errorf("run_at is required")
+	}
+	if task.Payload == nil {
+		return fmt.Errorf("payload is required")
+	}
+
+	db.logger.Debug("creating task",
+		"task_id", task.ID,
+		"task_id_type", fmt.Sprintf("%T", task.ID),
+		"type", task.Type,
+		"status", task.Status,
+		"run_at", task.RunAt,
+		"payload_size", len(task.Payload),
+	)
 
 	query := `
 		INSERT INTO tasks (
-			id,
-			type,
-			payload,
-			status,
-			attempts,
-			max_attempts,
-			run_at,
-			error,
-			created_at,
-			updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			id, type, payload, status, attempts, max_attempts, run_at, error, created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+		)
 	`
 
-	_, err := db.ExecContext(ctx, query,
+	// Don't generate a new ID if one is already set
+	if task.ID == 0 {
+		task.ID = generateTaskID(task)
+	}
+	task.CreatedAt = time.Now()
+	task.UpdatedAt = task.CreatedAt
+
+	db.logger.Debug("executing insert query",
+		"task_id", task.ID,
+		"query", query,
+	)
+
+	result, err := db.ExecContext(ctx, query,
 		task.ID,
 		task.Type,
 		task.Payload,
@@ -44,104 +70,114 @@ func (db *DB) CreateTask(task *models.Task) error {
 		task.UpdatedAt,
 	)
 	if err != nil {
+		db.logger.Error("failed to create task",
+			"error", err,
+			"task_id", task.ID,
+		)
 		return fmt.Errorf("failed to create task: %w", err)
 	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		db.logger.Error("failed to get rows affected",
+			"error", err,
+			"task_id", task.ID,
+		)
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	if rows != 1 {
+		db.logger.Error("unexpected number of rows affected",
+			"rows", rows,
+			"task_id", task.ID,
+		)
+		return fmt.Errorf("expected 1 row to be affected, got %d", rows)
+	}
+
+	db.logger.Debug("task created successfully",
+		"task_id", task.ID,
+		"rows_affected", rows,
+	)
 
 	return nil
 }
 
-// UpdateTask updates an existing task in the database
-func (db *DB) UpdateTask(task *models.Task) error {
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
-	defer cancel()
+// GetTask retrieves a task by ID
+func (db *DB) GetTask(ctx context.Context, id int64) (*models.Task, error) {
+	db.logger.Debug("getting task",
+		"task_id", id,
+		"task_id_type", fmt.Sprintf("%T", id),
+	)
 
+	task := &models.Task{}
+	query := `SELECT * FROM tasks WHERE id = $1`
+
+	db.logger.Debug("executing select query",
+		"task_id", id,
+		"query", query,
+	)
+
+	err := db.GetContext(ctx, task, query, id)
+	if err != nil {
+		db.logger.Error("failed to get task",
+			"error", err,
+			"task_id", id,
+		)
+		return nil, fmt.Errorf("failed to get task: %w", err)
+	}
+
+	db.logger.Debug("task retrieved successfully",
+		"task_id", task.ID,
+		"type", task.Type,
+		"status", task.Status,
+	)
+
+	return task, nil
+}
+
+// UpdateTask updates an existing task
+func (db *DB) UpdateTask(ctx context.Context, task *models.Task) error {
 	task.UpdatedAt = time.Now()
-
 	query := `
 		UPDATE tasks SET
-			status = $1,
-			attempts = $2,
-			run_at = $3,
-			error = $4,
-			updated_at = $5
-		WHERE id = $6`
-
+			type = $1,
+			payload = $2,
+			status = $3,
+			attempts = $4,
+			max_attempts = $5,
+			run_at = $6,
+			error = $7,
+			updated_at = $8
+		WHERE id = $9
+	`
 	result, err := db.ExecContext(ctx, query,
+		task.Type,
+		task.Payload,
 		task.Status,
 		task.Attempts,
+		task.MaxAttempts,
 		task.RunAt,
 		task.Error,
 		task.UpdatedAt,
 		task.ID,
 	)
-
 	if err != nil {
 		return fmt.Errorf("failed to update task: %w", err)
 	}
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("failed to get affected rows: %w", err)
+		return fmt.Errorf("failed to get rows affected: %w", err)
 	}
-
 	if rows == 0 {
-		return fmt.Errorf("task not found: %s", task.ID)
+		return fmt.Errorf("task not found: %d", task.ID)
 	}
 
 	return nil
 }
 
-// GetTask retrieves a task by ID
-func (db *DB) GetTask(id string) (*models.Task, error) {
-	db.logDebug("getting task", "id", id)
-
-	var task models.Task
-	err := db.Get(&task, "SELECT * FROM tasks WHERE id = ?", id)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			db.logDebug("task not found", "id", id)
-			return nil, fmt.Errorf("failed to get task: %w", err)
-		}
-		db.logError("failed to get task", err, "id", id)
-		return nil, fmt.Errorf("failed to get task: %w", err)
-	}
-
-	return &task, nil
-}
-
-// GetPendingTasks retrieves tasks that are ready to be processed
-func (db *DB) GetPendingTasks(limit int) ([]models.Task, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
-	defer cancel()
-
-	var tasks []models.Task
-	query := `
-		SELECT * FROM tasks
-		WHERE status IN ($1, $2)
-		AND run_at <= $3
-		ORDER BY run_at ASC
-		LIMIT $4`
-
-	err := db.SelectContext(ctx, &tasks, query,
-		models.TaskStatusPending,
-		models.TaskStatusRetrying,
-		time.Now(),
-		limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get pending tasks: %w", err)
-	}
-
-	return tasks, nil
-}
-
-// DeleteTask removes a task from the database
-func (db *DB) DeleteTask(id string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
-	defer cancel()
-
+// DeleteTask deletes a task by ID
+func (db *DB) DeleteTask(ctx context.Context, id int64) error {
 	query := `DELETE FROM tasks WHERE id = $1`
-
 	result, err := db.ExecContext(ctx, query, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete task: %w", err)
@@ -149,18 +185,40 @@ func (db *DB) DeleteTask(id string) error {
 
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("failed to get affected rows: %w", err)
+		return fmt.Errorf("failed to get rows affected: %w", err)
 	}
-
 	if rows == 0 {
-		return fmt.Errorf("task not found: %s", id)
+		return fmt.Errorf("task not found: %d", id)
 	}
 
 	return nil
 }
 
+// GetPendingTasks retrieves all pending tasks that are due to run
+func (db *DB) GetPendingTasks(ctx context.Context) ([]*models.Task, error) {
+	var tasks []*models.Task
+	query := `
+		SELECT * FROM tasks
+		WHERE status IN ('pending', 'retrying')
+		AND run_at <= $1
+		ORDER BY run_at ASC
+	`
+	err := db.SelectContext(ctx, &tasks, query, time.Now())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pending tasks: %w", err)
+	}
+	return tasks, nil
+}
+
+func generateTaskID(task *models.Task) int64 {
+	return time.Now().UnixNano()
+}
+
 // CreateTaskTx creates a new task within a transaction
 func (db *DB) CreateTaskTx(ctx context.Context, tx *sqlx.Tx, task *models.Task) error {
+	taskMutex.Lock()
+	defer taskMutex.Unlock()
+
 	query := `
 		INSERT INTO tasks (
 			id,
@@ -173,7 +231,7 @@ func (db *DB) CreateTaskTx(ctx context.Context, tx *sqlx.Tx, task *models.Task) 
 			error,
 			created_at,
 			updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
 
 	_, err := tx.ExecContext(ctx, query,
@@ -197,6 +255,9 @@ func (db *DB) CreateTaskTx(ctx context.Context, tx *sqlx.Tx, task *models.Task) 
 
 // UpdateTaskTx updates an existing task within an existing transaction
 func (db *DB) UpdateTaskTx(ctx context.Context, tx *sqlx.Tx, task *models.Task) error {
+	taskMutex.Lock()
+	defer taskMutex.Unlock()
+
 	task.UpdatedAt = time.Now()
 
 	query := `
@@ -227,19 +288,22 @@ func (db *DB) UpdateTaskTx(ctx context.Context, tx *sqlx.Tx, task *models.Task) 
 	}
 
 	if rows == 0 {
-		return fmt.Errorf("task not found: %s", task.ID)
+		return fmt.Errorf("task not found: %d", task.ID)
 	}
 
 	return nil
 }
 
 // GetTaskTx gets a task by ID within a transaction
-func (db *DB) GetTaskTx(ctx context.Context, tx *sqlx.Tx, id string) (*models.Task, error) {
+func (db *DB) GetTaskTx(ctx context.Context, tx *sqlx.Tx, id int64) (*models.Task, error) {
+	taskMutex.Lock()
+	defer taskMutex.Unlock()
+
 	var task models.Task
 	err := tx.GetContext(ctx, &task, `
 		SELECT *
 		FROM tasks
-		WHERE id = ?
+		WHERE id = $1
 	`, id)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -247,11 +311,15 @@ func (db *DB) GetTaskTx(ctx context.Context, tx *sqlx.Tx, id string) (*models.Ta
 	if err != nil {
 		return nil, fmt.Errorf("failed to get task in transaction: %w", err)
 	}
+
 	return &task, nil
 }
 
 // DeleteTaskTx removes a task from the database within an existing transaction
-func (db *DB) DeleteTaskTx(ctx context.Context, tx *sqlx.Tx, id string) error {
+func (db *DB) DeleteTaskTx(ctx context.Context, tx *sqlx.Tx, id int64) error {
+	taskMutex.Lock()
+	defer taskMutex.Unlock()
+
 	query := `DELETE FROM tasks WHERE id = $1`
 
 	result, err := tx.ExecContext(ctx, query, id)
@@ -265,7 +333,7 @@ func (db *DB) DeleteTaskTx(ctx context.Context, tx *sqlx.Tx, id string) error {
 	}
 
 	if rows == 0 {
-		return fmt.Errorf("task not found: %s", id)
+		return fmt.Errorf("task not found: %d", id)
 	}
 
 	return nil

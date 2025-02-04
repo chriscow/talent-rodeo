@@ -17,7 +17,9 @@ CREATE TABLE tasks (
     run_at TIMESTAMP NOT NULL,
     error TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Add constraint to prevent tasks with run_at in the past
+    CONSTRAINT tasks_run_at_future_check CHECK (run_at >= created_at)
 );
 
 -- Index for finding pending tasks
