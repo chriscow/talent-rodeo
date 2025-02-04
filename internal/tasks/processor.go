@@ -126,7 +126,17 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 			continue
 		}
 
-		// Update task status to running
+		// Start transaction for task processing
+		tx, err := p.db.BeginTxx(ctx, nil)
+		if err != nil {
+			p.logger.Error("failed to begin transaction",
+				"error", err,
+				"task_id", task.ID,
+			)
+			continue
+		}
+
+		// Update task status to running within transaction
 		task.Status = models.TaskStatusRunning
 		task.Attempts++
 		p.logger.Debug("updating task status to running",
@@ -135,8 +145,12 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 			"attempts", task.Attempts,
 			"max_attempts", task.MaxAttempts,
 		)
-		if err := p.db.UpdateTask(&task); err != nil {
-			p.logger.Error("failed to update task status", "error", err, "task_id", task.ID)
+		if err := p.db.UpdateTaskTx(ctx, tx, &task); err != nil {
+			tx.Rollback()
+			p.logger.Error("failed to update task status",
+				"error", err,
+				"task_id", task.ID,
+			)
 			continue
 		}
 
@@ -146,9 +160,20 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 		go func() {
 			defer p.wg.Done()
 
-			// Get the latest task state
-			t, err := p.db.GetTask(taskID)
+			// Start a new transaction for task completion
+			completionTx, err := p.db.BeginTxx(ctx, nil)
 			if err != nil {
+				p.logger.Error("failed to begin completion transaction",
+					"error", err,
+					"task_id", taskID,
+				)
+				return
+			}
+
+			// Get the latest task state within transaction
+			t, err := p.db.GetTaskTx(ctx, completionTx, taskID)
+			if err != nil {
+				completionTx.Rollback()
 				p.logger.Error("failed to get task",
 					"error", err,
 					"task_id", taskID,
@@ -156,6 +181,7 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 				return
 			}
 			if t == nil {
+				completionTx.Rollback()
 				p.logger.Error("task not found",
 					"task_id", taskID,
 				)
@@ -215,13 +241,30 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 				"attempts", t.Attempts,
 				"error", t.Error != "",
 			)
-			if err := p.db.UpdateTask(t); err != nil {
+			if err := p.db.UpdateTaskTx(ctx, completionTx, t); err != nil {
+				completionTx.Rollback()
 				p.logger.Error("failed to update task after processing",
+					"error", err,
+					"task_id", t.ID,
+				)
+				return
+			}
+
+			if err := completionTx.Commit(); err != nil {
+				p.logger.Error("failed to commit completion transaction",
 					"error", err,
 					"task_id", t.ID,
 				)
 			}
 		}()
+
+		// Commit the initial transaction after spawning the goroutine
+		if err := tx.Commit(); err != nil {
+			p.logger.Error("failed to commit initial transaction",
+				"error", err,
+				"task_id", task.ID,
+			)
+		}
 	}
 
 	return nil
