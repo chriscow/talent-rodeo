@@ -12,12 +12,9 @@ DROP INDEX IF EXISTS idx_appointments_status;
 
 DROP INDEX IF EXISTS idx_appointments_user_time;
 
--- Drop tables in reverse order of dependencies
+-- Drop tables in reverse order
 DROP TABLE IF EXISTS job_search_criteria;
 
 DROP TABLE IF EXISTS scheduling_preferences;
 
 DROP TABLE IF EXISTS appointments;
-
--- Disable foreign key support
-PRAGMA foreign_keys = OFF;
