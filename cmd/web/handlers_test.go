@@ -1,13 +1,11 @@
 package main
 
 import (
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -25,15 +23,8 @@ type testServer struct {
 func newTestServer(t *testing.T) *testServer {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	// Create a unique temporary file-based DSN for each test
-	tempDir := os.TempDir()
-	dsn := fmt.Sprintf("file:%s/testdb_%d.sqlite?mode=rwc", tempDir, time.Now().UnixNano())
-
-	// Initialize test database with the temporary file DSN
-	db, err := database.New(dsn, database.WithLogger(logger))
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Initialize test database using the Postgres setup
+	db := database.SetupTestDB(t)
 
 	// Create test user
 	user := &database.User{
@@ -41,7 +32,7 @@ func newTestServer(t *testing.T) *testServer {
 		Email:   "test@example.com",
 		Created: time.Now(),
 	}
-	_, err = db.InsertUser(*user)
+	_, err := db.InsertUser(*user)
 	if err != nil {
 		t.Fatal(err)
 	}
