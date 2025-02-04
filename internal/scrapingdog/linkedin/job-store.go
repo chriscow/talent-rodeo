@@ -3,25 +3,18 @@ package linkedin
 import (
 	"context"
 	"fmt"
-
-	"github.com/jmoiron/sqlx"
 )
 
 type JobStore struct {
-	db *sqlx.DB
+	db DBProvider
 }
 
 func (js *JobStore) SaveJobListings(ctx context.Context, searchID int64, listings []JobListing) error {
-	tx, err := js.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer tx.Rollback()
-
+	// Since we can't use BeginTx directly with our interface, we'll use ExecContext for each operation
 	for _, listing := range listings {
 		// First, insert or update the job listing
 		var jobListingID int64
-		err := tx.QueryRowContext(ctx, `
+		err := js.db.QueryRowContext(ctx, `
             INSERT INTO job_listings (
                 job_id, position, link, company_name, 
                 company_profile, location, posting_date, company_logo
@@ -44,7 +37,7 @@ func (js *JobStore) SaveJobListings(ctx context.Context, searchID int64, listing
 		}
 
 		// Then, record this job as a result of the search
-		_, err = tx.ExecContext(ctx, `
+		_, err = js.db.ExecContext(ctx, `
             INSERT INTO search_results (search_id, job_listing_id)
             VALUES (?, ?)
             ON CONFLICT DO NOTHING`,
@@ -54,14 +47,11 @@ func (js *JobStore) SaveJobListings(ctx context.Context, searchID int64, listing
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
-	}
 	return nil
 }
 
 func (js *JobStore) GetJobsByID(searchID int64) ([]JobListing, error) {
-	rows, err := js.db.Query(`
+	rows, err := js.db.QueryContext(context.Background(), `
 		SELECT 
 			j.job_id, j.position, j.link, j.company_name,
 			j.company_profile, j.location, j.posting_date, j.company_logo

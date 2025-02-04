@@ -30,7 +30,7 @@ func newTestServer(t *testing.T) *testServer {
 	dsn := fmt.Sprintf("file:%s/testdb_%d.sqlite?mode=rwc", tempDir, time.Now().UnixNano())
 
 	// Initialize test database with the temporary file DSN
-	db, err := database.New(dsn, true)
+	db, err := database.New(dsn, database.WithLogger(logger))
 	if err != nil {
 		t.Fatal(err)
 	}
