@@ -6,9 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"talent-rodeo/assets"
 	"time"
 
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jmoiron/sqlx"
+
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/lib/pq"
 )
 
 const defaultTimeout = 3 * time.Second
@@ -133,11 +139,19 @@ func (db *DB) WithTx(ctx context.Context, fn TxFn) error {
 }
 
 // New creates a new DB instance
-func New(dsn string, opts ...Option) (*DB, error) {
-	sqlxDB, err := sqlx.Connect("postgres", dsn)
+func New(dsn string, automigrate bool, opts ...Option) (*DB, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+
+	sqlxDB, err := sqlx.ConnectContext(ctx, "postgres", "postgres://"+dsn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
+		return nil, err
 	}
+
+	sqlxDB.SetMaxOpenConns(25)
+	sqlxDB.SetMaxIdleConns(25)
+	sqlxDB.SetConnMaxIdleTime(5 * time.Minute)
+	sqlxDB.SetConnMaxLifetime(2 * time.Hour)
 
 	db := &DB{
 		dbtx:   sqlxDB,
@@ -147,6 +161,26 @@ func New(dsn string, opts ...Option) (*DB, error) {
 	for _, opt := range opts {
 		if err := opt(db); err != nil {
 			return nil, fmt.Errorf("failed to apply option: %w", err)
+		}
+	}
+
+	if automigrate {
+		iofsDriver, err := iofs.New(assets.EmbeddedFiles, "migrations")
+		if err != nil {
+			return nil, err
+		}
+
+		migrator, err := migrate.NewWithSourceInstance("iofs", iofsDriver, "postgres://"+dsn)
+		if err != nil {
+			return nil, err
+		}
+
+		err = migrator.Up()
+		switch {
+		case errors.Is(err, migrate.ErrNoChange):
+			break
+		case err != nil:
+			return nil, err
 		}
 	}
 

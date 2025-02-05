@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"runtime/debug"
-	"strings"
 	"sync"
 
 	"talent-rodeo/internal/auth"
@@ -100,7 +99,7 @@ func run(logger *slog.Logger) error {
 	flag.StringVar(&cfg.autoHTTPS.email, "auto-https-email", "admin@example.com", "contact email address for problems with LetsEncrypt certificates")
 	flag.BoolVar(&cfg.autoHTTPS.staging, "auto-https-staging", false, "use LetsEncrypt staging environment")
 	flag.StringVar(&cfg.cookie.secretKey, "cookie-secret-key", os.Getenv("SESSION_SECRET"), "secret key for cookie authentication/encryption")
-	flag.StringVar(&cfg.db.dsn, "db-dsn", "db.sqlite", "sqlite3 DSN")
+	flag.StringVar(&cfg.db.dsn, "db-dsn", os.Getenv("DB_DSN"), "PostgreSQL DSN")
 	flag.BoolVar(&cfg.db.automigrate, "db-automigrate", true, "run migrations on startup")
 	flag.StringVar(&cfg.notifications.email, "notifications-email", "", "contact email address for error notifications")
 	flag.StringVar(&cfg.session.secretKey, "session-secret-key", os.Getenv("SESSION_SECRET"), "secret key for session cookie authentication")
@@ -127,63 +126,13 @@ func run(logger *slog.Logger) error {
 		return nil
 	}
 
-	// Use environment DSN if available, fallback to flag value
-	if envDSN := os.Getenv("DB_DSN"); envDSN != "" {
-		cfg.db.dsn = envDSN
-		logger.Debug("using database DSN from environment",
-			"dsn_type", func() string {
-				if strings.HasPrefix(envDSN, "postgres") {
-					return "PostgreSQL"
-				}
-				return "SQLite"
-			}(),
-			"dsn", envDSN)
-	}
-
 	var db *database.DB
-	if strings.HasPrefix(cfg.db.dsn, "postgres") {
-		logger.Info("initializing PostgreSQL database", "dsn", cfg.db.dsn)
-		// Force sslmode=disable
-		if !strings.Contains(cfg.db.dsn, "sslmode=") {
-			if strings.Contains(cfg.db.dsn, "?") {
-				cfg.db.dsn += "&sslmode=disable"
-			} else {
-				cfg.db.dsn += "?sslmode=disable"
-			}
-		} else if !strings.Contains(cfg.db.dsn, "sslmode=disable") {
-			cfg.db.dsn = strings.Replace(cfg.db.dsn, "sslmode=prefer", "sslmode=disable", 1)
-		}
-		logger.Debug("using DSN with SSL mode", "dsn", cfg.db.dsn)
-		pgDB, err := database.NewPG(cfg.db.dsn, cfg.db.automigrate)
-		if err != nil {
-			logger.Error("failed to connect to PostgreSQL",
-				"error", err,
-				"dsn", cfg.db.dsn)
-			return fmt.Errorf("failed to connect to PostgreSQL: %w", err)
-		}
-		logger.Debug("creating database instance from PostgreSQL connection")
-		db = database.NewFromPG(pgDB, logger)
-		logger.Info("PostgreSQL database initialized successfully")
-	} else {
-		logger.Info("initializing SQLite database", "path", cfg.db.dsn)
-		var err error
-		opts := []database.Option{
-			database.WithLogger(logger),
-			database.WithForeignKeys(),
-		}
-		if cfg.db.automigrate {
-			logger.Debug("enabling automatic migrations for SQLite")
-			opts = append(opts, database.WithTasksTable())
-		}
-		db, err = database.New(cfg.db.dsn, opts...)
-		if err != nil {
-			logger.Error("failed to connect to SQLite",
-				"error", err,
-				"path", cfg.db.dsn)
-			return fmt.Errorf("failed to connect to SQLite: %w", err)
-		}
-		logger.Info("SQLite database initialized successfully")
+	fmt.Println("starting application", "version", version.Get(), "database:", cfg.db.dsn)
+	db, err := database.New(cfg.db.dsn, cfg.db.automigrate)
+	if err != nil {
+		return err
 	}
+	defer db.Close()
 	defer func() {
 		logger.Debug("closing database connection")
 		db.Close()
