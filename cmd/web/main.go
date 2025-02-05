@@ -128,7 +128,7 @@ func run(logger *slog.Logger) error {
 
 	var db *database.DB
 	fmt.Println("starting application", "version", version.Get(), "database:", cfg.db.dsn)
-	db, err := database.New(cfg.db.dsn, cfg.db.automigrate)
+	db, err := database.New(cfg.db.dsn, cfg.db.automigrate, database.WithLogger(logger))
 	if err != nil {
 		return err
 	}
