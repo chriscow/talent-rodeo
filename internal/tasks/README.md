@@ -1,88 +1,157 @@
-# Task Processing System
+# Tasks Package
 
-This package implements a robust task processing system with a focus on scheduled outbound phone calls using Twilio.
+This package implements a robust background task processing system for the Talent Rodeo application, with a focus on reliable task execution and phone call handling.
 
-## Architecture
+## Overview
 
-### Core Components
+The tasks package provides a flexible and reliable system for processing background tasks, with built-in support for retries, transaction management, and task-specific handlers. It includes specialized support for phone call scheduling and execution through Twilio integration.
 
-1. **Task Processor**
-   - Manages background task execution
-   - Handles retries and error recovery
-   - Provides transaction support
-   - Implements task scheduling
-   - Debug logging throughout
+## Files
 
-2. **Task Handlers**
-   - Implement specific task types
-   - Each handler focuses on one task type
-   - Handlers are registered with the processor
+### processor.go
+Core task processing functionality:
+- Task queue management
+- Handler registration
+- Transaction handling
+- Retry logic
+- State management
 
-### Outbound Calling
+### processor_test.go
+Comprehensive tests for:
+- Task processing
+- Error handling
+- Retry behavior
+- Transaction management
+- Handler integration
 
-The system implements outbound calling through the `PhoneCallHandler` which:
-- Schedules calls for future execution
-- Manages Twilio integration
-- Handles call status tracking
-- Provides retry logic for failed calls
+## Directories
 
-#### Making an Outbound Call
+### handlers/
+Task-specific handlers including:
+- Phone call management
+- Twilio integration
+- Call scheduling
+- Status tracking
+- Error handling
 
+## Key Features
+
+1. Task Processing
+   - Asynchronous execution
+   - Automatic retries
+   - Transaction safety
+   - Status tracking
+   - Error handling
+
+2. Phone Call Management
+   - Call scheduling
+   - Status monitoring
+   - Twilio integration
+   - Timezone handling
+   - Failure recovery
+
+3. Handler System
+   - Pluggable handlers
+   - Type safety
+   - Context support
+   - Configuration management
+   - Logging integration
+
+## Usage
+
+Initialize task processor:
+```go
+processor := tasks.NewProcessor(db, logger)
+processor.RegisterHandler(phoneCallHandler)
+processor.Start(ctx)
+```
+
+Schedule a phone call:
 ```go
 params := handlers.ScheduleCallParams{
     PhoneNumber: "+1234567890",
-    Message:     "Your interview is scheduled for tomorrow",
+    Message:     "Hello, this is your reminder call",
     ScheduledAt: time.Now().Add(1 * time.Hour),
     TimeZone:    "America/New_York",
 }
-
 err := phoneCallHandler.ScheduleCall(ctx, params)
 ```
 
-#### Task Flow
-1. Call is scheduled via `ScheduleCall`
-2. Task is created with status `TaskStatusPending`
-3. Processor picks up task at scheduled time
-4. Task status changes to `TaskStatusRunning`
-5. Twilio API call is made
-6. Status is monitored for up to 30 seconds
-7. Task completes or retries based on call outcome
+## Task Lifecycle
 
-### Testing
+1. Task Creation
+   - Task type assignment
+   - Payload serialization
+   - Schedule setting
+   - Initial state setup
 
-The package provides both mock and real implementations:
+2. Task Processing
+   - Handler selection
+   - Transaction start
+   - Status updates
+   - Error handling
+   - Retry management
 
-1. **Mock Testing**
-   ```go
-   // Use MockTwilioClient for unit tests
-   mockClient := handlers.NewMockTwilioClient()
-   handler := handlers.NewPhoneCallHandler(mockClient, logger, config)
-   ```
+3. Task Completion
+   - Status finalization
+   - Transaction commit
+   - Resource cleanup
+   - Logging
+   - Metrics update
 
-2. **Integration Testing**
-   ```go
-   // Use RealTwilioClient for integration tests
-   realClient := handlers.NewRealTwilioClient(
-       os.Getenv("TWILIO_ACCOUNT_SID"),
-       os.Getenv("TWILIO_AUTH_TOKEN"),
-       os.Getenv("TWILIO_FROM_NUMBER"),
-   )
-   handler := handlers.NewPhoneCallHandler(realClient, logger, config)
-   ```
+## Handler Implementation
 
-### Required Environment Variables
-For real Twilio calls:
-- `TWILIO_ACCOUNT_SID`: Your Twilio account SID
-- `TWILIO_AUTH_TOKEN`: Your Twilio auth token
-- `TWILIO_FROM_NUMBER`: Your Twilio phone number
-- `TWILIO_WEBHOOK_URL`: Base URL for call webhooks
+Implement TaskHandler interface:
+```go
+type TaskHandler interface {
+    ProcessTask(ctx context.Context, task *models.Task) error
+    TaskType() string
+}
+```
 
-For testing:
-- `TWILIO_TEST_FROM_NUMBER`: Test from number
-- `TWILIO_TEST_TO_NUMBER`: Test to number
+Example handler:
+```go
+type CustomHandler struct {
+    // Dependencies
+}
 
-### Error Handling
-- Failed calls are retried up to `MaxAttempts` times
-- Each retry includes exponential backoff
-- Detailed error logging for debugging
-- Transaction support prevents task state corruption 
+func (h *CustomHandler) TaskType() string {
+    return "custom_task"
+}
+
+func (h *CustomHandler) ProcessTask(ctx context.Context, task *models.Task) error {
+    // Implementation
+}
+```
+
+## Error Handling
+
+The package provides comprehensive error handling:
+- Task-level errors
+- Transaction errors
+- Handler errors
+- Retry management
+- Status tracking
+
+## Best Practices
+
+1. Task Design
+   - Keep tasks idempotent
+   - Include necessary context
+   - Handle partial failures
+   - Plan for retries
+   - Log key events
+
+2. Handler Implementation
+   - Validate inputs
+   - Handle timeouts
+   - Clean up resources
+   - Report progress
+   - Maintain state
+
+3. Error Management
+   - Use appropriate status codes
+   - Include error context
+   - Log failures
+   - Track metrics
+   - Monitor retries 
