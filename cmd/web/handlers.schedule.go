@@ -7,9 +7,11 @@ import (
 	"net/http"
 	"strconv"
 	"talent-rodeo/internal/database"
+	"talent-rodeo/internal/models"
 	"talent-rodeo/internal/onboarding"
 	"talent-rodeo/internal/request"
 	"talent-rodeo/internal/response"
+	"talent-rodeo/internal/tasks/handlers"
 	"talent-rodeo/internal/validator"
 	"talent-rodeo/internal/voice"
 	"time"
@@ -289,20 +291,49 @@ func (app *application) scheduleAppointmentHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
-	app.logger.Debug("Parsed scheduled time",
-		"scheduled_time", scheduledTime,
-		"location", scheduledTime.Location())
-
-	// Check if time is in the past
-	if scheduledTime.Before(time.Now()) {
-		msg := "cannot schedule appointments in the past"
+	// Load the user's timezone
+	userLoc, err := time.LoadLocation(timezone)
+	if err != nil {
+		msg := fmt.Sprintf("invalid timezone: %v", err)
 		app.logger.Error(msg,
-			"scheduled_time", scheduledTime,
-			"current_time", time.Now())
+			"timezone", timezone)
 		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
 
+	// Convert the UTC time to user's timezone
+	userTime := scheduledTime.In(userLoc)
+	app.logger.Debug("Time conversion",
+		"original_time", scheduledTime,
+		"original_location", scheduledTime.Location(),
+		"user_timezone", timezone,
+		"user_time", userTime,
+		"user_location", userTime.Location())
+
+	// Check if time is in the past (truncate to minutes for comparison)
+	now := time.Now().In(userLoc).Truncate(time.Minute)
+	userTimeMinute := userTime.Truncate(time.Minute)
+
+	app.logger.Debug("Time comparison",
+		"now_truncated", now,
+		"scheduled_truncated", userTimeMinute)
+
+	if userTimeMinute.Before(now) {
+		msg := "cannot schedule appointments in the past"
+		app.logger.Error(msg,
+			"scheduled_time", userTimeMinute,
+			"current_time", now)
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+
+	// Add a small buffer to ensure we're safely in the future
+	scheduledTime = userTimeMinute.Add(time.Minute)
+	app.logger.Debug("Adding buffer to scheduled time",
+		"original_time", userTimeMinute,
+		"buffered_time", scheduledTime)
+
+	// Store appointment in user's timezone
 	appointment := &database.Appointment{
 		UserID:        user.ID,
 		ScheduledTime: scheduledTime,
@@ -316,6 +347,46 @@ func (app *application) scheduleAppointmentHandler(w http.ResponseWriter, r *htt
 		http.Error(w, fmt.Sprintf("Failed to create appointment: %v", err), http.StatusInternalServerError)
 		return
 	}
+
+	// Create a phone call task
+	if user.Phone == nil {
+		app.logger.Error("User has no phone number", "user_id", user.ID)
+		http.Error(w, "Phone number is required", http.StatusBadRequest)
+		return
+	}
+
+	payload := handlers.PhoneCallPayload{
+		PhoneNumber: *user.Phone,
+	}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		app.logger.Error("Failed to marshal phone call payload", "error", err)
+		http.Error(w, fmt.Sprintf("Failed to create task: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	task := &models.Task{
+		ID:          time.Now().UnixNano(),
+		Type:        "phone_call",
+		Payload:     payloadBytes,
+		Status:      models.TaskStatusPending,
+		MaxAttempts: 3,
+		RunAt:       scheduledTime,
+		CreatedAt:   time.Now().UTC(),
+		UpdatedAt:   time.Now().UTC(),
+	}
+
+	if err := app.processor.EnqueueTask(r.Context(), task); err != nil {
+		app.logger.Error("Failed to enqueue phone call task", "error", err)
+		http.Error(w, fmt.Sprintf("Failed to schedule call: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	app.logger.Debug("Phone call task created",
+		"task_id", task.ID,
+		"run_at", task.RunAt,
+		"phone_number", *user.Phone,
+	)
 
 	// Update onboarding state to indicate call is scheduled
 	if err := app.db.UpdateOnboardingStep(user.ID, onboarding.StepPhoneCallScheduled); err != nil {

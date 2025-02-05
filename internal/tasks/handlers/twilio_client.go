@@ -33,6 +33,10 @@ func NewRealTwilioClient(accountSID, authToken, fromNumber string) *RealTwilioCl
 
 // MakeCall initiates a phone call using Twilio
 func (c *RealTwilioClient) MakeCall(ctx context.Context, from, to, twiml string) (string, error) {
+	if from == "" {
+		from = c.fromNumber
+	}
+
 	c.logger.Debug("Making Twilio call",
 		"from", from,
 		"to", to,
