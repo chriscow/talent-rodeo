@@ -328,15 +328,15 @@ func (app *application) scheduleAppointmentHandler(w http.ResponseWriter, r *htt
 	}
 
 	// Add a small buffer to ensure we're safely in the future
-	scheduledTime = userTimeMinute.Add(time.Minute)
+	userTimeMinute = userTimeMinute.Add(time.Minute)
 	app.logger.Debug("Adding buffer to scheduled time",
 		"original_time", userTimeMinute,
-		"buffered_time", scheduledTime)
+		"buffered_time", userTimeMinute)
 
 	// Store appointment in user's timezone
 	appointment := &database.Appointment{
 		UserID:        user.ID,
-		ScheduledTime: scheduledTime,
+		ScheduledTime: userTimeMinute,
 		Timezone:      timezone,
 		Status:        database.AppointmentStatusScheduled,
 	}
@@ -371,7 +371,7 @@ func (app *application) scheduleAppointmentHandler(w http.ResponseWriter, r *htt
 		Payload:     payloadBytes,
 		Status:      models.TaskStatusPending,
 		MaxAttempts: 3,
-		RunAt:       scheduledTime,
+		RunAt:       userTime,
 		CreatedAt:   time.Now().UTC(),
 		UpdatedAt:   time.Now().UTC(),
 	}

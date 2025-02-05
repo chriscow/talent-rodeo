@@ -221,7 +221,11 @@ func run(logger *slog.Logger) error {
 		Secure:  true,
 	}
 
-	twilioClient := handlers.NewRealTwilioClient(os.Getenv("TWILIO_ACCOUNT_SID"), os.Getenv("TWILIO_AUTH_TOKEN"), os.Getenv("TWILIO_PHONE_NUMBER"))
+	twilioClient := handlers.NewRealTwilioClient(os.Getenv("TWILIO_ACCOUNT_SID"), os.Getenv("TWILIO_AUTH_TOKEN"), os.Getenv("TWILIO_FROM_NUMBER"))
+	logger.Debug("Created Twilio client",
+		"account_sid", os.Getenv("TWILIO_ACCOUNT_SID"),
+		"from_number", os.Getenv("TWILIO_FROM_NUMBER"))
+
 	twiml := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 	<Response>
 		<Connect>
@@ -231,10 +235,15 @@ func run(logger *slog.Logger) error {
 
 	processor := tasks.NewProcessor(db, logger)
 
+	fromNumber := os.Getenv("TWILIO_FROM_NUMBER")
+	logger.Debug("Creating phone call handler",
+		"from_number", fromNumber,
+		"twiml", twiml)
+
 	callHandler := handlers.NewPhoneCallHandler(twilioClient, logger, handlers.PhoneCallConfig{
-		FromNumber: os.Getenv("TWILIO_PHONE_NUMBER"),
+		FromNumber: fromNumber,
 		Twiml:      twiml,
-	}, processor)
+	}, processor, db)
 
 	processor.RegisterHandler(callHandler)
 

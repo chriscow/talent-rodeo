@@ -19,6 +19,11 @@ type RealTwilioClient struct {
 
 // NewRealTwilioClient creates a new Twilio client
 func NewRealTwilioClient(accountSID, authToken, fromNumber string) *RealTwilioClient {
+	logger := slog.Default()
+	logger.Debug("Creating Twilio client",
+		"account_sid", accountSID,
+		"from_number", fromNumber)
+
 	client := twilio.NewRestClientWithParams(twilio.ClientParams{
 		Username: accountSID,
 		Password: authToken,
@@ -27,13 +32,15 @@ func NewRealTwilioClient(accountSID, authToken, fromNumber string) *RealTwilioCl
 	return &RealTwilioClient{
 		client:     client,
 		fromNumber: fromNumber,
-		logger:     slog.Default(),
+		logger:     logger,
 	}
 }
 
 // MakeCall initiates a phone call using Twilio
 func (c *RealTwilioClient) MakeCall(ctx context.Context, from, to, twiml string) (string, error) {
 	if from == "" {
+		c.logger.Warn("No 'from' number specified, using default",
+			"default_from", c.fromNumber)
 		from = c.fromNumber
 	}
 
@@ -41,7 +48,7 @@ func (c *RealTwilioClient) MakeCall(ctx context.Context, from, to, twiml string)
 		"from", from,
 		"to", to,
 		"twiml", twiml,
-	)
+		"default_from", c.fromNumber)
 
 	params := &twilioApi.CreateCallParams{}
 	params.SetTo(to)

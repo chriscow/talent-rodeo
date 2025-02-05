@@ -53,7 +53,7 @@ func NewMockPhoneCallHandler(t *testing.T) *MockPhoneCallHandler {
 	taskProc := &MockTaskProcessor{}
 
 	handler := &MockPhoneCallHandler{
-		PhoneCallHandler: NewPhoneCallHandler(twilio, logger, config, taskProc),
+		PhoneCallHandler: NewPhoneCallHandler(twilio, logger, config, taskProc, db),
 		db:               db,
 		logger:           logger,
 		twilio:           twilio,
@@ -331,7 +331,10 @@ func TestPhoneCallHandler_IntegrationTest(t *testing.T) {
 	}
 	taskProc := &MockTaskProcessor{}
 
-	handler := NewPhoneCallHandler(realClient, logger, config, taskProc)
+	// Setup test database
+	db := database.SetupTestDB(t)
+
+	handler := NewPhoneCallHandler(realClient, logger, config, taskProc, db)
 
 	// Start a test server for Twilio webhook
 	mux := http.NewServeMux()
@@ -445,7 +448,10 @@ func TestPhoneCallHandler_WebSocketIntegration(t *testing.T) {
 	}
 	taskProc := &MockTaskProcessor{}
 
-	handler := NewPhoneCallHandler(realClient, logger, config, taskProc)
+	// Setup test database
+	db := database.SetupTestDB(t)
+
+	handler := NewPhoneCallHandler(realClient, logger, config, taskProc, db)
 
 	// Start a test server for Twilio webhook
 	mux := http.NewServeMux()

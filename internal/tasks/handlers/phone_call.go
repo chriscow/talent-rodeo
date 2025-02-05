@@ -7,7 +7,9 @@ import (
 	"log/slog"
 	"time"
 
+	"talent-rodeo/internal/database"
 	"talent-rodeo/internal/models"
+	"talent-rodeo/internal/onboarding"
 )
 
 // PhoneCallHandler processes phone call tasks
@@ -16,6 +18,7 @@ type PhoneCallHandler struct {
 	logger   *slog.Logger
 	config   PhoneCallConfig
 	taskProc TaskProcessor
+	db       UserDatabase
 }
 
 // PhoneCallConfig holds configuration for the phone call handler
@@ -41,13 +44,20 @@ type TaskProcessor interface {
 	EnqueueTask(ctx context.Context, task *models.Task) error
 }
 
+// UserDatabase defines the database operations needed by the phone call handler
+type UserDatabase interface {
+	GetUserByPhone(phone string) (*database.User, error)
+	UpdateOnboardingStep(userID int, step onboarding.Step) error
+}
+
 // NewPhoneCallHandler creates a new phone call handler
-func NewPhoneCallHandler(twilio TwilioClient, logger *slog.Logger, config PhoneCallConfig, taskProc TaskProcessor) *PhoneCallHandler {
+func NewPhoneCallHandler(twilio TwilioClient, logger *slog.Logger, config PhoneCallConfig, taskProc TaskProcessor, db UserDatabase) *PhoneCallHandler {
 	return &PhoneCallHandler{
 		twilio:   twilio,
 		logger:   logger,
 		config:   config,
 		taskProc: taskProc,
+		db:       db,
 	}
 }
 
@@ -56,65 +66,65 @@ func (h *PhoneCallHandler) TaskType() string {
 }
 
 func (h *PhoneCallHandler) ProcessTask(ctx context.Context, task *models.Task) error {
+	h.logger.Debug("Processing phone call task",
+		"task_id", task.ID,
+		"attempt", task.Attempts,
+		"max_attempts", task.MaxAttempts)
+
 	var payload PhoneCallPayload
 	if err := json.Unmarshal(task.Payload, &payload); err != nil {
 		return fmt.Errorf("failed to unmarshal payload: %w", err)
 	}
 
-	if payload.PhoneNumber == "" {
-		return fmt.Errorf("phone number is required")
+	// If this is the last attempt, update the user's onboarding state back to resume uploaded
+	if task.Attempts >= task.MaxAttempts-1 {
+		h.logger.Warn("Phone call task exhausted all retries, updating onboarding state",
+			"task_id", task.ID,
+			"attempts", task.Attempts,
+			"max_attempts", task.MaxAttempts)
+
+		// Find the user by phone number
+		user, err := h.db.GetUserByPhone(payload.PhoneNumber)
+		if err != nil {
+			h.logger.Error("Failed to find user by phone number",
+				"error", err,
+				"phone", payload.PhoneNumber)
+			return fmt.Errorf("failed to find user: %w", err)
+		}
+
+		// Update onboarding state back to resume uploaded
+		if err := h.db.UpdateOnboardingStep(user.ID, onboarding.StepResumeUploaded); err != nil {
+			h.logger.Error("Failed to update onboarding state",
+				"error", err,
+				"user_id", user.ID)
+			return fmt.Errorf("failed to update onboarding state: %w", err)
+		}
+
+		h.logger.Info("Updated user onboarding state back to resume uploaded",
+			"user_id", user.ID,
+			"phone", payload.PhoneNumber)
 	}
 
-	h.logger.Debug("Making call with TwiML",
-		"phone_number", payload.PhoneNumber,
-		"from_number", h.config.FromNumber,
-		"twiml", h.config.Twiml,
-	)
-
 	// Make the call
+	h.logger.Debug("Making call with Twilio",
+		"from_number", h.config.FromNumber,
+		"to_number", payload.PhoneNumber,
+		"twiml", h.config.Twiml)
+
 	callSID, err := h.twilio.MakeCall(ctx, h.config.FromNumber, payload.PhoneNumber, h.config.Twiml)
 	if err != nil {
+		h.logger.Error("Failed to make call",
+			"error", err,
+			"from_number", h.config.FromNumber,
+			"to_number", payload.PhoneNumber)
 		return fmt.Errorf("failed to make call: %w", err)
 	}
 
-	// Wait for call to be initiated (up to 30 seconds)
-	for i := 0; i < 30; i++ {
-		status, err := h.twilio.GetCallStatus(ctx, callSID)
-		if err != nil {
-			h.logger.Error("failed to get call status",
-				"error", err,
-				"call_sid", callSID,
-				"attempt", i+1,
-			)
-			continue
-		}
+	h.logger.Debug("Call initiated",
+		"call_sid", callSID,
+		"phone_number", payload.PhoneNumber)
 
-		h.logger.Info("call status",
-			"status", status,
-			"call_sid", callSID,
-			"attempt", i+1,
-		)
-
-		switch status {
-		case "in-progress", "completed":
-			return nil
-		case "failed", "busy", "no-answer", "canceled":
-			return fmt.Errorf("call failed with status: %s", status)
-		}
-
-		// Wait a second before checking again
-		time.Sleep(time.Second)
-	}
-
-	// If we get here, the call didn't connect in time
-	if err := h.twilio.EndCall(ctx, callSID); err != nil {
-		h.logger.Error("failed to end call",
-			"error", err,
-			"call_sid", callSID,
-		)
-	}
-
-	return fmt.Errorf("call did not connect within 30 seconds")
+	return nil
 }
 
 // ScheduleCall schedules a new phone call task
