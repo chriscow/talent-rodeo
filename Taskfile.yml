@@ -35,9 +35,21 @@ tasks:
       - go test -v -race -buildvcs ./...
 
   test:ui:
-    desc: Run UI tests using Playwright
+    desc: |
+      Run UI tests using Playwright. Optionally specify a test name:
+      task test:ui -- [test_name]
+      
+      Available tests: 
+        - homepage
+        - auth_flow
+        - profile
+        - resume_upload
+        - scheduling
+        - phone_call
+      
+      Example: task test:ui -- homepage
     cmds:
-      - python -c "from tools import run_ui_test; run_ui_test('{{.CLI_ARGS}}')"
+      - python -c "from tools import run_ui_test; run_ui_test({{if .CLI_ARGS}}'''{{.CLI_ARGS}}'''{{else}}None{{end}})"
 
   test-cover:
     desc: Run all tests and display coverage
