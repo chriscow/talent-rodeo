@@ -13,7 +13,7 @@ var (
 // TwilioClient defines the interface for making phone calls
 type TwilioClient interface {
 	// MakeCall initiates a phone call and returns a call SID
-	MakeCall(ctx context.Context, from, to, webhookURL string) (string, error)
+	MakeCall(ctx context.Context, from, to, twiml string) (string, error)
 
 	// GetCallStatus retrieves the current status of a call
 	GetCallStatus(ctx context.Context, callSID string) (string, error)
@@ -34,7 +34,7 @@ func NewMockTwilioClient() *MockTwilioClient {
 	}
 }
 
-func (m *MockTwilioClient) MakeCall(ctx context.Context, from, to, webhookURL string) (string, error) {
+func (m *MockTwilioClient) MakeCall(ctx context.Context, from, to, twiml string) (string, error) {
 	// Generate a predictable test call SID
 	callSID := "test_call_" + to
 	m.calls[callSID] = "queued"

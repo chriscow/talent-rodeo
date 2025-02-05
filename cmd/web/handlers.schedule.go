@@ -11,9 +11,11 @@ import (
 	"talent-rodeo/internal/request"
 	"talent-rodeo/internal/response"
 	"talent-rodeo/internal/validator"
+	"talent-rodeo/internal/voice"
 	"time"
 
 	"github.com/alexedwards/flow"
+	"github.com/gorilla/websocket"
 )
 
 type scheduleFormData struct {
@@ -81,6 +83,34 @@ func (app *application) rescheduleCall(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (app *application) handleVoiceWebSocket(w http.ResponseWriter, r *http.Request) {
+	app.logger.Debug("Handling voice websocket connection")
+
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool { return true },
+	}
+
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		app.logger.Error("WebSocket upgrade failed", "error", err)
+		return
+	}
+	defer conn.Close()
+
+	// Create a new voice session
+	session, err := voice.NewSession(conn, app.logger)
+	if err != nil {
+		app.logger.Error("Failed to create voice session", "error", err)
+		return
+	}
+	defer session.Close()
+
+	// Start the session
+	if err := session.Start(r.Context()); err != nil {
+		app.logger.Error("Voice session failed", "error", err)
+	}
+}
+
 func (app *application) scheduleHandler(w http.ResponseWriter, r *http.Request) {
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
@@ -104,6 +134,12 @@ func (app *application) scheduleHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	data["Appointments"] = appointments
+
+	// Add websocket endpoint for voice
+	if r.URL.Path == "/schedule/voice" {
+		app.handleVoiceWebSocket(w, r)
+		return
+	}
 
 	err = response.Page(w, http.StatusOK, data, "pages/schedule.html")
 	if err != nil {
