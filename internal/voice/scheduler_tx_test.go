@@ -13,6 +13,10 @@ import (
 )
 
 func TestCallScheduler_CancelCallTx(t *testing.T) {
+	// Use times relative to now to satisfy the future constraint
+	now := time.Now().UTC()
+	runAt := now.Add(24 * time.Hour) // Schedule for tomorrow
+
 	tests := []struct {
 		name    string
 		setup   func(context.Context, *database.DB, int64) error
@@ -21,14 +25,14 @@ func TestCallScheduler_CancelCallTx(t *testing.T) {
 	}{
 		{
 			name:   "cancel existing task",
-			taskID: time.Now().UnixNano(),
+			taskID: 123456, // Use fixed task ID for deterministic testing
 			setup: func(ctx context.Context, db *database.DB, taskID int64) error {
 				msg := &models.Message{
 					ID:        fmt.Sprintf("%d", taskID),
 					To:        "+1234567890",
 					From:      "system",
 					Body:      "Test message",
-					CreatedAt: time.Now(),
+					CreatedAt: now,
 				}
 				payload, err := json.Marshal(msg)
 				if err != nil {
@@ -40,10 +44,10 @@ func TestCallScheduler_CancelCallTx(t *testing.T) {
 					Type:        "phone_call",
 					Status:      models.TaskStatusPending,
 					MaxAttempts: 3,
-					RunAt:       time.Now().Add(time.Hour),
+					RunAt:       runAt,
 					Payload:     payload,
-					CreatedAt:   time.Now(),
-					UpdatedAt:   time.Now(),
+					CreatedAt:   now,
+					UpdatedAt:   now,
 				}
 				return db.CreateTask(ctx, task)
 			},
@@ -51,7 +55,7 @@ func TestCallScheduler_CancelCallTx(t *testing.T) {
 		},
 		{
 			name:    "cancel nonexistent task",
-			taskID:  time.Now().UnixNano(),
+			taskID:  789012, // Use fixed task ID for deterministic testing
 			wantErr: true,
 		},
 	}
@@ -99,6 +103,11 @@ func TestCallScheduler_CancelCallTx(t *testing.T) {
 }
 
 func TestCallScheduler_RescheduleCallTx(t *testing.T) {
+	// Use times relative to now to satisfy the future constraint
+	now := time.Now().UTC()
+	initialRunAt := now.Add(24 * time.Hour) // Schedule for tomorrow
+	newRunAt := now.Add(48 * time.Hour)     // Reschedule for day after tomorrow
+
 	tests := []struct {
 		name      string
 		setup     func(context.Context, *database.DB, int64) error
@@ -109,16 +118,16 @@ func TestCallScheduler_RescheduleCallTx(t *testing.T) {
 	}{
 		{
 			name:      "reschedule existing task",
-			taskID:    time.Now().UnixNano(),
-			newRunAt:  time.Now().Add(2 * time.Hour),
-			wantRunAt: time.Now().Add(2 * time.Hour),
+			taskID:    123456, // Use fixed task ID for deterministic testing
+			newRunAt:  newRunAt,
+			wantRunAt: newRunAt,
 			setup: func(ctx context.Context, db *database.DB, taskID int64) error {
 				msg := &models.Message{
 					ID:        fmt.Sprintf("%d", taskID),
 					To:        "+1234567890",
 					From:      "system",
 					Body:      "Test message",
-					CreatedAt: time.Now(),
+					CreatedAt: now,
 				}
 				payload, err := json.Marshal(msg)
 				if err != nil {
@@ -130,10 +139,10 @@ func TestCallScheduler_RescheduleCallTx(t *testing.T) {
 					Type:        "phone_call",
 					Status:      models.TaskStatusPending,
 					MaxAttempts: 3,
-					RunAt:       time.Now().Add(time.Hour),
+					RunAt:       initialRunAt,
 					Payload:     payload,
-					CreatedAt:   time.Now(),
-					UpdatedAt:   time.Now(),
+					CreatedAt:   now,
+					UpdatedAt:   now,
 				}
 				return db.CreateTask(ctx, task)
 			},
@@ -141,9 +150,9 @@ func TestCallScheduler_RescheduleCallTx(t *testing.T) {
 		},
 		{
 			name:      "reschedule nonexistent task",
-			taskID:    time.Now().UnixNano(),
-			newRunAt:  time.Now().Add(2 * time.Hour),
-			wantRunAt: time.Now().Add(2 * time.Hour),
+			taskID:    789012, // Use fixed task ID for deterministic testing
+			newRunAt:  newRunAt,
+			wantRunAt: newRunAt,
 			wantErr:   true,
 		},
 	}

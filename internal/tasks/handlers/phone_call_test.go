@@ -317,3 +317,99 @@ func TestPhoneCallHandler_ScheduleCall(t *testing.T) {
 		}
 	})
 }
+
+func TestPhoneCallHandler_IntegrationTest(t *testing.T) {
+	// Skip if not running integration tests
+	if testing.Short() {
+		t.Skip("Skipping integration test")
+	}
+
+	// Skip if Twilio credentials not set
+	accountSID := os.Getenv("TWILIO_ACCOUNT_SID")
+	authToken := os.Getenv("TWILIO_AUTH_TOKEN")
+	fromNumber := os.Getenv("TWILIO_TEST_FROM_NUMBER")
+	toNumber := os.Getenv("TWILIO_TEST_TO_NUMBER")
+	webhookURL := os.Getenv("TWILIO_WEBHOOK_URL")
+
+	if accountSID == "" || authToken == "" || fromNumber == "" || toNumber == "" || webhookURL == "" {
+		t.Skip("Skipping integration test - missing Twilio credentials")
+	}
+
+	// Create a real Twilio client
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	}))
+
+	realClient := NewRealTwilioClient(accountSID, authToken, fromNumber)
+	config := PhoneCallConfig{
+		FromNumber: fromNumber,
+		WebhookURL: webhookURL,
+	}
+	taskProc := &MockTaskProcessor{}
+
+	handler := NewPhoneCallHandler(realClient, logger, config, taskProc)
+
+	// Test immediate call
+	t.Run("make real outbound call", func(t *testing.T) {
+		ctx := context.Background()
+
+		payload := PhoneCallPayload{
+			PhoneNumber: toNumber,
+			Message:     "This is a test call from the talent rodeo system integration test.",
+		}
+		payloadBytes, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("failed to marshal payload: %v", err)
+		}
+
+		task := &models.Task{
+			ID:          time.Now().UnixNano(),
+			Type:        "phone_call",
+			Payload:     payloadBytes,
+			RunAt:       time.Now(),
+			MaxAttempts: 1,
+		}
+
+		// Process the task (this will make a real call)
+		err = handler.ProcessTask(ctx, task)
+		if err != nil {
+			t.Errorf("ProcessTask() error = %v; want nil", err)
+		}
+
+		t.Log("Successfully made outbound call to", toNumber)
+	})
+
+	// Test scheduled call
+	t.Run("schedule real outbound call", func(t *testing.T) {
+		ctx := context.Background()
+
+		// Schedule a call for 1 minute from now
+		scheduledAt := time.Now().Add(1 * time.Minute)
+		params := ScheduleCallParams{
+			PhoneNumber: toNumber,
+			Message:     "This is a scheduled test call from the talent rodeo system.",
+			ScheduledAt: scheduledAt,
+			TimeZone:    "UTC",
+		}
+
+		err := handler.ScheduleCall(ctx, params)
+		if err != nil {
+			t.Fatalf("ScheduleCall() error = %v", err)
+		}
+
+		// Verify task was enqueued
+		if len(taskProc.enqueuedTasks) != 1 {
+			t.Fatalf("expected 1 enqueued task, got %d", len(taskProc.enqueuedTasks))
+		}
+
+		task := taskProc.enqueuedTasks[0]
+		if task.Type != "phone_call" {
+			t.Errorf("task type = %q, want phone_call", task.Type)
+		}
+		if task.Status != models.TaskStatusPending {
+			t.Errorf("task status = %q, want pending", task.Status)
+		}
+
+		t.Logf("Successfully scheduled call to %s at %v", toNumber, scheduledAt)
+	})
+}
