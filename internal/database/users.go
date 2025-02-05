@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"talent-rodeo/internal/onboarding"
@@ -234,4 +235,23 @@ func (db *DB) UpdateUserPhone(userID int, phone string) error {
 
 	_, err := db.ExecContext(ctx, query, phonePtr, userID)
 	return err
+}
+
+// GetUserByPhone retrieves a user by their phone number
+func (db *DB) GetUserByPhone(phone string) (*User, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+
+	var user User
+	query := `SELECT * FROM users WHERE phone = $1`
+
+	err := db.GetContext(ctx, &user, query, phone)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("user not found with phone number %s", phone)
+		}
+		return nil, fmt.Errorf("failed to get user by phone: %w", err)
+	}
+
+	return &user, nil
 }

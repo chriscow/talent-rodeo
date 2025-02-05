@@ -26,7 +26,7 @@ func checkEnv() error {
 	required := []string{
 		"TWILIO_ACCOUNT_SID",
 		"TWILIO_AUTH_TOKEN",
-		"TWILIO_PHONE_NUMBER",
+		"TWILIO_FROM_NUMBER",
 		"TWIML_HANDLER",
 		"APP_DOMAIN",
 		"OPENAI_API_KEY",
@@ -72,7 +72,7 @@ func initiateCall(w http.ResponseWriter, r *http.Request) {
 	})
 
 	toNumber := r.FormValue("phone")
-	fromNumber := "+14258295443" // os.Getenv("TWILIO_PHONE_NUMBER") // "+15005550006"
+	fromNumber := os.Getenv("TWILIO_FROM_NUMBER") // "+15005550006"
 
 	// client := twilio.NewRestClient()
 	params := &twilioApi.CreateCallParams{}
