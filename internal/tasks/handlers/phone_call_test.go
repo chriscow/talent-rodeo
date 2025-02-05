@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"strings"
 	"testing"
@@ -12,6 +14,9 @@ import (
 
 	"talent-rodeo/internal/database"
 	"talent-rodeo/internal/models"
+	"talent-rodeo/internal/voice"
+
+	"github.com/gorilla/websocket"
 )
 
 // MockPhoneCallHandler is a test implementation of the phone call handler
@@ -34,7 +39,16 @@ func NewMockPhoneCallHandler(t *testing.T) *MockPhoneCallHandler {
 	twilio := NewMockTwilioClient()
 	config := PhoneCallConfig{
 		FromNumber: "+1987654321",
-		WebhookURL: "http://example.com/webhook",
+		Twiml: `<?xml version="1.0" encoding="UTF-8"?>
+			<Response>
+				<Connect>
+					<Stream url="wss://example.com/schedule/voice"/>
+				</Connect>
+				<Start>
+					<Stream name="stream"/>
+				</Start>
+				<Say>Welcome to your scheduled call. Please wait while we connect you.</Say>
+			</Response>`,
 	}
 	taskProc := &MockTaskProcessor{}
 
@@ -58,16 +72,13 @@ type phoneCallPayload struct {
 }
 
 func (h *MockPhoneCallHandler) ProcessTask(ctx context.Context, task *models.Task) error {
-	var payload phoneCallPayload
+	var payload PhoneCallPayload
 	if err := json.Unmarshal(task.Payload, &payload); err != nil {
 		return err
 	}
 
 	if payload.PhoneNumber == "" {
 		return errors.New("phone number is required")
-	}
-	if payload.Message == "" {
-		return errors.New("message is required")
 	}
 
 	return nil
@@ -91,9 +102,8 @@ func TestPhoneCallHandler_ProcessTask(t *testing.T) {
 		mockTwilio := NewMockTwilioClient()
 		handler.twilio = mockTwilio
 
-		payload := phoneCallPayload{
+		payload := PhoneCallPayload{
 			PhoneNumber: "+1234567890",
-			Message:     "Test message",
 		}
 		payloadBytes, err := json.Marshal(payload)
 		if err != nil {
@@ -143,9 +153,7 @@ func TestPhoneCallHandler_ProcessTask(t *testing.T) {
 		handler := NewMockPhoneCallHandler(t)
 		ctx := context.Background()
 
-		payload := phoneCallPayload{
-			Message: "Test message",
-		}
+		payload := PhoneCallPayload{}
 		payloadBytes, err := json.Marshal(payload)
 		if err != nil {
 			t.Fatalf("failed to marshal payload: %v", err)
@@ -164,34 +172,6 @@ func TestPhoneCallHandler_ProcessTask(t *testing.T) {
 		}
 		if err != nil && !strings.Contains(err.Error(), "phone number is required") {
 			t.Errorf("ProcessTask() error = %v; want error containing 'phone number is required'", err)
-		}
-	})
-
-	t.Run("handle missing message", func(t *testing.T) {
-		handler := NewMockPhoneCallHandler(t)
-		ctx := context.Background()
-
-		payload := phoneCallPayload{
-			PhoneNumber: "+1234567890",
-		}
-		payloadBytes, err := json.Marshal(payload)
-		if err != nil {
-			t.Fatalf("failed to marshal payload: %v", err)
-		}
-
-		task := &models.Task{
-			ID:      time.Now().UnixNano(),
-			Type:    "phone_call",
-			Payload: payloadBytes,
-			RunAt:   time.Now(),
-		}
-
-		err = handler.ProcessTask(ctx, task)
-		if err == nil {
-			t.Error("ProcessTask() error = nil; want error for missing message")
-		}
-		if err != nil && !strings.Contains(err.Error(), "message is required") {
-			t.Errorf("ProcessTask() error = %v; want error containing 'message is required'", err)
 		}
 	})
 }
@@ -216,7 +196,6 @@ func TestPhoneCallHandler_ScheduleCall(t *testing.T) {
 		scheduledAt := time.Now().Add(1 * time.Hour)
 		params := ScheduleCallParams{
 			PhoneNumber: "+1234567890",
-			Message:     "Test message",
 			ScheduledAt: scheduledAt,
 			TimeZone:    "UTC",
 		}
@@ -250,9 +229,6 @@ func TestPhoneCallHandler_ScheduleCall(t *testing.T) {
 		if payload.PhoneNumber != params.PhoneNumber {
 			t.Errorf("payload phone number = %q, want %q", payload.PhoneNumber, params.PhoneNumber)
 		}
-		if payload.Message != params.Message {
-			t.Errorf("payload message = %q, want %q", payload.Message, params.Message)
-		}
 	})
 
 	t.Run("handle missing phone number", func(t *testing.T) {
@@ -261,7 +237,6 @@ func TestPhoneCallHandler_ScheduleCall(t *testing.T) {
 		handler.taskProc = taskProc
 
 		params := ScheduleCallParams{
-			Message:     "Test message",
 			ScheduledAt: time.Now().Add(1 * time.Hour),
 			TimeZone:    "UTC",
 		}
@@ -282,7 +257,6 @@ func TestPhoneCallHandler_ScheduleCall(t *testing.T) {
 
 		params := ScheduleCallParams{
 			PhoneNumber: "+1234567890",
-			Message:     "Test message",
 			ScheduledAt: time.Now().Add(-1 * time.Hour),
 			TimeZone:    "UTC",
 		}
@@ -303,7 +277,6 @@ func TestPhoneCallHandler_ScheduleCall(t *testing.T) {
 
 		params := ScheduleCallParams{
 			PhoneNumber: "+1234567890",
-			Message:     "Test message",
 			ScheduledAt: time.Now().Add(1 * time.Hour),
 			TimeZone:    "Invalid/Timezone",
 		}
@@ -329,37 +302,91 @@ func TestPhoneCallHandler_IntegrationTest(t *testing.T) {
 	authToken := os.Getenv("TWILIO_AUTH_TOKEN")
 	fromNumber := os.Getenv("TWILIO_TEST_FROM_NUMBER")
 	toNumber := os.Getenv("TWILIO_TEST_TO_NUMBER")
-	webhookURL := os.Getenv("TWILIO_WEBHOOK_URL")
+	appDomain := os.Getenv("APP_DOMAIN")
 
-	if accountSID == "" || authToken == "" || fromNumber == "" || toNumber == "" || webhookURL == "" {
-		t.Skip("Skipping integration test - missing Twilio credentials")
+	if accountSID == "" || authToken == "" || fromNumber == "" || toNumber == "" || appDomain == "" {
+		t.Skip("Skipping integration test - missing required environment variables")
 	}
 
-	// Create a real Twilio client
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
 	}))
 
+	// Create TwiML with websocket connection
+	twiml := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+		<Response>
+			<Connect>
+				<Stream url="wss://%s/stream"/>
+			</Connect>
+			<Start>
+				<Transcription statusCallbackUrl="https://%s/transcription"/>
+			</Start>
+			<Say>Hello, this is a test call from the talent rodeo system integration test.</Say>
+		</Response>`, appDomain, appDomain)
+
 	realClient := NewRealTwilioClient(accountSID, authToken, fromNumber)
 	config := PhoneCallConfig{
 		FromNumber: fromNumber,
-		WebhookURL: webhookURL,
+		Twiml:      twiml,
 	}
 	taskProc := &MockTaskProcessor{}
 
 	handler := NewPhoneCallHandler(realClient, logger, config, taskProc)
 
-	// Test immediate call
-	t.Run("make real outbound call", func(t *testing.T) {
+	// Start a test server for Twilio webhook
+	mux := http.NewServeMux()
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool { return true },
+	}
+
+	// Handle websocket connections
+	mux.HandleFunc("/schedule/voice", func(w http.ResponseWriter, r *http.Request) {
+		t.Log("Received websocket connection request")
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Logf("WebSocket upgrade failed: %v", err)
+			return
+		}
+		defer conn.Close()
+
+		// Create and start voice session
+		session, err := voice.NewSession(conn, logger)
+		if err != nil {
+			t.Logf("Failed to create voice session: %v", err)
+			return
+		}
+		defer session.Close()
+
+		if err := session.Start(r.Context()); err != nil {
+			t.Logf("Voice session failed: %v", err)
+		}
+	})
+
+	// Start the server
+	server := &http.Server{
+		Addr:    ":2304",
+		Handler: mux,
+	}
+	go func() {
+		if err := server.ListenAndServe(); err != http.ErrServerClosed {
+			t.Logf("Server error: %v", err)
+		}
+	}()
+	defer server.Close()
+
+	// Allow time for server to start
+	time.Sleep(time.Second)
+
+	// Test the call
+	t.Run("make call with websocket", func(t *testing.T) {
 		ctx := context.Background()
 
 		payload := PhoneCallPayload{
 			PhoneNumber: toNumber,
-			Message:     "This is a test call from the talent rodeo system integration test.",
 		}
 		payloadBytes, err := json.Marshal(payload)
 		if err != nil {
-			t.Fatalf("failed to marshal payload: %v", err)
+			t.Fatalf("Failed to marshal payload: %v", err)
 		}
 
 		task := &models.Task{
@@ -373,43 +400,123 @@ func TestPhoneCallHandler_IntegrationTest(t *testing.T) {
 		// Process the task (this will make a real call)
 		err = handler.ProcessTask(ctx, task)
 		if err != nil {
-			t.Errorf("ProcessTask() error = %v; want nil", err)
+			t.Errorf("ProcessTask() error = %v", err)
 		}
 
-		t.Log("Successfully made outbound call to", toNumber)
+		t.Log("Successfully initiated call with websocket integration")
+	})
+}
+
+func TestPhoneCallHandler_WebSocketIntegration(t *testing.T) {
+	// Skip if not running integration tests
+	if testing.Short() {
+		t.Skip("Skipping integration test")
+	}
+
+	// Skip if Twilio credentials not set
+	accountSID := os.Getenv("TWILIO_ACCOUNT_SID")
+	authToken := os.Getenv("TWILIO_AUTH_TOKEN")
+	fromNumber := os.Getenv("TWILIO_TEST_FROM_NUMBER")
+	toNumber := os.Getenv("TWILIO_TEST_TO_NUMBER")
+	webhookURL := os.Getenv("APP_DOMAIN")
+
+	if accountSID == "" || authToken == "" || fromNumber == "" || toNumber == "" || webhookURL == "" {
+		t.Skip("Skipping integration test - missing required environment variables")
+	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	}))
+
+	// Create a real Twilio client
+	realClient := NewRealTwilioClient(accountSID, authToken, fromNumber)
+	config := PhoneCallConfig{
+		FromNumber: fromNumber,
+		Twiml: fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+			<Response>
+				<Connect>
+					<Stream url="wss://%s/schedule/voice"/>
+				</Connect>
+				<Start>
+					<Stream name="stream"/>
+				</Start>
+				<Say>Welcome to your scheduled call. Please wait while we connect you.</Say>
+			</Response>`, webhookURL),
+	}
+	taskProc := &MockTaskProcessor{}
+
+	handler := NewPhoneCallHandler(realClient, logger, config, taskProc)
+
+	// Start a test server for Twilio webhook
+	mux := http.NewServeMux()
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool { return true },
+	}
+
+	// Handle websocket connections
+	mux.HandleFunc("/schedule/voice", func(w http.ResponseWriter, r *http.Request) {
+		t.Log("Received websocket connection request")
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Logf("WebSocket upgrade failed: %v", err)
+			return
+		}
+		defer conn.Close()
+
+		// Create and start voice session
+		session, err := voice.NewSession(conn, logger)
+		if err != nil {
+			t.Logf("Failed to create voice session: %v", err)
+			return
+		}
+		defer session.Close()
+
+		if err := session.Start(r.Context()); err != nil {
+			t.Logf("Voice session failed: %v", err)
+		}
 	})
 
-	// Test scheduled call
-	t.Run("schedule real outbound call", func(t *testing.T) {
+	// Start the server
+	server := &http.Server{
+		Addr:    ":2304",
+		Handler: mux,
+	}
+	go func() {
+		if err := server.ListenAndServe(); err != http.ErrServerClosed {
+			t.Logf("Server error: %v", err)
+		}
+	}()
+	defer server.Close()
+
+	// Allow time for server to start
+	time.Sleep(time.Second)
+
+	// Test the call
+	t.Run("make call with websocket", func(t *testing.T) {
 		ctx := context.Background()
 
-		// Schedule a call for 1 minute from now
-		scheduledAt := time.Now().Add(1 * time.Minute)
-		params := ScheduleCallParams{
+		payload := PhoneCallPayload{
 			PhoneNumber: toNumber,
-			Message:     "This is a scheduled test call from the talent rodeo system.",
-			ScheduledAt: scheduledAt,
-			TimeZone:    "UTC",
 		}
-
-		err := handler.ScheduleCall(ctx, params)
+		payloadBytes, err := json.Marshal(payload)
 		if err != nil {
-			t.Fatalf("ScheduleCall() error = %v", err)
+			t.Fatalf("Failed to marshal payload: %v", err)
 		}
 
-		// Verify task was enqueued
-		if len(taskProc.enqueuedTasks) != 1 {
-			t.Fatalf("expected 1 enqueued task, got %d", len(taskProc.enqueuedTasks))
+		task := &models.Task{
+			ID:          time.Now().UnixNano(),
+			Type:        "phone_call",
+			Payload:     payloadBytes,
+			RunAt:       time.Now(),
+			MaxAttempts: 1,
 		}
 
-		task := taskProc.enqueuedTasks[0]
-		if task.Type != "phone_call" {
-			t.Errorf("task type = %q, want phone_call", task.Type)
-		}
-		if task.Status != models.TaskStatusPending {
-			t.Errorf("task status = %q, want pending", task.Status)
+		// Process the task (this will make a real call)
+		err = handler.ProcessTask(ctx, task)
+		if err != nil {
+			t.Errorf("ProcessTask() error = %v", err)
 		}
 
-		t.Logf("Successfully scheduled call to %s at %v", toNumber, scheduledAt)
+		t.Log("Successfully initiated call with websocket integration")
 	})
 }

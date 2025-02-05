@@ -21,19 +21,17 @@ type PhoneCallHandler struct {
 // PhoneCallConfig holds configuration for the phone call handler
 type PhoneCallConfig struct {
 	FromNumber string
-	WebhookURL string
+	Twiml      string // TwiML template for the call
 }
 
 // PhoneCallPayload represents the data needed to make a phone call
 type PhoneCallPayload struct {
-	PhoneNumber string `json:"phone_number"`
-	Message     string `json:"message"`
+	PhoneNumber string `json:"phone_number"` // The phone number to call
 }
 
 // ScheduleCallParams contains parameters for scheduling a call
 type ScheduleCallParams struct {
 	PhoneNumber string    // The phone number to call
-	Message     string    // The message or script to use
 	ScheduledAt time.Time // When to make the call (in UTC)
 	TimeZone    string    // User's timezone
 }
@@ -66,12 +64,14 @@ func (h *PhoneCallHandler) ProcessTask(ctx context.Context, task *models.Task) e
 	if payload.PhoneNumber == "" {
 		return fmt.Errorf("phone number is required")
 	}
-	if payload.Message == "" {
-		return fmt.Errorf("message is required")
-	}
+
+	h.logger.Debug("Making call with TwiML",
+		"phone_number", payload.PhoneNumber,
+		"twiml", h.config.Twiml,
+	)
 
 	// Make the call
-	callSID, err := h.twilio.MakeCall(ctx, h.config.FromNumber, payload.PhoneNumber, h.config.WebhookURL)
+	callSID, err := h.twilio.MakeCall(ctx, h.config.FromNumber, payload.PhoneNumber, h.config.Twiml)
 	if err != nil {
 		return fmt.Errorf("failed to make call: %w", err)
 	}
@@ -128,9 +128,6 @@ func (h *PhoneCallHandler) ScheduleCall(ctx context.Context, params ScheduleCall
 	if params.PhoneNumber == "" {
 		return fmt.Errorf("phone number is required")
 	}
-	if params.Message == "" {
-		return fmt.Errorf("message is required")
-	}
 	if params.ScheduledAt.IsZero() {
 		return fmt.Errorf("scheduled time is required")
 	}
@@ -153,7 +150,6 @@ func (h *PhoneCallHandler) ScheduleCall(ctx context.Context, params ScheduleCall
 	// Create task payload
 	payload := PhoneCallPayload{
 		PhoneNumber: params.PhoneNumber,
-		Message:     params.Message,
 	}
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
