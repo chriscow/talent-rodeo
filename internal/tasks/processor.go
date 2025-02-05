@@ -265,7 +265,40 @@ func generateTaskID() (int64, error) {
 }
 
 // EnqueueTask adds a new task to be processed
-func (p *Processor) EnqueueTask(ctx context.Context, taskType string, payload []byte, runAt time.Time) (*models.Task, error) {
+func (p *Processor) EnqueueTask(ctx context.Context, task *models.Task) error {
+	p.logger.Debug("enqueueing task",
+		"task_id", task.ID,
+		"type", task.Type,
+		"run_at", task.RunAt,
+		"max_attempts", task.MaxAttempts,
+		"payload_size", len(task.Payload),
+	)
+
+	_, exists := p.handlers[task.Type]
+	if !exists {
+		p.logger.Error("no handler registered for task type", "type", task.Type)
+		return fmt.Errorf("no handler registered for task type: %s", task.Type)
+	}
+
+	if err := p.db.CreateTask(ctx, task); err != nil {
+		p.logger.Error("failed to create task",
+			"error", err,
+			"task_id", task.ID,
+			"type", task.Type,
+		)
+		return fmt.Errorf("failed to create task: %w", err)
+	}
+
+	p.logger.Debug("task enqueued successfully",
+		"task_id", task.ID,
+		"type", task.Type,
+	)
+
+	return nil
+}
+
+// CreateAndEnqueueTask is a helper method that creates a new task with the given parameters and enqueues it
+func (p *Processor) CreateAndEnqueueTask(ctx context.Context, taskType string, payload []byte, runAt time.Time) (*models.Task, error) {
 	_, exists := p.handlers[taskType]
 	if !exists {
 		p.logger.Error("no handler registered for task type", "type", taskType)
@@ -289,27 +322,9 @@ func (p *Processor) EnqueueTask(ctx context.Context, taskType string, payload []
 		UpdatedAt:   time.Now(),
 	}
 
-	p.logger.Debug("enqueueing task",
-		"task_id", task.ID,
-		"type", task.Type,
-		"run_at", task.RunAt,
-		"max_attempts", task.MaxAttempts,
-		"payload_size", len(task.Payload),
-	)
-
-	if err := p.db.CreateTask(ctx, task); err != nil {
-		p.logger.Error("failed to create task",
-			"error", err,
-			"task_id", task.ID,
-			"type", task.Type,
-		)
-		return nil, fmt.Errorf("failed to create task: %w", err)
+	if err := p.EnqueueTask(ctx, task); err != nil {
+		return nil, err
 	}
-
-	p.logger.Debug("task enqueued successfully",
-		"task_id", task.ID,
-		"type", task.Type,
-	)
 
 	return task, nil
 }

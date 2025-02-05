@@ -13,6 +13,8 @@ import (
 	"talent-rodeo/internal/auth"
 	"talent-rodeo/internal/database"
 	"talent-rodeo/internal/smtp"
+	"talent-rodeo/internal/tasks"
+	"talent-rodeo/internal/tasks/handlers"
 	"talent-rodeo/internal/version"
 
 	"github.com/delaneyj/toolbelt"
@@ -84,6 +86,8 @@ type application struct {
 	pusher        *pusher.Client
 	keywordsMutex sync.RWMutex
 	natsShutdown  chan struct{}
+
+	processor *tasks.Processor
 }
 
 func run(logger *slog.Logger) error {
@@ -217,6 +221,24 @@ func run(logger *slog.Logger) error {
 		Secure:  true,
 	}
 
+	twilioClient := handlers.NewRealTwilioClient(os.Getenv("TWILIO_ACCOUNT_SID"), os.Getenv("TWILIO_AUTH_TOKEN"), os.Getenv("TWILIO_FROM_NUMBER"))
+	twiml := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+	<Response>
+		<Connect>
+			<Stream url="wss://%s/stream"/>
+		</Connect>
+	</Response>`, os.Getenv("APP_DOMAIN"))
+
+	processor := tasks.NewProcessor(db, logger)
+
+	callHandler := handlers.NewPhoneCallHandler(twilioClient, logger, handlers.PhoneCallConfig{
+		FromNumber: os.Getenv("TWILIO_FROM_NUMBER"),
+		Twiml:      twiml,
+	}, processor)
+
+	processor.RegisterHandler(callHandler)
+	processor.Start(ctx)
+
 	app := &application{
 		config:       cfg,
 		db:           db,
@@ -226,6 +248,7 @@ func run(logger *slog.Logger) error {
 		nats:         ns,
 		pusher:       &pusherClient,
 		natsShutdown: natsShutdown,
+		processor:    processor,
 	}
 
 	if cfg.autoHTTPS.domain != "" {

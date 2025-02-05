@@ -15,7 +15,7 @@ import (
 
 var (
 	testDBMutex sync.Mutex
-	testDB      *DB
+	testDBs     = make(map[string]*DB)
 )
 
 const (
@@ -23,7 +23,7 @@ const (
 	testDBPort     = 5432
 	testDBUser     = "postgres"
 	testDBPassword = "postgres"
-	testDBName     = "talent_rodeo_test"
+	testDBPrefix   = "talent_rodeo_test"
 )
 
 // SetupTestDB creates a new test database connection.
@@ -34,12 +34,12 @@ func SetupTestDB(t *testing.T) *DB {
 	testDBMutex.Lock()
 	defer testDBMutex.Unlock()
 
-	// If we already have a test database, close it first
-	if testDB != nil {
-		if err := testDB.Close(); err != nil {
-			t.Logf("warning: failed to close existing test database: %v", err)
-		}
-		testDB = nil
+	// Create a unique database name for this test
+	testDBName := fmt.Sprintf("%s_%d", testDBPrefix, time.Now().UnixNano())
+
+	// If we already have a test database for this name, return it
+	if db, exists := testDBs[testDBName]; exists {
+		return db
 	}
 
 	// Create test database connection string
@@ -59,26 +59,16 @@ func SetupTestDB(t *testing.T) *DB {
 	}
 	defer adminDB.Close()
 
-	// Terminate all connections to the test database
-	_, err = adminDB.Exec(fmt.Sprintf(`
-		SELECT pg_terminate_backend(pg_stat_activity.pid)
-		FROM pg_stat_activity
-		WHERE pg_stat_activity.datname = '%s'
-		AND pid <> pg_backend_pid();`, testDBName))
-	if err != nil {
-		t.Logf("warning: failed to terminate existing connections: %v", err)
-	}
-
-	// Drop and recreate test database
-	_, err = adminDB.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", testDBName))
-	if err != nil {
-		t.Fatalf("failed to drop test database: %v", err)
-	}
-
+	// Create test database
 	_, err = adminDB.Exec(fmt.Sprintf("CREATE DATABASE %s", testDBName))
 	if err != nil {
 		t.Fatalf("failed to create test database: %v", err)
 	}
+
+	// Register cleanup function
+	t.Cleanup(func() {
+		cleanupTestDB(t, testDBName)
+	})
 
 	// Connect to test database
 	sqlxDB, err := sqlx.Connect("postgres", dsn)
@@ -92,32 +82,72 @@ func SetupTestDB(t *testing.T) *DB {
 	sqlxDB.SetConnMaxLifetime(5 * time.Minute)
 
 	// Create DB instance with test options
-	testDB = &DB{
+	db := &DB{
 		dbtx: sqlxDB,
 		logger: slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 			Level: slog.LevelDebug,
 		})),
 	}
 
+	// Store the database instance
+	testDBs[testDBName] = db
+
 	// Run migrations
-	if err := runMigrations(testDB); err != nil {
+	if err := runMigrations(db); err != nil {
+		cleanupTestDB(t, testDBName)
 		t.Fatalf("failed to run migrations: %v", err)
 	}
 
-	// Register cleanup function
-	t.Cleanup(func() {
-		testDBMutex.Lock()
-		defer testDBMutex.Unlock()
+	return db
+}
 
-		if testDB != nil {
-			if err := testDB.Close(); err != nil {
-				t.Logf("warning: failed to close test database: %v", err)
-			}
-			testDB = nil
-		}
-	})
+func cleanupTestDB(t *testing.T, dbName string) {
+	t.Helper()
 
-	return testDB
+	testDBMutex.Lock()
+	defer testDBMutex.Unlock()
+
+	// Get the database instance
+	db, exists := testDBs[dbName]
+	if !exists {
+		return
+	}
+
+	// Close the database connection
+	if err := db.Close(); err != nil {
+		t.Logf("warning: failed to close test database connection: %v", err)
+	}
+
+	// Remove from the map
+	delete(testDBs, dbName)
+
+	// Connect to postgres to drop the test database
+	adminDSN := fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=postgres sslmode=disable",
+		testDBHost, testDBPort, testDBUser, testDBPassword,
+	)
+	adminDB, err := sqlx.Connect("postgres", adminDSN)
+	if err != nil {
+		t.Logf("warning: failed to connect to postgres for cleanup: %v", err)
+		return
+	}
+	defer adminDB.Close()
+
+	// Terminate all connections to the test database
+	_, err = adminDB.Exec(fmt.Sprintf(`
+		SELECT pg_terminate_backend(pg_stat_activity.pid)
+		FROM pg_stat_activity
+		WHERE pg_stat_activity.datname = '%s'
+		AND pid <> pg_backend_pid();`, dbName))
+	if err != nil {
+		t.Logf("warning: failed to terminate existing connections: %v", err)
+	}
+
+	// Drop the test database
+	_, err = adminDB.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
+	if err != nil {
+		t.Logf("warning: failed to drop test database: %v", err)
+	}
 }
 
 func runMigrations(db *DB) error {
