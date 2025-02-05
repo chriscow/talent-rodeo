@@ -18,16 +18,16 @@ type User struct {
 	HashedSecret string    `db:"hashed_secret"`
 	IsSuperUser  bool      `db:"is_superuser"`
 
-	Provider          string `db:"provider"`
-	Name              string `db:"name"`
-	FirstName         string `db:"first_name"`
-	LastName          string `db:"last_name"`
-	NickName          string `db:"nick_name"`
-	Description       string `db:"description"`
-	UserID            string `db:"user_id"`
-	AvatarURL         string `db:"avatar_url"`
-	Location          string `db:"location"`
-	Phone             string `db:"phone"`
+	Provider          string  `db:"provider"`
+	Name              string  `db:"name"`
+	FirstName         string  `db:"first_name"`
+	LastName          string  `db:"last_name"`
+	NickName          string  `db:"nick_name"`
+	Description       string  `db:"description"`
+	UserID            string  `db:"user_id"`
+	AvatarURL         string  `db:"avatar_url"`
+	Location          string  `db:"location"`
+	Phone             *string `db:"phone"`
 	AccessToken       string
 	AccessTokenSecret string
 	RefreshToken      string
@@ -84,19 +84,15 @@ func (db *DB) InsertUser(user User) (int, error) {
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id`
 
-	result, err := db.ExecContext(ctx, query, user.Email, user.HashedSecret,
+	var id int
+	err := db.QueryRowContext(ctx, query, user.Email, user.HashedSecret,
 		user.Provider, user.Name, user.FirstName, user.LastName, user.NickName,
-		user.Description, user.UserID, user.AvatarURL, user.Location)
+		user.Description, user.UserID, user.AvatarURL, user.Location).Scan(&id)
 	if err != nil {
 		return 0, err
 	}
 
-	id, err := result.LastInsertId()
-	if err != nil {
-		return 0, err
-	}
-
-	return int(id), err
+	return id, nil
 }
 
 func (db *DB) GetUser(id int) (*User, bool, error) {
@@ -229,8 +225,13 @@ func (db *DB) UpdateUserPhone(userID int, phone string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 
+	var phonePtr *string
+	if phone != "" {
+		phonePtr = &phone
+	}
+
 	query := `UPDATE users SET phone = $1 WHERE id = $2`
 
-	_, err := db.ExecContext(ctx, query, phone, userID)
+	_, err := db.ExecContext(ctx, query, phonePtr, userID)
 	return err
 }
