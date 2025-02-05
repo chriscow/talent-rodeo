@@ -67,6 +67,7 @@ func (h *PhoneCallHandler) ProcessTask(ctx context.Context, task *models.Task) e
 
 	h.logger.Debug("Making call with TwiML",
 		"phone_number", payload.PhoneNumber,
+		"from_number", h.config.FromNumber,
 		"twiml", h.config.Twiml,
 	)
 

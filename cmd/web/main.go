@@ -221,7 +221,7 @@ func run(logger *slog.Logger) error {
 		Secure:  true,
 	}
 
-	twilioClient := handlers.NewRealTwilioClient(os.Getenv("TWILIO_ACCOUNT_SID"), os.Getenv("TWILIO_AUTH_TOKEN"), os.Getenv("TWILIO_FROM_NUMBER"))
+	twilioClient := handlers.NewRealTwilioClient(os.Getenv("TWILIO_ACCOUNT_SID"), os.Getenv("TWILIO_AUTH_TOKEN"), os.Getenv("TWILIO_PHONE_NUMBER"))
 	twiml := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 	<Response>
 		<Connect>
@@ -232,12 +232,17 @@ func run(logger *slog.Logger) error {
 	processor := tasks.NewProcessor(db, logger)
 
 	callHandler := handlers.NewPhoneCallHandler(twilioClient, logger, handlers.PhoneCallConfig{
-		FromNumber: os.Getenv("TWILIO_FROM_NUMBER"),
+		FromNumber: os.Getenv("TWILIO_PHONE_NUMBER"),
 		Twiml:      twiml,
 	}, processor)
 
 	processor.RegisterHandler(callHandler)
-	processor.Start(ctx)
+
+	go func() {
+		if err := processor.Start(ctx); err != nil {
+			logger.Error("failed to start task processor", "error", err)
+		}
+	}()
 
 	app := &application{
 		config:       cfg,
