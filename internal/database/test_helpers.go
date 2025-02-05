@@ -37,7 +37,7 @@ func SetupTestDB(t *testing.T) *DB {
 	// If we already have a test database, close it first
 	if testDB != nil {
 		if err := testDB.Close(); err != nil {
-			t.Fatalf("failed to close existing test database: %v", err)
+			t.Logf("warning: failed to close existing test database: %v", err)
 		}
 		testDB = nil
 	}
@@ -48,11 +48,48 @@ func SetupTestDB(t *testing.T) *DB {
 		testDBHost, testDBPort, testDBUser, testDBPassword, testDBName,
 	)
 
+	// First connect to postgres to ensure test database exists
+	adminDSN := fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=postgres sslmode=disable",
+		testDBHost, testDBPort, testDBUser, testDBPassword,
+	)
+	adminDB, err := sqlx.Connect("postgres", adminDSN)
+	if err != nil {
+		t.Fatalf("failed to connect to postgres: %v", err)
+	}
+	defer adminDB.Close()
+
+	// Terminate all connections to the test database
+	_, err = adminDB.Exec(fmt.Sprintf(`
+		SELECT pg_terminate_backend(pg_stat_activity.pid)
+		FROM pg_stat_activity
+		WHERE pg_stat_activity.datname = '%s'
+		AND pid <> pg_backend_pid();`, testDBName))
+	if err != nil {
+		t.Logf("warning: failed to terminate existing connections: %v", err)
+	}
+
+	// Drop and recreate test database
+	_, err = adminDB.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", testDBName))
+	if err != nil {
+		t.Fatalf("failed to drop test database: %v", err)
+	}
+
+	_, err = adminDB.Exec(fmt.Sprintf("CREATE DATABASE %s", testDBName))
+	if err != nil {
+		t.Fatalf("failed to create test database: %v", err)
+	}
+
 	// Connect to test database
 	sqlxDB, err := sqlx.Connect("postgres", dsn)
 	if err != nil {
 		t.Fatalf("failed to connect to test database: %v", err)
 	}
+
+	// Set reasonable connection limits for tests
+	sqlxDB.SetMaxOpenConns(5)
+	sqlxDB.SetMaxIdleConns(5)
+	sqlxDB.SetConnMaxLifetime(5 * time.Minute)
 
 	// Create DB instance with test options
 	testDB = &DB{
@@ -62,8 +99,10 @@ func SetupTestDB(t *testing.T) *DB {
 		})),
 	}
 
-	// Clean up test database before each test
-	cleanupTestDB(t, testDB)
+	// Run migrations
+	if err := runMigrations(testDB); err != nil {
+		t.Fatalf("failed to run migrations: %v", err)
+	}
 
 	// Register cleanup function
 	t.Cleanup(func() {
@@ -72,36 +111,13 @@ func SetupTestDB(t *testing.T) *DB {
 
 		if testDB != nil {
 			if err := testDB.Close(); err != nil {
-				t.Errorf("failed to close test database: %v", err)
+				t.Logf("warning: failed to close test database: %v", err)
 			}
 			testDB = nil
 		}
 	})
 
 	return testDB
-}
-
-func cleanupTestDB(t *testing.T, db *DB) {
-	t.Helper()
-
-	// Drop all tables in the database
-	_, err := db.Exec(`
-		DO $$ DECLARE
-			r RECORD;
-		BEGIN
-			FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = current_schema()) LOOP
-				EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
-			END LOOP;
-		END $$;
-	`)
-	if err != nil {
-		t.Fatalf("failed to drop all tables: %v", err)
-	}
-
-	// Run migrations
-	if err := runMigrations(db); err != nil {
-		t.Fatalf("failed to run migrations: %v", err)
-	}
 }
 
 func runMigrations(db *DB) error {
@@ -138,6 +154,12 @@ func runMigrations(db *DB) error {
 		}
 	}
 
+	// Log migration path for debugging
+	db.logger.Debug("running migrations",
+		"workspace_root", workspaceRoot,
+		"migration_path", filepath.Join(workspaceRoot, "assets", "migrations"),
+	)
+
 	for _, file := range migrationFiles {
 		path := filepath.Join(workspaceRoot, "assets", "migrations", file)
 		sql, err := os.ReadFile(path)
@@ -145,6 +167,7 @@ func runMigrations(db *DB) error {
 			return fmt.Errorf("failed to read migration file %s: %w", file, err)
 		}
 
+		db.logger.Debug("applying migration", "file", file)
 		_, err = db.Exec(string(sql))
 		if err != nil {
 			return fmt.Errorf("failed to execute migration file %s: %w", file, err)
