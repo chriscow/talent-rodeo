@@ -147,13 +147,32 @@ def run_ui_test(test_name=None):
 
     return True
 
+def needs_authentication(page):
+    """Check if we need authentication by looking for the LinkedIn sign in button"""
+    print("Checking if authentication is needed...")
+    try:
+        return page.get_by_role("button", name="Sign in with LinkedIn").is_visible(timeout=5000)
+    except:
+        return False
+
+def wait_for_manual_auth(page):
+    """Wait for the user to complete manual authentication"""
+    print("\n🔐 Manual authentication needed - Please log in through LinkedIn...")
+    print("Waiting for authentication to complete...")
+    # Wait for a common element that appears after successful auth
+    page.wait_for_selector('text="Let\'s start with your resume"', timeout=60000)
+    print("✓ Authentication completed successfully\n")
+
 def test_homepage(page):
     """Test the homepage functionality"""
     print("Starting homepage test...")
     page.goto("http://localhost:2304")
     print("Page loaded")
     
-    # In test mode, we should be redirected to profile since we're logged in
+    if needs_authentication(page):
+        wait_for_manual_auth(page)
+    
+    # After auth we should be on profile
     assert page.url.endswith("/profile")
     print("✓ Homepage test passed")
 
@@ -163,7 +182,10 @@ def test_auth_flow(page):
     page.goto("http://localhost:2304")
     print("Page loaded")
     
-    # In test mode, we should already be logged in and redirected to profile
+    if needs_authentication(page):
+        wait_for_manual_auth(page)
+    
+    # After auth we should be on profile
     assert page.url.endswith("/profile")
     print("✓ Authentication flow test passed")
 
@@ -172,6 +194,9 @@ def test_profile(page):
     print("Loading profile page...")
     page.goto("http://localhost:2304/profile/resume/upload")
     print("Checking profile elements...")
+    
+    if needs_authentication(page):
+        wait_for_manual_auth(page)
     
     # Check for resume upload elements
     assert page.get_by_text("Let's start with your resume").is_visible()
@@ -186,6 +211,9 @@ def test_resume_upload(page):
     page.goto("http://localhost:2304/profile/resume/upload")
     print("Checking resume upload form...")
     
+    if needs_authentication(page):
+        wait_for_manual_auth(page)
+    
     # Check for resume upload elements
     assert page.get_by_text("Let's start with your resume").is_visible()
     assert page.get_by_label("Phone Number").is_visible()
@@ -199,6 +227,9 @@ def test_scheduling(page):
     page.goto("http://localhost:2304/profile")
     print("Checking scheduling elements...")
     
+    if needs_authentication(page):
+        wait_for_manual_auth(page)
+    
     # Check for scheduling elements
     assert page.get_by_text("Let's schedule a quick AI chat").is_visible()
     assert page.get_by_label("Preferred Time").is_visible()
@@ -211,6 +242,9 @@ def test_phone_call(page):
     print("Loading phone call page...")
     page.goto("http://localhost:2304/profile")
     print("Checking phone call elements...")
+    
+    if needs_authentication(page):
+        wait_for_manual_auth(page)
     
     # Check for phone call elements
     assert page.get_by_text("Great! We've processed your resume").is_visible()
