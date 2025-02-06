@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"talent-rodeo/internal/rodeo/block"
+	"talent-rodeo/experimental/rodeo/block"
 	"talent-rodeo/internal/utils"
 
 	"github.com/chriscow/minds"

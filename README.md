@@ -1014,3 +1014,71 @@ The module path is currently set to `talent-rodeo`. If you want to change this p
 brew install sox
 play -t ul -r 8000 -c 1 event_Arqp5eUAulHMySlmVvVtJ.ulaw
 ```
+
+
+# Using staticcheck
+
+1. Install staticcheck
+You can install staticcheck using the following command:
+
+```bash
+go install honnef.co/go/tools/cmd/staticcheck@latest
+```
+
+2. Run staticcheck
+After installation, navigate to your project directory and run:
+
+```bash
+staticcheck ./...
+```
+
+This will analyze your code and report any issues, including unused variables, functions, and imports.
+
+
+---
+
+# Use golangci-lint
+
+golangci-lint is a popular linter for Go that can help identify unused code, among other issues. Here’s how to set it up and use it:
+
+## Installation
+
+You can install golangci-lint using the following command:
+
+```bash
+brew install golangci/tap/golangci-lint
+```
+
+##  Running the Linter
+
+Once installed, navigate to your project directory and run:
+
+```bash
+golangci-lint run
+```
+
+This will analyze your code and report any issues, including unused variables, functions, and imports.
+
+# Using direnv
+
+VSCode's Go testing extension runs tests in a separate environment, so it does not automatically load .env files. However, you can configure it to do so using the following approaches:
+
+##Option 1: Use direnv (Recommended)
+
+VSCode respects direnv, which automatically loads environment variables from .env files when you enter a directory. 
+
+Install direnv:
+
+```bash
+brew install direnv  # macOS
+sudo apt install direnv  # Linux
+```
+
+Allow direnv to load .env:
+
+```bash
+echo 'dotenv .env' > .envrc
+direnv allow
+```
+
+Restart VSCode. Now, when you run tests, the environment variables from .env will be automatically loaded.

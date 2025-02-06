@@ -130,8 +130,9 @@ func TestProcessor_EnqueueTask(t *testing.T) {
 		if err == nil {
 			t.Error("expected error for unregistered handler, got nil")
 		}
-		if err != nil && err.Error() != "no handler registered for task type: unknown_type" {
-			t.Errorf("got error = %v; want 'no handler registered for task type: unknown_type'", err)
+		wantErr := "no handler registered for task type: unknown_type"
+		if err != nil && err.Error() != wantErr {
+			t.Errorf("got error = %v; want %q", err, wantErr)
 		}
 	})
 
@@ -165,7 +166,7 @@ func TestProcessor_EnqueueTask(t *testing.T) {
 			t.Fatalf("failed to enqueue task: %v", err)
 		}
 
-		if got := task.ID; got == 0 {
+		if task.ID == 0 {
 			t.Error("task ID is zero")
 		}
 		if got := task.Type; got != "test_task" {
@@ -174,8 +175,7 @@ func TestProcessor_EnqueueTask(t *testing.T) {
 		if got := task.Status; got != models.TaskStatusPending {
 			t.Errorf("task status = %v; want %v", got, models.TaskStatusPending)
 		}
-		got := string(task.Payload)
-		if got != string(payloadBytes) {
+		if got := string(task.Payload); got != string(payloadBytes) {
 			t.Errorf("task payload = %s; want %s", got, payloadBytes)
 		}
 		if got := task.RunAt.Unix(); got != runAt.Unix() {
@@ -352,8 +352,9 @@ func TestProcessor_CreateAndEnqueueTask(t *testing.T) {
 		if err == nil {
 			t.Error("expected error for unregistered handler, got nil")
 		}
-		if err != nil && err.Error() != "no handler registered for task type: unknown_type" {
-			t.Errorf("got error = %v; want 'no handler registered for task type: unknown_type'", err)
+		wantErr := "no handler registered for task type: unknown_type"
+		if err != nil && err.Error() != wantErr {
+			t.Errorf("got error = %v; want %q", err, wantErr)
 		}
 	})
 
@@ -376,7 +377,7 @@ func TestProcessor_CreateAndEnqueueTask(t *testing.T) {
 			t.Fatalf("failed to create and enqueue task: %v", err)
 		}
 
-		if got := task.ID; got == 0 {
+		if task.ID == 0 {
 			t.Error("task ID is zero")
 		}
 		if got := task.Type; got != "test_task" {
@@ -385,8 +386,7 @@ func TestProcessor_CreateAndEnqueueTask(t *testing.T) {
 		if got := task.Status; got != models.TaskStatusPending {
 			t.Errorf("task status = %v; want %v", got, models.TaskStatusPending)
 		}
-		got := string(task.Payload)
-		if got != string(payloadBytes) {
+		if got := string(task.Payload); got != string(payloadBytes) {
 			t.Errorf("task payload = %s; want %s", got, payloadBytes)
 		}
 		if got := task.RunAt.Unix(); got != runAt.Unix() {

@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"talent-rodeo/experimental/rodeo"
 	"talent-rodeo/internal/database"
 	"talent-rodeo/internal/onboarding"
 	"talent-rodeo/internal/response"
-	"talent-rodeo/internal/rodeo"
 	"talent-rodeo/internal/validator"
 )
 

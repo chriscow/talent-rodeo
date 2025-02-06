@@ -36,9 +36,49 @@ Consistent Naming Conventions: Use clear and consistent naming conventions for v
 ```
 
 
-## Tools
+# Tools
+
+## Your tools in `tools.py`
 
 Utilize Available Tools: Review and utilize the tools available in tools.py for various tasks. Ensure that you understand their functionality before use.
 
-IMPLEMENTATION_PLAN.md: utilize the IMPLEMENTATION_PLAN.md file to keep track of progress, learnings, and warnings for tarpits. 
+# golangci-lint
 
+golangci-lint is a popular linter for Go that can help identify unused code, among other issues. Here’s how to set it up and use it:
+
+## Installation
+
+You can install golangci-lint using the following command:
+
+```bash
+brew install golangci/tap/golangci-lint
+```
+
+## Running the Linter
+
+Once installed, navigate to your project directory and run:
+
+```bash
+golangci-lint run
+```
+
+This will analyze your code and report any issues, including unused variables, functions, and imports.
+
+
+# Using staticcheck
+
+1. Install staticcheck
+You can install staticcheck using the following command:
+
+```bash
+go install honnef.co/go/tools/cmd/staticcheck@latest
+```
+
+2. Run staticcheck
+After installation, navigate to your project directory and run:
+
+```bash
+staticcheck ./...
+```
+
+This will analyze your code and report any issues, including unused variables, functions, and imports.

@@ -12,6 +12,7 @@ import (
 
 	"talent-rodeo/internal/auth"
 	"talent-rodeo/internal/database"
+	"talent-rodeo/internal/jobmatch/processor"
 	"talent-rodeo/internal/smtp"
 	"talent-rodeo/internal/tasks"
 	"talent-rodeo/internal/tasks/handlers"
@@ -87,7 +88,9 @@ type application struct {
 	keywordsMutex sync.RWMutex
 	natsShutdown  chan struct{}
 
-	processor *tasks.Processor
+	processor    *tasks.Processor
+	jobProcessor processor.JobProcessor
+	jobHandler   *JobHandler
 }
 
 func run(logger *slog.Logger) error {
@@ -233,7 +236,7 @@ func run(logger *slog.Logger) error {
 		</Connect>
 	</Response>`, os.Getenv("APP_DOMAIN"))
 
-	processor := tasks.NewProcessor(db, logger)
+	taskProcessor := tasks.NewProcessor(db, logger)
 
 	fromNumber := os.Getenv("TWILIO_FROM_NUMBER")
 	logger.Debug("Creating phone call handler",
@@ -243,15 +246,18 @@ func run(logger *slog.Logger) error {
 	callHandler := handlers.NewPhoneCallHandler(twilioClient, logger, handlers.PhoneCallConfig{
 		FromNumber: fromNumber,
 		Twiml:      twiml,
-	}, processor, db)
+	}, taskProcessor, db)
 
-	processor.RegisterHandler(callHandler)
+	taskProcessor.RegisterHandler(callHandler)
 
 	go func() {
-		if err := processor.Start(ctx); err != nil {
+		if err := taskProcessor.Start(ctx); err != nil {
 			logger.Error("failed to start task processor", "error", err)
 		}
 	}()
+
+	// Initialize job processor
+	jobProc := processor.NewProcessor()
 
 	app := &application{
 		config:       cfg,
@@ -262,8 +268,12 @@ func run(logger *slog.Logger) error {
 		nats:         ns,
 		pusher:       &pusherClient,
 		natsShutdown: natsShutdown,
-		processor:    processor,
+		processor:    taskProcessor,
+		jobProcessor: jobProc,
 	}
+
+	// Initialize job handler
+	app.jobHandler = NewJobHandler(logger, app.jobProcessor)
 
 	if cfg.autoHTTPS.domain != "" {
 		return app.serveAutoHTTPS()

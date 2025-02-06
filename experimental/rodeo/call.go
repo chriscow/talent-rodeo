@@ -3,7 +3,7 @@ package rodeo
 import (
 	"context"
 	"fmt"
-	"talent-rodeo/internal/vapi"
+	"talent-rodeo/experimental/vapi"
 
 	"github.com/chriscow/minds"
 )

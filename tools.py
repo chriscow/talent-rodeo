@@ -58,7 +58,7 @@ def linkedin_login(page):
     
     # Wait for redirect back to our app
     print("Debug: Waiting for redirect to profile...")
-    page.wait_for_url("**/profile*")
+    page.wait_for_url("**/profile*", timeout=120000)
 
 def print_test_summary(test_name, passed, expectations=None, actual=None, error=None):
     """Print a clear summary of the test results"""
