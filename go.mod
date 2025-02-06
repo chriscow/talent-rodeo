@@ -36,11 +36,11 @@ require (
 	github.com/lmittmann/tint v1.0.6
 	github.com/markbates/goth v1.80.0
 	github.com/mattn/go-sqlite3 v1.14.24
+	github.com/mitchellh/mapstructure v1.5.0
 	github.com/nats-io/nats-server/v2 v2.10.24
 	github.com/nats-io/nats.go v1.37.0
 	github.com/pusher/pusher-http-go/v5 v5.1.1
 	github.com/spf13/cobra v1.8.1
-	github.com/stretchr/testify v1.10.0
 	github.com/tmaxmax/go-sse v0.10.0
 	github.com/tomasen/realip v0.0.0-20180522021738-f0c99a92ddce
 	github.com/twilio/twilio-go v1.23.11
@@ -128,7 +128,6 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250115164207-1a7da9e5054f // indirect
 	google.golang.org/grpc v1.69.4 // indirect
 	google.golang.org/protobuf v1.36.3 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	modernc.org/libc v1.61.2 // indirect
 	modernc.org/mathutil v1.6.0 // indirect
 	modernc.org/memory v1.8.0 // indirect

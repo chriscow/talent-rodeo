@@ -11,12 +11,14 @@
 ## Performance Optimization
 
 ### Caching System
-- [ ] Implement Redis caching:
+- [ ] Implement in-memory caching with Ristretto:
   ```go
+  import "github.com/dgraph-io/ristretto/v2"
+
   type CacheManager struct {
-      redis     *redis.Client
-      ttl       time.Duration
-      metrics   *CacheMetrics
+      cache    *ristretto.Cache
+      ttl      time.Duration
+      metrics  *CacheMetrics
   }
 
   func (c *CacheManager) Get(ctx context.Context, key string) (interface{}, error)
@@ -178,6 +180,7 @@
   - Go 1.21+
   - PostgreSQL 14+
   - Redis 6+
+  - NATS JetStream (we are using embedded nats for now)
 
   ## Configuration
   1. Environment variables
@@ -202,11 +205,10 @@
   ```
 
 ## Dependencies
-- Testing frameworks
+- Testing frameworks - don't use testify, use the standard library with the "got, want" pattern
 - Monitoring tools
 - Required Go packages:
   ```
-  github.com/stretchr/testify
   github.com/go-redis/redis/v8
   github.com/prometheus/client_golang
   ```
