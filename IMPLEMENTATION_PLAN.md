@@ -1,5 +1,14 @@
 # AI Job Matching System Implementation Plan
 
+**IMPORTANT*: DO NOT DELETE ANYTHING IN THIS FILE. Simply mark it as completed or move it to the bottom in a section indicating it is no longer needed.
+
+## **Implementation Guidelines**
++   - Keep it simple
++   - Avoid premature optimization
++   - Minimize dependencies
++   - Focus on user value
++   - Add complexity only when needed
+
 ## MVP Strategy
 Our implementation strategy focuses on delivering core value quickly to validate market fit:
 
@@ -75,6 +84,8 @@ Remaining:
 - [ ] Load testing under high call volume
 
 ### 2. Job Matching Core
+
+This app
 - [ ] Basic job search integration
 - [ ] Simple matching algorithm
 - [ ] Initial preference handling
