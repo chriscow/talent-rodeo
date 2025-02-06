@@ -70,8 +70,8 @@
 
 ## Keyword & Requirement Analysis
 
-### Keyword Extraction System
-- [ ] Implement text analysis:
+### ~~Keyword Extraction System~~
+- [x] Implement text analysis:
   ```go
   type TextAnalyzer struct {
       tokenizer    Tokenizer
@@ -83,7 +83,7 @@
   func (a *TextAnalyzer) AnalyzeFrequency(keywords []string) map[string]float64
   ```
 
-- [ ] Create keyword categorization:
+- [x] Create keyword categorization:
   ```go
   type KeywordCategorizer struct {
       categories map[string][]string
@@ -93,8 +93,8 @@
   func (c *KeywordCategorizer) Categorize(keyword string) string
   ```
 
-### Requirement Analysis
-- [ ] Build requirement parser:
+### ~~Requirement Analysis~~
+- [x] Build requirement parser:
   ```go
   type RequirementParser struct {
       patterns    []*regexp.Regexp
@@ -105,7 +105,7 @@
   func (p *RequirementParser) Classify(req string) RequirementType
   ```
 
-- [ ] Implement requirement matcher:
+- [x] Implement requirement matcher:
   ```go
   type RequirementMatcher struct {
       store    *store.Store
@@ -119,11 +119,12 @@
 - [ ] Create culture trait extractor:
   ```go
   type CultureTraitExtractor struct {
-      traits     map[string][]string
-      analyzer   *TextAnalyzer
+      llm       *minds.ContentGenerator
+      traits    map[string][]string
+      analyzer  *TextAnalyzer
   }
 
-  func (e *CultureTraitExtractor) Extract(description string) []CultureTrait
+  func (e *CultureTraitExtractor) Extract(description string) ([]CultureTrait, error)
   ```
 
 - [ ] Implement preference mapper:
@@ -136,29 +137,39 @@
   func (m *PreferenceMapper) MapPreferences(ctx context.Context, traits []CultureTrait) []Preference
   ```
 
+### Missing Items
+- [ ] Add support for soft skills analysis
+- [ ] Implement industry-specific keyword weighting
+- [ ] Add context-aware requirement parsing
+- [ ] Create comprehensive test suite for culture matching
+- [ ] Add validation for culture trait extraction
+- [ ] Implement feedback loop for preference mapping accuracy
+
 ## Search Infrastructure
 
 ### Vector Generation
-- [ ] Implement job vectorization:
+- [ ] Implement job vectorization using OpenAI embeddings:
   ```go
   type JobVectorizer struct {
-      model     *TextEmbedding
+      client    *openai.Client  // Using github.com/sashabaranov/go-openai
       analyzer  *TextAnalyzer
   }
 
   func (v *JobVectorizer) Vectorize(ctx context.Context, job *LinkedinJob) ([]float64, error)
   ```
 
-- [ ] Create vector store:
+- [ ] Create Pinecone vector store integration:
   ```go
   type VectorStore struct {
-      db        *sql.DB
+      pinecone  *pinecone.Client
       dimension int
   }
 
   func (vs *VectorStore) Store(ctx context.Context, id uuid.UUID, vector []float64) error
   func (vs *VectorStore) Search(ctx context.Context, vector []float64, limit int) ([]SearchResult, error)
   ```
+
+Note: We will use Pinecone as the vector database for semantic search and the github.com/sashabaranov/go-openai package for generating embeddings. Additional vectors for matching amounts and degrees of preferences will be generated internally.
 
 ### Search System
 - [ ] Build search service:

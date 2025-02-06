@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"talent-rodeo/internal/rodeo"
+	"talent-rodeo/experimental/rodeo"
 
 	"github.com/joho/godotenv"
 )

@@ -3,10 +3,10 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"talent-rodeo/experimental/rodeo"
 	"talent-rodeo/internal/database"
 	"talent-rodeo/internal/onboarding"
 	"talent-rodeo/internal/response"
-	"talent-rodeo/internal/rodeo"
 )
 
 func (app *application) restartOnboarding(w http.ResponseWriter, r *http.Request) {

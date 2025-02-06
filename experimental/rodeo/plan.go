@@ -7,7 +7,7 @@ import (
 	"html/template"
 	"time"
 
-	"talent-rodeo/internal/rodeo/block"
+	"talent-rodeo/experimental/rodeo/block"
 
 	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/handlers"

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"talent-rodeo/internal/rodeo"
+	"talent-rodeo/experimental/rodeo"
 
 	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/providers/openai"
