@@ -6,6 +6,49 @@ This package implements a robust background task processing system for the Talen
 
 The tasks package provides a flexible and reliable system for processing background tasks, with built-in support for retries, transaction management, and task-specific handlers. It includes specialized support for phone call scheduling and execution through Twilio integration.
 
+## Important Notes
+DO NOT DELETE THIS SECTION
+
+Important Database Constraints and Timing Requirements for Tasks:
+
+1. Database Constraint on run_at vs created_at:
+   - The tasks table has a check constraint: run_at >= created_at
+   - This means run_at must be equal to or later than created_at
+   - You cannot set run_at to a time before created_at
+
+2. Task Processing Requirements:
+   - For a task to be processed immediately in tests:
+     * created_at should be set to time.Now()
+     * run_at should be set to a small duration after created_at (e.g., 10ms)
+     * Example:
+       created_at := time.Now()
+       run_at := created_at.Add(10 * time.Millisecond)
+
+3. Task Retry Behavior:
+   - When a task fails and needs to retry:
+     * The new run_at time must be after the original created_at
+     * Typically set to: time.Now().Add(retryBackoff * attempts)
+     * The retryBackoff duration is multiplied by the number of attempts
+
+4. Test Setup Best Practices:
+   - Always set created_at to time.Now()
+   - Set run_at slightly in the future from created_at
+   - Wait for the duration to pass before processing (time.Sleep)
+   - Example pattern:
+     now := time.Now()
+     task := &models.Task{
+         CreatedAt: now,
+         RunAt: now.Add(10 * time.Millisecond),
+     }
+     time.Sleep(20 * time.Millisecond) // Wait for task to be ready
+
+5. Common Mistakes to Avoid:
+   - Don't set run_at to a time before created_at
+   - Don't set created_at in the past without adjusting run_at accordingly
+   - Don't expect immediate processing without waiting for run_at time
+
+Remember: These constraints exist to ensure task scheduling integrity and proper retry behavior.
+
 ## Files
 
 ### processor.go
