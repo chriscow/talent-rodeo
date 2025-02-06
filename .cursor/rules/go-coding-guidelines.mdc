@@ -2,14 +2,43 @@
 description: Go Coding Guidelines
 globs: **/*.go
 ---
-You are using go version go1.23.4
+# Go Coding Guidelines
 
-- Minimize Nesting
-- Refactor for smaller more testable functions
-- Always write tests for code you write to verify functionality using the standard library. Ask before using a third party library 
-- Always execute the tests you wrote to make sure your code works as you expect
-- Make sure we are getting sufficient code coverage
-- Use verbose debug logging to help diagnose issues
-- Always do a build to be sure nothing broke `go build -o /tmp/talent-rodeo ./cmd`
+## Version
+- Go Version: go1.23.4
 
-- you have tools in [tools.py](mdc:talent-rodeo/talent-rodeo/talent-rodeo/talent-rodeo/talent-rodeo/talent-rodeo/talent-rodeo/tools.py) available for many things. Please examine this file so you are aware of your tools.
+## General Principles
+1. Minimize Nesting: Aim for flat code structures to improve readability and maintainability.
+2. Refactor for Smaller Functions: Break down large functions into smaller, more testable units to enhance clarity and facilitate testing.
+3. Verbose Debug Logging: Implement detailed logging to help diagnose issues effectively. This should include logging of states and values throughout the code execution.
+4. Documentation: Write clear and concise documentation comments for all public functions and packages. Follow the same comment pattern as Go's standard library format.
+5. Error Handling: Implement proper error handling throughout your code. Always check for errors and handle them gracefully, providing meaningful messages or adding context with `fmt.Errorf(...). Be sure to use %w to wrap errors.
+6. Code Reviews: Encourage regular code reviews with me. This helps catch potential issues early.
+
+## Testing
+
+Use TDD principles
+
+1. Write Tests: Always write tests for any code you create to verify functionality. Use the standard library for testing unless a third-party library is explicitly requested.
+2. Execute Tests: Run the tests you write to ensure they work as expected.
+3. Code Coverage: Ensure that your tests provide sufficient coverage of the codebase.
+
+
+## Code Quality
+Consistent Naming Conventions: Use clear and consistent naming conventions for variables, functions, and packages. Follow Go's idiomatic naming practices (e.g., camelCase for variables and functions).
+
+
+## Build and Deployment
+1. Build Verification: Always perform a build to ensure that no errors have been introduced. Use the command:
+
+```bash
+   go build -o /tmp/talent-rodeo ./cmd
+```
+
+
+## Tools
+
+Utilize Available Tools: Review and utilize the tools available in tools.py for various tasks. Ensure that you understand their functionality before use.
+
+IMPLEMENTATION_PLAN.md: utilize the IMPLEMENTATION_PLAN.md file to keep track of progress, learnings, and warnings for tarpits. 
+
