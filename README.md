@@ -1082,3 +1082,11 @@ direnv allow
 ```
 
 Restart VSCode. Now, when you run tests, the environment variables from .env will be automatically loaded.
+
+# Start a PostgreSQL server
+
+```bash
+docker run --name postgres-server -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=rodeo
+ -p 5432:5432 -v postgres_data:/var/lib/postgresql/data -d postgres
+ ```
+

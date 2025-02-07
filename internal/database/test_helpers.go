@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -151,18 +153,6 @@ func cleanupTestDB(t *testing.T, dbName string) {
 }
 
 func runMigrations(db *DB) error {
-	// Read and execute migration files
-	var migrationFiles = []string{
-		"000001_initalize_schema_migrations.up.sql",
-		"000002_create_users_table.up.sql",
-		"000003_sessions.up.sql",
-		"000004_linkedin_jobs.up.sql",
-		"000005_enhance_onboarding.up.sql",
-		"000006_add_scheduling_tables.up.sql",
-		"000007_add_tasks_table.up.sql",
-		"000008_add_user_phone.up.sql",
-	}
-
 	// Get the absolute path to the workspace root
 	workspaceRoot := os.Getenv("WORKSPACE_ROOT")
 	if workspaceRoot == "" {
@@ -184,14 +174,32 @@ func runMigrations(db *DB) error {
 		}
 	}
 
+	migrationsPath := filepath.Join(workspaceRoot, "assets", "migrations")
+
 	// Log migration path for debugging
 	db.logger.Debug("running migrations",
 		"workspace_root", workspaceRoot,
-		"migration_path", filepath.Join(workspaceRoot, "assets", "migrations"),
+		"migration_path", migrationsPath,
 	)
 
+	// Read all migration files from the directory
+	entries, err := os.ReadDir(migrationsPath)
+	if err != nil {
+		return fmt.Errorf("failed to read migrations directory: %w", err)
+	}
+
+	// Filter and sort migration files
+	var migrationFiles []string
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".up.sql") {
+			migrationFiles = append(migrationFiles, entry.Name())
+		}
+	}
+	sort.Strings(migrationFiles)
+
+	// Apply migrations in order
 	for _, file := range migrationFiles {
-		path := filepath.Join(workspaceRoot, "assets", "migrations", file)
+		path := filepath.Join(migrationsPath, file)
 		sql, err := os.ReadFile(path)
 		if err != nil {
 			return fmt.Errorf("failed to read migration file %s: %w", file, err)

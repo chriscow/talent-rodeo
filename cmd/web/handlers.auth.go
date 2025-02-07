@@ -9,8 +9,20 @@ import (
 	"github.com/markbates/goth/gothic"
 )
 
-func (app *application) socialAuth(w http.ResponseWriter, r *http.Request) {
-	// goth looks for the provider in the query string, so we need to add it there
+// startSocialAuth handles GET requests to /auth/:provider.
+// It initiates the OAuth flow with the specified provider (e.g., LinkedIn).
+// The provider parameter is extracted from the URL and passed to the gothic library.
+//
+// Flow:
+//  1. Extracts provider from URL path
+//  2. Adds provider to query string (required by gothic)
+//  3. Redirects user to provider's OAuth page
+//
+// Routes:
+//   - GET /auth/:provider
+//
+// Requires: Anonymous user (handled by middleware)
+func (app *application) startSocialAuth(w http.ResponseWriter, r *http.Request) {
 	provider := flow.Param(r.Context(), "provider")
 	q := r.URL.Query()
 	q.Set("provider", provider)
@@ -19,10 +31,25 @@ func (app *application) socialAuth(w http.ResponseWriter, r *http.Request) {
 	gothic.BeginAuthHandler(w, r)
 }
 
-func (app *application) socialCallback(w http.ResponseWriter, r *http.Request) {
+// completeSocialAuth handles GET requests to /auth/:provider/callback.
+// It completes the OAuth flow, creates or retrieves the user, and starts their session.
+//
+// Flow:
+//  1. Validates OAuth response
+//  2. Completes authentication with provider
+//  3. Creates or retrieves user from database
+//  4. Creates session
+//  5. Redirects based on onboarding state
+//
+// Routes:
+//   - GET /auth/:provider/callback
+//
+// Requires: Anonymous user (handled by middleware)
+func (app *application) completeSocialAuth(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("error") != "" {
-		app.logger.Error("error", "error", r.URL.Query().Get("error"))
-		app.logger.Error("error", "error-description", r.URL.Query().Get("error_description"))
+		app.logger.Error("OAuth error",
+			"error", r.URL.Query().Get("error"),
+			"description", r.URL.Query().Get("error_description"))
 		http.Error(w, "You must grant access to continue.", http.StatusUnauthorized)
 		return
 	}
@@ -83,6 +110,8 @@ func (app *application) socialCallback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, redirectPath, http.StatusFound)
 }
 
+// handleAuthError is a helper function that processes authentication errors.
+// It provides specific error messages for access denied cases.
 func (app *application) handleAuthError(w http.ResponseWriter, r *http.Request, err error) {
 	if strings.Contains(err.Error(), "denied") {
 		http.Error(w, "You must grant access to continue.", http.StatusUnauthorized)
@@ -92,8 +121,21 @@ func (app *application) handleAuthError(w http.ResponseWriter, r *http.Request, 
 	app.serverError(w, r, err)
 }
 
-func (app *application) logout(w http.ResponseWriter, r *http.Request) {
-	app.logger.Info("Handling logout request", "method", r.Method, "url", r.URL.String())
+// logoutUser handles POST requests to /logout.
+// It clears the user's session and redirects them to the login page.
+//
+// Flow:
+//  1. Retrieves current session
+//  2. Clears all session values
+//  3. Sets session cookie to expire
+//  4. Redirects to login page
+//
+// Routes:
+//   - POST /logout
+//
+// Requires: Authenticated user (handled by middleware)
+func (app *application) logoutUser(w http.ResponseWriter, r *http.Request) {
+	app.logger.Info("Processing logout request", "method", r.Method, "url", r.URL.String())
 
 	session, err := app.sessionStore.Get(r, "session")
 	if err != nil {

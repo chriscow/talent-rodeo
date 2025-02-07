@@ -14,6 +14,7 @@ globs: **/*.go
 4. Documentation: Write clear and concise documentation comments for all public functions and packages. Follow the same comment pattern as Go's standard library format.
 5. Error Handling: Implement proper error handling throughout your code. Always check for errors and handle them gracefully, providing meaningful messages or adding context with `fmt.Errorf(...). Be sure to use %w to wrap errors.
 6. Code Reviews: Encourage regular code reviews with me. This helps catch potential issues early.
+7. Use the "accept interfaces, return structs" guideline or principle in Go. The idea is that interfaces should be defined where they are used (by the consumer), not where they are implemented (by the provider).
 
 ## Testing
 

@@ -1,7 +1,7 @@
 -- Create companies table
 CREATE TABLE companies (
     id BIGSERIAL PRIMARY KEY,
-    name TEXT NOT NULL,
+    name TEXT NOT NULL, -- its entirelypossible that two companies have the same name
     description TEXT,
     website TEXT,
     industry TEXT,
@@ -219,6 +219,20 @@ CREATE INDEX idx_job_listings_location ON job_listings (location);
 
 CREATE INDEX idx_job_listings_posting_date ON job_listings (posting_date);
 
+-- Create a new trigger function specifically for job_listings
+CREATE OR REPLACE FUNCTION update_job_listings_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.last_updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create the new trigger using the specific function
+CREATE TRIGGER job_listings_updated_at BEFORE
+UPDATE ON job_listings FOR EACH ROW
+EXECUTE FUNCTION update_job_listings_timestamp ();
+
 -- Create triggers for updating timestamps
 CREATE TRIGGER companies_updated_at BEFORE
 UPDATE ON companies FOR EACH ROW
@@ -234,10 +248,6 @@ EXECUTE FUNCTION update_timestamp ();
 
 CREATE TRIGGER job_skills_updated_at BEFORE
 UPDATE ON job_skills FOR EACH ROW
-EXECUTE FUNCTION update_timestamp ();
-
-CREATE TRIGGER job_listings_updated_at BEFORE
-UPDATE ON job_listings FOR EACH ROW
 EXECUTE FUNCTION update_timestamp ();
 
 CREATE TRIGGER extracted_job_details_updated_at BEFORE
