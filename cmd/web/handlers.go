@@ -1,14 +1,10 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"net/http"
-	"time"
 
 	"talent-rodeo/internal/response"
-
-	"github.com/nats-io/nats.go/jetstream"
 )
 
 func (app *application) home(w http.ResponseWriter, r *http.Request) {
@@ -34,6 +30,7 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+/*
 func (app *application) getKV() (jetstream.KeyValue, error) {
 	nc, err := app.nats.Client()
 	if err != nil {
@@ -59,3 +56,4 @@ func (app *application) getKV() (jetstream.KeyValue, error) {
 
 	return kv, nil
 }
+*/

@@ -7,7 +7,18 @@ import (
 	"talent-rodeo/internal/response"
 )
 
-func (app *application) InterviewPage(w http.ResponseWriter, r *http.Request) {
+// showInterviewPage displays the main interview page where users can start their interview.
+// It performs several prerequisite checks:
+// 1. Verifies user authentication, redirecting to login if not authenticated
+// 2. Checks for resume upload, redirecting to upload page if missing
+// 3. Validates scheduled appointment, redirecting to scheduling if none exists
+//
+// Routes:
+//   - GET /interview
+//
+// Templates:
+//   - pages/interview.html
+func (app *application) showInterviewPage(w http.ResponseWriter, r *http.Request) {
 	app.logger.Info("Handling interview page request", "method", r.Method, "url", r.URL.String())
 
 	user := contextGetAuthenticatedUser(r)
@@ -53,7 +64,16 @@ func (app *application) InterviewPage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (app *application) InterviewStart(w http.ResponseWriter, r *http.Request) {
+// startInterview initiates the interview process by displaying the interview start page.
+// It performs the same prerequisite checks as showInterviewPage but returns errors instead
+// of redirecting, as this endpoint is typically called via AJAX.
+//
+// Routes:
+//   - GET /interview/start
+//
+// Templates:
+//   - pages/interview-start.html
+func (app *application) startInterview(w http.ResponseWriter, r *http.Request) {
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -92,7 +112,12 @@ func (app *application) InterviewStart(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (app *application) InterviewEnd(w http.ResponseWriter, r *http.Request) {
+// completeInterview marks the interview as completed. Currently a placeholder
+// that will be expanded when interview completion logic is implemented.
+//
+// Routes:
+//   - POST /interview/end
+func (app *application) completeInterview(w http.ResponseWriter, r *http.Request) {
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -103,7 +128,16 @@ func (app *application) InterviewEnd(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (app *application) HandleAudio(w http.ResponseWriter, r *http.Request) {
+// handleAudioUpload processes audio recordings from the interview.
+// Currently a placeholder that will be implemented when the audio
+// interview feature is added.
+//
+// Routes:
+//   - POST /interview/audio
+//
+// Expected request:
+//   - Audio data in the request body (format TBD)
+func (app *application) handleAudioUpload(w http.ResponseWriter, r *http.Request) {
 	app.logger.Info("Handling audio request", "method", r.Method, "url", r.URL.String())
 
 	user := contextGetAuthenticatedUser(r)
