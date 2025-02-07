@@ -11,6 +11,8 @@ import (
 )
 
 func TestInterview(t *testing.T) {
+	// t.Skip("Skipping interview test - I think the LLM hallucinated this one")
+
 	ts := newTestServer(t)
 
 	t.Run("Unauthenticated user cannot access interview", func(t *testing.T) {

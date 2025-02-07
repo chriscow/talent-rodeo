@@ -17,85 +17,120 @@
     <article>
         <header>
             <hgroup>
-                <h1>{{ .Job.Position }}</h1>
-                <p>{{ .Job.CompanyName }} • {{ .Job.Location }}</p>
-                <p>{{ .Job.PostingTime }} • {{ .Job.EmploymentType }}</p>
+                <h1>{{ .Job.Title }}</h1>
+                <p>{{ .Job.Company }} • {{ .Job.Location }}</p>
+                <p>{{ .Job.PostedDate }} • {{ .Job.EmploymentType }}</p>
             </hgroup>
-            {{ if .Job.BasePay }}
-            <p><strong>Salary Range:</strong> {{ .Job.BasePay }}</p>
+            {{ if .Job.SalaryInfo }}
+            <p><strong>Salary Range:</strong> {{ .Job.SalaryInfo.Min }} - {{ .Job.SalaryInfo.Max }} {{
+                .Job.SalaryInfo.Currency }} ({{ .Job.SalaryInfo.Period }})</p>
             {{ end }}
         </header>
-    </article>
 
-    <!-- Requirements Requirements Section -->
-    {{ if .Requirements }}
-    <article>
-        <hgroup>
+        <!-- Job Description -->
+        <section>
+            <h2>Job Description</h2>
+            <p>{{ .Job.FullDescription }}</p>
+        </section>
+
+        <!-- Requirements Section -->
+        {{ if .Job.Requirements }}
+        <section>
             <h2>Requirements</h2>
-            <p>Extracted requirements from the description</p>
-        </hgroup>
-        <ul>
-            {{ if .Requirements.MustHaveRequirements }}
-            <li><strong>Must Have Requirements:</strong>
-                <ul>
-                    {{ range .Requirements.MustHaveRequirements }}
-                    <li>{{ . }}</li>
-                    {{ end }}
-                </ul>
-            </li>
-            {{ end }}
-            {{ if .Requirements.PreferredSkills }}
-            <li><strong>Preferred Skills:</strong>
-                <ul>
-                    {{ range .Requirements.PreferredSkills }}
-                    <li>{{ . }}</li>
-                    {{ end }}
-                </ul>
-            </li>
-            {{ end }}
-            {{ if .Requirements.WorkLocation }}
-            <li><strong>Work Location:</strong> {{ .Requirements.WorkLocation }}</li>
-            {{ end }}
-            {{ if .Requirements.CompanyCulture }}
-            <li><strong>Company Culture:</strong> {{ .Requirements.CompanyCulture }}</li>
-            {{ end }}
-            {{ if .Requirements.AdditionalInfo }}
-            <li><strong>Additional Information:</strong> {{ .Requirements.AdditionalInfo }}</li>
-            {{ end }}
-        </ul>
-    </article>
-    {{ end }}
-
-
-    <section>
-        <div>{{ .Description }}</div>
-    </section>
-
-    {{ if .Job.Recruiters }}
-    <article>
-        <h2>Recruiters</h2>
-        {{ range .Job.Recruiters }}
-        <div class="grid">
-            <div style="width: 50px">
-                <img src="{{ .Photo }}" alt="{{ .Name }}" style="width: 100%; border-radius: 50%">
-            </div>
-            <div>
-                <p><strong>{{ .Name }}</strong><br>
-                    {{ .Title }}</p>
-            </div>
-        </div>
+            <ul>
+                {{ range .Job.Requirements }}
+                <li>{{ . }}</li>
+                {{ end }}
+            </ul>
+        </section>
         {{ end }}
-    </article>
 
-    {{ end }}
+        <!-- Qualifications Section -->
+        {{ if .Job.Qualifications }}
+        <section>
+            <h2>Qualifications</h2>
+            <ul>
+                {{ range .Job.Qualifications }}
+                <li>{{ . }}</li>
+                {{ end }}
+            </ul>
+        </section>
+        {{ end }}
 
-    <section> <a href="{{ .Job.CompanyLinkedInID }}" target="_blank" role="button" class="secondary">View Company
-            Profile</a>
-    </section>
+        <!-- Benefits Section -->
+        {{ if .Job.Benefits }}
+        <section>
+            <h2>Benefits</h2>
+            <ul>
+                {{ range .Job.Benefits }}
+                <li>{{ . }}</li>
+                {{ end }}
+            </ul>
+        </section>
+        {{ end }}
 
-    <footer>
-        <a href="#" onclick="window.history.back()" class="secondary">Back to Results</a>
-    </footer>
+        <!-- Skills Section -->
+        {{ if .Job.Skills }}
+        <section>
+            <h2>Required Skills</h2>
+            <ul>
+                {{ range .Job.Skills }}
+                <li>{{ . }}</li>
+                {{ end }}
+            </ul>
+        </section>
+        {{ end }}
+
+        <!-- Company Info Section -->
+        {{ if .Job.CompanyInfo }}
+        <section>
+            <h2>About {{ .Job.Company }}</h2>
+            <p><strong>Industry:</strong> {{ .Job.CompanyInfo.Industry }}</p>
+        </section>
+        {{ end }}
+
+        <!-- Similar Jobs Section -->
+        {{ if .Job.SimilarJobs }}
+        <section>
+            <h2>Similar Jobs</h2>
+            <ul>
+                {{ range .Job.SimilarJobs }}
+                <li>
+                    <a href="{{ .URL }}" target="_blank">
+                        {{ .Title }} at {{ .Company }} • {{ .Location }}
+                    </a>
+                </li>
+                {{ end }}
+            </ul>
+        </section>
+        {{ end }}
+
+        <!-- People Also Viewed Section -->
+        {{ if .Job.PeopleAlsoViewed }}
+        <section>
+            <h2>People Also Viewed</h2>
+            <ul>
+                {{ range .Job.PeopleAlsoViewed }}
+                <li>
+                    <a href="{{ .URL }}" target="_blank">
+                        {{ .Title }} at {{ .Company }} • {{ .Location }}
+                    </a>
+                </li>
+                {{ end }}
+            </ul>
+        </section>
+        {{ end }}
+
+        <!-- Apply Button -->
+        {{ if .Job.URL }}
+        <section>
+            <a href="{{ .Job.URL }}" target="_blank" role="button">Apply Now</a>
+        </section>
+        {{ end }}
+
+        <footer>
+            <a href="#" onclick="window.history.back()" class="secondary">Back to Results</a>
+        </footer>
     </article>
 </main>
 {{ end }}

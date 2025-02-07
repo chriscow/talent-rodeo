@@ -44,6 +44,9 @@ type User struct {
 	OnboardingStartedAt     *time.Time      `db:"onboarding_started_at"`
 	OnboardingCompletedAt   *time.Time      `db:"onboarding_completed_at"`
 	OnboardingStepUpdatedAt *time.Time      `db:"onboarding_step_updated_at"`
+
+	UpdatedAt *time.Time `db:"updated_at"`
+	UserRole  *string    `db:"user_role"`
 }
 
 type UserKeyword struct {

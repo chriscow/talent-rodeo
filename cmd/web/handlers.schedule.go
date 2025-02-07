@@ -1,23 +1,17 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
-	"talent-rodeo/internal"
 	"talent-rodeo/internal/database"
+	"talent-rodeo/internal/handlers"
 	"talent-rodeo/internal/onboarding"
 	"talent-rodeo/internal/request"
 	"talent-rodeo/internal/response"
-	"talent-rodeo/internal/tasks/handlers"
 	"talent-rodeo/internal/validator"
-	"talent-rodeo/internal/voice"
-	"time"
 
 	"github.com/alexedwards/flow"
-	"github.com/gorilla/websocket"
 )
 
 type scheduleFormData struct {
@@ -28,92 +22,26 @@ type scheduleFormData struct {
 	validator.Validator
 }
 
-func (app *application) scheduleCall(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	user := contextGetAuthenticatedUser(r)
-	if user == nil {
-		app.badRequest(w, r, fmt.Errorf("user not found"))
-		return
-	}
-
-	preferredTime := r.FormValue("preferred_time")
-	if preferredTime == "" {
-		app.badRequest(w, r, fmt.Errorf("preferred time is required"))
-		return
-	}
-
-	// Update onboarding state to indicate call is scheduled
-	if err := app.db.UpdateOnboardingStep(user.ID, onboarding.StepPhoneCallScheduled); err != nil {
-		app.serverError(w, r, fmt.Errorf("failed to update onboarding state: %w", err))
-		return
-	}
-
-	// TODO: Actually schedule the call with the AI system
-	// For now, we'll just show the waiting screen
-
-	data := app.newTemplateData(r)
-	if err := response.Page(w, http.StatusOK, data, "pages/profile-waiting-call.html"); err != nil {
-		app.serverError(w, r, fmt.Errorf("failed to render waiting page: %w", err))
-	}
-}
-
-func (app *application) rescheduleCall(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	user := contextGetAuthenticatedUser(r)
-	if user == nil {
-		app.badRequest(w, r, fmt.Errorf("user not found"))
-		return
-	}
-
-	// Update onboarding state back to resume uploaded
-	if err := app.db.UpdateOnboardingStep(user.ID, onboarding.StepResumeUploaded); err != nil {
-		app.serverError(w, r, fmt.Errorf("failed to update onboarding state: %w", err))
-		return
-	}
-
-	data := app.newTemplateData(r)
-	if err := response.Page(w, http.StatusOK, data, "pages/profile-phone-call.html"); err != nil {
-		app.serverError(w, r, fmt.Errorf("failed to render schedule page: %w", err))
-	}
-}
-
-func (app *application) handleVoiceWebSocket(w http.ResponseWriter, r *http.Request) {
-	app.logger.Debug("Handling voice websocket connection")
-
-	upgrader := websocket.Upgrader{
-		CheckOrigin: func(r *http.Request) bool { return true },
-	}
-
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		app.logger.Error("WebSocket upgrade failed", "error", err)
-		return
-	}
-	defer conn.Close()
-
-	// Create a new voice session
-	session, err := voice.NewSession(conn, app.logger)
-	if err != nil {
-		app.logger.Error("Failed to create voice session", "error", err)
-		return
-	}
-	defer session.Close()
-
-	// Start the session
-	if err := session.Start(r.Context()); err != nil {
-		app.logger.Error("Voice session failed", "error", err)
-	}
-}
-
-func (app *application) scheduleHandler(w http.ResponseWriter, r *http.Request) {
+// showSchedulePage displays the scheduling interface where users can set their
+// availability preferences and view/manage their appointments.
+//
+// Flow:
+//  1. Verifies user authentication
+//  2. Loads existing scheduling preferences
+//  3. Loads upcoming appointments
+//  4. Handles websocket connection for voice if on voice route
+//
+// Routes:
+//   - GET /profile/schedule
+//   - GET /schedule/voice (websocket endpoint)
+//
+// Templates:
+//   - pages/schedule.html
+//
+// State:
+//   - Does not modify onboarding state
+//   - Accessible after StepResumeUploaded
+func (app *application) showSchedulePage(w http.ResponseWriter, r *http.Request) {
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
 		http.Redirect(w, r, "/auth/linkedin", http.StatusFound)
@@ -149,7 +77,24 @@ func (app *application) scheduleHandler(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (app *application) schedulePreferencesSubmitHandler(w http.ResponseWriter, r *http.Request) {
+// updateSchedulePreferences handles POST requests to update a user's scheduling preferences.
+// These preferences are used to determine available time slots for appointments.
+//
+// Flow:
+//  1. Validates form data (timezone, days, time range)
+//  2. Updates preferences in database
+//  3. Redirects back to schedule page
+//
+// Routes:
+//   - POST /profile/schedule/preferences
+//
+// Templates:
+//   - pages/schedule.html (on validation error)
+//
+// State:
+//   - Does not modify onboarding state
+//   - Accessible after StepResumeUploaded
+func (app *application) updateSchedulePreferences(w http.ResponseWriter, r *http.Request) {
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
 		http.Redirect(w, r, "/auth/linkedin", http.StatusFound)
@@ -202,7 +147,27 @@ func (app *application) schedulePreferencesSubmitHandler(w http.ResponseWriter, 
 	http.Redirect(w, r, "/profile/schedule", http.StatusFound)
 }
 
-func (app *application) scheduleAppointmentHandler(w http.ResponseWriter, r *http.Request) {
+// createAppointment handles POST requests to schedule a new appointment.
+// It validates the requested time, creates the appointment, and schedules
+// the voice call.
+//
+// Flow:
+//  1. Validates user has phone number
+//  2. Validates requested time
+//  3. Creates appointment record
+//  4. Schedules voice call
+//  5. Updates onboarding state
+//  6. Returns appropriate view based on request type
+//
+// Routes:
+//   - POST /profile/schedule/appointment
+//
+// Templates:
+//   - partials/waiting-for-call.html (HTMX request)
+//
+// State Transitions:
+//   - StepResumeUploaded → StepPhoneCallScheduled
+func (app *application) createAppointment(w http.ResponseWriter, r *http.Request) {
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
 		http.Redirect(w, r, "/auth/linkedin", http.StatusFound)
@@ -214,130 +179,33 @@ func (app *application) scheduleAppointmentHandler(w http.ResponseWriter, r *htt
 		"method", r.Method,
 		"content_type", r.Header.Get("Content-Type"))
 
-	err := r.ParseForm()
+	// Use the request decoder
+	scheduleReq, err := request.DecodeScheduleRequest(w, r)
 	if err != nil {
-		app.logger.Error("Failed to parse form", "error", err)
-		http.Error(w, fmt.Sprintf("Failed to parse form: %v", err), http.StatusBadRequest)
+		app.badRequest(w, r, err)
 		return
 	}
 
-	// Log raw request details
-	app.logger.Debug("Raw request details",
-		"form", r.Form,
-		"post_form", r.PostForm,
-		"headers", r.Header)
-
-	// Handle both form data and JSON requests
-	var preferredTime string
-	var timezone string
-
-	if r.Header.Get("Content-Type") == "application/json" {
-		var req struct {
-			DateTime string `json:"datetime"`
-			Timezone string `json:"timezone"`
-		}
-
-		// Read the raw body for logging
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			app.logger.Error("Failed to read request body", "error", err)
-			http.Error(w, "Failed to read request body", http.StatusBadRequest)
-			return
-		}
-		app.logger.Debug("Raw JSON body", "body", string(body))
-
-		// Parse the JSON
-		err = json.Unmarshal(body, &req)
-		if err != nil {
-			app.logger.Error("Failed to decode JSON",
-				"error", err,
-				"body", string(body))
-			http.Error(w, fmt.Sprintf("Failed to decode JSON: %v", err), http.StatusBadRequest)
-			return
-		}
-		preferredTime = req.DateTime
-		timezone = req.Timezone
-	} else {
-		preferredTime = r.FormValue("datetime")
-		timezone = r.FormValue("timezone")
-	}
-
-	app.logger.Debug("Parsed form values",
-		"preferred_time", preferredTime,
-		"timezone", timezone)
-
-	if preferredTime == "" {
-		msg := "preferred time is required"
-		app.logger.Error(msg)
-		http.Error(w, msg, http.StatusBadRequest)
+	// Check phone number
+	if user.Phone == nil {
+		app.logger.Error("User has no phone number", "user_id", user.ID)
+		app.badRequest(w, r, fmt.Errorf("phone number is required"))
 		return
 	}
 
-	if timezone == "" {
-		msg := "timezone is required"
-		app.logger.Error(msg)
-		http.Error(w, msg, http.StatusBadRequest)
-		return
-	}
-
-	// Validate datetime
-	scheduledTime, err := time.Parse(time.RFC3339, preferredTime)
+	// Validate time using helper
+	timeResult, err := request.ValidateScheduledTime(scheduleReq.DateTime, scheduleReq.Timezone)
 	if err != nil {
-		msg := fmt.Sprintf("invalid datetime format (expected RFC3339): %v", err)
-		app.logger.Error(msg,
-			"received_value", preferredTime,
-			"expected_format", "2006-01-02T15:04:05Z07:00")
-		http.Error(w, msg, http.StatusBadRequest)
+		app.logger.Error("Time validation failed", "error", err)
+		app.badRequest(w, r, err)
 		return
 	}
 
-	// Load the user's timezone
-	userLoc, err := time.LoadLocation(timezone)
-	if err != nil {
-		msg := fmt.Sprintf("invalid timezone: %v", err)
-		app.logger.Error(msg,
-			"timezone", timezone)
-		http.Error(w, msg, http.StatusBadRequest)
-		return
-	}
-
-	// Convert the UTC time to user's timezone
-	userTime := scheduledTime.In(userLoc)
-	app.logger.Debug("Time conversion",
-		"original_time", scheduledTime,
-		"original_location", scheduledTime.Location(),
-		"user_timezone", timezone,
-		"user_time", userTime,
-		"user_location", userTime.Location())
-
-	// Check if time is in the past (truncate to minutes for comparison)
-	now := time.Now().In(userLoc).Truncate(time.Minute)
-	userTimeMinute := userTime.Truncate(time.Minute)
-
-	app.logger.Debug("Time comparison",
-		"now_truncated", now,
-		"scheduled_truncated", userTimeMinute)
-
-	if userTimeMinute.Before(now) {
-		msg := "cannot schedule appointments in the past"
-		app.logger.Error(msg,
-			"scheduled_time", userTimeMinute,
-			"current_time", now)
-		http.Error(w, msg, http.StatusBadRequest)
-		return
-	}
-
-	// Add a small buffer to ensure we're safely in the future
-	userTimeMinute = userTimeMinute.Add(time.Minute)
-	app.logger.Debug("Adding buffer to scheduled time",
-		"original_time", userTimeMinute,
-		"buffered_time", userTimeMinute)
-
-	// Store appointment in user's timezone
+	// Create appointment using validated time
 	appointment := &database.Appointment{
 		UserID:        user.ID,
-		ScheduledTime: userTimeMinute,
-		Timezone:      timezone,
+		ScheduledTime: timeResult.UserTime,
+		Timezone:      scheduleReq.Timezone,
 		Status:        database.AppointmentStatusScheduled,
 	}
 
@@ -348,55 +216,47 @@ func (app *application) scheduleAppointmentHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// Create a phone call task
-	if user.Phone == nil {
-		app.logger.Error("User has no phone number", "user_id", user.ID)
-		http.Error(w, "Phone number is required", http.StatusBadRequest)
-		return
-	}
-
-	payload := handlers.PhoneCallPayload{
+	// Create voice call request
+	callRequest := handlers.CallRequest{
 		PhoneNumber: *user.Phone,
 	}
-	payloadBytes, err := json.Marshal(payload)
+
+	app.logger.Debug("Scheduling voice call",
+		"phone_number", *user.Phone,
+		"scheduled_time", timeResult.UserTime,
+		"timezone", scheduleReq.Timezone,
+	)
+
+	// Schedule the call
+	err = app.scheduler.ScheduleMessage(
+		r.Context(),
+		handlers.TopicVoiceInput,
+		callRequest,
+		map[string]string{
+			"appointment_id": fmt.Sprintf("%d", appointment.ID),
+			"user_id":        fmt.Sprintf("%d", user.ID),
+		},
+		timeResult.UserTime,
+		app.processor,
+	)
 	if err != nil {
-		app.logger.Error("Failed to marshal phone call payload", "error", err)
-		http.Error(w, fmt.Sprintf("Failed to create task: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	task := &internal.Task{
-		ID:          time.Now().UnixNano(),
-		Type:        "phone_call",
-		Payload:     payloadBytes,
-		Status:      internal.TaskStatusPending,
-		MaxAttempts: 3,
-		RunAt:       userTime,
-		CreatedAt:   time.Now().UTC(),
-		UpdatedAt:   time.Now().UTC(),
-	}
-
-	if err := app.processor.EnqueueTask(r.Context(), task); err != nil {
-		app.logger.Error("Failed to enqueue phone call task", "error", err)
+		app.logger.Error("Failed to schedule voice call",
+			"error", err,
+			"phone_number", *user.Phone,
+		)
 		http.Error(w, fmt.Sprintf("Failed to schedule call: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	app.logger.Debug("Phone call task created",
-		"task_id", task.ID,
-		"run_at", task.RunAt,
-		"phone_number", *user.Phone,
-	)
-
-	// Update onboarding state to indicate call is scheduled
+	// Update onboarding state
 	if err := app.db.UpdateOnboardingStep(user.ID, onboarding.StepPhoneCallScheduled); err != nil {
 		app.logger.Error("Failed to update onboarding state", "error", err)
 		http.Error(w, fmt.Sprintf("Failed to update onboarding state: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	// If it's an HTMX request, return the waiting partial
-	if r.Header.Get("HX-Request") == "true" {
+	// Handle response based on request type
+	if request.IsHTMXRequest(r) {
 		data := app.newTemplateData(r)
 		err = response.Page(w, http.StatusOK, data, "partials/waiting-for-call.html")
 		if err != nil {
@@ -405,11 +265,64 @@ func (app *application) scheduleAppointmentHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// For regular form submissions, redirect to profile
 	http.Redirect(w, r, "/profile", http.StatusFound)
 }
 
-func (app *application) cancelAppointmentHandler(w http.ResponseWriter, r *http.Request) {
+// rescheduleAppointment handles POST requests to reschedule an appointment.
+// It resets the onboarding state back to resume uploaded and shows the
+// scheduling page.
+//
+// Flow:
+//  1. Verifies user authentication
+//  2. Resets onboarding state to resume uploaded
+//  3. Shows scheduling page for new appointment
+//
+// Routes:
+//   - POST /profile/schedule/reschedule
+//
+// Templates:
+//   - pages/profile-schedule-phone-call.html
+//
+// State Transitions:
+//   - StepPhoneCallScheduled → StepResumeUploaded
+func (app *application) rescheduleAppointment(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	user := contextGetAuthenticatedUser(r)
+	if user == nil {
+		app.badRequest(w, r, fmt.Errorf("user not found"))
+		return
+	}
+
+	// Update onboarding state back to resume uploaded
+	if err := app.db.UpdateOnboardingStep(user.ID, onboarding.StepResumeUploaded); err != nil {
+		app.serverError(w, r, fmt.Errorf("failed to update onboarding state: %w", err))
+		return
+	}
+
+	data := app.newTemplateData(r)
+	if err := response.Page(w, http.StatusOK, data, "pages/profile-schedule-phone-call.html"); err != nil {
+		app.serverError(w, r, fmt.Errorf("failed to render schedule page: %w", err))
+	}
+}
+
+// cancelAppointment handles DELETE requests to cancel an existing appointment.
+// It marks the appointment as cancelled in the database.
+//
+// Flow:
+//  1. Verifies user authentication and appointment ownership
+//  2. Updates appointment status to cancelled
+//
+// Routes:
+//   - DELETE /profile/schedule/appointment/:id
+//
+// State:
+//   - Does not modify onboarding state
+//   - May require manual state reset if no other appointments exist
+func (app *application) cancelAppointment(w http.ResponseWriter, r *http.Request) {
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
 		http.Redirect(w, r, "/auth/linkedin", http.StatusFound)

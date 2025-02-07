@@ -12,19 +12,22 @@ import (
 
 	"talent-rodeo/internal/auth"
 	"talent-rodeo/internal/database"
+	"talent-rodeo/internal/handlers"
+	"talent-rodeo/internal/handlers/search/providers/scrapingdog"
 	"talent-rodeo/internal/smtp"
 	"talent-rodeo/internal/tasks"
-	"talent-rodeo/internal/tasks/handlers"
+	th "talent-rodeo/internal/tasks/handlers"
 	"talent-rodeo/internal/version"
 
-	"github.com/delaneyj/toolbelt"
-	"github.com/delaneyj/toolbelt/embeddednats"
+	"github.com/chriscow/minds/providers/gemini"
 	"github.com/gorilla/sessions"
 	"github.com/joho/godotenv"
 	"github.com/lmittmann/tint"
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
-	natsserver "github.com/nats-io/nats-server/v2/server"
+	"github.com/nats-io/nats-server/v2/server"
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/pusher/pusher-http-go/v5"
 )
 
@@ -40,8 +43,13 @@ func main() {
 }
 
 type config struct {
-	baseURL   string
-	httpPort  int
+	baseURL  string
+	httpPort int
+	nats     struct {
+		port     int
+		embedded bool
+		url      string
+	}
 	autoHTTPS struct {
 		domain  string
 		email   string
@@ -82,12 +90,14 @@ type application struct {
 	mailer        *smtp.Mailer
 	sessionStore  *sessions.CookieStore
 	wg            sync.WaitGroup
-	nats          *embeddednats.Server
 	pusher        *pusher.Client
 	keywordsMutex sync.RWMutex
-	natsShutdown  chan struct{}
+
+	natsServer   *server.Server
+	natsShutdown chan struct{}
 
 	processor *tasks.Processor
+	scheduler *th.NATSMessageScheduler
 }
 
 func run(logger *slog.Logger) error {
@@ -99,6 +109,9 @@ func run(logger *slog.Logger) error {
 
 	flag.StringVar(&cfg.baseURL, "base-url", os.Getenv("BASE_URL"), "base URL for the application")
 	flag.IntVar(&cfg.httpPort, "http-port", 2304, "port to listen on for HTTP requests")
+	flag.IntVar(&cfg.nats.port, "nats-port", 42223, "port to listen on for NATS")
+	flag.StringVar(&cfg.nats.url, "nats-url", "nats://localhost:42223", "URL for NATS server")
+	flag.BoolVar(&cfg.nats.embedded, "embedded-nats", true, "use embedded NATS server")
 	flag.StringVar(&cfg.autoHTTPS.domain, "auto-https-domain", "", "domain to enable automatic HTTPS for")
 	flag.StringVar(&cfg.autoHTTPS.email, "auto-https-email", "admin@example.com", "contact email address for problems with LetsEncrypt certificates")
 	flag.BoolVar(&cfg.autoHTTPS.staging, "auto-https-staging", false, "use LetsEncrypt staging environment")
@@ -171,45 +184,78 @@ func run(logger *slog.Logger) error {
 		auth.New(cfg.linkedin.clientID, cfg.linkedin.clientSecret, cfg.baseURL+"/auth/linkedin/callback"),
 	)
 
-	var ns *embeddednats.Server
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	// Create a channel to signal when NATS is shut down
-	natsShutdown := make(chan struct{})
-	defer func() {
-		if ns != nil {
-			logger.Info("shutting down NATS server")
-			// Close NATS first
-			ns.Close()
-			close(natsShutdown)
-			logger.Info("NATS server shutdown complete")
-		}
-		cancel()
-	}()
-
-	ns, err = func() (*embeddednats.Server, error) {
-		natsPort, err := toolbelt.FreePort()
-		if err != nil {
-			return nil, fmt.Errorf("error getting free port: %w", err)
-		}
-
-		ns, err := embeddednats.New(ctx, embeddednats.WithNATSServerOptions(&natsserver.Options{
+	// Create NATS server if embedded mode is enabled
+	var natsServer *server.Server
+	if cfg.nats.embedded {
+		natsServer, err = handlers.StartNATSServer(ctx, handlers.NATSConfig{
+			Port:      cfg.nats.port,
 			JetStream: true,
-			Port:      natsPort,
-		}))
-
+		})
 		if err != nil {
-			return nil, fmt.Errorf("error creating embedded nats server: %w", err)
+			return fmt.Errorf("failed to setup NATS: %w", err)
 		}
-
-		ns.WaitForServer()
-		return ns, nil
-	}()
-
-	if err != nil {
-		return fmt.Errorf("error setting up NATS: %w", err)
 	}
 
+	// Create JetStream context
+	nc, err := nats.Connect(cfg.nats.url)
+	if err != nil {
+		return fmt.Errorf("failed to connect to NATS: %w", err)
+	}
+	defer nc.Close()
+
+	js, err := jetstream.New(nc)
+	if err != nil {
+		return fmt.Errorf("failed to create JetStream context: %w", err)
+	}
+
+	// Create the main stream
+	stream, err := handlers.CreateStream(ctx, cfg.nats.url, logger)
+	if err != nil {
+		return fmt.Errorf("failed to create stream: %w", err)
+	}
+	_ = stream // We keep the stream reference even though we don't use it directly
+
+	// Setup all pipeline handlers
+	if err := setupPipelineHandlers(ctx, db, js, logger); err != nil {
+		return fmt.Errorf("failed to setup pipeline handlers: %w", err)
+	}
+
+	pusherClient := setupPusher(logger)
+
+	// This is to schedule delivery of messages for scheduled phone calls
+	taskProcessor := tasks.NewProcessor(db, logger)
+
+	// Setup scheduler
+	scheduler, err := setupNATSHandler(cfg.nats.url, logger)
+	if err != nil {
+		return fmt.Errorf("error setting up NATS handler: %w", err)
+	}
+	taskProcessor.RegisterHandler(scheduler)
+
+	app := &application{
+		config:       cfg,
+		db:           db,
+		logger:       logger,
+		mailer:       mailer,
+		sessionStore: sessionStore,
+		pusher:       &pusherClient,
+		natsServer:   natsServer,
+		natsShutdown: make(chan struct{}),
+		processor:    taskProcessor,
+		scheduler:    scheduler,
+	}
+
+	if cfg.autoHTTPS.domain != "" {
+		return app.serveAutoHTTPS()
+	}
+
+	return app.serveHTTP()
+}
+
+func setupPusher(logger *slog.Logger) pusher.Client {
 	logger.Debug("pusher config", "app_id", os.Getenv("PUSHER_APP_ID"), "key",
 		os.Getenv("PUSHER_KEY"), "secret", os.Getenv("PUSHER_SECRET"), "cluster", os.Getenv("PUSHER_CLUSTER"))
 
@@ -221,55 +267,24 @@ func run(logger *slog.Logger) error {
 		Secure:  true,
 	}
 
-	twilioClient := handlers.NewRealTwilioClient(os.Getenv("TWILIO_ACCOUNT_SID"), os.Getenv("TWILIO_AUTH_TOKEN"), os.Getenv("TWILIO_FROM_NUMBER"))
-	logger.Debug("Created Twilio client",
-		"account_sid", os.Getenv("TWILIO_ACCOUNT_SID"),
-		"from_number", os.Getenv("TWILIO_FROM_NUMBER"))
+	return pusherClient
+}
 
-	twiml := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
-	<Response>
-		<Connect>
-			<Stream url="wss://%s/stream"/>
-		</Connect>
-	</Response>`, os.Getenv("APP_DOMAIN"))
-
-	taskProcessor := tasks.NewProcessor(db, logger)
-
-	fromNumber := os.Getenv("TWILIO_FROM_NUMBER")
-	logger.Debug("Creating phone call handler",
-		"from_number", fromNumber,
-		"twiml", twiml)
-
-	callHandler := handlers.NewPhoneCallHandler(twilioClient, logger, handlers.PhoneCallConfig{
-		FromNumber: fromNumber,
-		Twiml:      twiml,
-	}, taskProcessor, db)
-
-	taskProcessor.RegisterHandler(callHandler)
-
-	go func() {
-		if err := taskProcessor.Start(ctx); err != nil {
-			logger.Error("failed to start task processor", "error", err)
-		}
-	}()
-
-	app := &application{
-		config:       cfg,
-		db:           db,
-		logger:       logger,
-		mailer:       mailer,
-		sessionStore: sessionStore,
-		nats:         ns,
-		pusher:       &pusherClient,
-		natsShutdown: natsShutdown,
-		processor:    taskProcessor,
+// setupNATSHandler sets up the NATS client and returns the handler.
+func setupNATSHandler(natsURL string, logger *slog.Logger) (*th.NATSMessageScheduler, error) {
+	// Connect to NATS
+	nc, err := nats.Connect(natsURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to NATS: %w", err)
 	}
 
-	if cfg.autoHTTPS.domain != "" {
-		return app.serveAutoHTTPS()
+	// Create JetStream context
+	js, err := jetstream.New(nc)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create JetStream context: %w", err)
 	}
 
-	return app.serveHTTP()
+	return th.NewNATSMessageScheduler(js, logger), nil
 }
 
 func (app *application) setupSessionStore(authKey, encryptKey []byte) {
@@ -302,5 +317,74 @@ func checkEnv() error {
 		}
 	}
 
+	return nil
+}
+
+// setupPipelineHandlers configures all pipeline handlers with JetStream
+func setupPipelineHandlers(
+	ctx context.Context,
+	db *database.DB,
+	js jetstream.JetStream,
+	logger *slog.Logger,
+) error {
+	// Setup voice handler
+	llm, err := gemini.NewProvider(ctx)
+	if err != nil {
+		return fmt.Errorf("error setting up gemini provider: %w", err)
+	}
+
+	voiceConfig := handlers.CallConfig{
+		FromNumber: os.Getenv("TWILIO_FROM_NUMBER"),
+		Twiml:      fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?><Response><Connect><Stream url="wss://%s/schedule/voice"/></Connect><Start><Stream name="stream"/></Start><Say>Welcome to your scheduled call. Please wait while we connect you.</Say></Response>`, os.Getenv("APP_DOMAIN")),
+	}
+
+	// Create voice handler
+	voiceHandler, err := handlers.NewVoiceHandler(ctx, js, th.NewRealTwilioClient(
+		os.Getenv("TWILIO_ACCOUNT_SID"),
+		os.Getenv("TWILIO_AUTH_TOKEN"),
+		os.Getenv("TWILIO_FROM_NUMBER"),
+	), logger, voiceConfig)
+	if err != nil {
+		return fmt.Errorf("error setting up voice handler: %w", err)
+	}
+	go voiceHandler.Start(ctx)
+
+	// Setup transcript handler
+	transcriptHandler, err := handlers.NewExperienceHandler(ctx, js, llm, logger)
+	if err != nil {
+		return fmt.Errorf("error setting up transcript handler: %w", err)
+	}
+	go transcriptHandler.Start(ctx)
+
+	// Setup job description handler
+	jobDescHandler, err := handlers.NewRequirementsHandler(ctx, js, llm, logger)
+	if err != nil {
+		return fmt.Errorf("error setting up job description handler: %w", err)
+	}
+	go jobDescHandler.Start(ctx)
+
+	// Setup culture handler
+	cultureHandler, err := handlers.NewCultureHandler(ctx, js, llm, logger)
+	if err != nil {
+		return fmt.Errorf("error setting up culture handler: %w", err)
+	}
+	go cultureHandler.Start(ctx)
+
+	// Setup assessment handler
+	assessmentHandler, err := handlers.NewAssessmentHandler(ctx, js, llm, logger)
+	if err != nil {
+		return fmt.Errorf("error setting up assessment handler: %w", err)
+	}
+	go assessmentHandler.Start(ctx)
+
+	// Setup search handler with ScrapingDog provider
+	searchProvider := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"))
+	searchHandler, err := handlers.NewSearchHandler(ctx, js, searchProvider, logger)
+	if err != nil {
+		return fmt.Errorf("error setting up search handler: %w", err)
+	}
+	go searchHandler.Start(ctx)
+
+	logger.Info("All pipeline handlers configured successfully")
 	return nil
 }
