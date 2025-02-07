@@ -12,7 +12,6 @@ import (
 
 	"talent-rodeo/internal/auth"
 	"talent-rodeo/internal/database"
-	"talent-rodeo/internal/jobmatch/processor"
 	"talent-rodeo/internal/smtp"
 	"talent-rodeo/internal/tasks"
 	"talent-rodeo/internal/tasks/handlers"
@@ -88,9 +87,7 @@ type application struct {
 	keywordsMutex sync.RWMutex
 	natsShutdown  chan struct{}
 
-	processor    *tasks.Processor
-	jobProcessor processor.JobProcessor
-	jobHandler   *JobHandler
+	processor *tasks.Processor
 }
 
 func run(logger *slog.Logger) error {
@@ -256,9 +253,6 @@ func run(logger *slog.Logger) error {
 		}
 	}()
 
-	// Initialize job processor
-	jobProc := processor.NewProcessor()
-
 	app := &application{
 		config:       cfg,
 		db:           db,
@@ -269,11 +263,7 @@ func run(logger *slog.Logger) error {
 		pusher:       &pusherClient,
 		natsShutdown: natsShutdown,
 		processor:    taskProcessor,
-		jobProcessor: jobProc,
 	}
-
-	// Initialize job handler
-	app.jobHandler = NewJobHandler(logger, app.jobProcessor)
 
 	if cfg.autoHTTPS.domain != "" {
 		return app.serveAutoHTTPS()

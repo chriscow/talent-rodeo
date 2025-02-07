@@ -1,4 +1,4 @@
-package processor
+package match
 
 import (
 	"context"
@@ -7,9 +7,7 @@ import (
 	"math"
 	"os"
 	"strings"
-
-	"talent-rodeo/internal/jobmatch/providers"
-	"talent-rodeo/internal/jobmatch/types"
+	"talent-rodeo/internal/search"
 )
 
 // MatchScore represents the detailed scoring of a job-candidate match
@@ -53,7 +51,7 @@ type ExperienceMatch struct {
 type Matcher struct {
 	logger   *log.Logger
 	analyzer Analyzer
-	registry *providers.Registry
+	registry *search.Registry
 }
 
 // NewMatcher creates a new job matcher instance
@@ -67,7 +65,7 @@ func NewMatcher(ctx context.Context, logger *log.Logger) (*Matcher, error) {
 		return nil, fmt.Errorf("failed to create analyzer: %w", err)
 	}
 
-	registry := providers.NewRegistry()
+	registry := search.NewRegistry()
 
 	return &Matcher{
 		logger:   logger,
@@ -77,12 +75,12 @@ func NewMatcher(ctx context.Context, logger *log.Logger) (*Matcher, error) {
 }
 
 // RegisterProvider registers a job provider with the matcher
-func (m *Matcher) RegisterProvider(provider types.JobProvider) error {
+func (m *Matcher) RegisterProvider(provider search.JobProvider) error {
 	return m.registry.Register(provider)
 }
 
 // Match computes the match score between a job and candidate
-func (m *Matcher) Match(ctx context.Context, job *types.Job, candidate *types.Candidate) (*MatchDetails, error) {
+func (m *Matcher) Match(ctx context.Context, job *search.Job, candidate *Candidate) (*MatchDetails, error) {
 	m.logger.Printf("Starting match computation for job=%s candidate=%s", job.ID, candidate.ID)
 
 	// Get detailed job information
@@ -95,7 +93,7 @@ func (m *Matcher) Match(ctx context.Context, job *types.Job, candidate *types.Ca
 	if err != nil {
 		m.logger.Printf("Warning: failed to get job details: %v, falling back to basic job info", err)
 		// Create a basic JobDetail from the Job
-		jobDetail = &types.JobDetail{
+		jobDetail = &search.JobDetail{
 			Job:             *job,
 			FullDescription: job.Description,
 			Requirements:    make([]string, 0),
@@ -174,7 +172,7 @@ func (m *Matcher) Match(ctx context.Context, job *types.Job, candidate *types.Ca
 }
 
 // getProvider returns the JobProvider for the given provider name
-func (m *Matcher) getProvider(providerName string) (types.JobProvider, error) {
+func (m *Matcher) getProvider(providerName string) (search.JobProvider, error) {
 	return m.registry.Get(providerName)
 }
 
@@ -248,7 +246,7 @@ func (m *Matcher) computeSkillsMatch(requirements []Requirement, candidateSkills
 }
 
 // computeLocationMatch calculates location compatibility
-func (m *Matcher) computeLocationMatch(job *types.JobDetail, candidate *types.Candidate) (float64, LocationMatch) {
+func (m *Matcher) computeLocationMatch(job *search.JobDetail, candidate *Candidate) (float64, LocationMatch) {
 	m.logger.Printf("Computing location match for job=%s candidate=%s", job.ID, candidate.ID)
 
 	// Check if job is remote
@@ -297,7 +295,7 @@ func (m *Matcher) computeLocationMatch(job *types.JobDetail, candidate *types.Ca
 }
 
 // computeExperienceMatch calculates the experience match score
-func (m *Matcher) computeExperienceMatch(requirements []Requirement, candidate *types.Candidate) (float64, ExperienceMatch) {
+func (m *Matcher) computeExperienceMatch(requirements []Requirement, candidate *Candidate) (float64, ExperienceMatch) {
 	var maxYearsRequired int
 	var match ExperienceMatch
 
@@ -334,7 +332,7 @@ func (m *Matcher) computeExperienceMatch(requirements []Requirement, candidate *
 
 // computePreferencesMatch calculates a match score based on various preferences
 // like work type, schedule, industry, company size, and culture
-func (m *Matcher) computePreferencesMatch(job *types.JobDetail, candidate *types.Candidate) float64 {
+func (m *Matcher) computePreferencesMatch(job *search.JobDetail, candidate *Candidate) float64 {
 	m.logger.Printf("Computing preferences match between job %s and candidate %s", job.ID, candidate.ID)
 
 	// Define preference categories and their weights
@@ -402,7 +400,7 @@ func (m *Matcher) computePreferencesMatch(job *types.JobDetail, candidate *types
 }
 
 // calculateConfidence determines the confidence level in the match computation
-func (m *Matcher) calculateConfidence(job *types.JobDetail, candidate *types.Candidate) float64 {
+func (m *Matcher) calculateConfidence(job *search.JobDetail, candidate *Candidate) float64 {
 	// Base confidence starts at 0.8
 	confidence := 0.8
 

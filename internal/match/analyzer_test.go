@@ -1,4 +1,4 @@
-package processor
+package match
 
 // Helper function to compare float values with a small epsilon
 func floatEquals(a, b float64) bool {

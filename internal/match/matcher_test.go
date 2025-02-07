@@ -1,12 +1,11 @@
-package processor
+package match
 
 import (
 	"context"
 	"fmt"
 	"math"
+	"talent-rodeo/internal/search"
 	"testing"
-
-	"talent-rodeo/internal/jobmatch/types"
 
 	"github.com/joho/godotenv"
 )
@@ -15,28 +14,28 @@ func init() {
 	godotenv.Load("/Users/chris/dev/talent-rodeo/.env")
 }
 
-// MockJobProvider is a mock implementation of types.JobProvider
+// MockJobProvider is a mock implementation of search.JobProvider
 type MockJobProvider struct {
 	name       string
-	jobDetails map[string]*types.JobDetail
+	jobDetails map[string]*search.JobDetail
 }
 
 func NewMockJobProvider(name string) *MockJobProvider {
 	return &MockJobProvider{
 		name:       name,
-		jobDetails: make(map[string]*types.JobDetail),
+		jobDetails: make(map[string]*search.JobDetail),
 	}
 }
 
-func (m *MockJobProvider) SearchJobs(ctx context.Context, criteria types.SearchCriteria) ([]types.Job, error) {
+func (m *MockJobProvider) SearchJobs(ctx context.Context, criteria search.Criteria) ([]search.Job, error) {
 	// For testing, return empty slice
-	return []types.Job{}, nil
+	return []search.Job{}, nil
 }
 
-func (m *MockJobProvider) GetJobDetails(ctx context.Context, jobID string) (*types.JobDetail, error) {
+func (m *MockJobProvider) GetJobDetails(ctx context.Context, jobID string) (*search.JobDetail, error) {
 	// Return standard test job details
-	return &types.JobDetail{
-		Job: types.Job{
+	return &search.JobDetail{
+		Job: search.Job{
 			ID:            jobID,
 			Title:         "Test Job",
 			Company:       "Test Company",
@@ -51,7 +50,7 @@ func (m *MockJobProvider) GetJobDetails(ctx context.Context, jobID string) (*typ
 		Qualifications:  []string{"Bachelor's degree", "5+ years experience"},
 		Benefits:        []string{"Health insurance", "401k"},
 		Skills:          []string{"Go", "Docker", "Kubernetes"},
-		SalaryInfo: &types.SalaryRange{
+		SalaryInfo: &search.SalaryRange{
 			Min:      100000,
 			Max:      150000,
 			Currency: "USD",
@@ -60,7 +59,7 @@ func (m *MockJobProvider) GetJobDetails(ctx context.Context, jobID string) (*typ
 		EmploymentType: "full-time",
 		WorkplaceType:  "remote",
 		Industry:       "Technology",
-		CompanyInfo: &types.CompanyInfo{
+		CompanyInfo: &search.Company{
 			Name:        "Test Company",
 			Industry:    "Technology",
 			Size:        "medium",
@@ -101,7 +100,7 @@ func TestMatcher_PerfectMatch(t *testing.T) {
 	matcher := setupMatcher(t)
 	ctx := context.Background()
 
-	job := &types.Job{
+	job := &search.Job{
 		ID:          "job1",
 		Title:       "Senior Go Developer",
 		Company:     "TechCorp",
@@ -109,7 +108,7 @@ func TestMatcher_PerfectMatch(t *testing.T) {
 		Description: "Looking for a Senior Go Developer with 5+ years of experience in Go, Docker, and Kubernetes.",
 		Provider:    "test-provider",
 	}
-	candidate := &types.Candidate{
+	candidate := &Candidate{
 		ID:                 "cand1",
 		Title:              "Senior Software Engineer",
 		Skills:             []string{"Go", "Docker", "Kubernetes", "AWS"},
@@ -170,7 +169,7 @@ func TestMatcher_PartialMatch(t *testing.T) {
 	matcher := setupMatcher(t)
 	ctx := context.Background()
 
-	job := &types.Job{
+	job := &search.Job{
 		ID:          "job2",
 		Title:       "Senior Go Developer",
 		Company:     "TechCorp",
@@ -178,7 +177,7 @@ func TestMatcher_PartialMatch(t *testing.T) {
 		Description: "Looking for a Senior Go Developer with 5+ years of experience in Go, Docker, and Kubernetes.",
 		Provider:    "test-provider",
 	}
-	candidate := &types.Candidate{
+	candidate := &Candidate{
 		ID:                 "cand2",
 		Title:              "Software Engineer",
 		Skills:             []string{"Go", "Python", "AWS"},
@@ -239,7 +238,7 @@ func TestMatcher_LocationMismatch(t *testing.T) {
 	matcher := setupMatcher(t)
 	ctx := context.Background()
 
-	job := &types.Job{
+	job := &search.Job{
 		ID:          "job3",
 		Title:       "Senior Go Developer",
 		Company:     "TechCorp",
@@ -247,7 +246,7 @@ func TestMatcher_LocationMismatch(t *testing.T) {
 		Description: "Looking for a Senior Go Developer with 5+ years of experience in Go, Docker, and Kubernetes.",
 		Provider:    "test-provider",
 	}
-	candidate := &types.Candidate{
+	candidate := &Candidate{
 		ID:                 "cand3",
 		Title:              "Senior Software Engineer",
 		Skills:             []string{"Go", "Docker", "Kubernetes"},
@@ -308,12 +307,12 @@ func TestMatcher_MissingRequiredData(t *testing.T) {
 	matcher := setupMatcher(t)
 	ctx := context.Background()
 
-	job := &types.Job{
+	job := &search.Job{
 		ID:      "job4",
 		Title:   "Senior Go Developer",
 		Company: "TechCorp",
 	}
-	candidate := &types.Candidate{
+	candidate := &Candidate{
 		ID:    "cand4",
 		Title: "Software Engineer",
 	}
@@ -334,12 +333,12 @@ func TestMatcher_MissingRequiredData(t *testing.T) {
 func TestLocationMatching_ExactMatch(t *testing.T) {
 	matcher := setupMatcher(t)
 
-	job := &types.JobDetail{
-		Job: types.Job{
+	job := &search.JobDetail{
+		Job: search.Job{
 			Location: "San Francisco",
 		},
 	}
-	candidate := &types.Candidate{
+	candidate := &Candidate{
 		PreferredLocations: []string{"San Francisco", "Remote"},
 	}
 
@@ -366,12 +365,12 @@ func TestLocationMatching_ExactMatch(t *testing.T) {
 func TestLocationMatching_RemoteMatch(t *testing.T) {
 	matcher := setupMatcher(t)
 
-	job := &types.JobDetail{
-		Job: types.Job{
+	job := &search.JobDetail{
+		Job: search.Job{
 			Location: "Remote",
 		},
 	}
-	candidate := &types.Candidate{
+	candidate := &Candidate{
 		PreferredLocations: []string{"Remote", "San Francisco"},
 	}
 
@@ -398,12 +397,12 @@ func TestLocationMatching_RemoteMatch(t *testing.T) {
 func TestLocationMatching_RemoteJobNoPreference(t *testing.T) {
 	matcher := setupMatcher(t)
 
-	job := &types.JobDetail{
-		Job: types.Job{
+	job := &search.JobDetail{
+		Job: search.Job{
 			Location: "Remote",
 		},
 	}
-	candidate := &types.Candidate{
+	candidate := &Candidate{
 		PreferredLocations: []string{"San Francisco", "New York"},
 	}
 
@@ -430,12 +429,12 @@ func TestLocationMatching_RemoteJobNoPreference(t *testing.T) {
 func TestLocationMatching_NoMatch(t *testing.T) {
 	matcher := setupMatcher(t)
 
-	job := &types.JobDetail{
-		Job: types.Job{
+	job := &search.JobDetail{
+		Job: search.Job{
 			Location: "London",
 		},
 	}
-	candidate := &types.Candidate{
+	candidate := &Candidate{
 		PreferredLocations: []string{"San Francisco", "New York"},
 	}
 
@@ -466,7 +465,7 @@ func TestExperienceMatching_ExceedsRequirements(t *testing.T) {
 		{Text: "5+ years of Go experience", Type: "must-have"},
 		{Text: "3+ years of AWS", Type: "nice-to-have"},
 	}
-	candidate := &types.Candidate{
+	candidate := &Candidate{
 		ExperienceYears: 7,
 	}
 
@@ -496,7 +495,7 @@ func TestExperienceMatching_MeetsRequirements(t *testing.T) {
 	requirements := []Requirement{
 		{Text: "5+ years of Go experience", Type: "must-have"},
 	}
-	candidate := &types.Candidate{
+	candidate := &Candidate{
 		ExperienceYears: 5,
 	}
 
@@ -526,7 +525,7 @@ func TestExperienceMatching_PartialExperience(t *testing.T) {
 	requirements := []Requirement{
 		{Text: "5+ years of Go experience", Type: "must-have"},
 	}
-	candidate := &types.Candidate{
+	candidate := &Candidate{
 		ExperienceYears: 3,
 	}
 
@@ -554,7 +553,7 @@ func TestExperienceMatching_NoRequirements(t *testing.T) {
 	matcher := setupMatcher(t)
 
 	requirements := []Requirement{}
-	candidate := &types.Candidate{
+	candidate := &Candidate{
 		ExperienceYears: 3,
 	}
 

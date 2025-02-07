@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"talent-rodeo/internal/models"
+	"talent-rodeo/internal"
 )
 
 func TestTaskOperations(t *testing.T) {
@@ -29,7 +29,7 @@ func TestTaskOperations(t *testing.T) {
 		Count:   42,
 	}
 
-	task, err := models.NewTask("test_task", payload)
+	task, err := internal.NewTask("test_task", payload)
 	if err != nil {
 		t.Fatalf("NewTask() error = %v", err)
 	}
@@ -81,7 +81,7 @@ func TestTaskOperations(t *testing.T) {
 	}
 
 	// Test UpdateTask
-	fetchedTask.Status = models.TaskStatusRunning
+	fetchedTask.Status = internal.TaskStatusRunning
 	fetchedTask.Attempts++
 	err = db.UpdateTask(ctx, fetchedTask)
 	if err != nil {
@@ -93,8 +93,8 @@ func TestTaskOperations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTask() after update error = %v", err)
 	}
-	if updatedTask.Status != models.TaskStatusRunning {
-		t.Errorf("UpdateTask() got Status = %v, want %v", updatedTask.Status, models.TaskStatusRunning)
+	if updatedTask.Status != internal.TaskStatusRunning {
+		t.Errorf("UpdateTask() got Status = %v, want %v", updatedTask.Status, internal.TaskStatusRunning)
 	}
 	if updatedTask.Attempts != 1 {
 		t.Errorf("UpdateTask() got Attempts = %v, want 1", updatedTask.Attempts)
@@ -110,7 +110,7 @@ func TestTaskOperations(t *testing.T) {
 	}
 
 	// Create a pending task
-	pendingTask, err := models.NewTask("pending_task", testPayload{Message: "pending", Count: 1})
+	pendingTask, err := internal.NewTask("pending_task", testPayload{Message: "pending", Count: 1})
 	if err != nil {
 		t.Fatalf("NewTask() error = %v", err)
 	}
@@ -157,15 +157,15 @@ func TestTaskValidation(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		task        *models.Task
+		task        *internal.Task
 		expectError bool
 	}{
 		{
 			name: "valid task",
-			task: &models.Task{
+			task: &internal.Task{
 				Type:        "test_task",
 				Payload:     json.RawMessage(`{"test": "data"}`),
-				Status:      models.TaskStatusPending,
+				Status:      internal.TaskStatusPending,
 				MaxAttempts: 3,
 				RunAt:       time.Now().Add(time.Hour),
 			},
@@ -173,9 +173,9 @@ func TestTaskValidation(t *testing.T) {
 		},
 		{
 			name: "missing type",
-			task: &models.Task{
+			task: &internal.Task{
 				Payload:     json.RawMessage(`{"test": "data"}`),
-				Status:      models.TaskStatusPending,
+				Status:      internal.TaskStatusPending,
 				MaxAttempts: 3,
 				RunAt:       time.Now().Add(time.Hour),
 			},
@@ -183,9 +183,9 @@ func TestTaskValidation(t *testing.T) {
 		},
 		{
 			name: "missing payload",
-			task: &models.Task{
+			task: &internal.Task{
 				Type:        "test_task",
-				Status:      models.TaskStatusPending,
+				Status:      internal.TaskStatusPending,
 				MaxAttempts: 3,
 				RunAt:       time.Now().Add(time.Hour),
 			},
@@ -193,10 +193,10 @@ func TestTaskValidation(t *testing.T) {
 		},
 		{
 			name: "past run_at",
-			task: &models.Task{
+			task: &internal.Task{
 				Type:        "test_task",
 				Payload:     json.RawMessage(`{"test": "data"}`),
-				Status:      models.TaskStatusPending,
+				Status:      internal.TaskStatusPending,
 				MaxAttempts: 3,
 				RunAt:       time.Now().Add(-time.Hour),
 			},
@@ -222,7 +222,7 @@ func TestTaskTransactions(t *testing.T) {
 	defer db.Close()
 
 	t.Run("basic_CRUD_operations", func(t *testing.T) {
-		task := &models.Task{
+		task := &internal.Task{
 			Type:        "test_task",
 			Payload:     json.RawMessage(`{"test": "data"}`),
 			Status:      "pending",
@@ -284,7 +284,7 @@ func TestTaskTransactions(t *testing.T) {
 	})
 
 	t.Run("basic_transaction", func(t *testing.T) {
-		task := &models.Task{
+		task := &internal.Task{
 			Type:        "test_task",
 			Payload:     json.RawMessage(`{"test": "data"}`),
 			Status:      "pending",
@@ -324,7 +324,7 @@ func TestTaskTransactions(t *testing.T) {
 	})
 
 	t.Run("rollback", func(t *testing.T) {
-		task := &models.Task{
+		task := &internal.Task{
 			Type:        "test_task",
 			Payload:     json.RawMessage(`{"test": "data"}`),
 			Status:      "pending",
@@ -356,7 +356,7 @@ func TestTaskTransactions(t *testing.T) {
 
 	t.Run("validation", func(t *testing.T) {
 		// Test invalid task type
-		task := &models.Task{
+		task := &internal.Task{
 			Type:        "",
 			Payload:     json.RawMessage(`{"test": "data"}`),
 			Status:      "pending",
@@ -369,7 +369,7 @@ func TestTaskTransactions(t *testing.T) {
 		}
 
 		// Test invalid status
-		task = &models.Task{
+		task = &internal.Task{
 			Type:        "test_task",
 			Payload:     json.RawMessage(`{"test": "data"}`),
 			Status:      "invalid_status",
@@ -382,7 +382,7 @@ func TestTaskTransactions(t *testing.T) {
 		}
 
 		// Test past run_at time
-		task = &models.Task{
+		task = &internal.Task{
 			Type:        "test_task",
 			Payload:     json.RawMessage(`{"test": "data"}`),
 			Status:      "pending",
