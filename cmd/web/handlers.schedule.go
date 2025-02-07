@@ -6,8 +6,8 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"talent-rodeo/internal"
 	"talent-rodeo/internal/database"
-	"talent-rodeo/internal/models"
 	"talent-rodeo/internal/onboarding"
 	"talent-rodeo/internal/request"
 	"talent-rodeo/internal/response"
@@ -365,11 +365,11 @@ func (app *application) scheduleAppointmentHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
-	task := &models.Task{
+	task := &internal.Task{
 		ID:          time.Now().UnixNano(),
 		Type:        "phone_call",
 		Payload:     payloadBytes,
-		Status:      models.TaskStatusPending,
+		Status:      internal.TaskStatusPending,
 		MaxAttempts: 3,
 		RunAt:       userTime,
 		CreatedAt:   time.Now().UTC(),

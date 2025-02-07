@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
+	"talent-rodeo/internal"
 	"talent-rodeo/internal/database"
-	"talent-rodeo/internal/models"
 )
 
 // WebhookHandler processes Twilio webhook callbacks
@@ -92,18 +92,18 @@ func (h *WebhookHandler) HandleTwilioCallback(w http.ResponseWriter, r *http.Req
 	// Update task based on call status
 	switch callStatus {
 	case "completed":
-		task.Status = models.TaskStatusComplete
+		task.Status = internal.TaskStatusComplete
 	case "failed", "busy", "no-answer", "canceled":
 		if task.Attempts >= task.MaxAttempts {
-			task.Status = models.TaskStatusFailed
+			task.Status = internal.TaskStatusFailed
 			task.Error = fmt.Sprintf("Call failed with status: %s after %d attempts", callStatus, task.Attempts)
 		} else {
-			task.Status = models.TaskStatusRetrying
+			task.Status = internal.TaskStatusRetrying
 			task.RunAt = time.Now().Add(time.Duration(task.Attempts) * time.Minute)
 			task.Error = fmt.Sprintf("Call failed with status: %s, will retry", callStatus)
 		}
 	case "in-progress":
-		task.Status = models.TaskStatusRunning
+		task.Status = internal.TaskStatusRunning
 	default:
 		h.logger.Debug("ignoring intermediate call status",
 			"status", callStatus,

@@ -55,16 +55,6 @@ func (app *application) routes() http.Handler {
 
 		mux.Group(func(mux *flow.Mux) {
 			mux.Use(app.requireSuperUser)
-			// Job search endpoints
-			mux.HandleFunc("/api/v1/jobs/search", app.jobHandler.HandleSearchJobs, "POST")
-			mux.HandleFunc("/api/v1/jobs/:id", app.jobHandler.HandleGetJobDetails, "GET")
-			mux.HandleFunc("/api/v1/jobs/:id/analyze", app.jobHandler.HandleAnalyzeJob, "POST")
-
-			// Legacy job endpoints
-			mux.HandleFunc("/job/search", app.linkedInSearch, "GET")
-			mux.HandleFunc("/job/:id", app.jobDetail, "GET")
-			mux.HandleFunc("/job/:id/match", app.handleJobMatch, "GET")
-
 			mux.HandleFunc("/user/:id/keywords", app.editKeywords, "GET")
 			mux.HandleFunc("/user/:id/keywords", app.saveKeywords, "POST")
 		})

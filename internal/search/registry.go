@@ -1,27 +1,25 @@
-package providers
+package search
 
 import (
 	"fmt"
 	"sync"
-
-	"talent-rodeo/internal/jobmatch/types"
 )
 
 // Registry manages the available job providers
 type Registry struct {
-	providers map[string]types.JobProvider
+	providers map[string]JobProvider
 	mu        sync.RWMutex
 }
 
 // NewRegistry creates a new provider registry
 func NewRegistry() *Registry {
 	return &Registry{
-		providers: make(map[string]types.JobProvider),
+		providers: make(map[string]JobProvider),
 	}
 }
 
 // Register adds a new provider to the registry
-func (r *Registry) Register(provider types.JobProvider) error {
+func (r *Registry) Register(provider JobProvider) error {
 	if provider == nil {
 		return fmt.Errorf("provider cannot be nil")
 	}
@@ -43,7 +41,7 @@ func (r *Registry) Register(provider types.JobProvider) error {
 }
 
 // Get returns a provider by name
-func (r *Registry) Get(name string) (types.JobProvider, error) {
+func (r *Registry) Get(name string) (JobProvider, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 

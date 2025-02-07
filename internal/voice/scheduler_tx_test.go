@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"talent-rodeo/internal"
 	"talent-rodeo/internal/database"
-	"talent-rodeo/internal/models"
 )
 
 func TestCallScheduler_CancelCallTx(t *testing.T) {
@@ -27,7 +27,7 @@ func TestCallScheduler_CancelCallTx(t *testing.T) {
 			name:   "cancel existing task",
 			taskID: 123456, // Use fixed task ID for deterministic testing
 			setup: func(ctx context.Context, db *database.DB, taskID int64) error {
-				msg := &models.Message{
+				msg := &internal.Message{
 					ID:        fmt.Sprintf("%d", taskID),
 					To:        "+1234567890",
 					From:      "system",
@@ -39,10 +39,10 @@ func TestCallScheduler_CancelCallTx(t *testing.T) {
 					return fmt.Errorf("failed to marshal message: %v", err)
 				}
 
-				task := &models.Task{
+				task := &internal.Task{
 					ID:          taskID,
 					Type:        "phone_call",
-					Status:      models.TaskStatusPending,
+					Status:      internal.TaskStatusPending,
 					MaxAttempts: 3,
 					RunAt:       runAt,
 					Payload:     payload,
@@ -90,8 +90,8 @@ func TestCallScheduler_CancelCallTx(t *testing.T) {
 					t.Fatalf("failed to get task: %v", err)
 				}
 
-				if task.Status != models.TaskStatusCancelled {
-					t.Errorf("task status = %v, want %v", task.Status, models.TaskStatusCancelled)
+				if task.Status != internal.TaskStatusCancelled {
+					t.Errorf("task status = %v, want %v", task.Status, internal.TaskStatusCancelled)
 				}
 			}
 
@@ -122,7 +122,7 @@ func TestCallScheduler_RescheduleCallTx(t *testing.T) {
 			newRunAt:  newRunAt,
 			wantRunAt: newRunAt,
 			setup: func(ctx context.Context, db *database.DB, taskID int64) error {
-				msg := &models.Message{
+				msg := &internal.Message{
 					ID:        fmt.Sprintf("%d", taskID),
 					To:        "+1234567890",
 					From:      "system",
@@ -134,10 +134,10 @@ func TestCallScheduler_RescheduleCallTx(t *testing.T) {
 					return fmt.Errorf("failed to marshal message: %v", err)
 				}
 
-				task := &models.Task{
+				task := &internal.Task{
 					ID:          taskID,
 					Type:        "phone_call",
-					Status:      models.TaskStatusPending,
+					Status:      internal.TaskStatusPending,
 					MaxAttempts: 3,
 					RunAt:       initialRunAt,
 					Payload:     payload,

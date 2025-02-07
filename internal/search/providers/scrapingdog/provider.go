@@ -8,9 +8,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"talent-rodeo/internal/search"
 	"time"
-
-	"talent-rodeo/internal/jobmatch/types"
 )
 
 const (
@@ -57,7 +56,7 @@ func NewProvider(apiKey string, opts ...Option) *Provider {
 }
 
 // SearchJobs searches for jobs based on the provided criteria
-func (p *Provider) SearchJobs(ctx context.Context, criteria types.SearchCriteria) ([]types.Job, error) {
+func (p *Provider) SearchJobs(ctx context.Context, criteria search.Criteria) ([]search.Job, error) {
 	log.Printf("Searching jobs with criteria: %+v", criteria)
 
 	// Build query parameters
@@ -90,16 +89,16 @@ func (p *Provider) SearchJobs(ctx context.Context, criteria types.SearchCriteria
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	var listings JobListings
+	var listings jobListings
 	if err := json.NewDecoder(resp.Body).Decode(&listings); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
 	// Convert to provider jobs
-	jobs := make([]types.Job, len(listings))
+	jobs := make([]search.Job, len(listings))
 	for i, listing := range listings {
 		postedDate, _ := time.Parse("2006-01-02", listing.PostingDate)
-		jobs[i] = types.Job{
+		jobs[i] = search.Job{
 			ID:            listing.ID,
 			Title:         listing.Position,
 			Company:       listing.CompanyName,
@@ -117,7 +116,7 @@ func (p *Provider) SearchJobs(ctx context.Context, criteria types.SearchCriteria
 }
 
 // GetJobDetails retrieves detailed information about a specific job
-func (p *Provider) GetJobDetails(ctx context.Context, jobID string) (*types.JobDetail, error) {
+func (p *Provider) GetJobDetails(ctx context.Context, jobID string) (*search.JobDetail, error) {
 	log.Printf("Getting job details for ID: %s", jobID)
 
 	// Build query parameters
@@ -142,7 +141,7 @@ func (p *Provider) GetJobDetails(ctx context.Context, jobID string) (*types.JobD
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	var details JobDetails
+	var details jobDetails
 	if err := json.NewDecoder(resp.Body).Decode(&details); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -155,14 +154,14 @@ func (p *Provider) GetJobDetails(ctx context.Context, jobID string) (*types.JobD
 	postedTime, _ := time.Parse("2006-01-02", detail.PostingTime)
 
 	// Parse salary range
-	var salaryInfo *types.SalaryRange
+	var salaryInfo *search.SalaryRange
 	if detail.BasePay != "" {
 		salaryInfo = parseSalaryRange(detail.BasePay)
 	}
 
 	// Convert to provider job detail
-	jobDetail := &types.JobDetail{
-		Job: types.Job{
+	jobDetail := &search.JobDetail{
+		Job: search.Job{
 			ID:            detail.CompanyLinkedInID,
 			Title:         detail.Position,
 			Company:       detail.CompanyName,
@@ -176,7 +175,7 @@ func (p *Provider) GetJobDetails(ctx context.Context, jobID string) (*types.JobD
 		EmploymentType:  detail.EmploymentType,
 		Industry:        detail.Industries,
 		SalaryInfo:      salaryInfo,
-		CompanyInfo: &types.CompanyInfo{
+		CompanyInfo: &search.Company{
 			Name:     detail.CompanyName,
 			Industry: detail.Industries,
 		},
@@ -200,7 +199,7 @@ func (p *Provider) Validate(ctx context.Context) error {
 }
 
 // parseSalaryRange attempts to parse a salary range string
-func parseSalaryRange(salary string) *types.SalaryRange {
+func parseSalaryRange(salary string) *search.SalaryRange {
 	// This is a very basic implementation
 	// In a real system, we would need more sophisticated parsing
 	if salary == "" {
@@ -218,7 +217,7 @@ func parseSalaryRange(salary string) *types.SalaryRange {
 	fmt.Sscanf(strings.TrimSpace(parts[0]), "%f", &min)
 	fmt.Sscanf(strings.TrimSpace(parts[1]), "%f", &max)
 
-	return &types.SalaryRange{
+	return &search.SalaryRange{
 		Min:      min,
 		Max:      max,
 		Currency: "USD",

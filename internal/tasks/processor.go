@@ -7,14 +7,14 @@ import (
 	"sync"
 	"time"
 
+	"talent-rodeo/internal"
 	"talent-rodeo/internal/database"
-	"talent-rodeo/internal/models"
 )
 
 // TaskHandler processes a specific type of task
 type TaskHandler interface {
 	// ProcessTask handles the execution of a task
-	ProcessTask(ctx context.Context, task *models.Task) error
+	ProcessTask(ctx context.Context, task *internal.Task) error
 	// TaskType returns the type of task this handler processes
 	TaskType() string
 }
@@ -119,7 +119,7 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 
 		// Update task status to running within transaction
 		oldStatus := task.Status
-		task.Status = models.TaskStatusRunning
+		task.Status = internal.TaskStatusRunning
 		task.Attempts++ // Always increment attempts when processing starts
 		p.logger.Debug("updating task status",
 			"task_id", task.ID,
@@ -210,17 +210,17 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 						"attempts", t.Attempts,
 						"max_attempts", t.MaxAttempts,
 						"old_status", oldStatus,
-						"new_status", models.TaskStatusFailed,
+						"new_status", internal.TaskStatusFailed,
 					)
-					t.Status = models.TaskStatusFailed
+					t.Status = internal.TaskStatusFailed
 				} else {
-					t.Status = models.TaskStatusRetrying
+					t.Status = internal.TaskStatusRetrying
 					t.RunAt = time.Now().Add(p.retryBackoff * time.Duration(t.Attempts))
 					t.Error = fmt.Sprintf("Call failed with status: %s, will retry", t.Status)
 				}
 			} else {
 				oldStatus = t.Status
-				t.Status = models.TaskStatusComplete
+				t.Status = internal.TaskStatusComplete
 				t.Error = ""
 				p.logger.Debug("task completed successfully",
 					"task_id", t.ID,
@@ -265,7 +265,7 @@ func generateTaskID() (int64, error) {
 }
 
 // EnqueueTask adds a new task to be processed
-func (p *Processor) EnqueueTask(ctx context.Context, task *models.Task) error {
+func (p *Processor) EnqueueTask(ctx context.Context, task *internal.Task) error {
 	p.logger.Debug("enqueueing task",
 		"task_id", task.ID,
 		"type", task.Type,
@@ -298,7 +298,7 @@ func (p *Processor) EnqueueTask(ctx context.Context, task *models.Task) error {
 }
 
 // CreateAndEnqueueTask is a helper method that creates a new task with the given parameters and enqueues it
-func (p *Processor) CreateAndEnqueueTask(ctx context.Context, taskType string, payload []byte, runAt time.Time) (*models.Task, error) {
+func (p *Processor) CreateAndEnqueueTask(ctx context.Context, taskType string, payload []byte, runAt time.Time) (*internal.Task, error) {
 	_, exists := p.handlers[taskType]
 	if !exists {
 		p.logger.Error("no handler registered for task type", "type", taskType)
@@ -311,11 +311,11 @@ func (p *Processor) CreateAndEnqueueTask(ctx context.Context, taskType string, p
 		return nil, fmt.Errorf("failed to generate task ID: %w", err)
 	}
 
-	task := &models.Task{
+	task := &internal.Task{
 		ID:          id,
 		Type:        taskType,
 		Payload:     payload,
-		Status:      models.TaskStatusPending,
+		Status:      internal.TaskStatusPending,
 		MaxAttempts: 3, // Default to 3 attempts
 		RunAt:       runAt,
 		CreatedAt:   time.Now(),

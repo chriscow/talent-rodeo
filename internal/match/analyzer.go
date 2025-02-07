@@ -1,4 +1,4 @@
-package processor
+package match
 
 import (
 	"context"
@@ -10,8 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
-	"talent-rodeo/internal/jobmatch/types"
+	"talent-rodeo/internal/search"
 
 	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/providers/gemini"
@@ -44,7 +43,7 @@ type ValidationResult struct {
 type Analyzer interface {
 	ExtractKeywords(ctx context.Context, text string) ([]Keyword, error)
 	ParseRequirements(ctx context.Context, text string) ([]Requirement, error)
-	ValidateJobData(ctx context.Context, job *types.JobDetail) (*ValidationResult, error)
+	ValidateJobData(ctx context.Context, job *search.JobDetail) (*ValidationResult, error)
 }
 
 // Analysis result types
@@ -107,13 +106,13 @@ func NewLLMAnalyzer(ctx context.Context, logger *log.Logger) (*LLMAnalyzer, erro
 
 // Analysis prompts
 const (
-	normalizePrompt = `Analyze this job description and:
+	NormalizePrompt = `Analyze this job description and:
 1. Rewrite it removing any references to the company and removing marketing language and fluff
 2. Extract the core job responsibilities
 3. Identify key differentiators
 Output in the specified JSON format.`
 
-	requirementsPrompt = `You are a job requirements extractor. 
+	RequirementsPrompt = `You are a job requirements extractor. 
 Analyze the job requirements and:
 
 1. Identify must-have skills/experience
@@ -122,6 +121,27 @@ Analyze the job requirements and:
 
 Output in the specified JSON format.`
 )
+
+// TestHooks provides methods for testing the analyzer
+type TestHooks interface {
+	SetProvider(provider minds.ContentGenerator)
+	SetLogger(logger *log.Logger)
+}
+
+// GetTestHooks returns the test hooks for an analyzer
+func (a *LLMAnalyzer) GetTestHooks() TestHooks {
+	return a
+}
+
+// SetProvider sets the provider for testing
+func (a *LLMAnalyzer) SetProvider(provider minds.ContentGenerator) {
+	a.provider = provider
+}
+
+// SetLogger sets the logger for testing
+func (a *LLMAnalyzer) SetLogger(logger *log.Logger) {
+	a.logger = logger
+}
 
 // ExtractKeywords implements the Analyzer interface using LLM
 func (a *LLMAnalyzer) ExtractKeywords(ctx context.Context, text string) ([]Keyword, error) {
@@ -238,7 +258,7 @@ func (a *LLMAnalyzer) ParseRequirements(ctx context.Context, text string) ([]Req
 }
 
 // ValidateJobData implements the Analyzer interface
-func (a *LLMAnalyzer) ValidateJobData(ctx context.Context, job *types.JobDetail) (*ValidationResult, error) {
+func (a *LLMAnalyzer) ValidateJobData(ctx context.Context, job *search.JobDetail) (*ValidationResult, error) {
 	if job == nil {
 		return nil, errors.New("job is nil")
 	}
@@ -318,7 +338,7 @@ func (a *LLMAnalyzer) normalizeJob(ctx context.Context, text string) (*Normalize
 
 	req := minds.NewRequest(
 		minds.Messages{
-			{Role: minds.RoleSystem, Content: normalizePrompt},
+			{Role: minds.RoleSystem, Content: NormalizePrompt},
 			{Role: minds.RoleUser, Content: "Job Description:\n" + text},
 		},
 		minds.WithResponseSchema(*schema),
@@ -355,7 +375,7 @@ func (a *LLMAnalyzer) analyzeRequirements(ctx context.Context, text string) (*Re
 
 	req := minds.NewRequest(
 		minds.Messages{
-			{Role: minds.RoleSystem, Content: requirementsPrompt},
+			{Role: minds.RoleSystem, Content: RequirementsPrompt},
 			{Role: minds.RoleUser, Content: "Job Description:\n" + text},
 		},
 		minds.WithResponseSchema(*schema),

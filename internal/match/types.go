@@ -1,23 +1,6 @@
-package types
+package match
 
 import "time"
-
-// Job represents a basic job listing.
-type Job struct {
-	ID             string
-	Title          string
-	Company        string
-	Location       string
-	PostedDate     time.Time
-	Description    string // Brief description or snippet
-	URL            string // Provider-specific URL
-	Provider       string // Name of the source provider
-	ProviderJobID  string // Original ID from the provider
-	Industry       string // Industry sector
-	CompanySize    string // Company size range (small, medium, large, etc.)
-	EmploymentType string // Full-time, part-time, contract, etc.
-	WorkplaceType  string // Remote, on-site, hybrid
-}
 
 // Candidate represents a job candidate with their profile information
 type Candidate struct {
@@ -57,23 +40,6 @@ type WorkExperience struct {
 	IsCurrent   bool      `json:"is_current"`
 	Description string    `json:"description"`
 	Skills      []string  `json:"skills"`
-}
-
-// JobDetail contains comprehensive information about a specific job.
-// This is returned by GetJobDetails and includes all available
-// information about the position.
-type JobDetail struct {
-	Job                      // Embed basic job information
-	FullDescription string   // Complete job description
-	Requirements    []string // List of job requirements
-	Qualifications  []string // Required qualifications
-	Benefits        []string // List of benefits
-	Skills          []string // Required skills
-	SalaryInfo      *SalaryRange
-	EmploymentType  string // Full-time, part-time, contract, etc.
-	WorkplaceType   string // Remote, on-site, hybrid
-	Industry        string
-	CompanyInfo     *CompanyInfo
 }
 
 // CompanyInfo contains information about the company posting the job.

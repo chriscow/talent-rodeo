@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"time"
 
+	"talent-rodeo/internal"
 	"talent-rodeo/internal/database"
-	"talent-rodeo/internal/models"
 	"talent-rodeo/internal/onboarding"
 )
 
@@ -41,7 +41,7 @@ type ScheduleCallParams struct {
 
 // TaskProcessor defines the interface for task processing
 type TaskProcessor interface {
-	EnqueueTask(ctx context.Context, task *models.Task) error
+	EnqueueTask(ctx context.Context, task *internal.Task) error
 }
 
 // UserDatabase defines the database operations needed by the phone call handler
@@ -65,7 +65,7 @@ func (h *PhoneCallHandler) TaskType() string {
 	return "phone_call"
 }
 
-func (h *PhoneCallHandler) ProcessTask(ctx context.Context, task *models.Task) error {
+func (h *PhoneCallHandler) ProcessTask(ctx context.Context, task *internal.Task) error {
 	h.logger.Debug("Processing phone call task",
 		"task_id", task.ID,
 		"attempt", task.Attempts,
@@ -171,11 +171,11 @@ func (h *PhoneCallHandler) ScheduleCall(ctx context.Context, params ScheduleCall
 	taskID := time.Now().UnixNano()
 
 	// Create the task
-	task := &models.Task{
+	task := &internal.Task{
 		ID:          taskID,
 		Type:        h.TaskType(),
 		Payload:     payloadBytes,
-		Status:      models.TaskStatusPending,
+		Status:      internal.TaskStatusPending,
 		MaxAttempts: 3, // Allow up to 3 retry attempts
 		RunAt:       scheduledUTC,
 		CreatedAt:   time.Now().UTC(),
