@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"talent-rodeo/internal"
 	"talent-rodeo/internal/database"
-	"talent-rodeo/internal/models"
 )
 
 func setupTestDB(t *testing.T) *database.DB {
@@ -20,13 +20,13 @@ func setupTestDB(t *testing.T) *database.DB {
 func TestCallScheduler_ScheduleCall(t *testing.T) {
 	tests := []struct {
 		name    string
-		msg     *models.Message
+		msg     *internal.Message
 		runAt   time.Time
 		wantErr bool
 	}{
 		{
 			name: "valid_future_time",
-			msg: &models.Message{
+			msg: &internal.Message{
 				ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
 				To:        "+1234567890",
 				From:      "system",
@@ -38,7 +38,7 @@ func TestCallScheduler_ScheduleCall(t *testing.T) {
 		},
 		{
 			name: "past_time",
-			msg: &models.Message{
+			msg: &internal.Message{
 				ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
 				To:        "+1234567890",
 				From:      "system",
@@ -50,7 +50,7 @@ func TestCallScheduler_ScheduleCall(t *testing.T) {
 		},
 		{
 			name: "valid_message",
-			msg: &models.Message{
+			msg: &internal.Message{
 				ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
 				To:        "+1234567890",
 				From:      "system",
@@ -62,7 +62,7 @@ func TestCallScheduler_ScheduleCall(t *testing.T) {
 		},
 		{
 			name: "missing_phone",
-			msg: &models.Message{
+			msg: &internal.Message{
 				ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
 				From:      "system",
 				Body:      "Test message",
@@ -99,8 +99,8 @@ func TestCallScheduler_ScheduleCall(t *testing.T) {
 				if task.Type != "phone_call" {
 					t.Errorf("task type = %v, want phone_call", task.Type)
 				}
-				if task.Status != models.TaskStatusPending {
-					t.Errorf("task status = %v, want %v", task.Status, models.TaskStatusPending)
+				if task.Status != internal.TaskStatusPending {
+					t.Errorf("task status = %v, want %v", task.Status, internal.TaskStatusPending)
 				}
 			}
 		})
@@ -124,7 +124,7 @@ func TestCallScheduler_CancelCall(t *testing.T) {
 			taskID:  time.Now().UnixNano(),
 			wantErr: false,
 			setup: func(ctx context.Context, db *database.DB, taskID int64) error {
-				msg := &models.Message{
+				msg := &internal.Message{
 					ID:        fmt.Sprintf("%d", taskID),
 					To:        "+1234567890",
 					From:      "system",
@@ -136,10 +136,10 @@ func TestCallScheduler_CancelCall(t *testing.T) {
 					return fmt.Errorf("failed to marshal message: %v", err)
 				}
 
-				task := &models.Task{
+				task := &internal.Task{
 					ID:          taskID,
 					Type:        "phone_call",
-					Status:      models.TaskStatusPending,
+					Status:      internal.TaskStatusPending,
 					MaxAttempts: 3,
 					RunAt:       time.Now().Add(time.Hour).UTC(),
 					Payload:     payload,
@@ -188,8 +188,8 @@ func TestCallScheduler_CancelCall(t *testing.T) {
 					t.Fatalf("failed to get task: %v", err)
 				}
 
-				if task.Status != models.TaskStatusCancelled {
-					t.Errorf("task status = %v, want %v", task.Status, models.TaskStatusCancelled)
+				if task.Status != internal.TaskStatusCancelled {
+					t.Errorf("task status = %v, want %v", task.Status, internal.TaskStatusCancelled)
 				}
 			}
 		})
@@ -216,7 +216,7 @@ func TestCallScheduler_RescheduleCall(t *testing.T) {
 			newTime: time.Now().Add(-time.Hour).UTC(),
 			wantErr: true,
 			setup: func(ctx context.Context, db *database.DB, taskID int64) error {
-				msg := &models.Message{
+				msg := &internal.Message{
 					ID:        fmt.Sprintf("%d", taskID),
 					To:        "+1234567890",
 					From:      "system",
@@ -228,10 +228,10 @@ func TestCallScheduler_RescheduleCall(t *testing.T) {
 					return fmt.Errorf("failed to marshal message: %v", err)
 				}
 
-				task := &models.Task{
+				task := &internal.Task{
 					ID:          taskID,
 					Type:        "phone_call",
-					Status:      models.TaskStatusPending,
+					Status:      internal.TaskStatusPending,
 					MaxAttempts: 3,
 					RunAt:       time.Now().Add(2 * time.Hour).UTC(),
 					Payload:     payload,
@@ -260,7 +260,7 @@ func TestCallScheduler_RescheduleCall(t *testing.T) {
 			newTime: time.Now().Add(2 * time.Hour).UTC(),
 			wantErr: false,
 			setup: func(ctx context.Context, db *database.DB, taskID int64) error {
-				msg := &models.Message{
+				msg := &internal.Message{
 					ID:        fmt.Sprintf("%d", taskID),
 					To:        "+1234567890",
 					From:      "system",
@@ -272,10 +272,10 @@ func TestCallScheduler_RescheduleCall(t *testing.T) {
 					return fmt.Errorf("failed to marshal message: %v", err)
 				}
 
-				task := &models.Task{
+				task := &internal.Task{
 					ID:          taskID,
 					Type:        "phone_call",
-					Status:      models.TaskStatusPending,
+					Status:      internal.TaskStatusPending,
 					MaxAttempts: 3,
 					RunAt:       time.Now().Add(time.Hour).UTC(),
 					Payload:     payload,

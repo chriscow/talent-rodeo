@@ -1,11 +1,11 @@
-package processor
+package match
 
 import (
 	"context"
 	"testing"
 	"time"
 
-	"talent-rodeo/internal/jobmatch/types"
+	"talent-rodeo/internal/search"
 
 	"github.com/google/uuid"
 )
@@ -15,8 +15,8 @@ type mockProvider struct {
 	name string
 }
 
-func (m *mockProvider) SearchJobs(ctx context.Context, criteria types.SearchCriteria) ([]types.Job, error) {
-	return []types.Job{
+func (m *mockProvider) SearchJobs(ctx context.Context, criteria search.Criteria) ([]search.Job, error) {
+	return []search.Job{
 		{
 			ID:            "job1",
 			Title:         "Software Engineer",
@@ -31,9 +31,9 @@ func (m *mockProvider) SearchJobs(ctx context.Context, criteria types.SearchCrit
 	}, nil
 }
 
-func (m *mockProvider) GetJobDetails(ctx context.Context, jobID string) (*types.JobDetail, error) {
-	return &types.JobDetail{
-		Job: types.Job{
+func (m *mockProvider) GetJobDetails(ctx context.Context, jobID string) (*search.JobDetail, error) {
+	return &search.JobDetail{
+		Job: search.Job{
 			ID:            jobID,
 			Title:         "Software Engineer",
 			Company:       "Test Company",
@@ -197,7 +197,7 @@ func TestProcess(t *testing.T) {
 					t.Fatal("Process() result is not a map")
 				}
 
-				jobs, ok := result["jobs"].([]types.Job)
+				jobs, ok := result["jobs"].([]search.Job)
 				if !ok {
 					t.Fatal("Process() jobs is not a []types.Job")
 				}

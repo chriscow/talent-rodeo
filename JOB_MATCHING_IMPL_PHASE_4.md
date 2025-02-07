@@ -11,12 +11,12 @@
 ## Performance Optimization
 
 ### Caching System
-- [ ] Implement in-memory caching with Ristretto:
+- [ ] Implement in-memory caching with gcache:
   ```go
-  import "github.com/dgraph-io/ristretto/v2"
+  import "github.com/bluele/gcache"
 
   type CacheManager struct {
-      cache    *ristretto.Cache
+      cache    *gcache.Cache
       ttl      time.Duration
       metrics  *CacheMetrics
   }

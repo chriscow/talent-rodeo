@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"talent-rodeo/internal"
 	"talent-rodeo/internal/database"
-	"talent-rodeo/internal/models"
 )
 
 func setupWebhookTest(t *testing.T) (*WebhookHandler, *database.DB) {
@@ -30,10 +30,10 @@ func setupWebhookTest(t *testing.T) (*WebhookHandler, *database.DB) {
 	return handler, db
 }
 
-func createTestTask(t *testing.T, db *database.DB) *models.Task {
+func createTestTask(t *testing.T, db *database.DB) *internal.Task {
 	t.Helper()
 
-	msg := &models.Message{
+	msg := &internal.Message{
 		ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
 		To:        "+1234567890",
 		From:      "system",
@@ -45,10 +45,10 @@ func createTestTask(t *testing.T, db *database.DB) *models.Task {
 		t.Fatalf("failed to marshal message: %v", err)
 	}
 
-	task := &models.Task{
+	task := &internal.Task{
 		ID:          time.Now().UnixNano(),
 		Type:        "phone_call",
-		Status:      models.TaskStatusRunning,
+		Status:      internal.TaskStatusRunning,
 		MaxAttempts: 3,
 		Attempts:    1,
 		RunAt:       time.Now().Add(time.Hour),
@@ -78,10 +78,10 @@ func TestWebhookHandler_HandleTwilioCallback(t *testing.T) {
 			name:       "completed_call",
 			taskID:     time.Now().UnixNano(),
 			callStatus: "completed",
-			wantStatus: models.TaskStatusComplete,
+			wantStatus: internal.TaskStatusComplete,
 			wantCode:   http.StatusOK,
 			setup: func(ctx context.Context, db *database.DB, taskID int64) error {
-				msg := &models.Message{
+				msg := &internal.Message{
 					ID:        fmt.Sprintf("%d", taskID),
 					To:        "+1234567890",
 					From:      "system",
@@ -93,10 +93,10 @@ func TestWebhookHandler_HandleTwilioCallback(t *testing.T) {
 					return fmt.Errorf("failed to marshal message: %v", err)
 				}
 
-				task := &models.Task{
+				task := &internal.Task{
 					ID:          taskID,
 					Type:        "phone_call",
-					Status:      models.TaskStatusPending,
+					Status:      internal.TaskStatusPending,
 					MaxAttempts: 3,
 					RunAt:       time.Now().Add(time.Hour).UTC(),
 					Payload:     payload,
@@ -123,10 +123,10 @@ func TestWebhookHandler_HandleTwilioCallback(t *testing.T) {
 			name:       "failed_call",
 			taskID:     time.Now().UnixNano(),
 			callStatus: "failed",
-			wantStatus: models.TaskStatusRetrying,
+			wantStatus: internal.TaskStatusRetrying,
 			wantCode:   http.StatusOK,
 			setup: func(ctx context.Context, db *database.DB, taskID int64) error {
-				msg := &models.Message{
+				msg := &internal.Message{
 					ID:        fmt.Sprintf("%d", taskID),
 					To:        "+1234567890",
 					From:      "system",
@@ -138,10 +138,10 @@ func TestWebhookHandler_HandleTwilioCallback(t *testing.T) {
 					return fmt.Errorf("failed to marshal message: %v", err)
 				}
 
-				task := &models.Task{
+				task := &internal.Task{
 					ID:          taskID,
 					Type:        "phone_call",
-					Status:      models.TaskStatusPending,
+					Status:      internal.TaskStatusPending,
 					MaxAttempts: 3,
 					RunAt:       time.Now().Add(time.Hour).UTC(),
 					Payload:     payload,
@@ -303,7 +303,7 @@ func TestWebhookHandler_HandleTwilioCallback_Concurrent(t *testing.T) {
 		t.Fatalf("failed to get final task state: %v", err)
 	}
 
-	if updatedTask.Status != models.TaskStatusComplete {
-		t.Errorf("final task status = %v, want %v", updatedTask.Status, models.TaskStatusComplete)
+	if updatedTask.Status != internal.TaskStatusComplete {
+		t.Errorf("final task status = %v, want %v", updatedTask.Status, internal.TaskStatusComplete)
 	}
 }

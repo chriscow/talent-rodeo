@@ -11,7 +11,7 @@
 ## Implementation Notes and Clarifications
 
 ### Project Structure
-- ~~Using `/internal/jobmatch` as the main package~~
+- ~~Using `/internal/matching` as the main package~~
 - ~~Reference implementations:~~
   - ~~`/internal/scrapingdog` - Example job provider implementation (will be removed)~~
   - ~~`/internal/tasks` - Task processing patterns to follow~~
@@ -83,7 +83,7 @@
 
 ### Directory Structure
 ```
-internal/jobmatch/
+internal/matching/
 ├── types/          # Common types and interfaces
 ├── providers/      # Job listing provider implementations
 │   └── scrapingdog/ # ScrapingDog implementation
@@ -514,7 +514,7 @@ The job analysis system has been implemented with LLM capabilities providing sop
 ```go
 require (
     github.com/chriscow/minds v0.1.0
-    github.com/dgraph-io/ristretto v0.1.1  // for caching
+    ggithub.com/bluele/gcache  // for caching
     github.com/alexedwards/flow v1.0.0     // for routing
     github.com/fatih/color v1.13.0         // for debug logging
 )

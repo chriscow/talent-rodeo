@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"talent-rodeo/internal"
 	"talent-rodeo/internal/database"
-	"talent-rodeo/internal/models"
 )
 
 func TestSimpleTaskCreateAndRead(t *testing.T) {
@@ -31,7 +31,7 @@ func TestSimpleTaskCreateAndRead(t *testing.T) {
 	)
 
 	// Create minimal message
-	msg := &models.Message{
+	msg := &internal.Message{
 		ID:        fmt.Sprintf("%d", taskID),
 		To:        "+1234567890",
 		From:      "system",
@@ -50,10 +50,10 @@ func TestSimpleTaskCreateAndRead(t *testing.T) {
 	)
 
 	// Create task
-	task := &models.Task{
+	task := &internal.Task{
 		ID:          taskID,
 		Type:        "phone_call",
-		Status:      models.TaskStatusPending,
+		Status:      internal.TaskStatusPending,
 		MaxAttempts: 3,
 		RunAt:       time.Now().Add(time.Hour).UTC(),
 		Payload:     payload,

@@ -1,59 +1,17 @@
-package processor
+package match
 
 import (
 	"context"
-	"errors"
 	"log"
 	"os"
+	"talent-rodeo/internal/search"
 	"testing"
 
-	"talent-rodeo/internal/jobmatch/types"
-
-	"github.com/chriscow/minds"
 	"github.com/joho/godotenv"
 )
 
 func init() {
 	godotenv.Load("/Users/chris/dev/talent-rodeo/.env")
-}
-
-// mockLLMProvider implements the LLM provider interface for testing
-type mockLLMProvider struct {
-	normalizeResponse    string
-	requirementsResponse string
-	shouldError          bool
-}
-
-func (m *mockLLMProvider) GenerateContent(ctx context.Context, req minds.Request) (minds.Response, error) {
-	if m.shouldError {
-		return nil, errors.New("mock error")
-	}
-
-	// Return different responses based on the prompt
-	if req.Messages[1].Content == normalizePrompt+"\n\nJob Description:\n"+testJobDescription {
-		return &mockResponse{content: m.normalizeResponse}, nil
-	}
-	return &mockResponse{content: m.requirementsResponse}, nil
-}
-
-func (m *mockLLMProvider) ModelName() string {
-	return "mock"
-}
-
-func (m *mockLLMProvider) Close() {
-	return
-}
-
-type mockResponse struct {
-	content string
-}
-
-func (m *mockResponse) String() string {
-	return m.content
-}
-
-func (m *mockResponse) ToolCalls() []minds.ToolCall {
-	return nil
 }
 
 const testJobDescription = `We are seeking a Senior Golang Developer to join our dynamic team! 
@@ -105,7 +63,7 @@ func TestLLMAnalyzer_ExtractKeywords(t *testing.T) {
 				normalizeResponse:    normalizeResp,
 				requirementsResponse: requirementsResp,
 			},
-			wantKeywords: 3, // 2 must-have + 1 nice-to-have
+			wantKeywords: 5, // 2 must-have + 1 nice-to-have + 2 differentiators
 			wantErr:      false,
 		},
 		{
@@ -126,7 +84,7 @@ func TestLLMAnalyzer_ExtractKeywords(t *testing.T) {
 				t.Fatalf("NewLLMAnalyzer() error = %v", err)
 			}
 
-			// Override the provider with our mock
+			// Set the provider using test hooks
 			analyzer.provider = tt.provider
 
 			got, err := analyzer.ExtractKeywords(context.Background(), testJobDescription)
@@ -140,6 +98,7 @@ func TestLLMAnalyzer_ExtractKeywords(t *testing.T) {
 			}
 
 			if len(got) != tt.wantKeywords {
+				t.Logf("got: %v  want: %d", got, tt.wantKeywords)
 				t.Errorf("ExtractKeywords() got %d keywords, want %d", len(got), tt.wantKeywords)
 			}
 
@@ -216,7 +175,7 @@ func TestLLMAnalyzer_ParseRequirements(t *testing.T) {
 				t.Fatalf("NewLLMAnalyzer() error = %v", err)
 			}
 
-			// Override the provider with our mock
+			// Set the provider using test hooks
 			analyzer.provider = tt.provider
 
 			got, err := analyzer.ParseRequirements(context.Background(), testJobDescription)
@@ -259,21 +218,21 @@ func TestLLMAnalyzer_ValidateJobData(t *testing.T) {
 	}
 
 	// Test with valid job
-	validJob := &types.JobDetail{
-		Job: types.Job{
-			ID:             "123",
-			Title:          "Software Engineer",
-			Description:    "Valid job description",
-			Company:        "Test Company",
-			Location:       "Remote",
-			URL:            "https://example.com/job/123",
-			EmploymentType: "full-time",
-			WorkplaceType:  "hybrid",
-			Industry:       "Technology",
+	validJob := &search.JobDetail{
+		Job: search.Job{
+			ID:          "123",
+			Title:       "Software Engineer",
+			Description: "Valid job description",
+			Company:     "Test Company",
+			Location:    "Remote",
+			URL:         "https://example.com/job/123",
 		},
 		FullDescription: "Detailed job description with requirements",
 		Requirements:    []string{"Go", "AWS"},
 		Skills:          []string{"Go", "AWS", "Docker"},
+		EmploymentType:  "full-time",
+		WorkplaceType:   "hybrid",
+		Industry:        "Technology",
 	}
 
 	got, err := analyzer.ValidateJobData(context.Background(), validJob)
@@ -288,8 +247,8 @@ func TestLLMAnalyzer_ValidateJobData(t *testing.T) {
 	}
 
 	// Test with invalid job
-	invalidJob := &types.JobDetail{
-		Job: types.Job{
+	invalidJob := &search.JobDetail{
+		Job: search.Job{
 			// Missing all required fields
 		},
 	}
@@ -319,12 +278,14 @@ func TestLLMAnalyzer_ProviderError(t *testing.T) {
 	logger := setupTestLogger(t)
 	provider := &mockLLMProvider{shouldError: true}
 
-	analyzer := &LLMAnalyzer{
-		provider: provider,
-		logger:   logger,
+	analyzer, err := NewLLMAnalyzer(context.Background(), logger)
+	if err != nil {
+		t.Fatalf("NewLLMAnalyzer() error = %v", err)
 	}
 
-	_, err := analyzer.ExtractKeywords(context.Background(), testJobDescription)
+	analyzer.provider = provider
+
+	_, err = analyzer.ExtractKeywords(context.Background(), testJobDescription)
 	if err == nil {
 		t.Error("ExtractKeywords() expected error when provider fails")
 	}
@@ -336,8 +297,8 @@ func TestValidateJobData_InvalidURL(t *testing.T) {
 		t.Fatalf("NewLLMAnalyzer() error = %v", err)
 	}
 
-	job := &types.JobDetail{
-		Job: types.Job{
+	job := &search.JobDetail{
+		Job: search.Job{
 			ID:          "123",
 			Title:       "Software Engineer",
 			Description: "Looking for a talented engineer",

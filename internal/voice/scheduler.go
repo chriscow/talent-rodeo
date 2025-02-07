@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"time"
 
+	"talent-rodeo/internal"
 	"talent-rodeo/internal/database"
-	"talent-rodeo/internal/models"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -28,7 +28,7 @@ func NewCallScheduler(db *database.DB, logger *slog.Logger) *CallScheduler {
 }
 
 // ScheduleCall schedules a call to be made at the specified time
-func (s *CallScheduler) ScheduleCall(ctx context.Context, msg *models.Message, runAt time.Time) (int64, error) {
+func (s *CallScheduler) ScheduleCall(ctx context.Context, msg *internal.Message, runAt time.Time) (int64, error) {
 	// Validate message
 	if msg == nil {
 		return 0, fmt.Errorf("message is required")
@@ -49,11 +49,11 @@ func (s *CallScheduler) ScheduleCall(ctx context.Context, msg *models.Message, r
 	}
 
 	taskID := time.Now().UnixNano()
-	task := &models.Task{
+	task := &internal.Task{
 		ID:          taskID,
 		Type:        "phone_call",
 		Payload:     payload,
-		Status:      models.TaskStatusPending,
+		Status:      internal.TaskStatusPending,
 		MaxAttempts: 3,
 		RunAt:       runAt.UTC(), // Always store time in UTC
 		CreatedAt:   time.Now().UTC(),
@@ -138,7 +138,7 @@ func (s *CallScheduler) CancelCallTx(ctx context.Context, tx *sqlx.Tx, taskID in
 	}
 
 	// Update task status to cancelled
-	task.Status = models.TaskStatusCancelled
+	task.Status = internal.TaskStatusCancelled
 	task.UpdatedAt = time.Now().UTC()
 
 	s.logger.Debug("updating task in transaction",

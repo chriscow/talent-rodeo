@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"talent-rodeo/internal/models"
+	"talent-rodeo/internal"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -17,7 +17,7 @@ var (
 )
 
 // CreateTask creates a new task
-func (db *DB) CreateTask(ctx context.Context, task *models.Task) error {
+func (db *DB) CreateTask(ctx context.Context, task *internal.Task) error {
 	if task.Type == "" {
 		return fmt.Errorf("task type is required")
 	}
@@ -102,13 +102,13 @@ func (db *DB) CreateTask(ctx context.Context, task *models.Task) error {
 }
 
 // GetTask retrieves a task by ID
-func (db *DB) GetTask(ctx context.Context, id int64) (*models.Task, error) {
+func (db *DB) GetTask(ctx context.Context, id int64) (*internal.Task, error) {
 	db.logger.Debug("getting task",
 		"task_id", id,
 		"task_id_type", fmt.Sprintf("%T", id),
 	)
 
-	task := &models.Task{}
+	task := &internal.Task{}
 	query := `SELECT * FROM tasks WHERE id = $1`
 
 	db.logger.Debug("executing select query",
@@ -135,7 +135,7 @@ func (db *DB) GetTask(ctx context.Context, id int64) (*models.Task, error) {
 }
 
 // UpdateTask updates an existing task
-func (db *DB) UpdateTask(ctx context.Context, task *models.Task) error {
+func (db *DB) UpdateTask(ctx context.Context, task *internal.Task) error {
 	task.UpdatedAt = time.Now()
 	query := `
 		UPDATE tasks SET
@@ -195,8 +195,8 @@ func (db *DB) DeleteTask(ctx context.Context, id int64) error {
 }
 
 // GetPendingTasks retrieves all pending tasks that are due to run
-func (db *DB) GetPendingTasks(ctx context.Context) ([]*models.Task, error) {
-	var tasks []*models.Task
+func (db *DB) GetPendingTasks(ctx context.Context) ([]*internal.Task, error) {
+	var tasks []*internal.Task
 	query := `
 		SELECT * FROM tasks
 		WHERE status IN ('pending', 'retrying')
@@ -210,12 +210,12 @@ func (db *DB) GetPendingTasks(ctx context.Context) ([]*models.Task, error) {
 	return tasks, nil
 }
 
-func generateTaskID(task *models.Task) int64 {
+func generateTaskID(task *internal.Task) int64 {
 	return time.Now().UnixNano()
 }
 
 // CreateTaskTx creates a new task within a transaction
-func (db *DB) CreateTaskTx(ctx context.Context, tx *sqlx.Tx, task *models.Task) error {
+func (db *DB) CreateTaskTx(ctx context.Context, tx *sqlx.Tx, task *internal.Task) error {
 	taskMutex.Lock()
 	defer taskMutex.Unlock()
 
@@ -254,7 +254,7 @@ func (db *DB) CreateTaskTx(ctx context.Context, tx *sqlx.Tx, task *models.Task) 
 }
 
 // UpdateTaskTx updates an existing task within an existing transaction
-func (db *DB) UpdateTaskTx(ctx context.Context, tx *sqlx.Tx, task *models.Task) error {
+func (db *DB) UpdateTaskTx(ctx context.Context, tx *sqlx.Tx, task *internal.Task) error {
 	taskMutex.Lock()
 	defer taskMutex.Unlock()
 
@@ -295,11 +295,11 @@ func (db *DB) UpdateTaskTx(ctx context.Context, tx *sqlx.Tx, task *models.Task) 
 }
 
 // GetTaskTx gets a task by ID within a transaction
-func (db *DB) GetTaskTx(ctx context.Context, tx *sqlx.Tx, id int64) (*models.Task, error) {
+func (db *DB) GetTaskTx(ctx context.Context, tx *sqlx.Tx, id int64) (*internal.Task, error) {
 	taskMutex.Lock()
 	defer taskMutex.Unlock()
 
-	var task models.Task
+	var task internal.Task
 	err := tx.GetContext(ctx, &task, `
 		SELECT *
 		FROM tasks

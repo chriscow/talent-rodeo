@@ -1,7 +1,7 @@
 package scrapingdog
 
-// JobListing represents a job listing from the ScrapingDog API
-type JobListing struct {
+// jobListing represents a job listing from the ScrapingDog API
+type jobListing struct {
 	Position       string `json:"job_position"`
 	Link           string `json:"job_link"`
 	ID             string `json:"job_id"`
@@ -12,11 +12,11 @@ type JobListing struct {
 	CompanyLogo    string `json:"company_logo_url"`
 }
 
-// JobListings is a slice of JobListing
-type JobListings []JobListing
+// jobListings is a slice of JobListing
+type jobListings []jobListing
 
-// JobDetail represents detailed job information from the ScrapingDog API
-type JobDetail struct {
+// jobDetail represents detailed job information from the ScrapingDog API
+type jobDetail struct {
 	Position          string       `json:"job_position"`
 	Status            string       `json:"jobs_status"`
 	Location          string       `json:"job_location"`
@@ -29,24 +29,24 @@ type JobDetail struct {
 	EmploymentType    string       `json:"Employment_type"`
 	JobFunction       string       `json:"Job_function"`
 	Industries        string       `json:"Industries"`
-	Recruiters        []Recruiter  `json:"recruiter_details"`
-	SimilarJobs       []RelatedJob `json:"similar_jobs"`
-	PeopleAlsoViewed  []RelatedJob `json:"people_also_viewed"`
+	Recruiters        []recruiter  `json:"recruiter_details"`
+	SimilarJobs       []relatedJob `json:"similar_jobs"`
+	PeopleAlsoViewed  []relatedJob `json:"people_also_viewed"`
 }
 
-// JobDetails is a slice of JobDetail
-type JobDetails []JobDetail
+// jobDetails is a slice of JobDetail
+type jobDetails []jobDetail
 
-// Recruiter represents a recruiter from the ScrapingDog API
-type Recruiter struct {
+// recruiter represents a recruiter from the ScrapingDog API
+type recruiter struct {
 	Photo      string `json:"recruiter_photo"`
 	Name       string `json:"recruiter_name"`
 	Title      string `json:"recruiter_title"`
 	ProfileURL string `json:"recruiter_profile_url"`
 }
 
-// RelatedJob represents a related or similar job from the ScrapingDog API
-type RelatedJob struct {
+// relatedJob represents a related or similar job from the ScrapingDog API
+type relatedJob struct {
 	Position    string `json:"job_position"`
 	Company     string `json:"job_company"`
 	Location    string `json:"job_location"`

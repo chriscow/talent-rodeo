@@ -30,7 +30,7 @@ Important Database Constraints and Timing Requirements for Tasks:
    - Wait for the duration to pass before processing (time.Sleep)
    - Example pattern:
      now := time.Now()
-     task := &models.Task{
+     task := &internal.Task{
          CreatedAt: now,
          RunAt: now.Add(10 * time.Millisecond),
      }
@@ -54,19 +54,19 @@ import (
 	"testing"
 	"time"
 
+	"talent-rodeo/internal"
 	"talent-rodeo/internal/database"
-	"talent-rodeo/internal/models"
 	"talent-rodeo/internal/tasks/handlers"
 )
 
 // MockTaskHandler is a test handler that records task executions
 type MockTaskHandler struct {
-	processedTasks []*models.Task
+	processedTasks []*internal.Task
 	shouldError    bool
 	taskType       string
 }
 
-func (h *MockTaskHandler) ProcessTask(ctx context.Context, task *models.Task) error {
+func (h *MockTaskHandler) ProcessTask(ctx context.Context, task *internal.Task) error {
 	if h.shouldError {
 		return errors.New("mock error")
 	}
@@ -115,11 +115,11 @@ func TestProcessor_EnqueueTask(t *testing.T) {
 		processor, _ := setupTestProcessor(t)
 		ctx := context.Background()
 
-		task := &models.Task{
+		task := &internal.Task{
 			ID:          time.Now().UnixNano(),
 			Type:        "unknown_type",
 			Payload:     []byte("{}"),
-			Status:      models.TaskStatusPending,
+			Status:      internal.TaskStatusPending,
 			MaxAttempts: 3,
 			RunAt:       time.Now(),
 			CreatedAt:   time.Now(),
@@ -150,11 +150,11 @@ func TestProcessor_EnqueueTask(t *testing.T) {
 		}
 
 		runAt := time.Now().Add(time.Hour)
-		task := &models.Task{
+		task := &internal.Task{
 			ID:          time.Now().UnixNano(),
 			Type:        "test_task",
 			Payload:     payloadBytes,
-			Status:      models.TaskStatusPending,
+			Status:      internal.TaskStatusPending,
 			MaxAttempts: 3,
 			RunAt:       runAt,
 			CreatedAt:   time.Now(),
@@ -172,8 +172,8 @@ func TestProcessor_EnqueueTask(t *testing.T) {
 		if got := task.Type; got != "test_task" {
 			t.Errorf("task type = %q; want %q", got, "test_task")
 		}
-		if got := task.Status; got != models.TaskStatusPending {
-			t.Errorf("task status = %v; want %v", got, models.TaskStatusPending)
+		if got := task.Status; got != internal.TaskStatusPending {
+			t.Errorf("task status = %v; want %v", got, internal.TaskStatusPending)
 		}
 		if got := string(task.Payload); got != string(payloadBytes) {
 			t.Errorf("task payload = %s; want %s", got, payloadBytes)
@@ -194,11 +194,11 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 	processor.RegisterHandler(handler)
 
 	// Create a test task
-	task := &models.Task{
+	task := &internal.Task{
 		ID:          time.Now().UnixNano(),
 		Type:        "test_task",
 		Payload:     []byte("{}"),
-		Status:      models.TaskStatusPending,
+		Status:      internal.TaskStatusPending,
 		MaxAttempts: 3,
 		RunAt:       time.Now().Add(10 * time.Millisecond), // Set to very near future
 		CreatedAt:   time.Now(),
@@ -226,8 +226,8 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 			t.Fatalf("failed to get processed task: %v", err)
 		}
 
-		if got := processedTask.Status; got != models.TaskStatusComplete {
-			t.Errorf("task status = %v; want %v", got, models.TaskStatusComplete)
+		if got := processedTask.Status; got != internal.TaskStatusComplete {
+			t.Errorf("task status = %v; want %v", got, internal.TaskStatusComplete)
 		}
 		if got := processedTask.Attempts; got != 1 {
 			t.Errorf("task attempts = %d; want %d", got, 1)
@@ -247,11 +247,11 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 
 	t.Run("handle task processing error", func(t *testing.T) {
 		// Create a new task that will fail
-		failingTask := &models.Task{
+		failingTask := &internal.Task{
 			ID:          time.Now().UnixNano(),
 			Type:        "test_task",
 			Payload:     []byte("{}"),
-			Status:      models.TaskStatusPending,
+			Status:      internal.TaskStatusPending,
 			MaxAttempts: 2,
 			RunAt:       time.Now().Add(10 * time.Millisecond), // Set to very near future
 			CreatedAt:   time.Now(),
@@ -281,8 +281,8 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 			t.Fatalf("failed to get processed task: %v", err)
 		}
 
-		if got := processedTask.Status; got != models.TaskStatusRetrying {
-			t.Errorf("task status = %v; want %v", got, models.TaskStatusRetrying)
+		if got := processedTask.Status; got != internal.TaskStatusRetrying {
+			t.Errorf("task status = %v; want %v", got, internal.TaskStatusRetrying)
 		}
 		if got := processedTask.Attempts; got != 1 {
 			t.Errorf("task attempts = %d; want %d", got, 1)
@@ -308,8 +308,8 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 			t.Fatalf("failed to get processed task: %v", err)
 		}
 
-		if got := processedTask.Status; got != models.TaskStatusFailed {
-			t.Errorf("task status = %v; want %v", got, models.TaskStatusFailed)
+		if got := processedTask.Status; got != internal.TaskStatusFailed {
+			t.Errorf("task status = %v; want %v", got, internal.TaskStatusFailed)
 		}
 		if got := processedTask.Attempts; got != 2 {
 			t.Errorf("task attempts = %d; want %d", got, 2)
@@ -383,8 +383,8 @@ func TestProcessor_CreateAndEnqueueTask(t *testing.T) {
 		if got := task.Type; got != "test_task" {
 			t.Errorf("task type = %q; want %q", got, "test_task")
 		}
-		if got := task.Status; got != models.TaskStatusPending {
-			t.Errorf("task status = %v; want %v", got, models.TaskStatusPending)
+		if got := task.Status; got != internal.TaskStatusPending {
+			t.Errorf("task status = %v; want %v", got, internal.TaskStatusPending)
 		}
 		if got := string(task.Payload); got != string(payloadBytes) {
 			t.Errorf("task payload = %s; want %s", got, payloadBytes)
@@ -408,11 +408,11 @@ func TestTaskProcessorInterface(t *testing.T) {
 
 		// Test the interface method
 		ctx := context.Background()
-		task := &models.Task{
+		task := &internal.Task{
 			ID:          time.Now().UnixNano(),
 			Type:        "test_task",
 			Payload:     []byte("{}"),
-			Status:      models.TaskStatusPending,
+			Status:      internal.TaskStatusPending,
 			MaxAttempts: 3,
 			RunAt:       time.Now().Add(time.Hour), // Set to future time
 			CreatedAt:   time.Now(),
@@ -439,14 +439,14 @@ func TestProcessor_ConcurrentTaskProcessing(t *testing.T) {
 
 	// Create multiple tasks
 	numTasks := 5
-	tasks := make([]*models.Task, numTasks)
+	tasks := make([]*internal.Task, numTasks)
 	for i := 0; i < numTasks; i++ {
 		now := time.Now()
-		tasks[i] = &models.Task{
+		tasks[i] = &internal.Task{
 			ID:          time.Now().UnixNano() + int64(i),
 			Type:        "test_task",
 			Payload:     []byte(fmt.Sprintf(`{"index": %d}`, i)),
-			Status:      models.TaskStatusPending,
+			Status:      internal.TaskStatusPending,
 			MaxAttempts: 3,
 			RunAt:       now.Add(10 * time.Millisecond), // Set run_at slightly in the future
 			CreatedAt:   now,
@@ -475,8 +475,8 @@ func TestProcessor_ConcurrentTaskProcessing(t *testing.T) {
 			t.Fatalf("failed to get processed task %d: %v", i, err)
 		}
 
-		if got := processedTask.Status; got != models.TaskStatusComplete {
-			t.Errorf("task %d status = %v; want %v", i, got, models.TaskStatusComplete)
+		if got := processedTask.Status; got != internal.TaskStatusComplete {
+			t.Errorf("task %d status = %v; want %v", i, got, internal.TaskStatusComplete)
 		}
 		if got := processedTask.Attempts; got != 1 {
 			t.Errorf("task %d attempts = %d; want %d", i, got, 1)
@@ -506,11 +506,11 @@ func TestProcessor_TaskRetryBackoff(t *testing.T) {
 
 	// Create a task
 	now := time.Now()
-	task := &models.Task{
+	task := &internal.Task{
 		ID:          time.Now().UnixNano(),
 		Type:        "test_task",
 		Payload:     []byte("{}"),
-		Status:      models.TaskStatusPending,
+		Status:      internal.TaskStatusPending,
 		MaxAttempts: 3,
 		RunAt:       now.Add(10 * time.Millisecond), // Set run_at slightly in the future
 		CreatedAt:   now,
@@ -536,8 +536,8 @@ func TestProcessor_TaskRetryBackoff(t *testing.T) {
 		t.Fatalf("failed to get processed task: %v", err)
 	}
 
-	if got := processedTask.Status; got != models.TaskStatusRetrying {
-		t.Errorf("task status = %v; want %v", got, models.TaskStatusRetrying)
+	if got := processedTask.Status; got != internal.TaskStatusRetrying {
+		t.Errorf("task status = %v; want %v", got, internal.TaskStatusRetrying)
 	}
 
 	// Verify retry time is set correctly
@@ -561,8 +561,8 @@ func TestProcessor_TaskRetryBackoff(t *testing.T) {
 		t.Fatalf("failed to get processed task after retry: %v", err)
 	}
 
-	if got := processedTask.Status; got != models.TaskStatusRetrying {
-		t.Errorf("task status after retry = %v; want %v", got, models.TaskStatusRetrying)
+	if got := processedTask.Status; got != internal.TaskStatusRetrying {
+		t.Errorf("task status after retry = %v; want %v", got, internal.TaskStatusRetrying)
 	}
 
 	// Verify increased retry time

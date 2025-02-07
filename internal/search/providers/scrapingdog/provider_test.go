@@ -5,9 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"talent-rodeo/internal/search"
 	"testing"
-
-	"talent-rodeo/internal/jobmatch/types"
 )
 
 func TestScrapingDogProvider_SearchJobs(t *testing.T) {
@@ -28,7 +27,7 @@ func TestScrapingDogProvider_SearchJobs(t *testing.T) {
 		}
 
 		// Return mock response
-		jobs := []JobListing{
+		jobs := []jobListing{
 			{
 				Position:    "Senior Go Developer",
 				Link:        "https://linkedin.com/jobs/1",
@@ -51,7 +50,7 @@ func TestScrapingDogProvider_SearchJobs(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	criteria := types.SearchCriteria{
+	criteria := search.Criteria{
 		Keywords: []string{"golang"},
 		Location: "Remote",
 	}
@@ -109,7 +108,7 @@ func TestScrapingDogProvider_GetJobDetails(t *testing.T) {
 		}
 
 		// Return mock response
-		details := []JobDetail{
+		details := []jobDetail{
 			{
 				Position:       "Senior Go Developer",
 				Status:         "active",
@@ -122,7 +121,7 @@ func TestScrapingDogProvider_GetJobDetails(t *testing.T) {
 				EmploymentType: "Full-time",
 				JobFunction:    "Software Development",
 				Industries:     "Technology",
-				Recruiters: []Recruiter{
+				Recruiters: []recruiter{
 					{
 						Name:       "John Doe",
 						Title:      "Technical Recruiter",

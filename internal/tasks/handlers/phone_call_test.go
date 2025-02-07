@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"talent-rodeo/internal"
 	"talent-rodeo/internal/database"
-	"talent-rodeo/internal/models"
 	"talent-rodeo/internal/voice"
 
 	"github.com/gorilla/websocket"
@@ -71,7 +71,7 @@ type phoneCallPayload struct {
 	Message     string `json:"message"`
 }
 
-func (h *MockPhoneCallHandler) ProcessTask(ctx context.Context, task *models.Task) error {
+func (h *MockPhoneCallHandler) ProcessTask(ctx context.Context, task *internal.Task) error {
 	var payload PhoneCallPayload
 	if err := json.Unmarshal(task.Payload, &payload); err != nil {
 		return err
@@ -110,7 +110,7 @@ func TestPhoneCallHandler_ProcessTask(t *testing.T) {
 			t.Fatalf("failed to marshal payload: %v", err)
 		}
 
-		task := &models.Task{
+		task := &internal.Task{
 			ID:      time.Now().UnixNano(),
 			Type:    "phone_call",
 			Payload: payloadBytes,
@@ -133,7 +133,7 @@ func TestPhoneCallHandler_ProcessTask(t *testing.T) {
 		handler := NewMockPhoneCallHandler(t)
 		ctx := context.Background()
 
-		task := &models.Task{
+		task := &internal.Task{
 			ID:      time.Now().UnixNano(),
 			Type:    "phone_call",
 			Payload: []byte("{invalid json}"),
@@ -159,7 +159,7 @@ func TestPhoneCallHandler_ProcessTask(t *testing.T) {
 			t.Fatalf("failed to marshal payload: %v", err)
 		}
 
-		task := &models.Task{
+		task := &internal.Task{
 			ID:      time.Now().UnixNano(),
 			Type:    "phone_call",
 			Payload: payloadBytes,
@@ -178,10 +178,10 @@ func TestPhoneCallHandler_ProcessTask(t *testing.T) {
 
 // MockTaskProcessor implements TaskProcessor for testing
 type MockTaskProcessor struct {
-	enqueuedTasks []*models.Task
+	enqueuedTasks []*internal.Task
 }
 
-func (m *MockTaskProcessor) EnqueueTask(ctx context.Context, task *models.Task) error {
+func (m *MockTaskProcessor) EnqueueTask(ctx context.Context, task *internal.Task) error {
 	m.enqueuedTasks = append(m.enqueuedTasks, task)
 	return nil
 }
@@ -214,7 +214,7 @@ func TestPhoneCallHandler_ScheduleCall(t *testing.T) {
 		if task.Type != "phone_call" {
 			t.Errorf("task type = %q, want phone_call", task.Type)
 		}
-		if task.Status != models.TaskStatusPending {
+		if task.Status != internal.TaskStatusPending {
 			t.Errorf("task status = %q, want pending", task.Status)
 		}
 		if task.MaxAttempts != 3 {
@@ -392,7 +392,7 @@ func TestPhoneCallHandler_IntegrationTest(t *testing.T) {
 			t.Fatalf("Failed to marshal payload: %v", err)
 		}
 
-		task := &models.Task{
+		task := &internal.Task{
 			ID:          time.Now().UnixNano(),
 			Type:        "phone_call",
 			Payload:     payloadBytes,
@@ -509,7 +509,7 @@ func TestPhoneCallHandler_WebSocketIntegration(t *testing.T) {
 			t.Fatalf("Failed to marshal payload: %v", err)
 		}
 
-		task := &models.Task{
+		task := &internal.Task{
 			ID:          time.Now().UnixNano(),
 			Type:        "phone_call",
 			Payload:     payloadBytes,

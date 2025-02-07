@@ -1,4 +1,4 @@
-package processor
+package match
 
 import (
 	"context"
@@ -6,9 +6,8 @@ import (
 	"log"
 	"os"
 	"sync"
+	"talent-rodeo/internal/search"
 	"time"
-
-	"talent-rodeo/internal/jobmatch/types"
 
 	"github.com/google/uuid"
 	"github.com/mitchellh/mapstructure"
@@ -20,7 +19,7 @@ import (
 type processor struct {
 	mu        sync.RWMutex
 	jobs      map[uuid.UUID]*ProcessStatus
-	providers map[string]types.JobProvider
+	providers map[string]search.JobProvider
 	// Phase 5 additions:
 	// - messageQueue *watermill.Router
 	// - deadLetterQueue *watermill.Topic
@@ -29,10 +28,10 @@ type processor struct {
 
 // NewProcessor creates a new job processor.
 // In Phase 5, this will initialize NATS/Watermill and other dependencies.
-func NewProcessor(providers ...types.JobProvider) JobProcessor {
+func NewProcessor(providers ...search.JobProvider) JobProcessor {
 	p := &processor{
 		jobs:      make(map[uuid.UUID]*ProcessStatus),
-		providers: make(map[string]types.JobProvider),
+		providers: make(map[string]search.JobProvider),
 	}
 
 	// Register providers
@@ -208,8 +207,8 @@ func (p *processor) handleSearch(ctx context.Context, req ProcessRequest) (inter
 }
 
 // extractSearchCriteria converts request parameters to SearchCriteria
-func extractSearchCriteria(params map[string]interface{}) (types.SearchCriteria, error) {
-	criteria := types.SearchCriteria{
+func extractSearchCriteria(params map[string]interface{}) (search.Criteria, error) {
+	criteria := search.Criteria{
 		PageSize:   10, // Default page size
 		PageNumber: 1,  // Default page number
 	}
@@ -295,7 +294,7 @@ func (p *processor) handleAnalyze(ctx context.Context, req ProcessRequest) (inte
 	logger.Printf("Parsed %d requirements", len(requirements))
 
 	// Create a job struct for validation with safe type assertions
-	job := &types.JobDetail{
+	job := &search.JobDetail{
 		FullDescription: jobDesc,
 	}
 
@@ -344,12 +343,12 @@ func (p *processor) handleAnalyze(ctx context.Context, req ProcessRequest) (inte
 
 func (p *processor) handleMatch(ctx context.Context, req ProcessRequest) (*ProcessResponse, error) {
 	// Extract job and candidate data from request params
-	var job types.Job
+	var job search.Job
 	if err := mapstructure.Decode(req.Params["job"], &job); err != nil {
 		return nil, fmt.Errorf("failed to decode job data: %w", err)
 	}
 
-	var candidate types.Candidate
+	var candidate Candidate
 	if err := mapstructure.Decode(req.Params["candidate"], &candidate); err != nil {
 		return nil, fmt.Errorf("failed to decode candidate data: %w", err)
 	}
