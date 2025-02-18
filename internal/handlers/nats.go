@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -53,8 +54,6 @@ func StartNATSServer(ctx context.Context, cfg NATSConfig) (*server.Server, error
 
 // CreateStream creates a NATS stream (publisher)
 func CreateStream(ctx context.Context, natsURL string, logger *slog.Logger) (jetstream.Stream, error) {
-	const streamName = "rodeo"
-
 	if natsURL == "" {
 		natsURL = nats.DefaultURL
 	}
@@ -72,15 +71,18 @@ func CreateStream(ctx context.Context, natsURL string, logger *slog.Logger) (jet
 	}
 
 	config := jetstream.StreamConfig{
-		Name:      streamName,
+		Name:      rodeoStream,
 		Retention: jetstream.InterestPolicy,
 		Subjects:  []string{"rodeo.>"},
 	}
 
-	stream, err := js.CreateStream(ctx, config)
-	if err != nil {
-		logger.Error("failed to create stream", "error", err)
-		return nil, fmt.Errorf("failed to create stream: %w", err)
+	stream, err := js.Stream(ctx, rodeoStream)
+	if errors.Is(err, jetstream.ErrStreamNotFound) {
+		stream, err = js.CreateStream(ctx, config)
+		if err != nil {
+			logger.Error("failed to create stream", "error", err)
+			return nil, fmt.Errorf("failed to create stream: %w", err)
+		}
 	}
 
 	return stream, nil

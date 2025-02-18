@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
-	"time"
 
 	"github.com/chriscow/minds"
 	"github.com/nats-io/nats.go/jetstream"
@@ -41,63 +39,23 @@ type Requirement struct {
 }
 
 type RequirementsHandler struct {
-	ctx      context.Context
-	js       jetstream.JetStream
-	llm      minds.ContentGenerator
-	logger   *slog.Logger
-	consumer jetstream.Consumer
+	llm     minds.ContentGenerator
+	logger  *slog.Logger
+	generic *GenericHandler
 }
 
 func NewRequirementsHandler(ctx context.Context, js jetstream.JetStream, llm minds.ContentGenerator, logger *slog.Logger) (*RequirementsHandler, error) {
-	const requirementsConsumerName = "RODEO-JOBDESC-REQUIREMENTS-QUEUE"
-
-	cons, err := getConsumer(ctx, js, rodeoStream, requirementsConsumerName, TopicJobDescriptionInput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get consumer: %w", err)
+	handler := &RequirementsHandler{
+		llm:     llm,
+		logger:  logger.With(slog.String("component", "requirements_handler")),
+		generic: NewGenericHandler(js, logger),
 	}
 
-	return &RequirementsHandler{
-		ctx:      ctx,
-		js:       js,
-		llm:      llm,
-		logger:   logger,
-		consumer: cons,
-	}, nil
-}
-
-func (h *RequirementsHandler) Start(ctx context.Context) error {
-	h.logger.Info("Starting requirements handler")
-	for {
-		select {
-		case <-ctx.Done():
-			h.logger.Info("Stopping requirements handler", "reason", ctx.Err())
-			return ctx.Err()
-		default:
-			if err := h.processNextMessage(ctx); err != nil {
-				h.logger.Error("Error processing message", "error", err)
-				continue
-			}
-		}
-	}
-}
-
-func (h *RequirementsHandler) processNextMessage(ctx context.Context) error {
-	msgs, err := h.consumer.Fetch(1, jetstream.FetchMaxWait(250*time.Millisecond))
-	if err != nil {
-		if strings.Contains(err.Error(), "timeout") {
-			return nil
-		}
-		return fmt.Errorf("failed to fetch message: %w", err)
+	if err := handler.generic.Register(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-JOBDESC-REQUIREMENTS-QUEUE", handler.handleMessage); err != nil {
+		return nil, fmt.Errorf("failed to register requirements handler: %w", err)
 	}
 
-	for msg := range msgs.Messages() {
-		if err := h.handleMessage(ctx, msg); err != nil {
-			h.logger.Error("Failed to handle message", "error", err)
-			msg.Term()
-			return err
-		}
-	}
-	return nil
+	return handler, nil
 }
 
 func (h *RequirementsHandler) handleMessage(ctx context.Context, msg jetstream.Msg) error {
@@ -108,7 +66,6 @@ func (h *RequirementsHandler) handleMessage(ctx context.Context, msg jetstream.M
 	var input JobDescriptionInput
 	if err := json.Unmarshal(msg.Data(), &input); err != nil {
 		h.logger.Error("Failed to unmarshal input", "error", err)
-		msg.Ack()
 		return nil
 	}
 
@@ -127,17 +84,15 @@ func (h *RequirementsHandler) handleMessage(ctx context.Context, msg jetstream.M
 		"nice_to_have_count", len(reqs.NiceToHave),
 		"min_years", reqs.MinYearsExperience)
 
-	_, err = h.js.Publish(ctx, TopicRequirementsExtracted, reqJSON)
+	_, err = h.generic.js.Publish(ctx, TopicRequirementsExtracted, reqJSON)
 	if err != nil {
 		return fmt.Errorf("failed to publish requirements: %w", err)
 	}
 
-	msg.Ack()
 	return nil
 }
 
 func (h *RequirementsHandler) extract(ctx context.Context, description string) (*Requirements, error) {
-
 	msgs := minds.Messages{
 		{
 			Role:    minds.RoleSystem,

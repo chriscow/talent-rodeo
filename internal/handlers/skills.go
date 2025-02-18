@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
-	"time"
 
 	"github.com/chriscow/minds"
 	"github.com/nats-io/nats.go/jetstream"
@@ -34,73 +32,30 @@ type Skill struct {
 }
 
 type SkillsHandler struct {
-	ctx      context.Context
-	js       jetstream.JetStream
-	llm      minds.ContentGenerator
-	logger   *slog.Logger
-	consumer jetstream.Consumer
+	llm     minds.ContentGenerator
+	logger  *slog.Logger
+	generic *GenericHandler
 }
 
 func NewSkillsHandler(ctx context.Context, js jetstream.JetStream, llm minds.ContentGenerator, logger *slog.Logger) (*SkillsHandler, error) {
-	const skillsConsumerName = "RODEO-TRANSCRIPT-SKILLS-QUEUE"
-
-	cons, err := getConsumer(ctx, js, rodeoStream, skillsConsumerName, TopicJobDescriptionInput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get consumer: %w", err)
+	handler := &SkillsHandler{
+		llm:     llm,
+		logger:  logger.With(slog.String("component", "skills_handler")),
+		generic: NewGenericHandler(js, logger),
 	}
 
-	return &SkillsHandler{
-		ctx:      ctx,
-		js:       js,
-		llm:      llm,
-		logger:   logger,
-		consumer: cons,
-	}, nil
-}
-
-// Start begins processing messages from the NATS stream.
-// It will continue processing until the context is cancelled.
-func (h *SkillsHandler) Start(ctx context.Context) error {
-	h.logger.Info("Starting compensation handler")
-	for {
-		select {
-		case <-ctx.Done():
-			h.logger.Info("Stopping compensation handler", "reason", ctx.Err())
-			return ctx.Err()
-		default:
-			if err := h.processNextMessage(ctx); err != nil {
-				h.logger.Error("Error processing message", "error", err)
-				continue
-			}
-		}
-	}
-}
-
-func (h *SkillsHandler) Close() error {
-	return nil
-}
-
-func (h *SkillsHandler) processNextMessage(ctx context.Context) error {
-	msgs, err := h.consumer.Fetch(1, jetstream.FetchMaxWait(250*time.Millisecond))
-	if err != nil {
-		if strings.Contains(err.Error(), "timeout") {
-			return nil
-		}
-		return fmt.Errorf("failed to fetch message: %w", err)
+	if err := handler.generic.Register(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-TRANSCRIPT-SKILLS-QUEUE", handler.handleMessage); err != nil {
+		return nil, fmt.Errorf("failed to register skills handler: %w", err)
 	}
 
-	for msg := range msgs.Messages() {
-		if err := h.handleMessage(ctx, msg); err != nil {
-			h.logger.Error("Failed to handle message", "error", err)
-			msg.Term()
-			return err
-		}
-	}
-	return nil
+	return handler, nil
 }
 
-// ExtractSkills analyzes the transcript to identify skills and expertise levels.
+// handleMessage processes a single transcript to extract skills
 func (h *SkillsHandler) handleMessage(ctx context.Context, msg jetstream.Msg) error {
+	h.logger.Debug("Processing skills message",
+		"subject", msg.Subject(),
+		"data_size", len(msg.Data()))
 
 	transcript := string(msg.Data())
 
@@ -114,12 +69,14 @@ func (h *SkillsHandler) handleMessage(ctx context.Context, msg jetstream.Msg) er
 		return fmt.Errorf("failed to marshal skills: %w", err)
 	}
 
-	_, err = h.js.Publish(ctx, TopicSkillsExtracted, skillsJSON)
+	h.logger.Debug("Publishing skills",
+		"skills_count", len(skills.Skills))
+
+	_, err = h.generic.js.Publish(ctx, TopicSkillsExtracted, skillsJSON)
 	if err != nil {
 		return fmt.Errorf("failed to publish skills: %w", err)
 	}
 
-	msg.Ack()
 	return nil
 }
 
@@ -152,6 +109,9 @@ func (h *SkillsHandler) extract(ctx context.Context, transcript string) (*Skills
 	if err := json.Unmarshal([]byte(result.String()), &output); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal skills: %w", err)
 	}
+
+	h.logger.Debug("Extracted skills",
+		"skills_count", len(output.Skills))
 
 	return &output, nil
 }

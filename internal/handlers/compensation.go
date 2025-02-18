@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
-	"time"
 
 	"github.com/chriscow/minds"
 	"github.com/nats-io/nats.go/jetstream"
@@ -48,64 +46,24 @@ type EquityRange struct {
 }
 
 type CompensationHandler struct {
-	ctx      context.Context
-	js       jetstream.JetStream
-	llm      minds.ContentGenerator
-	logger   *slog.Logger
-	consumer jetstream.Consumer
+	llm     minds.ContentGenerator
+	logger  *slog.Logger
+	generic *GenericHandler
 }
 
 func NewCompensationHandler(ctx context.Context, js jetstream.JetStream, llm minds.ContentGenerator, logger *slog.Logger) (*CompensationHandler, error) {
-
-	const compensationConsumerName = "RODEO-JOBDESC-COMPENSATION-QUEUE"
-
-	cons, err := getConsumer(ctx, js, rodeoStream, compensationConsumerName, TopicJobDescriptionInput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get consumer: %w", err)
+	handler := &CompensationHandler{
+		llm:     llm,
+		logger:  logger.With(slog.String("component", "compensation_handler")),
+		generic: NewGenericHandler(js, logger),
 	}
 
-	return &CompensationHandler{
-		ctx:      ctx,
-		llm:      llm,
-		logger:   logger,
-		js:       js,
-		consumer: cons,
-	}, nil
-}
-
-func (h *CompensationHandler) Start(ctx context.Context) error {
-	h.logger.Info("Starting compensation handler")
-	for {
-		select {
-		case <-ctx.Done():
-			h.logger.Info("Stopping compensation handler", "reason", ctx.Err())
-			return ctx.Err()
-		default:
-			if err := h.processNextMessage(ctx); err != nil {
-				h.logger.Error("Error processing message", "error", err)
-				continue
-			}
-		}
-	}
-}
-
-func (h *CompensationHandler) processNextMessage(ctx context.Context) error {
-	msgs, err := h.consumer.Fetch(1, jetstream.FetchMaxWait(250*time.Millisecond))
-	if err != nil {
-		if strings.Contains(err.Error(), "timeout") {
-			return nil
-		}
-		return fmt.Errorf("failed to fetch message: %w", err)
+	// Register the message handler
+	if err := handler.generic.Register(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-JOBDESC-COMPENSATION-QUEUE", handler.handleMessage); err != nil {
+		return nil, fmt.Errorf("failed to register compensation handler: %w", err)
 	}
 
-	for msg := range msgs.Messages() {
-		if err := h.handleMessage(ctx, msg); err != nil {
-			h.logger.Error("Failed to handle message", "error", err)
-			msg.Term()
-			return err
-		}
-	}
-	return nil
+	return handler, nil
 }
 
 func (h *CompensationHandler) handleMessage(ctx context.Context, msg jetstream.Msg) error {
@@ -116,7 +74,6 @@ func (h *CompensationHandler) handleMessage(ctx context.Context, msg jetstream.M
 	var input JobDescriptionInput
 	if err := json.Unmarshal(msg.Data(), &input); err != nil {
 		h.logger.Error("Failed to unmarshal input", "error", err)
-		msg.Ack()
 		return nil
 	}
 
@@ -135,17 +92,15 @@ func (h *CompensationHandler) handleMessage(ctx context.Context, msg jetstream.M
 		"benefits_count", len(comp.Benefits),
 		"has_equity", comp.Equity != nil)
 
-	_, err = h.js.Publish(ctx, TopicCompensationExtracted, compJSON)
+	_, err = h.generic.js.Publish(ctx, TopicCompensationExtracted, compJSON)
 	if err != nil {
 		return fmt.Errorf("failed to publish compensation: %w", err)
 	}
 
-	msg.Ack()
 	return nil
 }
 
 func (h *CompensationHandler) extract(ctx context.Context, description string) (*Compensation, error) {
-
 	msgs := minds.Messages{
 		{
 			Role:    minds.RoleSystem,

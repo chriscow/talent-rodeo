@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
 	"talent-rodeo/internal/handlers/search"
-	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -16,71 +14,28 @@ import (
 const (
 	TopicSearchInput  = "rodeo.search.input"
 	TopicSearchResult = "rodeo.search.result"
-	StreamNameSearch  = "rodeo.search"
 )
 
 // SearchHandler handles job search requests
 type SearchHandler struct {
-	ctx      context.Context
-	js       jetstream.JetStream
 	logger   *slog.Logger
 	provider search.JobProvider
-	consumer jetstream.Consumer
+	generic  *GenericHandler
 }
 
 // NewSearchHandler creates a new SearchHandler instance
 func NewSearchHandler(ctx context.Context, js jetstream.JetStream, provider search.JobProvider, logger *slog.Logger) (*SearchHandler, error) {
-	const searchConsumerName = "RODEO-SEARCH-QUEUE"
-
-	cons, err := getConsumer(ctx, js, rodeoStream, searchConsumerName, TopicSearchInput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get consumer: %w", err)
-	}
-
-	return &SearchHandler{
-		ctx:      ctx,
-		js:       js,
+	handler := &SearchHandler{
 		logger:   logger.With(slog.String("component", "search_handler")),
 		provider: provider,
-		consumer: cons,
-	}, nil
-}
-
-// Start begins processing messages for job search requests
-func (h *SearchHandler) Start(ctx context.Context) error {
-	h.logger.Info("Starting search handler")
-	for {
-		select {
-		case <-ctx.Done():
-			h.logger.Info("Stopping search handler", "reason", ctx.Err())
-			return ctx.Err()
-		default:
-			if err := h.processNextMessage(ctx); err != nil {
-				h.logger.Error("Error processing message", "error", err)
-				continue
-			}
-		}
-	}
-}
-
-// processNextMessage fetches and processes the next message
-func (h *SearchHandler) processNextMessage(ctx context.Context) error {
-	msgs, err := h.consumer.Fetch(1, jetstream.FetchMaxWait(250*time.Millisecond))
-	if err != nil {
-		if strings.Contains(err.Error(), "timeout") {
-			return nil
-		}
-		return fmt.Errorf("failed to fetch message: %w", err)
+		generic:  NewGenericHandler(js, logger),
 	}
 
-	for msg := range msgs.Messages() {
-		if err := h.handleMessage(ctx, msg); err != nil {
-			h.logger.Error("Failed to handle message", "error", err)
-			msg.Term()
-			return err
-		}
+	if err := handler.generic.Register(ctx, rodeoStream, TopicSearchInput, "RODEO-SEARCH-QUEUE", handler.handleMessage); err != nil {
+		return nil, fmt.Errorf("failed to register search handler: %w", err)
 	}
-	return nil
+
+	return handler, nil
 }
 
 // handleMessage processes a single job search request message
@@ -92,7 +47,6 @@ func (h *SearchHandler) handleMessage(ctx context.Context, msg jetstream.Msg) er
 	var criteria search.Criteria
 	if err := json.Unmarshal(msg.Data(), &criteria); err != nil {
 		h.logger.Error("Failed to unmarshal criteria", "error", err)
-		msg.Ack()
 		return nil
 	}
 
@@ -109,17 +63,10 @@ func (h *SearchHandler) handleMessage(ctx context.Context, msg jetstream.Msg) er
 	h.logger.Debug("Publishing search results",
 		"criteria", criteria)
 
-	_, err = h.js.Publish(ctx, TopicSearchResult, jobsJSON)
+	_, err = h.generic.js.Publish(ctx, TopicSearchResult, jobsJSON)
 	if err != nil {
 		return fmt.Errorf("failed to publish search result: %w", err)
 	}
 
-	msg.Ack()
-	return nil
-}
-
-// Close closes the handler and releases any resources
-func (h *SearchHandler) Close() error {
-	h.logger.Info("Closing search handler")
 	return nil
 }
