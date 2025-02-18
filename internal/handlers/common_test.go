@@ -3,16 +3,25 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"log"
 	"log/slog"
 	"os"
+	"talent-rodeo/internal/database"
 	"testing"
 	"time"
 
 	"github.com/chriscow/minds"
+	"github.com/joho/godotenv"
 	"github.com/nats-io/nats-server/v2/test"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
+
+func init() {
+	if err := godotenv.Load("../../.env"); err != nil {
+		log.Fatalf("Failed to load .env file: %v", err)
+	}
+}
 
 // mockResponse implements minds.Response for testing
 type mockResponse struct {
@@ -103,6 +112,7 @@ func deleteStreams(t *testing.T, js jetstream.JetStream) {
 
 // testEnv provides a test environment with NATS
 type testEnv struct {
+	db       *database.DB
 	js       jetstream.JetStream
 	nc       *nats.Conn
 	llm      *mockLLM
@@ -159,7 +169,10 @@ func newTestEnv(t *testing.T) *testEnv {
 		responses: make(map[string]string),
 	}
 
+	db := database.SetupTestDB(t)
+
 	env := &testEnv{
+		db:       db,
 		js:       js,
 		nc:       nc,
 		llm:      llm,
