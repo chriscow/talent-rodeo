@@ -5,69 +5,85 @@ This document outlines the consistent patterns used across handlers in the `inte
 ## Handler Structure
 
 ### Core Components
-Each handler follows a consistent structure with these components:
 
-1. **Constants and Types**
-   - Topic constants defined at the top (e.g., `TopicSkillsExtracted`)
-   - System prompts when LLM is used
+1. **Generic Handler**
+   - Provides common functionality for message handling
+   - Manages NATS JetStream consumers and message processing
+   - Handles context cancellation and error recovery
+   ```go
+   type GenericHandler struct {
+       js     jetstream.JetStream
+       logger *slog.Logger
+   }
+   ```
+
+2. **Specific Handlers**
+   - Implement business logic for specific message types
+   - Use GenericHandler for message processing
+   - Define message types and constants
+   ```go
+   type SpecificHandler struct {
+       db      *database.DB        // if database access needed
+       llm     minds.ContentGenerator  // if LLM is needed
+       logger  *slog.Logger
+       generic *GenericHandler
+   }
+   ```
+
+3. **Message Types**
    - Clear type definitions with JSON tags and descriptions
-
-2. **Handler Struct**
-   ```go
-   type HandlerName struct {
-       ctx      context.Context
-       js       jetstream.JetStream
-       llm      minds.ContentGenerator  // if LLM is needed
-       logger   *slog.Logger
-       consumer jetstream.Consumer
-   }
-   ```
-
-3. **Constructor Pattern**
-   ```go
-   func NewHandlerName(ctx context.Context, js jetstream.JetStream, ...) (*HandlerName, error) {
-       consumer, err := getConsumer(ctx, js, streamName, consumerName, topicName)
-       if err != nil {
-           return nil, fmt.Errorf("failed to get consumer: %w", err)
-       }
-       return &HandlerName{...}, nil
-   }
-   ```
+   - Input/Output structs for each handler
+   - Validation and business rules
 
 ### Message Processing Flow
 
-1. **Start Method**
-   - Runs in an infinite loop until context is cancelled
-   - Handles errors gracefully without stopping the handler
-   - Logs start/stop events
+1. **Handler Registration**
+   ```go
+   func NewSpecificHandler(ctx context.Context, js jetstream.JetStream, ...) (*SpecificHandler, error) {
+       handler := &SpecificHandler{
+           generic: NewGenericHandler(js, logger),
+           // ... other dependencies
+       }
+       
+       // Register message handlers
+       err := handler.generic.Register(ctx, streamName, subject, durable, handler.handleMessage)
+       if err != nil {
+           return nil, fmt.Errorf("failed to register handler: %w", err)
+       }
+       
+       return handler, nil
+   }
+   ```
 
 2. **Message Processing**
-   - Uses `processNextMessage` for message fetching
-   - Implements `handleMessage` for business logic
-   - Proper error handling and logging at each step
+   - Implement `handleMessage` callback for business logic
+   - Process messages with proper error handling
+   - Use structured logging for debugging
+   ```go
+   func (h *SpecificHandler) handleMessage(ctx context.Context, msg jetstream.Msg) error {
+       // Unmarshal message
+       // Process business logic
+       // Return error if processing fails
+   }
+   ```
 
 3. **Error Handling**
    - Wraps errors with context using `fmt.Errorf("failed to...: %w", err)`
    - Logs errors with appropriate context
-   - Graceful error recovery to continue processing
-
-4. **Logging**
-   - Verbose debug logging for state tracking
-   - Consistent log levels (Info for lifecycle, Debug for operations, Error for issues)
-   - Structured logging with relevant fields
+   - Messages are automatically terminated on error or acknowledged on success
 
 ## Testing Patterns
 
 ### Test Structure
 
-1. **Test Setup**
-   - Uses table-driven tests
-   - Common test harness for handler setup
-   - Mock implementations for external dependencies
+1. **Handler Tests**
+   - Test specific handler business logic
+   - Mock dependencies (database, LLM, etc.)
+   - Table-driven tests for various scenarios
 
 2. **Test Cases**
    ```go
-   func TestHandlerName(t *testing.T) {
+   func TestSpecificHandler_HandleMessage(t *testing.T) {
        tests := []struct {
            name     string
            input    InputType
@@ -79,6 +95,7 @@ Each handler follows a consistent structure with these components:
        
        for _, tt := range tests {
            t.Run(tt.name, func(t *testing.T) {
+               // Setup handler with mocks
                got, err := handler.Process(tt.input)
                if (err != nil) != tt.wantErr {
                    t.Errorf("unexpected error: %v", err)
@@ -92,56 +109,40 @@ Each handler follows a consistent structure with these components:
    ```
 
 3. **Integration Tests**
-   - Separate `_integration_test.go` files
-   - Tests full message flow through NATS
-   - Verifies end-to-end functionality
-
-4. **Mock Implementations**
-   - Interface-based design for external dependencies
-   - Mock implementations in test files
-   - Consistent mock patterns across handlers
+   - Test full message flow through NATS
+   - Verify end-to-end functionality
+   - Test consumer creation and message processing
 
 ### Testing Best Practices
 
 1. **Coverage**
-   - Tests for happy path and error cases
-   - Boundary condition testing
-   - Error injection testing
+   - Test happy path and error cases
+   - Test message handling timeouts
+   - Test context cancellation
 
 2. **Assertions**
-   - Uses standard library testing
-   - Follows "got, want" pattern
+   - Use standard library testing
+   - Follow "got, want" pattern
    - Clear error messages with context
 
 3. **Test Helpers**
+   - Mock message implementations
    - Common setup/teardown functions
    - Shared test utilities
-   - Clear documentation of helper functions
-
-## Common Interfaces
-
-Handlers implement these common interfaces:
-
-```go
-type Handler interface {
-    Start(context.Context) error
-    Close() error
-}
-```
 
 ## Message Flow
 
-1. **Input**
-   - Messages received from NATS JetStream
-   - JSON unmarshaling into typed structs
-   - Validation of input data
+1. **Registration**
+   - Handler registers with GenericHandler
+   - Consumer created/updated for subject
+   - Message processing goroutine started
 
 2. **Processing**
-   - Business logic in separate methods
-   - Clear separation of concerns
-   - Error handling at each step
+   - Messages fetched with timeout
+   - Business logic executed
+   - Automatic acknowledgment handling
 
-3. **Output**
-   - Results published back to NATS
-   - Consistent JSON marshaling
-   - Proper message acknowledgment 
+3. **Cleanup**
+   - Context cancellation handled
+   - Resources cleaned up properly
+   - Error recovery and backoff implemented 
