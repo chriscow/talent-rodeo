@@ -108,8 +108,13 @@ type AssessmentHandler struct {
 	generic *GenericHandler
 }
 
-func NewAssessmentHandler(ctx context.Context, js jetstream.JetStream, llm minds.ContentGenerator, logger *slog.Logger) (*AssessmentHandler, error) {
+func NewAssessmentHandler(ctx context.Context, js jetstream.JetStream, llm minds.ContentGenerator, logger *slog.Logger, db *database.DB) (*AssessmentHandler, error) {
+	if db == nil {
+		return nil, fmt.Errorf("database connection is required")
+	}
+
 	handler := &AssessmentHandler{
+		db:      db,
 		llm:     llm,
 		logger:  logger.With(slog.String("component", "assessment_handler")),
 		generic: NewGenericHandler(js, logger),

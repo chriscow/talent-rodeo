@@ -148,7 +148,7 @@ func TestAssessMatch(t *testing.T) {
 	}
 
 	// Create handler
-	handler, err := NewAssessmentHandler(context.Background(), env.js, env.llm, env.logger)
+	handler, err := NewAssessmentHandler(context.Background(), env.js, env.llm, env.logger, env.db)
 	if err != nil {
 		t.Fatalf("Failed to create handler: %v", err)
 	}
@@ -261,7 +261,7 @@ func TestHandleAssessmentMessage(t *testing.T) {
 	// Create handler with a background context since we don't need to control its lifecycle.
 	// The handler is required even though we don't explicitly use it because it registers
 	// the message handler with the GenericHandler during creation.
-	_, err = NewAssessmentHandler(context.Background(), env.js, env.llm, env.logger)
+	_, err = NewAssessmentHandler(context.Background(), env.js, env.llm, env.logger, env.db)
 	if err != nil {
 		t.Fatalf("Failed to create handler: %v", err)
 	}
