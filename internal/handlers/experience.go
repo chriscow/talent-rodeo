@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
-	"time"
 
 	"github.com/chriscow/minds"
 	"github.com/nats-io/nats.go/jetstream"
@@ -36,75 +34,58 @@ type Role struct {
 }
 
 type ExperienceHandler struct {
-	ctx      context.Context
-	js       jetstream.JetStream
-	llm      minds.ContentGenerator
-	logger   *slog.Logger
-	consumer jetstream.Consumer
+	llm     minds.ContentGenerator
+	logger  *slog.Logger
+	generic *GenericHandler
 }
 
 func NewExperienceHandler(ctx context.Context, js jetstream.JetStream, llm minds.ContentGenerator, logger *slog.Logger) (*ExperienceHandler, error) {
-	const experienceConsumerName = "RODEO-TRANSCRIPT-EXPERIENCE-QUEUE"
-
-	cons, err := getConsumer(ctx, js, rodeoStream, experienceConsumerName, TopicTranscriptInput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get consumer: %w", err)
+	handler := &ExperienceHandler{
+		llm:     llm,
+		logger:  logger.With(slog.String("component", "experience_handler")),
+		generic: NewGenericHandler(js, logger),
 	}
 
-	return &ExperienceHandler{
-		ctx:      ctx,
-		js:       js,
-		llm:      llm,
-		logger:   logger,
-		consumer: cons,
-	}, nil
-}
-
-func (h *ExperienceHandler) Start(ctx context.Context) error {
-	h.logger.Info("Starting experience handler")
-	for {
-		select {
-		case <-ctx.Done():
-			h.logger.Info("Stopping experience handler", "reason", ctx.Err())
-			return ctx.Err()
-		default:
-			if err := h.processNextMessage(ctx); err != nil {
-				h.logger.Error("Error processing message", "error", err)
-				continue
-			}
-		}
-	}
-}
-
-func (h *ExperienceHandler) Close() error {
-	return nil
-}
-
-func (h *ExperienceHandler) processNextMessage(ctx context.Context) error {
-	msgs, err := h.consumer.Fetch(1, jetstream.FetchMaxWait(250*time.Millisecond))
-	if err != nil {
-		if strings.Contains(err.Error(), "timeout") {
-			return nil
-		}
-		return fmt.Errorf("failed to fetch message: %w", err)
+	if err := handler.generic.Register(ctx, rodeoStream, TopicTranscriptInput, "RODEO-TRANSCRIPT-EXPERIENCE-QUEUE", handler.handleMessage); err != nil {
+		return nil, fmt.Errorf("failed to register experience handler: %w", err)
 	}
 
-	for msg := range msgs.Messages() {
-		if err := h.handleMessage(ctx, msg); err != nil {
-			h.logger.Error("Failed to handle message", "error", err)
-			msg.Term()
-			return err
-		}
-	}
-	return nil
+	return handler, nil
 }
 
 func (h *ExperienceHandler) handleMessage(ctx context.Context, msg jetstream.Msg) error {
+	h.logger.Debug("Processing experience message",
+		"subject", msg.Subject(),
+		"data_size", len(msg.Data()))
+
 	transcript := string(msg.Data())
 
+	experience, err := h.extract(ctx, transcript)
+	if err != nil {
+		return fmt.Errorf("failed to extract experience: %w", err)
+	}
+
+	experienceJSON, err := json.Marshal(experience)
+	if err != nil {
+		return fmt.Errorf("failed to marshal experience: %w", err)
+	}
+
+	h.logger.Debug("Publishing experience",
+		"total_years", experience.TotalYears,
+		"roles_count", len(experience.Roles))
+
+	_, err = h.generic.js.Publish(ctx, TopicExperienceExtracted, experienceJSON)
+	if err != nil {
+		return fmt.Errorf("failed to publish experience: %w", err)
+	}
+
+	return nil
+}
+
+func (h *ExperienceHandler) extract(ctx context.Context, transcript string) (*Experience, error) {
 	schema, err := minds.NewResponseSchema("Experience", "Experience details", Experience{})
 	if err != nil {
-		return fmt.Errorf("failed to create experience schema: %w", err)
+		return nil, fmt.Errorf("failed to create experience schema: %w", err)
 	}
 
 	request := minds.NewRequest(minds.Messages{
@@ -118,28 +99,21 @@ func (h *ExperienceHandler) handleMessage(ctx context.Context, msg jetstream.Msg
 		},
 	}, minds.WithResponseSchema(*schema))
 
+	h.logger.Debug("Extracting experience from transcript")
+
 	result, err := h.llm.GenerateContent(ctx, request)
 	if err != nil {
-		return fmt.Errorf("failed to generate content: %w", err)
+		return nil, fmt.Errorf("failed to generate content: %w", err)
 	}
 
 	var output Experience
 	if err := json.Unmarshal([]byte(result.String()), &output); err != nil {
-		return fmt.Errorf("failed to unmarshal experience: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal experience: %w", err)
 	}
 
-	h.logger.Info("Experience", "experience", output)
+	h.logger.Debug("Extracted experience",
+		"total_years", output.TotalYears,
+		"roles_count", len(output.Roles))
 
-	experienceJSON, err := json.Marshal(output)
-	if err != nil {
-		return fmt.Errorf("failed to marshal experience: %w", err)
-	}
-
-	_, err = h.js.Publish(ctx, TopicExperienceExtracted, experienceJSON)
-	if err != nil {
-		return fmt.Errorf("failed to publish experience: %w", err)
-	}
-
-	msg.Ack()
-	return nil
+	return &output, nil
 }

@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
-	"time"
 
 	"github.com/chriscow/minds"
 	"github.com/nats-io/nats.go/jetstream"
@@ -15,82 +13,41 @@ import (
 const (
 	workplacePrompt = `You are an expert workplace analyst. Your task is to extract and structure workplace information from job descriptions.
 		Focus on identifying:
-		- Work location details
-		- Work arrangement type (remote/hybrid/on-site)
-		- Schedule and time requirements
-		- Time zone requirements
+		- Location details (remote, hybrid, onsite)
+		- Work schedule and hours
+		- Office environment
 		- Travel requirements
-		
-		Provide structured output with clear categorization of all workplace arrangements.`
+
+		Provide structured output with clear categorization of all workplace aspects.`
 )
 
-// Workplace defines workplace details
+// Workplace defines the workplace details for a job
 type Workplace struct {
-	Location       string `json:"location" description:"Location"`
-	Type           string `json:"type" description:"Type"`         // e.g., "Remote", "Hybrid", "On-site"
-	Schedule       string `json:"schedule" description:"Schedule"` // e.g., "Full-time", "Part-time", "Contract"
-	TimeZone       string `json:"timeZone,omitempty" description:"Time zone"`
-	TravelRequired string `json:"travelRequired,omitempty" description:"Travel required"`
+	Location    string   `json:"location" description:"Location details (remote, hybrid, onsite)"`
+	Type        string   `json:"type" description:"Type of workplace (office, remote, hybrid)"`
+	Schedule    string   `json:"schedule" description:"Work schedule and hours"`
+	Environment string   `json:"environment" description:"Office environment description"`
+	Travel      []string `json:"travel" description:"Travel requirements"`
 }
 
 type WorkplaceHandler struct {
-	ctx      context.Context
-	js       jetstream.JetStream
-	llm      minds.ContentGenerator
-	logger   *slog.Logger
-	consumer jetstream.Consumer
+	llm     minds.ContentGenerator
+	logger  *slog.Logger
+	generic *GenericHandler
 }
 
 func NewWorkplaceHandler(ctx context.Context, js jetstream.JetStream, llm minds.ContentGenerator, logger *slog.Logger) (*WorkplaceHandler, error) {
-	const workplaceConsumerName = "RODEO-JOBDESC-WORKPLACE-QUEUE"
-
-	cons, err := getConsumer(ctx, js, rodeoStream, workplaceConsumerName, TopicJobDescriptionInput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get consumer: %w", err)
+	handler := &WorkplaceHandler{
+		llm:     llm,
+		logger:  logger.With(slog.String("component", "workplace_handler")),
+		generic: NewGenericHandler(js, logger),
 	}
 
-	return &WorkplaceHandler{
-		ctx:      ctx,
-		js:       js,
-		llm:      llm,
-		logger:   logger,
-		consumer: cons,
-	}, nil
-}
-
-func (h *WorkplaceHandler) Start(ctx context.Context) error {
-	h.logger.Info("Starting workplace handler")
-	for {
-		select {
-		case <-ctx.Done():
-			h.logger.Info("Stopping workplace handler", "reason", ctx.Err())
-			return ctx.Err()
-		default:
-			if err := h.processNextMessage(ctx); err != nil {
-				h.logger.Error("Error processing message", "error", err)
-				continue
-			}
-		}
-	}
-}
-
-func (h *WorkplaceHandler) processNextMessage(ctx context.Context) error {
-	msgs, err := h.consumer.Fetch(1, jetstream.FetchMaxWait(250*time.Millisecond))
-	if err != nil {
-		if strings.Contains(err.Error(), "timeout") {
-			return nil
-		}
-		return fmt.Errorf("failed to fetch message: %w", err)
+	if err := handler.generic.Register(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-JOBDESC-WORKPLACE-QUEUE", handler.handleMessage); err != nil {
+		return nil, fmt.Errorf("failed to register workplace handler: %w", err)
 	}
 
-	for msg := range msgs.Messages() {
-		if err := h.handleMessage(ctx, msg); err != nil {
-			h.logger.Error("Failed to handle message", "error", err)
-			msg.Term()
-			return err
-		}
-	}
-	return nil
+	return handler, nil
 }
 
 func (h *WorkplaceHandler) handleMessage(ctx context.Context, msg jetstream.Msg) error {
@@ -101,7 +58,6 @@ func (h *WorkplaceHandler) handleMessage(ctx context.Context, msg jetstream.Msg)
 	var input JobDescriptionInput
 	if err := json.Unmarshal(msg.Data(), &input); err != nil {
 		h.logger.Error("Failed to unmarshal input", "error", err)
-		msg.Ack()
 		return nil
 	}
 
@@ -120,12 +76,11 @@ func (h *WorkplaceHandler) handleMessage(ctx context.Context, msg jetstream.Msg)
 		"type", workplace.Type,
 		"schedule", workplace.Schedule)
 
-	_, err = h.js.Publish(ctx, TopicWorkplaceExtracted, workplaceJSON)
+	_, err = h.generic.js.Publish(ctx, TopicWorkplaceExtracted, workplaceJSON)
 	if err != nil {
 		return fmt.Errorf("failed to publish workplace: %w", err)
 	}
 
-	msg.Ack()
 	return nil
 }
 
@@ -164,8 +119,8 @@ func (h *WorkplaceHandler) extract(ctx context.Context, description string) (*Wo
 		"location", workplace.Location,
 		"type", workplace.Type,
 		"schedule", workplace.Schedule,
-		"timezone", workplace.TimeZone,
-		"travel", workplace.TravelRequired)
+		"environment", workplace.Environment,
+		"travel_requirements", len(workplace.Travel))
 
 	return &workplace, nil
 }

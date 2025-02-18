@@ -12,18 +12,17 @@ func TestExtractWorkplace(t *testing.T) {
 	defer env.cleanup()
 
 	// Test job description
-	jobDesc := `We are looking for a Senior Software Engineer to join our team.
-    This is a remote-first position with quarterly travel to our San Francisco office.
-    Must be able to work in PST timezone.
-    Full-time position with flexible hours.`
+	jobDesc := `This is a remote position with flexible hours. We are looking for someone who can work
+		in the EST timezone. Some travel (10-20%) may be required for quarterly team meetings.
+		Our office environment is modern and collaborative when you do come in.`
 
 	// Expected response from LLM
-	expectedWorkplace := &Workplace{
-		Location:       "San Francisco",
-		Type:           "Remote-first",
-		Schedule:       "Full-time",
-		TimeZone:       "PST",
-		TravelRequired: "Quarterly",
+	want := &Workplace{
+		Location:    "Remote",
+		Type:        "Remote",
+		Schedule:    "Flexible hours",
+		Environment: "Modern and collaborative office",
+		Travel:      []string{"10-20% travel for quarterly team meetings"},
 	}
 
 	// Create handler
@@ -33,11 +32,11 @@ func TestExtractWorkplace(t *testing.T) {
 	}
 
 	// Set up mock LLM response
-	workplaceJSON, err := json.Marshal(expectedWorkplace)
+	wantJSON, err := json.Marshal(want)
 	if err != nil {
 		t.Fatalf("Failed to marshal workplace: %v", err)
 	}
-	env.llm.responses[workplacePrompt] = string(workplaceJSON)
+	env.llm.responses[workplacePrompt] = string(wantJSON)
 
 	// Test ExtractWorkplace
 	got, err := handler.extract(context.Background(), jobDesc)
@@ -46,62 +45,63 @@ func TestExtractWorkplace(t *testing.T) {
 	}
 
 	// Compare results
-	if got.Location != expectedWorkplace.Location {
-		t.Errorf("got location %q, want %q", got.Location, expectedWorkplace.Location)
+	if got.Location != want.Location {
+		t.Errorf("got location %q, want %q", got.Location, want.Location)
 	}
-	if got.Type != expectedWorkplace.Type {
-		t.Errorf("got type %q, want %q", got.Type, expectedWorkplace.Type)
+	if got.Type != want.Type {
+		t.Errorf("got type %q, want %q", got.Type, want.Type)
 	}
-	if got.Schedule != expectedWorkplace.Schedule {
-		t.Errorf("got schedule %q, want %q", got.Schedule, expectedWorkplace.Schedule)
+	if got.Schedule != want.Schedule {
+		t.Errorf("got schedule %q, want %q", got.Schedule, want.Schedule)
 	}
-	if got.TimeZone != expectedWorkplace.TimeZone {
-		t.Errorf("got timezone %q, want %q", got.TimeZone, expectedWorkplace.TimeZone)
+	if got.Environment != want.Environment {
+		t.Errorf("got environment %q, want %q", got.Environment, want.Environment)
 	}
-	if got.TravelRequired != expectedWorkplace.TravelRequired {
-		t.Errorf("got travel required %q, want %q", got.TravelRequired, expectedWorkplace.TravelRequired)
+	if len(got.Travel) != len(want.Travel) {
+		t.Errorf("got %d travel requirements, want %d", len(got.Travel), len(want.Travel))
+	} else {
+		for i, v := range got.Travel {
+			if v != want.Travel[i] {
+				t.Errorf("got travel[%d] %q, want %q", i, v, want.Travel[i])
+			}
+		}
 	}
 }
 
-func TestHandleWorkplaceMessage(t *testing.T) {
+func TestWorkplaceHandleMessage(t *testing.T) {
 	env := newTestEnv(t)
 	defer env.cleanup()
 
 	// Create test input with a specific job description
 	input := JobDescriptionInput{
-		Description: `This is a remote-first position with quarterly travel to our San Francisco office.
-			Must be able to work in PST timezone.
-			Full-time position with flexible hours.`,
+		Description: "Remote position with flexible hours in EST timezone. Some travel required.",
 	}
 
+	// Create expected response
 	want := &Workplace{
-		Location:       "San Francisco",
-		Type:           "Remote-first",
-		Schedule:       "Full-time",
-		TimeZone:       "PST",
-		TravelRequired: "Quarterly",
+		Location:    "Remote",
+		Type:        "Remote",
+		Schedule:    "Flexible hours",
+		Environment: "Not specified",
+		Travel:      []string{"Some travel required"},
 	}
 
+	// Set up mock LLM response
 	wantJSON, err := json.Marshal(want)
 	if err != nil {
-		t.Fatalf("TestHandleWorkplaceMessage: Failed to marshal result: %v", err)
+		t.Fatalf("TestWorkplaceHandleMessage: Failed to marshal result: %v", err)
 	}
-
 	env.llm.responses[workplacePrompt] = string(wantJSON)
 
-	// Create handler
-	handler, err := NewWorkplaceHandler(context.Background(), env.js, env.llm, env.logger)
+	// Create handler with a background context since we don't need to control its lifecycle.
+	// The handler is required even though we don't explicitly use it because it registers
+	// the message handler with the GenericHandler during creation.
+	_, err = NewWorkplaceHandler(context.Background(), env.js, env.llm, env.logger)
 	if err != nil {
-		t.Fatalf("TestHandleWorkplaceMessage: Failed to create handler: %v", err)
+		t.Fatalf("Failed to create handler: %v", err)
 	}
 
-	// Start the handler in a goroutine
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	go handler.Start(ctx)
-	time.Sleep(100 * time.Millisecond) // Allow handler to initialize
-
-	// Use the generic harness to send the job description and receive the extracted workplace
+	// Send test message and verify response
 	got, err := SendAndReceiveMessage[JobDescriptionInput, Workplace](
 		t,
 		context.Background(),
@@ -110,30 +110,32 @@ func TestHandleWorkplaceMessage(t *testing.T) {
 		TopicJobDescriptionInput,
 		TopicWorkplaceExtracted,
 		input,
-		2*time.Second,
+		1*time.Second,
 	)
 	if err != nil {
-		t.Fatalf("TestHandleWorkplaceMessage: Failed to send and receive message: %v", err)
+		t.Fatalf("Failed to send and receive message: %v", err)
 	}
 
-	// Validate the extracted workplace
+	// Verify response
 	if got.Location != want.Location {
-		t.Errorf("TestHandleWorkplaceMessage: got location %q, want %q", got.Location, want.Location)
+		t.Errorf("got location %q, want %q", got.Location, want.Location)
 	}
 	if got.Type != want.Type {
-		t.Errorf("TestHandleWorkplaceMessage: got type %q, want %q", got.Type, want.Type)
+		t.Errorf("got type %q, want %q", got.Type, want.Type)
 	}
 	if got.Schedule != want.Schedule {
-		t.Errorf("TestHandleWorkplaceMessage: got schedule %q, want %q", got.Schedule, want.Schedule)
+		t.Errorf("got schedule %q, want %q", got.Schedule, want.Schedule)
 	}
-	if got.TimeZone != want.TimeZone {
-		t.Errorf("TestHandleWorkplaceMessage: got timezone %q, want %q", got.TimeZone, want.TimeZone)
+	if got.Environment != want.Environment {
+		t.Errorf("got environment %q, want %q", got.Environment, want.Environment)
 	}
-	if got.TravelRequired != want.TravelRequired {
-		t.Errorf("TestHandleWorkplaceMessage: got travel required %q, want %q", got.TravelRequired, want.TravelRequired)
+	if len(got.Travel) != len(want.Travel) {
+		t.Errorf("got %d travel requirements, want %d", len(got.Travel), len(want.Travel))
+	} else {
+		for i, v := range got.Travel {
+			if v != want.Travel[i] {
+				t.Errorf("got travel[%d] %q, want %q", i, v, want.Travel[i])
+			}
+		}
 	}
-
-	// Stop the handler
-	cancel()
-	time.Sleep(100 * time.Millisecond)
 }

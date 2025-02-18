@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
-	"time"
 
 	"github.com/chriscow/minds"
 	"github.com/nats-io/nats.go/jetstream"
@@ -31,73 +29,29 @@ type Preferences struct {
 }
 
 type PreferencesHandler struct {
-	ctx      context.Context
-	js       jetstream.JetStream
-	llm      minds.ContentGenerator
-	logger   *slog.Logger
-	consumer jetstream.Consumer
+	llm     minds.ContentGenerator
+	logger  *slog.Logger
+	generic *GenericHandler
 }
 
 func NewPreferencesHandler(ctx context.Context, js jetstream.JetStream, llm minds.ContentGenerator, logger *slog.Logger) (*PreferencesHandler, error) {
-	const preferencesConsumerName = "RODEO-TRANSCRIPT-PREFERENCES-QUEUE"
-
-	cons, err := getConsumer(ctx, js, rodeoStream, preferencesConsumerName, TopicJobDescriptionInput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get consumer: %w", err)
+	handler := &PreferencesHandler{
+		llm:     llm,
+		logger:  logger.With(slog.String("component", "preferences_handler")),
+		generic: NewGenericHandler(js, logger),
 	}
 
-	return &PreferencesHandler{
-		ctx:      ctx,
-		js:       js,
-		llm:      llm,
-		logger:   logger,
-		consumer: cons,
-	}, nil
-}
-
-// Start begins processing messages from the NATS stream.
-// It will continue processing until the context is cancelled.
-func (h *PreferencesHandler) Start(ctx context.Context) error {
-	h.logger.Info("Starting preferences handler")
-	for {
-		select {
-		case <-ctx.Done():
-			h.logger.Info("Stopping preferences handler", "reason", ctx.Err())
-			return ctx.Err()
-		default:
-			if err := h.processNextMessage(ctx); err != nil {
-				h.logger.Error("Error processing message", "error", err)
-				continue
-			}
-		}
-	}
-}
-
-func (h *PreferencesHandler) Close() error {
-	return nil
-}
-
-func (h *PreferencesHandler) processNextMessage(ctx context.Context) error {
-	msgs, err := h.consumer.Fetch(1, jetstream.FetchMaxWait(250*time.Millisecond))
-	if err != nil {
-		if strings.Contains(err.Error(), "timeout") {
-			return nil
-		}
-		return fmt.Errorf("failed to fetch message: %w", err)
+	if err := handler.generic.Register(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-TRANSCRIPT-PREFERENCES-QUEUE", handler.handleMessage); err != nil {
+		return nil, fmt.Errorf("failed to register preferences handler: %w", err)
 	}
 
-	for msg := range msgs.Messages() {
-		if err := h.handleMessage(ctx, msg); err != nil {
-			h.logger.Error("Failed to handle message", "error", err)
-			msg.Term()
-			return err
-		}
-	}
-	return nil
+	return handler, nil
 }
 
-// ExtractSkills analyzes the transcript to identify skills and expertise levels.
 func (h *PreferencesHandler) handleMessage(ctx context.Context, msg jetstream.Msg) error {
+	h.logger.Debug("Processing preferences message",
+		"subject", msg.Subject(),
+		"data_size", len(msg.Data()))
 
 	transcript := string(msg.Data())
 
@@ -111,12 +65,17 @@ func (h *PreferencesHandler) handleMessage(ctx context.Context, msg jetstream.Ms
 		return fmt.Errorf("failed to marshal preferences: %w", err)
 	}
 
-	_, err = h.js.Publish(ctx, TopicPreferencesExtracted, preferencesJSON)
+	h.logger.Debug("Publishing preferences",
+		"locations", len(preferences.PreferredLocations),
+		"remote", preferences.RemotePreference,
+		"work_style", preferences.WorkStyle,
+		"company_size", preferences.CompanySize)
+
+	_, err = h.generic.js.Publish(ctx, TopicPreferencesExtracted, preferencesJSON)
 	if err != nil {
 		return fmt.Errorf("failed to publish preferences: %w", err)
 	}
 
-	msg.Ack()
 	return nil
 }
 
@@ -149,6 +108,12 @@ func (h *PreferencesHandler) extract(ctx context.Context, transcript string) (*P
 	if err := json.Unmarshal([]byte(result.String()), &output); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal preferences: %w", err)
 	}
+
+	h.logger.Debug("Extracted preferences",
+		"locations", len(output.PreferredLocations),
+		"remote", output.RemotePreference,
+		"work_style", output.WorkStyle,
+		"company_size", output.CompanySize)
 
 	return &output, nil
 }

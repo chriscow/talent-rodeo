@@ -154,22 +154,18 @@ func TestCompensationHandleMessage(t *testing.T) {
 	}
 	env.llm.responses[compensationPrompt] = string(wantJSON)
 
-	// Create handler
-	handler, err := NewCompensationHandler(context.Background(), env.js, env.llm, env.logger)
+	// Create handler with a background context since we don't need to control its lifecycle.
+	// The handler is required even though we don't explicitly use it because it registers
+	// the message handler with the GenericHandler during creation.
+	_, err = NewCompensationHandler(context.Background(), env.js, env.llm, env.logger)
 	if err != nil {
 		t.Fatalf("Failed to create handler: %v", err)
 	}
 
-	// Start handler
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	go handler.Start(ctx)
-	time.Sleep(100 * time.Millisecond) // Allow handler to initialize
-
 	// Send test message and verify response
 	result, err := SendAndReceiveMessage[JobDescriptionInput, Compensation](
 		t,
-		ctx,
+		context.Background(),
 		env.js,
 		rodeoStream,
 		TopicJobDescriptionInput,
@@ -192,8 +188,4 @@ func TestCompensationHandleMessage(t *testing.T) {
 			t.Errorf("got max salary %f, want %f", result.SalaryRange.Max, want.SalaryRange.Max)
 		}
 	}
-
-	// Stop the handler
-	cancel()
-	time.Sleep(100 * time.Millisecond)
 }

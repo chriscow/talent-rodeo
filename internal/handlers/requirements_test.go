@@ -21,7 +21,7 @@ func TestExtractRequirements(t *testing.T) {
     Bachelor's degree in Computer Science required.`
 
 	// Expected response from LLM
-	expectedReqs := &Requirements{
+	want := &Requirements{
 		MustHave: []Requirement{
 			{
 				Skill:       "Go",
@@ -52,7 +52,7 @@ func TestExtractRequirements(t *testing.T) {
 		Education:          []string{"Bachelor's degree in Computer Science"},
 	}
 
-	wantJSON, err := json.Marshal(expectedReqs)
+	wantJSON, err := json.Marshal(want)
 	if err != nil {
 		t.Fatalf("TestExtractRequirements: Failed to marshal result: %v", err)
 	}
@@ -73,20 +73,20 @@ func TestExtractRequirements(t *testing.T) {
 	}
 
 	// Compare results
-	if len(got.MustHave) != len(expectedReqs.MustHave) {
-		t.Errorf("got %d must-have requirements, want %d", len(got.MustHave), len(expectedReqs.MustHave))
+	if len(got.MustHave) != len(want.MustHave) {
+		t.Errorf("got %d must-have requirements, want %d", len(got.MustHave), len(want.MustHave))
 	}
 
-	if len(got.NiceToHave) != len(expectedReqs.NiceToHave) {
-		t.Errorf("got %d nice-to-have requirements, want %d", len(got.NiceToHave), len(expectedReqs.NiceToHave))
+	if len(got.NiceToHave) != len(want.NiceToHave) {
+		t.Errorf("got %d nice-to-have requirements, want %d", len(got.NiceToHave), len(want.NiceToHave))
 	}
 
-	if got.MinYearsExperience != expectedReqs.MinYearsExperience {
-		t.Errorf("got min years %f, want %f", got.MinYearsExperience, expectedReqs.MinYearsExperience)
+	if got.MinYearsExperience != want.MinYearsExperience {
+		t.Errorf("got min years %f, want %f", got.MinYearsExperience, want.MinYearsExperience)
 	}
 
-	if len(got.Education) != len(expectedReqs.Education) {
-		t.Errorf("got %d education requirements, want %d", len(got.Education), len(expectedReqs.Education))
+	if len(got.Education) != len(want.Education) {
+		t.Errorf("got %d education requirements, want %d", len(got.Education), len(want.Education))
 	}
 }
 
@@ -123,19 +123,15 @@ func TestHandleRequirementsMessage(t *testing.T) {
 		requirementsPrompt: string(wantJSON),
 	}
 
-	// Create handler.
-	handler, err := NewRequirementsHandler(context.Background(), env.js, env.llm, env.logger)
+	// Create handler with a background context since we don't need to control its lifecycle.
+	// The handler is required even though we don't explicitly use it because it registers
+	// the message handler with the GenericHandler during creation.
+	_, err = NewRequirementsHandler(context.Background(), env.js, env.llm, env.logger)
 	if err != nil {
-		t.Fatalf("TestHandleMessage: Failed to create handler: %v", err)
+		t.Fatalf("Failed to create handler: %v", err)
 	}
 
-	// Start the handler in a goroutine.
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	go handler.Start(ctx)
-	time.Sleep(100 * time.Millisecond) // Allow handler to initialize
-
-	// Use the generic harness to send the job description and receive the extracted requirements.
+	// Send test message and verify response
 	got, err := SendAndReceiveMessage[JobDescriptionInput, Requirements](
 		t,
 		context.Background(),
@@ -144,10 +140,10 @@ func TestHandleRequirementsMessage(t *testing.T) {
 		TopicJobDescriptionInput,
 		TopicRequirementsExtracted,
 		input,
-		2*time.Second,
+		1*time.Second,
 	)
 	if err != nil {
-		t.Fatalf("TestHandleMessage: Failed to send and receive message: %v", err)
+		t.Fatalf("Failed to send and receive message: %v", err)
 	}
 
 	// Validate the extracted requirements.
@@ -181,8 +177,4 @@ func TestHandleRequirementsMessage(t *testing.T) {
 	if len(got.Education) == 0 {
 		t.Error("TestHandleMessage: Expected education requirements, got none")
 	}
-
-	// Stop the handler.
-	cancel()
-	time.Sleep(100 * time.Millisecond)
 }

@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
-	"time"
 
 	"github.com/chriscow/minds"
 	"github.com/nats-io/nats.go/jetstream"
@@ -32,63 +30,24 @@ type Culture struct {
 }
 
 type CultureHandler struct {
-	ctx      context.Context
-	js       jetstream.JetStream
-	llm      minds.ContentGenerator
-	logger   *slog.Logger
-	consumer jetstream.Consumer
+	llm     minds.ContentGenerator
+	logger  *slog.Logger
+	generic *GenericHandler
 }
 
 func NewCultureHandler(ctx context.Context, js jetstream.JetStream, llm minds.ContentGenerator, logger *slog.Logger) (*CultureHandler, error) {
-	const cultureConsumerName = "RODEO-JOBDESC-CULTURE-QUEUE"
-
-	cons, err := getConsumer(ctx, js, rodeoStream, cultureConsumerName, TopicJobDescriptionInput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get consumer: %w", err)
+	handler := &CultureHandler{
+		llm:     llm,
+		logger:  logger.With(slog.String("component", "culture_handler")),
+		generic: NewGenericHandler(js, logger),
 	}
 
-	return &CultureHandler{
-		ctx:      ctx,
-		js:       js,
-		llm:      llm,
-		logger:   logger,
-		consumer: cons,
-	}, nil
-}
-
-func (h *CultureHandler) Start(ctx context.Context) error {
-	h.logger.Info("Starting culture handler")
-	for {
-		select {
-		case <-ctx.Done():
-			h.logger.Info("Stopping culture handler", "reason", ctx.Err())
-			return ctx.Err()
-		default:
-			if err := h.processNextMessage(ctx); err != nil {
-				h.logger.Error("Error processing message", "error", err)
-				continue
-			}
-		}
-	}
-}
-
-func (h *CultureHandler) processNextMessage(ctx context.Context) error {
-	msgs, err := h.consumer.Fetch(1, jetstream.FetchMaxWait(250*time.Millisecond))
-	if err != nil {
-		if strings.Contains(err.Error(), "timeout") {
-			return nil
-		}
-		return fmt.Errorf("failed to fetch message: %w", err)
+	// Register the message handler with the generic handler
+	if err := handler.generic.Register(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-JOBDESC-CULTURE-QUEUE", handler.handleMessage); err != nil {
+		return nil, fmt.Errorf("failed to register culture handler: %w", err)
 	}
 
-	for msg := range msgs.Messages() {
-		if err := h.handleMessage(ctx, msg); err != nil {
-			h.logger.Error("Failed to handle message", "error", err)
-			msg.Term()
-			return err
-		}
-	}
-	return nil
+	return handler, nil
 }
 
 func (h *CultureHandler) handleMessage(ctx context.Context, msg jetstream.Msg) error {
@@ -99,7 +58,6 @@ func (h *CultureHandler) handleMessage(ctx context.Context, msg jetstream.Msg) e
 	var input JobDescriptionInput
 	if err := json.Unmarshal(msg.Data(), &input); err != nil {
 		h.logger.Error("Failed to unmarshal input", "error", err)
-		msg.Ack()
 		return nil
 	}
 
@@ -118,12 +76,11 @@ func (h *CultureHandler) handleMessage(ctx context.Context, msg jetstream.Msg) e
 		"values_count", len(culture.Values),
 		"team_dynamics", culture.TeamDynamics)
 
-	_, err = h.js.Publish(ctx, TopicCultureExtracted, cultureJSON)
+	_, err = h.generic.js.Publish(ctx, TopicCultureExtracted, cultureJSON)
 	if err != nil {
 		return fmt.Errorf("failed to publish culture: %w", err)
 	}
 
-	msg.Ack()
 	return nil
 }
 

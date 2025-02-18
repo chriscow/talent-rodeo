@@ -7,7 +7,90 @@ import (
 	"time"
 )
 
-func TestMessageHandling(t *testing.T) {
+func TestExtractExperience(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	// Test transcript
+	transcript := `I've been in the tech industry for 6 years.
+		I'm currently a Lead Developer at InnovativeTech for 2 years,
+		where I work with React and Node.js. Previously, I was at
+		CloudSystems for 4 years as a Full Stack Developer using
+		Python and JavaScript.`
+
+	// Expected response from LLM
+	want := &Experience{
+		TotalYears: 6,
+		Roles: []Role{
+			{
+				Title:       "Lead Developer",
+				Company:     "InnovativeTech",
+				YearsInRole: 2,
+				Skills:      []string{"React", "Node.js"},
+			},
+			{
+				Title:       "Full Stack Developer",
+				Company:     "CloudSystems",
+				YearsInRole: 4,
+				Skills:      []string{"Python", "JavaScript"},
+			},
+		},
+	}
+
+	// Set up mock LLM response
+	wantJSON, err := json.Marshal(want)
+	if err != nil {
+		t.Fatalf("Failed to marshal experience: %v", err)
+	}
+	env.llm.responses[experiencePrompt] = string(wantJSON)
+
+	// Create handler
+	handler, err := NewExperienceHandler(context.Background(), env.js, env.llm, env.logger)
+	if err != nil {
+		t.Fatalf("Failed to create handler: %v", err)
+	}
+
+	got, err := handler.extract(context.Background(), transcript)
+	if err != nil {
+		t.Fatalf("extract failed: %v", err)
+	}
+
+	// Validate the extracted experience
+	if got.TotalYears != want.TotalYears {
+		t.Errorf("got %v total years, want %v", got.TotalYears, want.TotalYears)
+	}
+
+	if len(got.Roles) != len(want.Roles) {
+		t.Errorf("got %d roles, want %d", len(got.Roles), len(want.Roles))
+	}
+
+	// Check for specific roles
+	foundLeadDev := false
+	foundFullStack := false
+	for _, role := range got.Roles {
+		switch role.Title {
+		case "Lead Developer":
+			foundLeadDev = true
+			if role.YearsInRole != 2 {
+				t.Errorf("got %v years as Lead Developer, want 2", role.YearsInRole)
+			}
+		case "Full Stack Developer":
+			foundFullStack = true
+			if role.YearsInRole != 4 {
+				t.Errorf("got %v years as Full Stack Developer, want 4", role.YearsInRole)
+			}
+		}
+	}
+
+	if !foundLeadDev {
+		t.Error("Lead Developer role not found")
+	}
+	if !foundFullStack {
+		t.Error("Full Stack Developer role not found")
+	}
+}
+
+func TestHandleExperienceMessage(t *testing.T) {
 	env := newTestEnv(t)
 	defer env.cleanup()
 
@@ -20,7 +103,7 @@ func TestMessageHandling(t *testing.T) {
 		Python and JavaScript.`,
 	}
 
-	want := Experience{
+	want := &Experience{
 		TotalYears: 6,
 		Roles: []Role{
 			{
@@ -40,26 +123,20 @@ func TestMessageHandling(t *testing.T) {
 
 	wantJSON, err := json.Marshal(want)
 	if err != nil {
-		t.Fatalf("TestMessageHandling: Failed to marshal result: %v", err)
+		t.Fatalf("Failed to marshal result: %v", err)
 	}
 
-	env.llm.responses = map[string]string{
-		experiencePrompt: string(wantJSON),
-	}
+	env.llm.responses[experiencePrompt] = string(wantJSON)
 
-	// Create handler
-	handler, err := NewExperienceHandler(context.Background(), env.js, env.llm, env.logger)
+	// Create handler with a background context since we don't need to control its lifecycle.
+	// The handler is required even though we don't explicitly use it because it registers
+	// the message handler with the GenericHandler during creation.
+	_, err = NewExperienceHandler(context.Background(), env.js, env.llm, env.logger)
 	if err != nil {
-		t.Fatalf("TestMessageHandling: Failed to create handler: %v", err)
+		t.Fatalf("Failed to create handler: %v", err)
 	}
 
-	// Start the handler in a goroutine
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	go handler.Start(ctx)
-	time.Sleep(100 * time.Millisecond) // Allow handler to initialize
-
-	// Use the generic harness to send the transcript and receive the extracted experience
+	// Send test message and verify response
 	got, err := SendAndReceiveMessage[TranscriptInput, Experience](
 		t,
 		context.Background(),
@@ -68,19 +145,19 @@ func TestMessageHandling(t *testing.T) {
 		TopicTranscriptInput,
 		TopicExperienceExtracted,
 		input,
-		2*time.Second,
+		1*time.Second,
 	)
 	if err != nil {
-		t.Fatalf("TestMessageHandling: Failed to send and receive message: %v", err)
+		t.Fatalf("Failed to send and receive message: %v", err)
 	}
 
 	// Validate the extracted experience
 	if got.TotalYears != want.TotalYears {
-		t.Errorf("TestMessageHandling: Expected %v total years, got %v", want.TotalYears, got.TotalYears)
+		t.Errorf("got %v total years, want %v", got.TotalYears, want.TotalYears)
 	}
 
 	if len(got.Roles) != len(want.Roles) {
-		t.Errorf("TestMessageHandling: Expected %d roles, got %d", len(want.Roles), len(got.Roles))
+		t.Errorf("got %d roles, want %d", len(got.Roles), len(want.Roles))
 	}
 
 	// Check for specific roles
@@ -91,24 +168,20 @@ func TestMessageHandling(t *testing.T) {
 		case "Lead Developer":
 			foundLeadDev = true
 			if role.YearsInRole != 2 {
-				t.Errorf("TestMessageHandling: Expected 2 years as Lead Developer, got %v", role.YearsInRole)
+				t.Errorf("got %v years as Lead Developer, want 2", role.YearsInRole)
 			}
 		case "Full Stack Developer":
 			foundFullStack = true
 			if role.YearsInRole != 4 {
-				t.Errorf("TestMessageHandling: Expected 4 years as Full Stack Developer, got %v", role.YearsInRole)
+				t.Errorf("got %v years as Full Stack Developer, want 4", role.YearsInRole)
 			}
 		}
 	}
 
 	if !foundLeadDev {
-		t.Error("TestMessageHandling: Lead Developer role not found")
+		t.Error("Lead Developer role not found")
 	}
 	if !foundFullStack {
-		t.Error("TestMessageHandling: Full Stack Developer role not found")
+		t.Error("Full Stack Developer role not found")
 	}
-
-	// Stop the handler
-	cancel()
-	time.Sleep(100 * time.Millisecond)
 }

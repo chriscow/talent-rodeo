@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
-	"strings"
 	"talent-rodeo/internal/database"
-	"time"
 
 	"github.com/chriscow/minds"
 	"github.com/nats-io/nats.go/jetstream"
@@ -104,102 +102,66 @@ type AssessmentInput struct {
 }
 
 type AssessmentHandler struct {
-	ctx      context.Context
-	db       *database.DB
-	js       jetstream.JetStream
-	llm      minds.ContentGenerator
-	logger   *slog.Logger
-	consumer jetstream.Consumer
+	db      *database.DB
+	llm     minds.ContentGenerator
+	logger  *slog.Logger
+	generic *GenericHandler
 }
 
 func NewAssessmentHandler(ctx context.Context, js jetstream.JetStream, llm minds.ContentGenerator, logger *slog.Logger) (*AssessmentHandler, error) {
-	const assessmentConsumerName = "RODEO-ASSESSMENT-QUEUE"
-
-	cons, err := getConsumer(ctx, js, rodeoStream, assessmentConsumerName, TopicTranscriptInput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get consumer: %w", err)
+	handler := &AssessmentHandler{
+		llm:     llm,
+		logger:  logger.With(slog.String("component", "assessment_handler")),
+		generic: NewGenericHandler(js, logger),
 	}
 
-	return &AssessmentHandler{
-		ctx:      ctx,
-		js:       js,
-		llm:      llm,
-		logger:   logger,
-		consumer: cons,
-	}, nil
-}
-
-func (h *AssessmentHandler) Start(ctx context.Context) error {
-	h.logger.Info("Starting assessment handler")
-	for {
-		select {
-		case <-ctx.Done():
-			h.logger.Info("Stopping assessment handler", "reason", ctx.Err())
-			return ctx.Err()
-		default:
-			if err := h.processNextMessage(ctx); err != nil {
-				h.logger.Error("Error processing message", "error", err)
-				continue
-			}
-		}
-	}
-}
-
-func (h *AssessmentHandler) Close() error {
-	return nil
-}
-
-func (h *AssessmentHandler) processNextMessage(ctx context.Context) error {
-	msgs, err := h.consumer.Fetch(1, jetstream.FetchMaxWait(250*time.Millisecond))
-	if err != nil {
-		if strings.Contains(err.Error(), "timeout") {
-			return nil
-		}
-		return fmt.Errorf("failed to fetch message: %w", err)
+	if err := handler.generic.Register(ctx, rodeoStream, TopicAssessmentInput, "RODEO-ASSESSMENT-QUEUE", handler.handleMessage); err != nil {
+		return nil, fmt.Errorf("failed to register assessment handler: %w", err)
 	}
 
-	for msg := range msgs.Messages() {
-		if err := h.handleMessage(ctx, msg); err != nil {
-			h.logger.Error("Failed to handle message", "error", err)
-			msg.Term()
-			return err
-		}
-	}
-	return nil
+	return handler, nil
 }
 
 func (h *AssessmentHandler) handleMessage(ctx context.Context, msg jetstream.Msg) error {
+	h.logger.Debug("Processing assessment message",
+		"subject", msg.Subject(),
+		"data_size", len(msg.Data()))
+
 	var input AssessmentInput
 	if err := json.Unmarshal(msg.Data(), &input); err != nil {
 		h.logger.Error("Failed to unmarshal input", "error", err)
-		msg.Ack()
 		return nil
 	}
 
 	assessment, err := h.assessMatch(ctx, input)
 	if err != nil {
-		h.logger.Error("Failed to assess match", "error", err)
-		msg.Ack()
 		return fmt.Errorf("failed to assess match: %w", err)
 	}
 
-	h.logger.Debug("Assessment result", "assessment", assessment)
-
 	assessmentJSON, err := json.Marshal(assessment)
 	if err != nil {
-		h.logger.Error("Failed to marshal assessment", "error", err)
-		msg.Ack()
 		return fmt.Errorf("failed to marshal assessment: %w", err)
 	}
 
-	_, err = h.js.Publish(ctx, TopicAssessmentResult, assessmentJSON)
+	h.logger.Debug("Publishing assessment",
+		"candidate_id", input.Candidate.CandidateID,
+		"job_id", input.Job.JobID,
+		"score", assessment.Score,
+		"confidence", assessment.Confidence)
+
+	_, err = h.generic.js.Publish(ctx, TopicAssessmentResult, assessmentJSON)
 	if err != nil {
-		h.logger.Error("Failed to publish assessment", "error", err)
-		msg.Ack()
 		return fmt.Errorf("failed to publish assessment: %w", err)
 	}
 
-	msg.Ack()
+	// Store the assessment result
+	if err := store(h.db, input.Candidate.CandidateID, input.Job.JobID, assessment.Score, assessment.Confidence, assessment.Analysis); err != nil {
+		h.logger.Error("Failed to store assessment",
+			"error", err,
+			"candidate_id", input.Candidate.CandidateID,
+			"job_id", input.Job.JobID)
+	}
+
 	return nil
 }
 
@@ -262,11 +224,6 @@ func (h *AssessmentHandler) assessMatch(ctx context.Context, input AssessmentInp
 	}
 
 	h.logger.Debug("Successfully unmarshaled assessment", "score", assessment.Score, "confidence", assessment.Confidence)
-
-	// store the assessment in the database if we received a database connection
-	if h.db != nil {
-		store(h.db, input.Candidate.CandidateID, input.Job.JobID, assessment.Score, assessment.Confidence, assessment.Analysis)
-	}
 
 	return &assessment, nil
 }

@@ -147,7 +147,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	// Create stream
 	_, err = js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
 		Name:      rodeoStream,
-		Subjects:  []string{"rodeo.>"},
+		Subjects:  []string{"rodeo.>", "test.>"},
 		Retention: jetstream.InterestPolicy,
 	})
 	if err != nil {
