@@ -90,17 +90,13 @@ func TestHandleCultureMessage(t *testing.T) {
 
 	env.llm.responses[culturePrompt] = string(wantJSON)
 
-	// Create handler
-	handler, err := NewCultureHandler(context.Background(), env.js, env.llm, env.logger)
+	// Create handler with a background context since we don't need to control its lifecycle.
+	// The handler is required even though we don't explicitly use it because it registers
+	// the message handler with the GenericHandler during creation.
+	_, err = NewCultureHandler(context.Background(), env.js, env.llm, env.logger)
 	if err != nil {
 		t.Fatalf("TestHandleCultureMessage: Failed to create handler: %v", err)
 	}
-
-	// Start the handler in a goroutine
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	go handler.Start(ctx)
-	time.Sleep(100 * time.Millisecond) // Allow handler to initialize
 
 	// Use the generic harness to send the job description and receive the extracted culture
 	got, err := SendAndReceiveMessage[JobDescriptionInput, Culture](
@@ -135,8 +131,4 @@ func TestHandleCultureMessage(t *testing.T) {
 	if got.WorkStyle != want.WorkStyle {
 		t.Errorf("TestHandleCultureMessage: got work style %q, want %q", got.WorkStyle, want.WorkStyle)
 	}
-
-	// Stop the handler
-	cancel()
-	time.Sleep(100 * time.Millisecond)
 }

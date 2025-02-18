@@ -39,66 +39,26 @@ type CallConfig struct {
 
 // VoiceHandler handles voice calls
 type VoiceHandler struct {
-	ctx      context.Context
-	logger   *slog.Logger
-	js       jetstream.JetStream
-	consumer jetstream.Consumer
-	twilio   TwilioClient
-	config   CallConfig
+	logger  *slog.Logger
+	twilio  TwilioClient
+	config  CallConfig
+	generic *GenericHandler
 }
 
 // NewVoiceHandler creates a new VoiceHandler instance
 func NewVoiceHandler(ctx context.Context, js jetstream.JetStream, twilio TwilioClient, logger *slog.Logger, config CallConfig) (*VoiceHandler, error) {
-	const voiceConsumerName = "RODEO-VOICE-CALLER-QUEUE"
-
-	consumer, err := getConsumer(ctx, js, rodeoStream, voiceConsumerName, TopicVoiceInput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get consumer: %w", err)
+	handler := &VoiceHandler{
+		logger:  logger.With(slog.String("component", "voice_handler")),
+		twilio:  twilio,
+		config:  config,
+		generic: NewGenericHandler(js, logger),
 	}
 
-	return &VoiceHandler{
-		ctx:      ctx,
-		logger:   logger,
-		js:       js,
-		consumer: consumer,
-		twilio:   twilio,
-		config:   config,
-	}, nil
-}
-
-// Start begins processing messages from the NATS stream.
-// It will continue processing until the context is cancelled.
-func (h *VoiceHandler) Start(ctx context.Context) error {
-	h.logger.Info("Starting voice call handler")
-	for {
-		select {
-		case <-ctx.Done():
-			h.logger.Info("Stopping voice call handler", "reason", ctx.Err())
-			return ctx.Err()
-		default:
-			if err := h.processNextMessage(ctx); err != nil {
-				h.logger.Error("Error processing message", "error", err)
-				continue
-			}
-		}
-	}
-}
-
-// processNextMessage fetches and processes the next message from the stream
-func (h *VoiceHandler) processNextMessage(ctx context.Context) error {
-	msgs, err := h.consumer.Fetch(1)
-	if err != nil {
-		return fmt.Errorf("failed to fetch messages: %w", err)
+	if err := handler.generic.Register(ctx, rodeoStream, TopicVoiceInput, "RODEO-VOICE-CALLER-QUEUE", handler.handleMessage); err != nil {
+		return nil, fmt.Errorf("failed to register voice handler: %w", err)
 	}
 
-	msg := <-msgs.Messages()
-	if err := h.handleMessage(ctx, msg); err != nil {
-		h.logger.Error("Failed to handle message", "error", err)
-		msg.Term()
-		return err
-	}
-
-	return nil
+	return handler, nil
 }
 
 // handleMessage processes a single message containing a call request
@@ -110,8 +70,8 @@ func (h *VoiceHandler) handleMessage(ctx context.Context, msg jetstream.Msg) err
 	// Parse the call request
 	var req CallRequest
 	if err := json.Unmarshal(msg.Data(), &req); err != nil {
-		msg.Term()
-		return fmt.Errorf("failed to unmarshal call request: %w", err)
+		h.logger.Error("Failed to unmarshal call request", "error", err)
+		return nil
 	}
 
 	// Make the call
@@ -130,12 +90,9 @@ func (h *VoiceHandler) handleMessage(ctx context.Context, msg jetstream.Msg) err
 
 	// Publish the result
 	if err := h.publishResult(ctx, result); err != nil {
-		msg.Term()
 		return fmt.Errorf("failed to publish result: %w", err)
 	}
 
-	// Acknowledge message only after successful processing
-	msg.DoubleAck(ctx)
 	return nil
 }
 
@@ -174,7 +131,7 @@ func (h *VoiceHandler) publishResult(ctx context.Context, result *CallResult) er
 		"phone_number", result.PhoneNumber,
 		"call_sid", result.CallSID)
 
-	if _, err := h.js.Publish(ctx, TopicVoiceResult, resultJSON); err != nil {
+	if _, err := h.generic.js.Publish(ctx, TopicVoiceResult, resultJSON); err != nil {
 		return fmt.Errorf("failed to publish result: %w", err)
 	}
 

@@ -9,117 +9,30 @@ import (
 
 // mockTwilioClient implements TwilioClient for testing
 type mockTwilioClient struct {
+	calls []struct {
+		fromNumber string
+		toNumber   string
+		twiml      string
+	}
 	callSID string
 	err     error
 }
 
 func (m *mockTwilioClient) MakeCall(ctx context.Context, fromNumber, toNumber, twiml string) (string, error) {
-	if m.err != nil {
-		return "", m.err
-	}
-	return m.callSID, nil
+	m.calls = append(m.calls, struct {
+		fromNumber string
+		toNumber   string
+		twiml      string
+	}{fromNumber, toNumber, twiml})
+	return m.callSID, m.err
 }
 
-func TestMakeCall(t *testing.T) {
-	env := newTestEnv(t)
-	defer env.cleanup()
-
-	tests := []struct {
-		name        string
-		phoneNumber string
-		mockCallSID string
-		mockErr     error
-		want        *CallResult
-		wantErr     bool
-	}{
-		{
-			name:        "successful call",
-			phoneNumber: "+1234567890",
-			mockCallSID: "call-123",
-			want: &CallResult{
-				CallSID:     "call-123",
-				PhoneNumber: "+1234567890",
-				Status:      "initiated",
-			},
-		},
-		{
-			name:        "twilio error",
-			phoneNumber: "+1234567890",
-			mockErr:     fmt.Errorf("twilio error"),
-			wantErr:     true,
-		},
-		{
-			name:        "invalid phone number",
-			phoneNumber: "1234567890", // missing plus
-			mockErr:     fmt.Errorf("Invalid phone number: The 'To' number 1234567890 is not a valid phone number"),
-			wantErr:     true,
-		},
-		{
-			name:        "empty phone number",
-			phoneNumber: "",
-			mockErr:     fmt.Errorf("Invalid phone number: The 'To' number is required"),
-			wantErr:     true,
-		},
-	}
-
-	config := CallConfig{
-		FromNumber: "+1987654321",
-		Twiml:      "<Response><Say>Test call</Say></Response>",
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create mock Twilio client for this test
-			twilio := &mockTwilioClient{
-				callSID: tt.mockCallSID,
-				err:     tt.mockErr,
-			}
-
-			// Create handler
-			handler, err := NewVoiceHandler(context.Background(), env.js, twilio, env.logger, config)
-			if err != nil {
-				t.Fatalf("Failed to create handler: %v", err)
-			}
-
-			// Test makeCall
-			got, err := handler.makeCall(context.Background(), CallRequest{PhoneNumber: tt.phoneNumber})
-			if (err != nil) != tt.wantErr {
-				t.Errorf("makeCall() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-
-			if tt.wantErr {
-				return
-			}
-
-			if got.CallSID != tt.want.CallSID {
-				t.Errorf("CallSID = %v, want %v", got.CallSID, tt.want.CallSID)
-			}
-			if got.PhoneNumber != tt.want.PhoneNumber {
-				t.Errorf("PhoneNumber = %v, want %v", got.PhoneNumber, tt.want.PhoneNumber)
-			}
-			if got.Status != tt.want.Status {
-				t.Errorf("Status = %v, want %v", got.Status, tt.want.Status)
-			}
-		})
-	}
-}
-
-func TestHandleMessage(t *testing.T) {
-	env := newTestEnv(t)
-	defer env.cleanup()
-
-	config := CallConfig{
-		FromNumber: "+1987654321",
-		Twiml:      "<Response><Say>Test call</Say></Response>",
-	}
-
+func TestVoiceHandleMessage(t *testing.T) {
 	tests := []struct {
 		name        string
 		input       CallRequest
-		mockCallSID string
-		mockErr     error
-		want        *CallResult
+		want        CallResult
+		twilioError error
 		wantErr     bool
 	}{
 		{
@@ -127,48 +40,54 @@ func TestHandleMessage(t *testing.T) {
 			input: CallRequest{
 				PhoneNumber: "+1234567890",
 			},
-			mockCallSID: "call-123",
-			want: &CallResult{
-				CallSID:     "call-123",
+			want: CallResult{
+				CallSID:     "test-call-sid",
 				PhoneNumber: "+1234567890",
 				Status:      "initiated",
 			},
+			twilioError: nil,
+			wantErr:     false,
 		},
 		{
 			name: "failed call",
 			input: CallRequest{
 				PhoneNumber: "+1234567890",
 			},
-			mockErr: fmt.Errorf("twilio error"),
-			want: &CallResult{
+			want: CallResult{
 				PhoneNumber: "+1234567890",
 				Status:      "failed",
 			},
-			wantErr: true,
+			twilioError: fmt.Errorf("twilio error"),
+			wantErr:     false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create mock Twilio client for this test
+			env := newTestEnv(t)
+			defer env.cleanup()
+
+			// Create mock Twilio client
 			twilio := &mockTwilioClient{
-				callSID: tt.mockCallSID,
-				err:     tt.mockErr,
+				callSID: tt.want.CallSID,
+				err:     tt.twilioError,
 			}
 
-			// Create handler
-			handler, err := NewVoiceHandler(context.Background(), env.js, twilio, env.logger, config)
+			// Create handler config
+			config := CallConfig{
+				FromNumber: "+19876543210",
+				Twiml:      "<Response><Say>Hello</Say></Response>",
+			}
+
+			// Create handler with a background context since we don't need to control its lifecycle.
+			// The handler is required even though we don't explicitly use it because it registers
+			// the message handler with the GenericHandler during creation.
+			_, err := NewVoiceHandler(context.Background(), env.js, twilio, env.logger, config)
 			if err != nil {
 				t.Fatalf("Failed to create handler: %v", err)
 			}
 
-			// Start the handler
-			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second) // Increase timeout duration
-			defer cancel()
-			go handler.Start(ctx)
-			time.Sleep(100 * time.Millisecond) // Allow handler to initialize
-
-			// Send and receive message
+			// Send test message and verify response
 			got, err := SendAndReceiveMessage[CallRequest, CallResult](
 				t,
 				context.Background(),
@@ -177,21 +96,39 @@ func TestHandleMessage(t *testing.T) {
 				TopicVoiceInput,
 				TopicVoiceResult,
 				tt.input,
-				5*time.Second, // Increase wait duration
+				1*time.Second,
 			)
-			if err != nil && !tt.wantErr {
-				t.Fatalf("Failed to send and receive message: %v", err)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("SendAndReceiveMessage error = %v, wantErr %v", err, tt.wantErr)
 			}
 
-			// Verify results
+			// Verify Twilio call was made with correct parameters
+			if !tt.wantErr && tt.twilioError == nil {
+				if len(twilio.calls) != 1 {
+					t.Errorf("Expected 1 Twilio call, got %d", len(twilio.calls))
+				} else {
+					call := twilio.calls[0]
+					if call.fromNumber != config.FromNumber {
+						t.Errorf("Wrong from number: got %s, want %s", call.fromNumber, config.FromNumber)
+					}
+					if call.toNumber != tt.input.PhoneNumber {
+						t.Errorf("Wrong to number: got %s, want %s", call.toNumber, tt.input.PhoneNumber)
+					}
+					if call.twiml != config.Twiml {
+						t.Errorf("Wrong TwiML: got %s, want %s", call.twiml, config.Twiml)
+					}
+				}
+			}
+
+			// Verify response
 			if got.CallSID != tt.want.CallSID {
-				t.Errorf("CallSID = %v, want %v", got.CallSID, tt.want.CallSID)
+				t.Errorf("Wrong CallSID: got %s, want %s", got.CallSID, tt.want.CallSID)
 			}
 			if got.PhoneNumber != tt.want.PhoneNumber {
-				t.Errorf("PhoneNumber = %v, want %v", got.PhoneNumber, tt.want.PhoneNumber)
+				t.Errorf("Wrong PhoneNumber: got %s, want %s", got.PhoneNumber, tt.want.PhoneNumber)
 			}
 			if got.Status != tt.want.Status {
-				t.Errorf("Status = %v, want %v", got.Status, tt.want.Status)
+				t.Errorf("Wrong Status: got %s, want %s", got.Status, tt.want.Status)
 			}
 		})
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
@@ -39,49 +40,46 @@ func (h *GenericHandler) Register(ctx context.Context, streamName string, subjec
 	}
 
 	// Create or update consumer for this subject.
-	_, err := h.js.CreateOrUpdateConsumer(ctx, streamName, consumerConfig)
+	consumer, err := h.js.CreateOrUpdateConsumer(ctx, streamName, consumerConfig)
 	if err != nil {
 		h.logger.Error("failed to create/update consumer", "subject", subject, "error", err)
 		return fmt.Errorf("failed to create consumer for subject %s: %w", subject, err)
 	}
 
-	// Subscribe to the subject.
-	h.logger.Debug("registering handler", "subject", subject, "durable", durable)
-	_, err = h.js.PullSubscribe(subject, durable)
-	if err != nil {
-		h.logger.Error("failed to subscribe to subject", "subject", subject, "error", err)
-		return fmt.Errorf("failed to subscribe to subject %s: %w", subject, err)
-	}
-
 	// Start a goroutine to process incoming messages.
 	go func() {
-		sub, err := h.js.Consumer(ctx, streamName, durable)
-		if err != nil {
-			h.logger.Error("failed to get consumer", "subject", subject, "error", err)
-			return
-		}
-
 		for {
 			select {
 			case <-ctx.Done():
 				h.logger.Debug("generic handler context cancelled", "subject", subject)
 				return
 			default:
-				// Try fetching one message with a short timeout.
-				msgs, err := sub.Fetch(1, jetstream.FetchTimeout(1*time.Second))
+				// Try fetching messages with a short timeout.
+				msgs, err := consumer.Fetch(1, jetstream.FetchMaxWait(250*time.Millisecond))
 				if err != nil {
-					h.logger.Debug("no messages fetched", "subject", subject, "error", err)
+					if strings.Contains(err.Error(), "timeout") {
+						continue
+					}
+					h.logger.Error("failed to fetch messages", "subject", subject, "error", err)
+					time.Sleep(100 * time.Millisecond) // Back off on error
 					continue
 				}
 
-				for _, msg := range msgs {
-					h.logger.Debug("processing message", "subject", subject, "data", string(msg.Data()))
-					if err := callback(ctx, msg); err != nil {
-						h.logger.Error("callback processing failed", "subject", subject, "error", err)
-						// Optionally send a negative acknowledgement.
-						_ = msg.Nak()
-					} else {
-						_ = msg.Ack()
+				// Process each message in the batch
+				for msg := range msgs.Messages() {
+					select {
+					case <-ctx.Done():
+						h.logger.Debug("context cancelled while processing message", "subject", subject)
+						msg.Term() // Terminate message processing on context cancellation
+						return
+					default:
+						h.logger.Debug("processing message", "subject", subject, "data", string(msg.Data()))
+						if err := callback(ctx, msg); err != nil {
+							h.logger.Error("callback processing failed", "subject", subject, "error", err)
+							msg.Term()
+						} else {
+							msg.Ack()
+						}
 					}
 				}
 			}
