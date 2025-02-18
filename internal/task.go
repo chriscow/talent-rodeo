@@ -30,7 +30,7 @@ type Task struct {
 }
 
 // NewTask creates a new task with default values
-func NewTask(taskType string, payload interface{}) (*Task, error) {
+func NewTask(taskType string, payload any) (*Task, error) {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
@@ -47,12 +47,12 @@ func NewTask(taskType string, payload interface{}) (*Task, error) {
 }
 
 // GetPayload unmarshals the task payload into the provided interface
-func (t *Task) GetPayload(v interface{}) error {
+func (t *Task) GetPayload(v any) error {
 	return json.Unmarshal(t.Payload, v)
 }
 
 // SetPayload marshals the provided interface into the task payload
-func (t *Task) SetPayload(v interface{}) error {
+func (t *Task) SetPayload(v any) error {
 	payloadBytes, err := json.Marshal(v)
 	if err != nil {
 		return err

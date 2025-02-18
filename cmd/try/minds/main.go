@@ -117,7 +117,7 @@ func run() error {
 					},
 					Handler: handlers.Sequential(
 						"c2_flow",
-						handlers.NewMetadataUpdater(map[string]interface{}{
+						handlers.NewMetadataUpdater(map[string]any{
 							"target_language_level": "c1",
 						}),
 						handlers.ConditionalRetry(
@@ -126,7 +126,7 @@ func run() error {
 							handlers.Sequential("c2_flow_c1_retry_flow", c1Step, readabilityStep),
 						,	)handlers.ParallelWithFocus(
 							"c2_flow_c1_storage",
-							handlers.NewMetadataUpdater(map[string]interface{}{
+							handlers.NewMetadataUpdater(map[string]any{
 								"target_language_level": "b2",
 							}),
 						),
@@ -136,7 +136,7 @@ func run() error {
 							handlers.Sequential("c2_flow_b2_retry_flow", b2SimplificationStep, readabilityStep),
 							conditionalRetryFn,
 						),
-						handlers.NewMetadataUpdater(map[string]interface{}{
+						handlers.NewMetadataUpdater(map[string]any{
 							"target_language_level": "b1",
 						}),
 						handlers.ConditionalRetry(
@@ -145,7 +145,7 @@ func run() error {
 							handlers.Sequential("c2_flow_b1_retry_flow", b1SimplificationStep, readabilityStep),
 							conditionalRetryFn,
 						),
-						handlers.NewMetadataUpdater(map[string]interface{}{
+						handlers.NewMetadataUpdater(map[string]any{
 							"target_language_level": "a2a1",
 						}),
 						handlers.ConditionalRetry(
@@ -163,7 +163,7 @@ func run() error {
 					},
 					Handler: handlers.Sequential(
 						"c1_flow",
-						handlers.NewMetadataUpdater(map[string]interface{}{
+						handlers.NewMetadataUpdater(map[string]any{
 							"target_language_level": "b2",
 						}),
 						handlers.ConditionalRetry(
@@ -172,7 +172,7 @@ func run() error {
 							handlers.Sequential("c1_flow_b2_retry_flow", b2SimplificationStep, readabilityStep),
 							conditionalRetryFn,
 						),
-						handlers.NewMetadataUpdater(map[string]interface{}{
+						handlers.NewMetadataUpdater(map[string]any{
 							"target_language_level": "b1",
 						}),
 						handlers.ConditionalRetry(
@@ -181,7 +181,7 @@ func run() error {
 							handlers.Sequential("c1_flow_b1_retry_flow", b1SimplificationStep, readabilityStep),
 							conditionalRetryFn,
 						),
-						handlers.NewMetadataUpdater(map[string]interface{}{
+						handlers.NewMetadataUpdater(map[string]any{
 							"target_language_level": "a2a1",
 						}),
 						handlers.ConditionalRetry(
@@ -199,7 +199,7 @@ func run() error {
 					},
 					Handler: handlers.Sequential(
 						"b2_flow",
-						handlers.NewMetadataUpdater(map[string]interface{}{
+						handlers.NewMetadataUpdater(map[string]any{
 							"target_language_level": "b1",
 						}),
 						handlers.ConditionalRetry(
@@ -208,7 +208,7 @@ func run() error {
 							handlers.Sequential("b2_flow_b1_retry_flow", b1SimplificationStep, readabilityStep),
 							conditionalRetryFn,
 						),
-						handlers.NewMetadataUpdater(map[string]interface{}{
+						handlers.NewMetadataUpdater(map[string]any{
 							"target_language_level": "a2a1",
 						}),
 						handlers.ConditionalRetry(
@@ -226,7 +226,7 @@ func run() error {
 					},
 					Handler: handlers.Sequential(
 						"b1_flow",
-						handlers.NewMetadataUpdater(map[string]interface{}{
+						handlers.NewMetadataUpdater(map[string]any{
 							"target_language_level": "a2a1",
 						}),
 						handlers.ConditionalRetry(

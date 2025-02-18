@@ -266,7 +266,7 @@ func TestNATSMessageScheduler_ScheduleMessage(t *testing.T) {
 	tests := []struct {
 		name      string
 		subject   string
-		data      interface{}
+		data      any
 		metadata  map[string]string
 		runAt     time.Time
 		wantErr   bool

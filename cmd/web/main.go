@@ -92,6 +92,7 @@ type application struct {
 	wg            sync.WaitGroup
 	pusher        *pusher.Client
 	keywordsMutex sync.RWMutex
+	handlers      map[string]any
 
 	natsServer   *server.Server
 	natsShutdown chan struct{}
@@ -219,7 +220,8 @@ func run(logger *slog.Logger) error {
 	_ = stream // We keep the stream reference even though we don't use it directly
 
 	// Setup all pipeline handlers
-	if err := setupPipelineHandlers(ctx, db, js, logger); err != nil {
+	handlers, err := setupPipelineHandlers(ctx, db, js, logger)
+	if err != nil {
 		return fmt.Errorf("failed to setup pipeline handlers: %w", err)
 	}
 
@@ -246,6 +248,7 @@ func run(logger *slog.Logger) error {
 		natsShutdown: make(chan struct{}),
 		processor:    taskProcessor,
 		scheduler:    scheduler,
+		handlers:     handlers,
 	}
 
 	if cfg.autoHTTPS.domain != "" {
@@ -326,11 +329,14 @@ func setupPipelineHandlers(
 	db *database.DB,
 	js jetstream.JetStream,
 	logger *slog.Logger,
-) error {
+) (map[string]any, error) {
+	pipelineHandlers := make(map[string]any)
+	logger.Debug("setting up pipeline handlers")
+
 	// Setup voice handler
 	llm, err := gemini.NewProvider(ctx)
 	if err != nil {
-		return fmt.Errorf("error setting up gemini provider: %w", err)
+		return nil, fmt.Errorf("error setting up gemini provider: %w", err)
 	}
 
 	voiceConfig := handlers.CallConfig{
@@ -345,46 +351,52 @@ func setupPipelineHandlers(
 		os.Getenv("TWILIO_FROM_NUMBER"),
 	), logger, voiceConfig)
 	if err != nil {
-		return fmt.Errorf("error setting up voice handler: %w", err)
+		return nil, fmt.Errorf("error setting up voice handler: %w", err)
 	}
-	go voiceHandler.Start(ctx)
+	pipelineHandlers["voice"] = voiceHandler
+	logger.Debug("voice handler configured")
 
 	// Setup transcript handler
 	transcriptHandler, err := handlers.NewExperienceHandler(ctx, js, llm, logger)
 	if err != nil {
-		return fmt.Errorf("error setting up transcript handler: %w", err)
+		return nil, fmt.Errorf("error setting up transcript handler: %w", err)
 	}
-	go transcriptHandler.Start(ctx)
+	pipelineHandlers["transcript"] = transcriptHandler
+	logger.Debug("transcript handler configured")
 
 	// Setup job description handler
 	jobDescHandler, err := handlers.NewRequirementsHandler(ctx, js, llm, logger)
 	if err != nil {
-		return fmt.Errorf("error setting up job description handler: %w", err)
+		return nil, fmt.Errorf("error setting up job description handler: %w", err)
 	}
-	go jobDescHandler.Start(ctx)
+	pipelineHandlers["jobDesc"] = jobDescHandler
+	logger.Debug("job description handler configured")
 
 	// Setup culture handler
 	cultureHandler, err := handlers.NewCultureHandler(ctx, js, llm, logger)
 	if err != nil {
-		return fmt.Errorf("error setting up culture handler: %w", err)
+		return nil, fmt.Errorf("error setting up culture handler: %w", err)
 	}
-	go cultureHandler.Start(ctx)
+	pipelineHandlers["culture"] = cultureHandler
+	logger.Debug("culture handler configured")
 
 	// Setup assessment handler
-	assessmentHandler, err := handlers.NewAssessmentHandler(ctx, js, llm, logger)
+	assessmentHandler, err := handlers.NewAssessmentHandler(ctx, js, llm, logger, db)
 	if err != nil {
-		return fmt.Errorf("error setting up assessment handler: %w", err)
+		return nil, fmt.Errorf("error setting up assessment handler: %w", err)
 	}
-	go assessmentHandler.Start(ctx)
+	pipelineHandlers["assessment"] = assessmentHandler
+	logger.Debug("assessment handler configured")
 
 	// Setup search handler with ScrapingDog provider
 	searchProvider := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"))
 	searchHandler, err := handlers.NewSearchHandler(ctx, js, searchProvider, logger)
 	if err != nil {
-		return fmt.Errorf("error setting up search handler: %w", err)
+		return nil, fmt.Errorf("error setting up search handler: %w", err)
 	}
-	go searchHandler.Start(ctx)
+	pipelineHandlers["search"] = searchHandler
+	logger.Debug("search handler configured")
 
 	logger.Info("All pipeline handlers configured successfully")
-	return nil
+	return pipelineHandlers, nil
 }

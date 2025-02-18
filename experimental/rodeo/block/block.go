@@ -6,7 +6,7 @@ import (
 	"github.com/chriscow/minds"
 )
 
-type Message interface{}
+type Message any
 
 type BlockType string
 

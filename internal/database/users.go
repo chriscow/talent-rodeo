@@ -200,14 +200,14 @@ func (db *DB) UpdateFullResume(userID int, fileName, resume string) error {
 	defer cancel()
 
 	var query string
-	var args []interface{}
+	var args []any
 
 	if fileName == "" {
 		query = `UPDATE users SET resume_filename=NULL, full_resume=NULL WHERE id = $1`
-		args = []interface{}{userID}
+		args = []any{userID}
 	} else {
 		query = `UPDATE users SET resume_filename = $1, full_resume = $2 WHERE id = $3`
-		args = []interface{}{fileName, resume, userID}
+		args = []any{fileName, resume, userID}
 	}
 
 	_, err := db.ExecContext(ctx, query, args...)
