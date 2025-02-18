@@ -148,7 +148,7 @@ func handleMediaStream(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			var data map[string]interface{}
+			var data map[string]any
 			if err := json.Unmarshal(message, &data); err != nil {
 				log.Printf("Error parsing message: %v", err)
 				continue

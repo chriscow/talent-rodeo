@@ -153,7 +153,7 @@ func (app *application) logoutUser(w http.ResponseWriter, r *http.Request) {
 
 	if app.config.testing {
 		// In testing mode, explicitly reset session values
-		session.Values = make(map[interface{}]interface{})
+		session.Values = make(map[any]any)
 	}
 
 	// Set MaxAge to -1 to expire the cookie immediately

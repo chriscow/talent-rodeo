@@ -137,14 +137,14 @@ func handleExecuteWorkflow(conn *websocket.Conn, msg WebsocketMsg) {
 }
 
 func sendError(conn *websocket.Conn, message string) {
-	conn.WriteJSON(map[string]interface{}{
+	conn.WriteJSON(map[string]any{
 		"type":    "error",
 		"message": message,
 	})
 }
 
-func sendSuccess(conn *websocket.Conn, msgType string, data interface{}) {
-	conn.WriteJSON(map[string]interface{}{
+func sendSuccess(conn *websocket.Conn, msgType string, data any) {
+	conn.WriteJSON(map[string]any{
 		"type":    msgType,
 		"payload": data,
 	})

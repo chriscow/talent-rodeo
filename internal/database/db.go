@@ -23,15 +23,15 @@ const defaultTimeout = 3 * time.Second
 type DBTX interface {
 	sqlx.ExtContext
 	sqlx.PreparerContext
-	Get(dest interface{}, query string, args ...interface{}) error
-	GetContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
-	Select(dest interface{}, query string, args ...interface{}) error
-	SelectContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
-	Queryx(query string, args ...interface{}) (*sqlx.Rows, error)
-	QueryRowx(query string, args ...interface{}) *sqlx.Row
-	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
-	Exec(query string, args ...interface{}) (sql.Result, error)
-	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	Get(dest any, query string, args ...any) error
+	GetContext(ctx context.Context, dest any, query string, args ...any) error
+	Select(dest any, query string, args ...any) error
+	SelectContext(ctx context.Context, dest any, query string, args ...any) error
+	Queryx(query string, args ...any) (*sqlx.Rows, error)
+	QueryRowx(query string, args ...any) *sqlx.Row
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	Exec(query string, args ...any) (sql.Result, error)
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
 // DB wraps sqlx.DB to provide additional functionality
@@ -196,27 +196,27 @@ func (db *DB) Close() error {
 }
 
 // Helper methods to make the DB struct satisfy the DBTX interface
-func (db *DB) GetContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error {
+func (db *DB) GetContext(ctx context.Context, dest any, query string, args ...any) error {
 	return db.dbtx.GetContext(ctx, dest, query, args...)
 }
 
-func (db *DB) SelectContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error {
+func (db *DB) SelectContext(ctx context.Context, dest any, query string, args ...any) error {
 	return db.dbtx.SelectContext(ctx, dest, query, args...)
 }
 
-func (db *DB) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
+func (db *DB) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
 	return db.dbtx.QueryRowContext(ctx, query, args...)
 }
 
-func (db *DB) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+func (db *DB) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	return db.dbtx.ExecContext(ctx, query, args...)
 }
 
-func (db *DB) Exec(query string, args ...interface{}) (sql.Result, error) {
+func (db *DB) Exec(query string, args ...any) (sql.Result, error) {
 	return db.dbtx.Exec(query, args...)
 }
 
-func (db *DB) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+func (db *DB) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
 	if sqlxDB, ok := db.dbtx.(*sqlx.DB); ok {
 		return sqlxDB.QueryContext(ctx, query, args...)
 	}

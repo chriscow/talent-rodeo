@@ -29,7 +29,7 @@ func (p Prompt) Body() string {
 	return p.body
 }
 
-func (p Prompt) Execute(data interface{}) (string, error) {
+func (p Prompt) Execute(data any) (string, error) {
 	var result strings.Builder
 	if err := p.Template.Execute(&result, data); err != nil {
 		return "", err
