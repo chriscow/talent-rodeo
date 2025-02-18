@@ -47,7 +47,7 @@ func (t *addKnownFactsTool) Call(ctx context.Context, input []byte) ([]byte, err
 	}
 	t.state.Candidate.KnownFacts = append(t.state.Candidate.KnownFacts, args.Facts...)
 
-	result := map[string]interface{}{
+	result := map[string]any{
 		"known_facts": args.Facts,
 	}
 
@@ -85,7 +85,7 @@ func (t *addInferredPreferenceTool) Call(ctx context.Context, input []byte) ([]b
 	}
 	t.state.Candidate.InferredPreferences = append(t.state.Candidate.InferredPreferences, args.Preferences...)
 
-	result := map[string]interface{}{
+	result := map[string]any{
 		"inferred_preferences": args.Preferences,
 	}
 

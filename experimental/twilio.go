@@ -58,7 +58,7 @@ func (t *TwilioAudioInterface) Output(audio []byte) {
 		}
 
 		audioPayload := base64.StdEncoding.EncodeToString(audio)
-		audioDelta := map[string]interface{}{
+		audioDelta := map[string]any{
 			"event":     "media",
 			"streamSid": streamSid,
 			"media": map[string]string{
@@ -83,7 +83,7 @@ func (t *TwilioAudioInterface) Interrupt() {
 			return
 		}
 
-		clearMessage := map[string]interface{}{
+		clearMessage := map[string]any{
 			"event":     "clear",
 			"streamSid": streamSid,
 		}
@@ -95,7 +95,7 @@ func (t *TwilioAudioInterface) Interrupt() {
 	}()
 }
 
-func (t *TwilioAudioInterface) HandleTwilioMessage(data map[string]interface{}) {
+func (t *TwilioAudioInterface) HandleTwilioMessage(data map[string]any) {
 	eventType, ok := data["event"].(string)
 	if !ok {
 		return
@@ -106,7 +106,7 @@ func (t *TwilioAudioInterface) HandleTwilioMessage(data map[string]interface{}) 
 
 	switch eventType {
 	case "start":
-		if start, ok := data["start"].(map[string]interface{}); ok {
+		if start, ok := data["start"].(map[string]any); ok {
 			if streamSid, ok := start["streamSid"].(string); ok {
 				t.streamSid = streamSid
 			}
@@ -116,7 +116,7 @@ func (t *TwilioAudioInterface) HandleTwilioMessage(data map[string]interface{}) 
 			return
 		}
 
-		if media, ok := data["media"].(map[string]interface{}); ok {
+		if media, ok := data["media"].(map[string]any); ok {
 			if payload, ok := media["payload"].(string); ok {
 				audioData, err := base64.StdEncoding.DecodeString(payload)
 				if err != nil {

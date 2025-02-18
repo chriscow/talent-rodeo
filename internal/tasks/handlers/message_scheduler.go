@@ -104,7 +104,7 @@ func (h *NATSMessageScheduler) ProcessTask(ctx context.Context, task *internal.T
 }
 
 // ScheduleMessage schedules a message to be published at the specified time
-func (h *NATSMessageScheduler) ScheduleMessage(ctx context.Context, subject string, data interface{}, metadata map[string]string, runAt time.Time, taskProc TaskProcessor) error {
+func (h *NATSMessageScheduler) ScheduleMessage(ctx context.Context, subject string, data any, metadata map[string]string, runAt time.Time, taskProc TaskProcessor) error {
 	h.logger.Debug("scheduling message",
 		"subject", subject,
 		"run_at", runAt,

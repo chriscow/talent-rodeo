@@ -143,7 +143,7 @@ type MonitorPlan struct {
 }
 
 type Squad struct {
-	Members          []interface{}    `json:"members"`
+	Members          []any            `json:"members"`
 	Name             string           `json:"name"`
 	MembersOverrides MembersOverrides `json:"membersOverrides"`
 }
