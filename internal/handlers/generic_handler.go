@@ -60,7 +60,16 @@ func (h *GenericHandler) Register(ctx context.Context, streamName string, subjec
 					if strings.Contains(err.Error(), "timeout") {
 						continue
 					}
-					h.logger.Error("failed to fetch messages", "subject", subject, "error", err)
+					if strings.Contains(err.Error(), "nats: connection closed") {
+						// This is expected during cleanup/shutdown
+						h.logger.Debug("connection closed (expected during cleanup)",
+							"subject", subject,
+							"error", err)
+						return
+					}
+					h.logger.Error("failed to fetch messages",
+						"subject", subject,
+						"error", err)
 					time.Sleep(100 * time.Millisecond) // Back off on error
 					continue
 				}

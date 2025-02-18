@@ -132,7 +132,10 @@ func newTestEnv(t *testing.T) *testEnv {
 	opts := test.DefaultTestOptions
 	opts.JetStream = true
 	srv := test.RunServer(&opts)
-	t.Cleanup(srv.Shutdown)
+	t.Cleanup(func() {
+		logger.Debug("cleaning up test NATS server")
+		srv.Shutdown()
+	})
 
 	// Wait for server to be ready
 	if !srv.ReadyForConnections(5 * time.Second) {
@@ -182,18 +185,21 @@ func newTestEnv(t *testing.T) *testEnv {
 		cleanups: make([]func(), 0),
 	}
 
-	// Add cleanup for NATS connection
+	// Add cleanup functions
 	env.cleanups = append(env.cleanups, func() {
+		logger.Debug("cleaning up test environment", "component", "test_env")
+		cancel()
 		nc.Close()
+		if err := db.Close(); err != nil {
+			logger.Error("error closing database", "error", err)
+		}
 	})
 
-	t.Cleanup(env.cleanup)
 	return env
 }
 
-func (e *testEnv) cleanup() {
-	e.cancel()
-	for _, cleanup := range e.cleanups {
+func (env *testEnv) cleanup() {
+	for _, cleanup := range env.cleanups {
 		cleanup()
 	}
 }
