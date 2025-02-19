@@ -8,51 +8,6 @@ import (
 	"time"
 )
 
-func TestExtractPreferences(t *testing.T) {
-	env := newTestEnv(t)
-	defer env.cleanup()
-
-	// Test transcript
-	transcript := `I'm looking for a remote position, but I'm open to hybrid work in San Francisco or Seattle.
-    I prefer working in mid-size to enterprise companies, especially in the tech or fintech industry.
-    I enjoy collaborative environments and I'm looking for a salary between $150,000 and $200,000.`
-
-	// Expected response from LLM
-	want := &Preferences{
-		PreferredLocations: []string{"San Francisco", "Seattle"},
-		RemotePreference:   "remote",
-		WorkStyle:          "collaborative",
-		CompanySize:        "mid-size",
-		Industry:           []string{"tech", "fintech"},
-		SalaryRange: &SalaryRange{
-			Min: 150000,
-			Max: 200000,
-		},
-	}
-
-	// Set up mock LLM response
-	preferencesJSON, err := json.Marshal(want)
-	if err != nil {
-		t.Fatalf("Failed to marshal preferences: %v", err)
-	}
-	env.llm.responses[preferencesPrompt] = string(preferencesJSON)
-
-	// Create handler
-	handler, err := NewPreferencesHandler(context.Background(), env.js, env.llm, env.logger)
-	if err != nil {
-		t.Fatalf("Failed to create handler: %v", err)
-	}
-
-	got, err := handler.extract(context.Background(), transcript)
-	if err != nil {
-		t.Fatalf("extract failed: %v", err)
-	}
-
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got %v, want %v", got, want)
-	}
-}
-
 func TestHandlePreferencesMessage(t *testing.T) {
 	env := newTestEnv(t)
 	defer env.cleanup()
@@ -78,20 +33,18 @@ func TestHandlePreferencesMessage(t *testing.T) {
 		},
 	}
 
+	// Create handler
+	handler, err := NewPreferencesHandler(context.Background(), env.js, env.llm, env.logger)
+	if err != nil {
+		t.Fatalf("Failed to create handler: %v", err)
+	}
+
+	// Set up mock LLM response for the system prompt
 	wantJSON, err := json.Marshal(want)
 	if err != nil {
 		t.Fatalf("Failed to marshal result: %v", err)
 	}
-
-	env.llm.responses[preferencesPrompt] = string(wantJSON)
-
-	// Create handler with a background context since we don't need to control its lifecycle.
-	// The handler is required even though we don't explicitly use it because it registers
-	// the message handler with the GenericHandler during creation.
-	_, err = NewPreferencesHandler(context.Background(), env.js, env.llm, env.logger)
-	if err != nil {
-		t.Fatalf("Failed to create handler: %v", err)
-	}
+	env.llm.responses[handler.GetSystemPrompt()] = string(wantJSON)
 
 	// Send test message and verify response
 	got, err := SendAndReceiveMessage[JobDescriptionInput, Preferences](

@@ -10,16 +10,12 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 )
 
-const (
-	experiencePrompt = `Analyze interview transcripts and extract work experience details.
+const experiencePrompt = `Analyze interview transcripts and extract work experience details.
 Include total years of experience and details about each role mentioned.
 
 Provide a JSON object with experience details including:
 - totalYears: Total years of professional experience
 - roles: Array of roles with title, company, years in role, and skills used`
-
-	TopicExperienceExtracted = "rodeo.transcript.extracted.experience"
-)
 
 type Experience struct {
 	TotalYears float64 `json:"totalYears" description:"The total number of years of experience"`
@@ -43,14 +39,29 @@ func NewExperienceHandler(ctx context.Context, js jetstream.JetStream, llm minds
 	handler := &ExperienceHandler{
 		llm:     llm,
 		logger:  logger.With(slog.String("component", "experience_handler")),
-		generic: NewGenericHandler(js, logger),
+		generic: NewGenericHandler(js, logger, llm),
 	}
 
-	if err := handler.generic.Register(ctx, rodeoStream, TopicTranscriptInput, "RODEO-TRANSCRIPT-EXPERIENCE-QUEUE", handler.handleMessage); err != nil {
+	if err := handler.generic.RegisterLLMHandler(ctx, rodeoStream, TopicTranscriptInput, "RODEO-TRANSCRIPT-EXPERIENCE-QUEUE", handler); err != nil {
 		return nil, fmt.Errorf("failed to register experience handler: %w", err)
 	}
 
 	return handler, nil
+}
+
+// GetSystemPrompt implements LLMProcessor
+func (h *ExperienceHandler) GetSystemPrompt() string {
+	return experiencePrompt
+}
+
+// GetResponseSchema implements LLMProcessor
+func (h *ExperienceHandler) GetResponseSchema() (*minds.ResponseSchema, error) {
+	return minds.NewResponseSchema("Experience", "Experience details", Experience{})
+}
+
+// GetOutputTopic implements LLMProcessor
+func (h *ExperienceHandler) GetOutputTopic() string {
+	return TopicExperienceExtracted
 }
 
 func (h *ExperienceHandler) handleMessage(ctx context.Context, msg jetstream.Msg) error {
@@ -60,60 +71,51 @@ func (h *ExperienceHandler) handleMessage(ctx context.Context, msg jetstream.Msg
 
 	transcript := string(msg.Data())
 
-	experience, err := h.extract(ctx, transcript)
-	if err != nil {
-		return fmt.Errorf("failed to extract experience: %w", err)
-	}
-
-	experienceJSON, err := json.Marshal(experience)
-	if err != nil {
-		return fmt.Errorf("failed to marshal experience: %w", err)
-	}
-
-	h.logger.Debug("Publishing experience",
-		"total_years", experience.TotalYears,
-		"roles_count", len(experience.Roles))
-
-	_, err = h.generic.js.Publish(ctx, TopicExperienceExtracted, experienceJSON)
-	if err != nil {
-		return fmt.Errorf("failed to publish experience: %w", err)
-	}
-
-	return nil
-}
-
-func (h *ExperienceHandler) extract(ctx context.Context, transcript string) (*Experience, error) {
-	schema, err := minds.NewResponseSchema("Experience", "Experience details", Experience{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create experience schema: %w", err)
-	}
-
-	request := minds.NewRequest(minds.Messages{
+	msgs := minds.Messages{
 		{
 			Role:    minds.RoleSystem,
-			Content: experiencePrompt,
+			Content: h.GetSystemPrompt(),
 		},
 		{
 			Role:    minds.RoleUser,
 			Content: transcript,
 		},
-	}, minds.WithResponseSchema(*schema))
+	}
+
+	schema, err := h.GetResponseSchema()
+	if err != nil {
+		return fmt.Errorf("failed to create experience schema: %w", err)
+	}
+
+	request := minds.NewRequest(msgs, minds.WithResponseSchema(*schema))
 
 	h.logger.Debug("Extracting experience from transcript")
 
 	result, err := h.llm.GenerateContent(ctx, request)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate content: %w", err)
+		return fmt.Errorf("failed to extract experience: %w", err)
 	}
 
-	var output Experience
-	if err := json.Unmarshal([]byte(result.String()), &output); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal experience: %w", err)
+	var experience Experience
+	if err := json.Unmarshal([]byte(result.String()), &experience); err != nil {
+		h.logger.Error("Failed to unmarshal experience", "error", err, "response", result.String())
+		return fmt.Errorf("failed to unmarshal experience: %w", err)
 	}
 
 	h.logger.Debug("Extracted experience",
-		"total_years", output.TotalYears,
-		"roles_count", len(output.Roles))
+		"total_years", experience.TotalYears,
+		"roles_count", len(experience.Roles))
 
-	return &output, nil
+	// Publish the extracted experience
+	experienceJSON, err := json.Marshal(experience)
+	if err != nil {
+		return fmt.Errorf("failed to marshal experience: %w", err)
+	}
+
+	_, err = h.generic.js.Publish(ctx, h.GetOutputTopic(), experienceJSON)
+	if err != nil {
+		return fmt.Errorf("failed to publish experience: %w", err)
+	}
+
+	return nil
 }

@@ -365,7 +365,20 @@ func setupPipelineHandlers(
 	logger.Debug("job description handler configured")
 
 	// TODO: preferences handler
+	preferencesHandler, err := handlers.NewPreferencesHandler(ctx, js, llm, logger)
+	if err != nil {
+		return nil, fmt.Errorf("error setting up preferences handler: %w", err)
+	}
+	h["preferences"] = preferencesHandler
+	logger.Debug("preferences handler configured")
+
 	// TODO: requirements handler
+	requirementsHandler, err := handlers.NewRequirementsHandler(ctx, js, llm, logger)
+	if err != nil {
+		return nil, fmt.Errorf("error setting up requirements handler: %w", err)
+	}
+	h["requirements"] = requirementsHandler
+	logger.Debug("requirements handler configured")
 
 	// Setup search handler with ScrapingDog provider
 	searchProvider := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"))
@@ -377,6 +390,12 @@ func setupPipelineHandlers(
 	logger.Debug("search handler configured")
 
 	// TODO: skills handler
+	skillsHandler, err := handlers.NewSkillsHandler(ctx, js, llm, logger)
+	if err != nil {
+		return nil, fmt.Errorf("error setting up skills handler: %w", err)
+	}
+	h["skills"] = skillsHandler
+	logger.Debug("skills handler configured")
 
 	// Setup transcript handler
 	transcriptHandler, err := handlers.NewExperienceHandler(ctx, js, llm, logger)

@@ -8,6 +8,8 @@ const (
 	TopicCompensationExtracted = "rodeo.jobdesc.extracted.compensation"
 	TopicWorkplaceExtracted    = "rodeo.jobdesc.extracted.workplace"
 	TopicCultureExtracted      = "rodeo.jobdesc.extracted.culture"
+	TopicExperienceExtracted   = "rodeo.transcript.extracted.experience"
+	TopicPreferencesExtracted  = "rodeo.transcript.extracted.preferences"
 
 	// I'm not going to send a completion message
 	// TopicJobDescriptionAnalyzed = "rodeo.jobdesc.analyzed"
