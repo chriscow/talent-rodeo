@@ -51,7 +51,7 @@ func NewVoiceHandler(ctx context.Context, js jetstream.JetStream, twilio TwilioC
 		logger:  logger.With(slog.String("component", "voice_handler")),
 		twilio:  twilio,
 		config:  config,
-		generic: NewGenericHandler(js, logger),
+		generic: NewGenericHandler(js, logger, nil),
 	}
 
 	if err := handler.generic.Register(ctx, rodeoStream, TopicVoiceInput, "RODEO-VOICE-CALLER-QUEUE", handler.handleMessage); err != nil {

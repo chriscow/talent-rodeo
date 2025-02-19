@@ -7,63 +7,6 @@ import (
 	"time"
 )
 
-func TestExtractCulture(t *testing.T) {
-	env := newTestEnv(t)
-	defer env.cleanup()
-
-	// Test job description
-	jobDesc := `We are a fast-paced startup looking for passionate individuals who thrive in a collaborative environment.
-    Our values include innovation, transparency, and continuous learning.
-    We believe in flexible work arrangements and encourage open communication.
-    Team members should be self-motivated and comfortable with rapid iteration.`
-
-	// Expected response from LLM
-	expectedCulture := &Culture{
-		Description:  "A dynamic startup environment that emphasizes collaboration and innovation",
-		Values:       []string{"Innovation", "Transparency", "Continuous Learning"},
-		TeamDynamics: "Highly collaborative with open communication",
-		WorkStyle:    "Self-motivated with rapid iteration",
-	}
-
-	// Create handler
-	handler, err := NewCultureHandler(context.Background(), env.js, env.llm, env.logger)
-	if err != nil {
-		t.Fatalf("Failed to create handler: %v", err)
-	}
-
-	// Set up mock LLM response
-	cultureJSON, err := json.Marshal(expectedCulture)
-	if err != nil {
-		t.Fatalf("Failed to marshal culture: %v", err)
-	}
-	env.llm.responses[culturePrompt] = string(cultureJSON)
-
-	// Test ExtractCulture
-	got, err := handler.extract(context.Background(), jobDesc)
-	if err != nil {
-		t.Fatalf("ExtractCulture failed: %v", err)
-	}
-
-	// Compare results
-	if got.Description != expectedCulture.Description {
-		t.Errorf("got description %q, want %q", got.Description, expectedCulture.Description)
-	}
-	if len(got.Values) != len(expectedCulture.Values) {
-		t.Errorf("got %d values, want %d", len(got.Values), len(expectedCulture.Values))
-	}
-	for i, v := range got.Values {
-		if v != expectedCulture.Values[i] {
-			t.Errorf("got value[%d] %q, want %q", i, v, expectedCulture.Values[i])
-		}
-	}
-	if got.TeamDynamics != expectedCulture.TeamDynamics {
-		t.Errorf("got team dynamics %q, want %q", got.TeamDynamics, expectedCulture.TeamDynamics)
-	}
-	if got.WorkStyle != expectedCulture.WorkStyle {
-		t.Errorf("got work style %q, want %q", got.WorkStyle, expectedCulture.WorkStyle)
-	}
-}
-
 func TestHandleCultureMessage(t *testing.T) {
 	env := newTestEnv(t)
 	defer env.cleanup()
@@ -76,6 +19,7 @@ func TestHandleCultureMessage(t *testing.T) {
 			Team members should be self-motivated and comfortable with rapid iteration.`,
 	}
 
+	// Expected culture result
 	want := &Culture{
 		Description:  "A dynamic startup environment that emphasizes collaboration and innovation",
 		Values:       []string{"Innovation", "Transparency", "Continuous Learning"},
@@ -83,22 +27,22 @@ func TestHandleCultureMessage(t *testing.T) {
 		WorkStyle:    "Self-motivated with rapid iteration",
 	}
 
+	// Set up mock LLM response
 	wantJSON, err := json.Marshal(want)
 	if err != nil {
-		t.Fatalf("TestHandleCultureMessage: Failed to marshal result: %v", err)
+		t.Fatalf("Failed to marshal result: %v", err)
 	}
 
-	env.llm.responses[culturePrompt] = string(wantJSON)
-
-	// Create handler with a background context since we don't need to control its lifecycle.
-	// The handler is required even though we don't explicitly use it because it registers
-	// the message handler with the GenericHandler during creation.
-	_, err = NewCultureHandler(context.Background(), env.js, env.llm, env.logger)
+	// Create handler
+	handler, err := NewCultureHandler(context.Background(), env.js, env.llm, env.logger)
 	if err != nil {
-		t.Fatalf("TestHandleCultureMessage: Failed to create handler: %v", err)
+		t.Fatalf("Failed to create handler: %v", err)
 	}
 
-	// Use the generic harness to send the job description and receive the extracted culture
+	// Set the LLM response for the system prompt
+	env.llm.responses[handler.GetSystemPrompt()] = string(wantJSON)
+
+	// Send test message and verify response
 	got, err := SendAndReceiveMessage[JobDescriptionInput, Culture](
 		t,
 		context.Background(),
@@ -110,25 +54,25 @@ func TestHandleCultureMessage(t *testing.T) {
 		2*time.Second,
 	)
 	if err != nil {
-		t.Fatalf("TestHandleCultureMessage: Failed to send and receive message: %v", err)
+		t.Fatalf("Failed to send and receive message: %v", err)
 	}
 
 	// Validate the extracted culture
 	if got.Description != want.Description {
-		t.Errorf("TestHandleCultureMessage: got description %q, want %q", got.Description, want.Description)
+		t.Errorf("got description %q, want %q", got.Description, want.Description)
 	}
 	if len(got.Values) != len(want.Values) {
-		t.Errorf("TestHandleCultureMessage: got %d values, want %d", len(got.Values), len(want.Values))
+		t.Errorf("got %d values, want %d", len(got.Values), len(want.Values))
 	}
 	for i, v := range got.Values {
 		if v != want.Values[i] {
-			t.Errorf("TestHandleCultureMessage: got value[%d] %q, want %q", i, v, want.Values[i])
+			t.Errorf("got value[%d] %q, want %q", i, v, want.Values[i])
 		}
 	}
 	if got.TeamDynamics != want.TeamDynamics {
-		t.Errorf("TestHandleCultureMessage: got team dynamics %q, want %q", got.TeamDynamics, want.TeamDynamics)
+		t.Errorf("got team dynamics %q, want %q", got.TeamDynamics, want.TeamDynamics)
 	}
 	if got.WorkStyle != want.WorkStyle {
-		t.Errorf("TestHandleCultureMessage: got work style %q, want %q", got.WorkStyle, want.WorkStyle)
+		t.Errorf("got work style %q, want %q", got.WorkStyle, want.WorkStyle)
 	}
 }

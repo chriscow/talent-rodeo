@@ -40,14 +40,29 @@ func NewWorkplaceHandler(ctx context.Context, js jetstream.JetStream, llm minds.
 	handler := &WorkplaceHandler{
 		llm:     llm,
 		logger:  logger.With(slog.String("component", "workplace_handler")),
-		generic: NewGenericHandler(js, logger),
+		generic: NewGenericHandler(js, logger, llm),
 	}
 
-	if err := handler.generic.Register(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-JOBDESC-WORKPLACE-QUEUE", handler.handleMessage); err != nil {
+	if err := handler.generic.RegisterLLMHandler(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-JOBDESC-WORKPLACE-QUEUE", handler); err != nil {
 		return nil, fmt.Errorf("failed to register workplace handler: %w", err)
 	}
 
 	return handler, nil
+}
+
+// GetSystemPrompt implements LLMProcessor
+func (h *WorkplaceHandler) GetSystemPrompt() string {
+	return workplacePrompt
+}
+
+// GetResponseSchema implements LLMProcessor
+func (h *WorkplaceHandler) GetResponseSchema() (*minds.ResponseSchema, error) {
+	return minds.NewResponseSchema("Workplace", "Workplace details", Workplace{})
+}
+
+// GetOutputTopic implements LLMProcessor
+func (h *WorkplaceHandler) GetOutputTopic() string {
+	return TopicWorkplaceExtracted
 }
 
 func (h *WorkplaceHandler) handleMessage(ctx context.Context, msg jetstream.Msg) error {
@@ -58,47 +73,23 @@ func (h *WorkplaceHandler) handleMessage(ctx context.Context, msg jetstream.Msg)
 	var input JobDescriptionInput
 	if err := json.Unmarshal(msg.Data(), &input); err != nil {
 		h.logger.Error("Failed to unmarshal input", "error", err)
-		return nil
+		return fmt.Errorf("failed to unmarshal job description input: %w", err)
 	}
 
-	workplace, err := h.extract(ctx, input.Description)
-	if err != nil {
-		return fmt.Errorf("failed to extract workplace: %w", err)
-	}
-
-	workplaceJSON, err := json.Marshal(workplace)
-	if err != nil {
-		return fmt.Errorf("failed to marshal workplace: %w", err)
-	}
-
-	h.logger.Debug("Publishing workplace",
-		"location", workplace.Location,
-		"type", workplace.Type,
-		"schedule", workplace.Schedule)
-
-	_, err = h.generic.js.Publish(ctx, TopicWorkplaceExtracted, workplaceJSON)
-	if err != nil {
-		return fmt.Errorf("failed to publish workplace: %w", err)
-	}
-
-	return nil
-}
-
-func (h *WorkplaceHandler) extract(ctx context.Context, description string) (*Workplace, error) {
 	msgs := minds.Messages{
 		{
 			Role:    minds.RoleSystem,
-			Content: workplacePrompt,
+			Content: h.GetSystemPrompt(),
 		},
 		{
 			Role:    minds.RoleUser,
-			Content: fmt.Sprintf("Please analyze this job description and extract all workplace-related information:\n\n%s", description),
+			Content: fmt.Sprintf("Please analyze this job description and extract all workplace-related information:\n\n%s", input.Description),
 		},
 	}
 
-	schema, err := minds.NewResponseSchema("Workplace", "Workplace details", Workplace{})
+	schema, err := h.GetResponseSchema()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create workplace schema: %w", err)
+		return fmt.Errorf("failed to create workplace schema: %w", err)
 	}
 
 	request := minds.NewRequest(msgs, minds.WithResponseSchema(*schema))
@@ -107,12 +98,13 @@ func (h *WorkplaceHandler) extract(ctx context.Context, description string) (*Wo
 
 	result, err := h.llm.GenerateContent(ctx, request)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract workplace details: %w", err)
+		return fmt.Errorf("failed to extract workplace details: %w", err)
 	}
 
 	var workplace Workplace
 	if err := json.Unmarshal([]byte(result.String()), &workplace); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal workplace details: %w", err)
+		h.logger.Error("Failed to unmarshal workplace details", "error", err, "response", result.String())
+		return fmt.Errorf("failed to unmarshal workplace details: %w", err)
 	}
 
 	h.logger.Debug("Extracted workplace details",
@@ -122,5 +114,16 @@ func (h *WorkplaceHandler) extract(ctx context.Context, description string) (*Wo
 		"environment", workplace.Environment,
 		"travel_requirements", len(workplace.Travel))
 
-	return &workplace, nil
+	// Publish the extracted workplace details
+	workplaceJSON, err := json.Marshal(workplace)
+	if err != nil {
+		return fmt.Errorf("failed to marshal workplace details: %w", err)
+	}
+
+	_, err = h.generic.js.Publish(ctx, h.GetOutputTopic(), workplaceJSON)
+	if err != nil {
+		return fmt.Errorf("failed to publish workplace details: %w", err)
+	}
+
+	return nil
 }

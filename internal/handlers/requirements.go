@@ -48,14 +48,29 @@ func NewRequirementsHandler(ctx context.Context, js jetstream.JetStream, llm min
 	handler := &RequirementsHandler{
 		llm:     llm,
 		logger:  logger.With(slog.String("component", "requirements_handler")),
-		generic: NewGenericHandler(js, logger),
+		generic: NewGenericHandler(js, logger, llm),
 	}
 
-	if err := handler.generic.Register(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-JOBDESC-REQUIREMENTS-QUEUE", handler.handleMessage); err != nil {
+	if err := handler.generic.RegisterLLMHandler(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-JOBDESC-REQUIREMENTS-QUEUE", handler); err != nil {
 		return nil, fmt.Errorf("failed to register requirements handler: %w", err)
 	}
 
 	return handler, nil
+}
+
+// GetSystemPrompt implements LLMProcessor
+func (h *RequirementsHandler) GetSystemPrompt() string {
+	return requirementsPrompt
+}
+
+// GetResponseSchema implements LLMProcessor
+func (h *RequirementsHandler) GetResponseSchema() (*minds.ResponseSchema, error) {
+	return minds.NewResponseSchema("Requirements", "Job requirements", Requirements{})
+}
+
+// GetOutputTopic implements LLMProcessor
+func (h *RequirementsHandler) GetOutputTopic() string {
+	return TopicRequirementsExtracted
 }
 
 func (h *RequirementsHandler) handleMessage(ctx context.Context, msg jetstream.Msg) error {
@@ -66,47 +81,23 @@ func (h *RequirementsHandler) handleMessage(ctx context.Context, msg jetstream.M
 	var input JobDescriptionInput
 	if err := json.Unmarshal(msg.Data(), &input); err != nil {
 		h.logger.Error("Failed to unmarshal input", "error", err)
-		return nil
+		return fmt.Errorf("failed to unmarshal job description input: %w", err)
 	}
 
-	reqs, err := h.extract(ctx, input.Description)
-	if err != nil {
-		return fmt.Errorf("failed to extract requirements: %w", err)
-	}
-
-	reqJSON, err := json.Marshal(reqs)
-	if err != nil {
-		return fmt.Errorf("failed to marshal requirements: %w", err)
-	}
-
-	h.logger.Debug("Publishing requirements",
-		"must_have_count", len(reqs.MustHave),
-		"nice_to_have_count", len(reqs.NiceToHave),
-		"min_years", reqs.MinYearsExperience)
-
-	_, err = h.generic.js.Publish(ctx, TopicRequirementsExtracted, reqJSON)
-	if err != nil {
-		return fmt.Errorf("failed to publish requirements: %w", err)
-	}
-
-	return nil
-}
-
-func (h *RequirementsHandler) extract(ctx context.Context, description string) (*Requirements, error) {
 	msgs := minds.Messages{
 		{
 			Role:    minds.RoleSystem,
-			Content: requirementsPrompt,
+			Content: h.GetSystemPrompt(),
 		},
 		{
 			Role:    minds.RoleUser,
-			Content: fmt.Sprintf("Please analyze this job description and extract all requirements:\n\n%s", description),
+			Content: fmt.Sprintf("Please analyze this job description and extract all requirements:\n\n%s", input.Description),
 		},
 	}
 
-	schema, err := minds.NewResponseSchema("Requirements", "Job requirements", Requirements{})
+	schema, err := h.GetResponseSchema()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create requirements schema: %w", err)
+		return fmt.Errorf("failed to create requirements schema: %w", err)
 	}
 
 	request := minds.NewRequest(msgs, minds.WithResponseSchema(*schema))
@@ -115,18 +106,30 @@ func (h *RequirementsHandler) extract(ctx context.Context, description string) (
 
 	result, err := h.llm.GenerateContent(ctx, request)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract requirements: %w", err)
+		return fmt.Errorf("failed to extract requirements: %w", err)
 	}
 
-	var reqs Requirements
-	if err := json.Unmarshal([]byte(result.String()), &reqs); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal requirements: %w", err)
+	var requirements Requirements
+	if err := json.Unmarshal([]byte(result.String()), &requirements); err != nil {
+		h.logger.Error("Failed to unmarshal requirements", "error", err, "response", result.String())
+		return fmt.Errorf("failed to unmarshal requirements: %w", err)
 	}
 
 	h.logger.Debug("Extracted requirements",
-		"mustHave", len(reqs.MustHave),
-		"niceToHave", len(reqs.NiceToHave),
-		"minYears", reqs.MinYearsExperience)
+		"must_have_count", len(requirements.MustHave),
+		"nice_to_have_count", len(requirements.NiceToHave),
+		"min_years", requirements.MinYearsExperience)
 
-	return &reqs, nil
+	// Publish the extracted requirements
+	requirementsJSON, err := json.Marshal(requirements)
+	if err != nil {
+		return fmt.Errorf("failed to marshal requirements: %w", err)
+	}
+
+	_, err = h.generic.js.Publish(ctx, h.GetOutputTopic(), requirementsJSON)
+	if err != nil {
+		return fmt.Errorf("failed to publish requirements: %w", err)
+	}
+
+	return nil
 }

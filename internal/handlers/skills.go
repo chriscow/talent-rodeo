@@ -41,77 +41,86 @@ func NewSkillsHandler(ctx context.Context, js jetstream.JetStream, llm minds.Con
 	handler := &SkillsHandler{
 		llm:     llm,
 		logger:  logger.With(slog.String("component", "skills_handler")),
-		generic: NewGenericHandler(js, logger),
+		generic: NewGenericHandler(js, logger, llm),
 	}
 
-	if err := handler.generic.Register(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-TRANSCRIPT-SKILLS-QUEUE", handler.handleMessage); err != nil {
+	if err := handler.generic.RegisterLLMHandler(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-TRANSCRIPT-SKILLS-QUEUE", handler); err != nil {
 		return nil, fmt.Errorf("failed to register skills handler: %w", err)
 	}
 
 	return handler, nil
 }
 
-// handleMessage processes a single transcript to extract skills
+// GetSystemPrompt implements LLMProcessor
+func (h *SkillsHandler) GetSystemPrompt() string {
+	return skillsPrompt
+}
+
+// GetResponseSchema implements LLMProcessor
+func (h *SkillsHandler) GetResponseSchema() (*minds.ResponseSchema, error) {
+	return minds.NewResponseSchema("Skills", "Array of extracted skills", Skills{})
+}
+
+// GetOutputTopic implements LLMProcessor
+func (h *SkillsHandler) GetOutputTopic() string {
+	return TopicSkillsExtracted
+}
+
 func (h *SkillsHandler) handleMessage(ctx context.Context, msg jetstream.Msg) error {
 	h.logger.Debug("Processing skills message",
 		"subject", msg.Subject(),
 		"data_size", len(msg.Data()))
 
-	transcript := string(msg.Data())
+	var input JobDescriptionInput
+	if err := json.Unmarshal(msg.Data(), &input); err != nil {
+		h.logger.Error("Failed to unmarshal input", "error", err)
+		return fmt.Errorf("failed to unmarshal job description input: %w", err)
+	}
 
-	skills, err := h.extract(ctx, transcript)
+	msgs := minds.Messages{
+		{
+			Role:    minds.RoleSystem,
+			Content: h.GetSystemPrompt(),
+		},
+		{
+			Role:    minds.RoleUser,
+			Content: input.Description,
+		},
+	}
+
+	schema, err := h.GetResponseSchema()
+	if err != nil {
+		return fmt.Errorf("failed to create skills schema: %w", err)
+	}
+
+	request := minds.NewRequest(msgs, minds.WithResponseSchema(*schema))
+
+	h.logger.Debug("Extracting skills from job description")
+
+	result, err := h.llm.GenerateContent(ctx, request)
 	if err != nil {
 		return fmt.Errorf("failed to extract skills: %w", err)
 	}
 
+	var skills Skills
+	if err := json.Unmarshal([]byte(result.String()), &skills); err != nil {
+		h.logger.Error("Failed to unmarshal skills", "error", err, "response", result.String())
+		return fmt.Errorf("failed to unmarshal skills: %w", err)
+	}
+
+	h.logger.Debug("Extracted skills",
+		"skills_count", len(skills.Skills))
+
+	// Publish the extracted skills
 	skillsJSON, err := json.Marshal(skills)
 	if err != nil {
 		return fmt.Errorf("failed to marshal skills: %w", err)
 	}
 
-	h.logger.Debug("Publishing skills",
-		"skills_count", len(skills.Skills))
-
-	_, err = h.generic.js.Publish(ctx, TopicSkillsExtracted, skillsJSON)
+	_, err = h.generic.js.Publish(ctx, h.GetOutputTopic(), skillsJSON)
 	if err != nil {
 		return fmt.Errorf("failed to publish skills: %w", err)
 	}
 
 	return nil
-}
-
-func (h *SkillsHandler) extract(ctx context.Context, transcript string) (*Skills, error) {
-	msgs := minds.Messages{{
-		Role:    minds.RoleSystem,
-		Content: skillsPrompt,
-	},
-		{
-			Role:    minds.RoleUser,
-			Content: transcript,
-		},
-	}
-
-	schema, err := minds.NewResponseSchema("Skills", "Array of extracted skills", Skills{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create skills schema: %w", err)
-	}
-
-	request := minds.NewRequest(msgs, minds.WithResponseSchema(*schema))
-
-	h.logger.Debug("Extracting skills from transcript")
-
-	result, err := h.llm.GenerateContent(ctx, request)
-	if err != nil {
-		return nil, fmt.Errorf("failed to extract skills: %w", err)
-	}
-
-	var output Skills
-	if err := json.Unmarshal([]byte(result.String()), &output); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal skills: %w", err)
-	}
-
-	h.logger.Debug("Extracted skills",
-		"skills_count", len(output.Skills))
-
-	return &output, nil
 }

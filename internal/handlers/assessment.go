@@ -117,14 +117,29 @@ func NewAssessmentHandler(ctx context.Context, js jetstream.JetStream, llm minds
 		db:      db,
 		llm:     llm,
 		logger:  logger.With(slog.String("component", "assessment_handler")),
-		generic: NewGenericHandler(js, logger),
+		generic: NewGenericHandler(js, logger, llm),
 	}
 
-	if err := handler.generic.Register(ctx, rodeoStream, TopicAssessmentInput, "RODEO-ASSESSMENT-QUEUE", handler.handleMessage); err != nil {
+	if err := handler.generic.RegisterLLMHandler(ctx, rodeoStream, TopicAssessmentInput, "RODEO-ASSESSMENT-QUEUE", handler); err != nil {
 		return nil, fmt.Errorf("failed to register assessment handler: %w", err)
 	}
 
 	return handler, nil
+}
+
+// GetSystemPrompt implements LLMProcessor
+func (h *AssessmentHandler) GetSystemPrompt() string {
+	return "You are an expert talent matcher analyzing the fit between candidates and job positions."
+}
+
+// GetResponseSchema implements LLMProcessor
+func (h *AssessmentHandler) GetResponseSchema() (*minds.ResponseSchema, error) {
+	return minds.NewResponseSchema("MatchAssessment", "Comprehensive match assessment", MatchAssessment{})
+}
+
+// GetOutputTopic implements LLMProcessor
+func (h *AssessmentHandler) GetOutputTopic() string {
+	return TopicAssessmentResult
 }
 
 func (h *AssessmentHandler) handleMessage(ctx context.Context, msg jetstream.Msg) error {
@@ -138,26 +153,47 @@ func (h *AssessmentHandler) handleMessage(ctx context.Context, msg jetstream.Msg
 		return nil
 	}
 
-	assessment, err := h.assessMatch(ctx, input)
+	userContent, err := generateAssessmentPrompt(input)
+	if err != nil {
+		return fmt.Errorf("failed to generate prompt: %w", err)
+	}
+
+	h.logger.Debug("Generated assessment prompt", "prompt", userContent)
+
+	msgs := minds.Messages{
+		{
+			Role:    minds.RoleSystem,
+			Content: h.GetSystemPrompt(),
+		},
+		{
+			Role:    minds.RoleUser,
+			Content: userContent,
+		},
+	}
+
+	schema, err := h.GetResponseSchema()
+	if err != nil {
+		return fmt.Errorf("failed to create assessment schema: %w", err)
+	}
+
+	request := minds.NewRequest(msgs, minds.WithResponseSchema(*schema))
+
+	h.logger.Debug("Generating content with LLM", "request", request)
+
+	result, err := h.llm.GenerateContent(ctx, request)
 	if err != nil {
 		return fmt.Errorf("failed to assess match: %w", err)
 	}
 
-	assessmentJSON, err := json.Marshal(assessment)
-	if err != nil {
-		return fmt.Errorf("failed to marshal assessment: %w", err)
+	h.logger.Debug("Received LLM response", "response", result.String())
+
+	var assessment MatchAssessment
+	if err := json.Unmarshal([]byte(result.String()), &assessment); err != nil {
+		h.logger.Error("Failed to unmarshal assessment", "error", err, "response", result.String())
+		return fmt.Errorf("failed to unmarshal assessment: %w", err)
 	}
 
-	h.logger.Debug("Publishing assessment",
-		"candidate_id", input.Candidate.CandidateID,
-		"job_id", input.Job.JobID,
-		"score", assessment.Score,
-		"confidence", assessment.Confidence)
-
-	_, err = h.generic.js.Publish(ctx, TopicAssessmentResult, assessmentJSON)
-	if err != nil {
-		return fmt.Errorf("failed to publish assessment: %w", err)
-	}
+	h.logger.Debug("Successfully unmarshaled assessment", "score", assessment.Score, "confidence", assessment.Confidence)
 
 	// Store the assessment result
 	if err := store(h.db, input.Candidate.CandidateID, input.Job.JobID, assessment.Score, assessment.Confidence, assessment.Analysis); err != nil {
@@ -184,53 +220,6 @@ func generateAssessmentPrompt(input AssessmentInput) (string, error) {
 
 	return fmt.Sprintf("Please assess the match between this candidate and job position:\n\nCandidate Profile:\n%s\n\nJob Profile:\n%s",
 		string(candidateJSON), string(jobJSON)), nil
-}
-
-// AssessMatch performs the actual assessment using the LLM
-func (h *AssessmentHandler) assessMatch(ctx context.Context, input AssessmentInput) (*MatchAssessment, error) {
-	userContent, err := generateAssessmentPrompt(input)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate prompt: %w", err)
-	}
-
-	h.logger.Debug("Generated assessment prompt", "prompt", userContent)
-
-	msgs := minds.Messages{
-		{
-			Role:    minds.RoleSystem,
-			Content: "You are an expert talent matcher analyzing the fit between candidates and job positions.",
-		},
-		{
-			Role:    minds.RoleUser,
-			Content: userContent,
-		},
-	}
-
-	schema, err := minds.NewResponseSchema("MatchAssessment", "Comprehensive match assessment", MatchAssessment{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create assessment schema: %w", err)
-	}
-
-	request := minds.NewRequest(msgs, minds.WithResponseSchema(*schema))
-
-	h.logger.Debug("Generating content with LLM", "request", request)
-
-	result, err := h.llm.GenerateContent(ctx, request)
-	if err != nil {
-		return nil, fmt.Errorf("failed to assess match: %w", err)
-	}
-
-	h.logger.Debug("Received LLM response", "response", result.String())
-
-	var assessment MatchAssessment
-	if err := json.Unmarshal([]byte(result.String()), &assessment); err != nil {
-		h.logger.Error("Failed to unmarshal assessment", "error", err, "response", result.String())
-		return nil, fmt.Errorf("failed to unmarshal assessment: %w", err)
-	}
-
-	h.logger.Debug("Successfully unmarshaled assessment", "score", assessment.Score, "confidence", assessment.Confidence)
-
-	return &assessment, nil
 }
 
 // stores the assessment result in the database
