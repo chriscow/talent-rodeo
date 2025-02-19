@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 
@@ -55,86 +54,27 @@ func NewCompensationHandler(ctx context.Context, js jetstream.JetStream, llm min
 	handler := &CompensationHandler{
 		llm:     llm,
 		logger:  logger.With(slog.String("component", "compensation_handler")),
-		generic: NewGenericHandler(js, logger, nil),
+		generic: NewGenericHandler(js, logger, llm),
 	}
 
-	// Register the message handler
-	if err := handler.generic.Register(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-JOBDESC-COMPENSATION-QUEUE", handler.handleMessage); err != nil {
+	if err := handler.generic.RegisterLLMHandler(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-JOBDESC-COMPENSATION-QUEUE", handler); err != nil {
 		return nil, fmt.Errorf("failed to register compensation handler: %w", err)
 	}
 
 	return handler, nil
 }
 
-func (h *CompensationHandler) handleMessage(ctx context.Context, msg jetstream.Msg) error {
-	h.logger.Debug("Processing compensation message",
-		"subject", msg.Subject(),
-		"data_size", len(msg.Data()))
-
-	var input JobDescriptionInput
-	if err := json.Unmarshal(msg.Data(), &input); err != nil {
-		h.logger.Error("Failed to unmarshal input", "error", err)
-		return nil
-	}
-
-	comp, err := h.extract(ctx, input.Description)
-	if err != nil {
-		return fmt.Errorf("failed to extract compensation: %w", err)
-	}
-
-	compJSON, err := json.Marshal(comp)
-	if err != nil {
-		return fmt.Errorf("failed to marshal compensation: %w", err)
-	}
-
-	h.logger.Debug("Publishing compensation",
-		"has_salary", comp.SalaryRange != nil,
-		"benefits_count", len(comp.Benefits),
-		"has_equity", comp.Equity != nil)
-
-	_, err = h.generic.js.Publish(ctx, TopicCompensationExtracted, compJSON)
-	if err != nil {
-		return fmt.Errorf("failed to publish compensation: %w", err)
-	}
-
-	return nil
+// GetSystemPrompt implements LLMProcessor
+func (h *CompensationHandler) GetSystemPrompt() string {
+	return compensationPrompt
 }
 
-func (h *CompensationHandler) extract(ctx context.Context, description string) (*Compensation, error) {
-	msgs := minds.Messages{
-		{
-			Role:    minds.RoleSystem,
-			Content: compensationPrompt,
-		},
-		{
-			Role:    minds.RoleUser,
-			Content: fmt.Sprintf("Please analyze this job description and extract all compensation-related information:\n\n%s", description),
-		},
-	}
+// GetResponseSchema implements LLMProcessor
+func (h *CompensationHandler) GetResponseSchema() (*minds.ResponseSchema, error) {
+	return minds.NewResponseSchema("Compensation", "Compensation details", Compensation{})
+}
 
-	schema, err := minds.NewResponseSchema("Compensation", "Compensation details", Compensation{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create compensation schema: %w", err)
-	}
-
-	request := minds.NewRequest(msgs, minds.WithResponseSchema(*schema))
-
-	h.logger.Debug("Extracting compensation from job description")
-
-	result, err := h.llm.GenerateContent(ctx, request)
-	if err != nil {
-		return nil, fmt.Errorf("failed to extract compensation: %w", err)
-	}
-
-	var comp Compensation
-	if err := json.Unmarshal([]byte(result.String()), &comp); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal compensation: %w", err)
-	}
-
-	h.logger.Debug("Extracted compensation",
-		"has_salary", comp.SalaryRange != nil,
-		"benefits", len(comp.Benefits),
-		"has_equity", comp.Equity != nil)
-
-	return &comp, nil
+// GetOutputTopic implements LLMProcessor
+func (h *CompensationHandler) GetOutputTopic() string {
+	return TopicCompensationExtracted
 }

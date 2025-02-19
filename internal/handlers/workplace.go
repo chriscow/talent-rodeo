@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 
@@ -63,67 +62,4 @@ func (h *WorkplaceHandler) GetResponseSchema() (*minds.ResponseSchema, error) {
 // GetOutputTopic implements LLMProcessor
 func (h *WorkplaceHandler) GetOutputTopic() string {
 	return TopicWorkplaceExtracted
-}
-
-func (h *WorkplaceHandler) handleMessage(ctx context.Context, msg jetstream.Msg) error {
-	h.logger.Debug("Processing workplace message",
-		"subject", msg.Subject(),
-		"data_size", len(msg.Data()))
-
-	var input JobDescriptionInput
-	if err := json.Unmarshal(msg.Data(), &input); err != nil {
-		h.logger.Error("Failed to unmarshal input", "error", err)
-		return fmt.Errorf("failed to unmarshal job description input: %w", err)
-	}
-
-	msgs := minds.Messages{
-		{
-			Role:    minds.RoleSystem,
-			Content: h.GetSystemPrompt(),
-		},
-		{
-			Role:    minds.RoleUser,
-			Content: fmt.Sprintf("Please analyze this job description and extract all workplace-related information:\n\n%s", input.Description),
-		},
-	}
-
-	schema, err := h.GetResponseSchema()
-	if err != nil {
-		return fmt.Errorf("failed to create workplace schema: %w", err)
-	}
-
-	request := minds.NewRequest(msgs, minds.WithResponseSchema(*schema))
-
-	h.logger.Debug("Extracting workplace details from job description")
-
-	result, err := h.llm.GenerateContent(ctx, request)
-	if err != nil {
-		return fmt.Errorf("failed to extract workplace details: %w", err)
-	}
-
-	var workplace Workplace
-	if err := json.Unmarshal([]byte(result.String()), &workplace); err != nil {
-		h.logger.Error("Failed to unmarshal workplace details", "error", err, "response", result.String())
-		return fmt.Errorf("failed to unmarshal workplace details: %w", err)
-	}
-
-	h.logger.Debug("Extracted workplace details",
-		"location", workplace.Location,
-		"type", workplace.Type,
-		"schedule", workplace.Schedule,
-		"environment", workplace.Environment,
-		"travel_requirements", len(workplace.Travel))
-
-	// Publish the extracted workplace details
-	workplaceJSON, err := json.Marshal(workplace)
-	if err != nil {
-		return fmt.Errorf("failed to marshal workplace details: %w", err)
-	}
-
-	_, err = h.generic.js.Publish(ctx, h.GetOutputTopic(), workplaceJSON)
-	if err != nil {
-		return fmt.Errorf("failed to publish workplace details: %w", err)
-	}
-
-	return nil
 }

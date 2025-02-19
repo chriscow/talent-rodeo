@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"log/slog"
@@ -140,86 +139,6 @@ func (h *AssessmentHandler) GetResponseSchema() (*minds.ResponseSchema, error) {
 // GetOutputTopic implements LLMProcessor
 func (h *AssessmentHandler) GetOutputTopic() string {
 	return TopicAssessmentResult
-}
-
-func (h *AssessmentHandler) handleMessage(ctx context.Context, msg jetstream.Msg) error {
-	h.logger.Debug("Processing assessment message",
-		"subject", msg.Subject(),
-		"data_size", len(msg.Data()))
-
-	var input AssessmentInput
-	if err := json.Unmarshal(msg.Data(), &input); err != nil {
-		h.logger.Error("Failed to unmarshal input", "error", err)
-		return nil
-	}
-
-	userContent, err := generateAssessmentPrompt(input)
-	if err != nil {
-		return fmt.Errorf("failed to generate prompt: %w", err)
-	}
-
-	h.logger.Debug("Generated assessment prompt", "prompt", userContent)
-
-	msgs := minds.Messages{
-		{
-			Role:    minds.RoleSystem,
-			Content: h.GetSystemPrompt(),
-		},
-		{
-			Role:    minds.RoleUser,
-			Content: userContent,
-		},
-	}
-
-	schema, err := h.GetResponseSchema()
-	if err != nil {
-		return fmt.Errorf("failed to create assessment schema: %w", err)
-	}
-
-	request := minds.NewRequest(msgs, minds.WithResponseSchema(*schema))
-
-	h.logger.Debug("Generating content with LLM", "request", request)
-
-	result, err := h.llm.GenerateContent(ctx, request)
-	if err != nil {
-		return fmt.Errorf("failed to assess match: %w", err)
-	}
-
-	h.logger.Debug("Received LLM response", "response", result.String())
-
-	var assessment MatchAssessment
-	if err := json.Unmarshal([]byte(result.String()), &assessment); err != nil {
-		h.logger.Error("Failed to unmarshal assessment", "error", err, "response", result.String())
-		return fmt.Errorf("failed to unmarshal assessment: %w", err)
-	}
-
-	h.logger.Debug("Successfully unmarshaled assessment", "score", assessment.Score, "confidence", assessment.Confidence)
-
-	// Store the assessment result
-	if err := store(h.db, input.Candidate.CandidateID, input.Job.JobID, assessment.Score, assessment.Confidence, assessment.Analysis); err != nil {
-		h.logger.Error("Failed to store assessment",
-			"error", err,
-			"candidate_id", input.Candidate.CandidateID,
-			"job_id", input.Job.JobID)
-	}
-
-	return nil
-}
-
-// generateAssessmentPrompt creates the prompt for the LLM
-func generateAssessmentPrompt(input AssessmentInput) (string, error) {
-	candidateJSON, err := json.MarshalIndent(input.Candidate, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal candidate profile: %w", err)
-	}
-
-	jobJSON, err := json.MarshalIndent(input.Job, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal job profile: %w", err)
-	}
-
-	return fmt.Sprintf("Please assess the match between this candidate and job position:\n\nCandidate Profile:\n%s\n\nJob Profile:\n%s",
-		string(candidateJSON), string(jobJSON)), nil
 }
 
 // stores the assessment result in the database

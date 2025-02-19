@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 
@@ -71,65 +70,4 @@ func (h *RequirementsHandler) GetResponseSchema() (*minds.ResponseSchema, error)
 // GetOutputTopic implements LLMProcessor
 func (h *RequirementsHandler) GetOutputTopic() string {
 	return TopicRequirementsExtracted
-}
-
-func (h *RequirementsHandler) handleMessage(ctx context.Context, msg jetstream.Msg) error {
-	h.logger.Debug("Processing requirements message",
-		"subject", msg.Subject(),
-		"data_size", len(msg.Data()))
-
-	var input JobDescriptionInput
-	if err := json.Unmarshal(msg.Data(), &input); err != nil {
-		h.logger.Error("Failed to unmarshal input", "error", err)
-		return fmt.Errorf("failed to unmarshal job description input: %w", err)
-	}
-
-	msgs := minds.Messages{
-		{
-			Role:    minds.RoleSystem,
-			Content: h.GetSystemPrompt(),
-		},
-		{
-			Role:    minds.RoleUser,
-			Content: fmt.Sprintf("Please analyze this job description and extract all requirements:\n\n%s", input.Description),
-		},
-	}
-
-	schema, err := h.GetResponseSchema()
-	if err != nil {
-		return fmt.Errorf("failed to create requirements schema: %w", err)
-	}
-
-	request := minds.NewRequest(msgs, minds.WithResponseSchema(*schema))
-
-	h.logger.Debug("Extracting requirements from job description")
-
-	result, err := h.llm.GenerateContent(ctx, request)
-	if err != nil {
-		return fmt.Errorf("failed to extract requirements: %w", err)
-	}
-
-	var requirements Requirements
-	if err := json.Unmarshal([]byte(result.String()), &requirements); err != nil {
-		h.logger.Error("Failed to unmarshal requirements", "error", err, "response", result.String())
-		return fmt.Errorf("failed to unmarshal requirements: %w", err)
-	}
-
-	h.logger.Debug("Extracted requirements",
-		"must_have_count", len(requirements.MustHave),
-		"nice_to_have_count", len(requirements.NiceToHave),
-		"min_years", requirements.MinYearsExperience)
-
-	// Publish the extracted requirements
-	requirementsJSON, err := json.Marshal(requirements)
-	if err != nil {
-		return fmt.Errorf("failed to marshal requirements: %w", err)
-	}
-
-	_, err = h.generic.js.Publish(ctx, h.GetOutputTopic(), requirementsJSON)
-	if err != nil {
-		return fmt.Errorf("failed to publish requirements: %w", err)
-	}
-
-	return nil
 }
