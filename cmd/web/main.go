@@ -330,21 +330,68 @@ func setupPipelineHandlers(
 	js jetstream.JetStream,
 	logger *slog.Logger,
 ) (map[string]any, error) {
-	pipelineHandlers := make(map[string]any)
+	h := make(map[string]any)
 	logger.Debug("setting up pipeline handlers")
 
-	// Setup voice handler
-	llm, err := gemini.NewProvider(ctx)
+	llm, err := gemini.NewProvider(ctx, gemini.WithAPIKey(os.Getenv("GEMINI_API_KEY")))
 	if err != nil {
 		return nil, fmt.Errorf("error setting up gemini provider: %w", err)
 	}
 
+	// Setup assessment handler
+	assessmentHandler, err := handlers.NewAssessmentHandler(ctx, js, llm, logger, db)
+	if err != nil {
+		return nil, fmt.Errorf("error setting up assessment handler: %w", err)
+	}
+	h["assessment"] = assessmentHandler
+	logger.Debug("assessment handler configured")
+
+	// Setup culture handler
+	cultureHandler, err := handlers.NewCultureHandler(ctx, js, llm, logger)
+	if err != nil {
+		return nil, fmt.Errorf("error setting up culture handler: %w", err)
+	}
+	h["culture"] = cultureHandler
+	logger.Debug("culture handler configured")
+
+	// TODO: experience handler
+
+	// Setup job description handler
+	jobDescHandler, err := handlers.NewRequirementsHandler(ctx, js, llm, logger)
+	if err != nil {
+		return nil, fmt.Errorf("error setting up job description handler: %w", err)
+	}
+	h["jobDesc"] = jobDescHandler
+	logger.Debug("job description handler configured")
+
+	// TODO: preferences handler
+	// TODO: requirements handler
+
+	// Setup search handler with ScrapingDog provider
+	searchProvider := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"))
+	searchHandler, err := handlers.NewSearchHandler(ctx, js, searchProvider, logger)
+	if err != nil {
+		return nil, fmt.Errorf("error setting up search handler: %w", err)
+	}
+	h["search"] = searchHandler
+	logger.Debug("search handler configured")
+
+	// TODO: skills handler
+
+	// Setup transcript handler
+	transcriptHandler, err := handlers.NewExperienceHandler(ctx, js, llm, logger)
+	if err != nil {
+		return nil, fmt.Errorf("error setting up transcript handler: %w", err)
+	}
+	h["transcript"] = transcriptHandler
+	logger.Debug("transcript handler configured")
+
+	// Setup voice handler
 	voiceConfig := handlers.CallConfig{
 		FromNumber: os.Getenv("TWILIO_FROM_NUMBER"),
 		Twiml:      fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?><Response><Connect><Stream url="wss://%s/schedule/voice"/></Connect><Start><Stream name="stream"/></Start><Say>Welcome to your scheduled call. Please wait while we connect you.</Say></Response>`, os.Getenv("APP_DOMAIN")),
 	}
 
-	// Create voice handler
 	voiceHandler, err := handlers.NewVoiceHandler(ctx, js, th.NewRealTwilioClient(
 		os.Getenv("TWILIO_ACCOUNT_SID"),
 		os.Getenv("TWILIO_AUTH_TOKEN"),
@@ -353,50 +400,11 @@ func setupPipelineHandlers(
 	if err != nil {
 		return nil, fmt.Errorf("error setting up voice handler: %w", err)
 	}
-	pipelineHandlers["voice"] = voiceHandler
+	h["voice"] = voiceHandler
 	logger.Debug("voice handler configured")
 
-	// Setup transcript handler
-	transcriptHandler, err := handlers.NewExperienceHandler(ctx, js, llm, logger)
-	if err != nil {
-		return nil, fmt.Errorf("error setting up transcript handler: %w", err)
-	}
-	pipelineHandlers["transcript"] = transcriptHandler
-	logger.Debug("transcript handler configured")
-
-	// Setup job description handler
-	jobDescHandler, err := handlers.NewRequirementsHandler(ctx, js, llm, logger)
-	if err != nil {
-		return nil, fmt.Errorf("error setting up job description handler: %w", err)
-	}
-	pipelineHandlers["jobDesc"] = jobDescHandler
-	logger.Debug("job description handler configured")
-
-	// Setup culture handler
-	cultureHandler, err := handlers.NewCultureHandler(ctx, js, llm, logger)
-	if err != nil {
-		return nil, fmt.Errorf("error setting up culture handler: %w", err)
-	}
-	pipelineHandlers["culture"] = cultureHandler
-	logger.Debug("culture handler configured")
-
-	// Setup assessment handler
-	assessmentHandler, err := handlers.NewAssessmentHandler(ctx, js, llm, logger, db)
-	if err != nil {
-		return nil, fmt.Errorf("error setting up assessment handler: %w", err)
-	}
-	pipelineHandlers["assessment"] = assessmentHandler
-	logger.Debug("assessment handler configured")
-
-	// Setup search handler with ScrapingDog provider
-	searchProvider := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"))
-	searchHandler, err := handlers.NewSearchHandler(ctx, js, searchProvider, logger)
-	if err != nil {
-		return nil, fmt.Errorf("error setting up search handler: %w", err)
-	}
-	pipelineHandlers["search"] = searchHandler
-	logger.Debug("search handler configured")
+	// TODO: workplace handler
 
 	logger.Info("All pipeline handlers configured successfully")
-	return pipelineHandlers, nil
+	return h, nil
 }
