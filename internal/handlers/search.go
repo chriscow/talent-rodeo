@@ -28,7 +28,7 @@ func NewSearchHandler(ctx context.Context, js jetstream.JetStream, provider sear
 	handler := &SearchHandler{
 		logger:   logger.With(slog.String("component", "search_handler")),
 		provider: provider,
-		generic:  NewGenericHandler(js, logger),
+		generic:  NewGenericHandler(js, logger, nil),
 	}
 
 	if err := handler.generic.Register(ctx, rodeoStream, TopicSearchInput, "RODEO-SEARCH-QUEUE", handler.handleMessage); err != nil {

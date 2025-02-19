@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chriscow/minds"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -35,8 +36,8 @@ func TestGenericHandler_MessageHandling(t *testing.T) {
 	// Create a channel to track message processing
 	processed := make(chan bool, 1)
 
-	// Create handler
-	handler := NewGenericHandler(env.js, env.logger)
+	// Create handler with mock LLM
+	handler := NewGenericHandler(env.js, env.logger, env.llm)
 
 	// Register message handler
 	err := handler.Register(env.ctx, rodeoStream, testSubject, "TEST-GENERIC-HANDLER", func(ctx context.Context, msg jetstream.Msg) error {
@@ -103,7 +104,7 @@ func TestGenericHandler_ContextCancellation(t *testing.T) {
 	const testSubject = "rodeo.test.cancellation"
 
 	// Create handler with short-lived context
-	handler := NewGenericHandler(env.js, env.logger)
+	handler := NewGenericHandler(env.js, env.logger, env.llm)
 	ctx, cancel := context.WithTimeout(env.ctx, 1*time.Second)
 	defer cancel()
 
@@ -138,4 +139,145 @@ func TestGenericHandler_ContextCancellation(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		// Success - no message processed after cancellation
 	}
+}
+
+func TestGenericHandler_LLMProcessing(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	const (
+		testSubject  = "rodeo.test.llm.input"
+		testResponse = "rodeo.test.llm.response"
+	)
+
+	// Set up mock LLM response
+	mockResponseData := TestResponse{
+		Processed: true,
+		Content:   "processed content",
+	}
+	mockResponseJSON, err := json.Marshal(mockResponseData)
+	if err != nil {
+		t.Fatalf("Failed to marshal mock response: %v", err)
+	}
+
+	// Set up the response in the LLM's response map
+	env.llm.responses = map[string]string{
+		"Test system prompt": string(mockResponseJSON),
+	}
+
+	// Create handler with mock LLM
+	handler := NewGenericHandler(env.js, env.logger, env.llm)
+
+	// Register LLM handler
+	err = handler.RegisterLLMHandler(env.ctx, rodeoStream, testSubject, "TEST-LLM-HANDLER", &testProcessor{
+		outputTopic: testResponse,
+	})
+	if err != nil {
+		t.Fatalf("Failed to register LLM handler: %v", err)
+	}
+
+	// Create test input
+	input := TestMessage{
+		Content: "test message for LLM processing",
+	}
+
+	// Use the generic harness to send and receive messages
+	got, err := SendAndReceiveMessage[TestMessage, TestResponse](
+		t,
+		env.ctx,
+		env.js,
+		rodeoStream,
+		testSubject,
+		testResponse,
+		input,
+		2*time.Second,
+	)
+	if err != nil {
+		t.Fatalf("Failed to send and receive message: %v", err)
+	}
+
+	// Verify response
+	if !got.Processed {
+		t.Error("Expected message to be processed")
+	}
+	if got.Content != "processed content" {
+		t.Errorf("Expected response content %q, got %q", "processed content", got.Content)
+	}
+}
+
+func TestGenericHandler_LLMProcessing_NoLLM(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	// Create handler without LLM
+	handler := NewGenericHandler(env.js, env.logger, nil)
+
+	// Attempt to register LLM handler
+	err := handler.RegisterLLMHandler(env.ctx, rodeoStream, "test.subject", "TEST-LLM-HANDLER", &testProcessor{
+		outputTopic: "test.response",
+	})
+	if err == nil {
+		t.Error("Expected error when registering LLM handler without LLM, got nil")
+	}
+}
+
+func TestGenericHandler_LLMProcessing_Error(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	const (
+		testSubject  = "rodeo.test.llm.error"
+		testResponse = "rodeo.test.llm.error.response"
+	)
+
+	// Set up mock LLM with error by having no responses
+	env.llm.responses = nil
+
+	// Create handler
+	handler := NewGenericHandler(env.js, env.logger, env.llm)
+
+	// Register LLM handler
+	err := handler.RegisterLLMHandler(env.ctx, rodeoStream, testSubject, "TEST-LLM-ERROR", &testProcessor{
+		outputTopic: testResponse,
+	})
+	if err != nil {
+		t.Fatalf("Failed to register LLM handler: %v", err)
+	}
+
+	// Create test input
+	input := TestMessage{
+		Content: "test message that should fail",
+	}
+
+	// Send message and expect error
+	_, err = SendAndReceiveMessage[TestMessage, TestResponse](
+		t,
+		env.ctx,
+		env.js,
+		rodeoStream,
+		testSubject,
+		testResponse,
+		input,
+		2*time.Second,
+	)
+	if err == nil {
+		t.Error("Expected error from LLM processing, got nil")
+	}
+}
+
+// testProcessor implements LLMProcessor for testing
+type testProcessor struct {
+	outputTopic string
+}
+
+func (p *testProcessor) GetSystemPrompt() string {
+	return "Test system prompt"
+}
+
+func (p *testProcessor) GetResponseSchema() (*minds.ResponseSchema, error) {
+	return minds.NewResponseSchema("TestSchema", "Test schema for LLM processing", TestResponse{})
+}
+
+func (p *testProcessor) GetOutputTopic() string {
+	return p.outputTopic
 }

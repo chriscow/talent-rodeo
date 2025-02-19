@@ -39,15 +39,29 @@ func NewCultureHandler(ctx context.Context, js jetstream.JetStream, llm minds.Co
 	handler := &CultureHandler{
 		llm:     llm,
 		logger:  logger.With(slog.String("component", "culture_handler")),
-		generic: NewGenericHandler(js, logger),
+		generic: NewGenericHandler(js, logger, llm),
 	}
 
-	// Register the message handler with the generic handler
-	if err := handler.generic.Register(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-JOBDESC-CULTURE-QUEUE", handler.handleMessage); err != nil {
+	if err := handler.generic.RegisterLLMHandler(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-JOBDESC-CULTURE-QUEUE", handler); err != nil {
 		return nil, fmt.Errorf("failed to register culture handler: %w", err)
 	}
 
 	return handler, nil
+}
+
+// GetSystemPrompt implements LLMProcessor
+func (h *CultureHandler) GetSystemPrompt() string {
+	return culturePrompt
+}
+
+// GetResponseSchema implements LLMProcessor
+func (h *CultureHandler) GetResponseSchema() (*minds.ResponseSchema, error) {
+	return minds.NewResponseSchema("Culture", "Cultural aspects", Culture{})
+}
+
+// GetOutputTopic implements LLMProcessor
+func (h *CultureHandler) GetOutputTopic() string {
+	return TopicCultureExtracted
 }
 
 func (h *CultureHandler) handleMessage(ctx context.Context, msg jetstream.Msg) error {
@@ -61,44 +75,20 @@ func (h *CultureHandler) handleMessage(ctx context.Context, msg jetstream.Msg) e
 		return nil
 	}
 
-	culture, err := h.extract(ctx, input.Description)
-	if err != nil {
-		return fmt.Errorf("failed to extract culture: %w", err)
-	}
-
-	cultureJSON, err := json.Marshal(culture)
-	if err != nil {
-		return fmt.Errorf("failed to marshal culture: %w", err)
-	}
-
-	h.logger.Debug("Publishing culture",
-		"description_length", len(culture.Description),
-		"values_count", len(culture.Values),
-		"team_dynamics", culture.TeamDynamics)
-
-	_, err = h.generic.js.Publish(ctx, TopicCultureExtracted, cultureJSON)
-	if err != nil {
-		return fmt.Errorf("failed to publish culture: %w", err)
-	}
-
-	return nil
-}
-
-func (h *CultureHandler) extract(ctx context.Context, description string) (*Culture, error) {
 	msgs := minds.Messages{
 		{
 			Role:    minds.RoleSystem,
-			Content: culturePrompt,
+			Content: h.GetSystemPrompt(),
 		},
 		{
 			Role:    minds.RoleUser,
-			Content: fmt.Sprintf("Please analyze this job description and extract all culture-related information:\n\n%s", description),
+			Content: fmt.Sprintf("Please analyze this job description and extract all culture-related information:\n\n%s", input.Description),
 		},
 	}
 
-	schema, err := minds.NewResponseSchema("Culture", "Cultural aspects", Culture{})
+	schema, err := h.GetResponseSchema()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create culture schema: %w", err)
+		return fmt.Errorf("failed to create culture schema: %w", err)
 	}
 
 	request := minds.NewRequest(msgs, minds.WithResponseSchema(*schema))
@@ -107,12 +97,13 @@ func (h *CultureHandler) extract(ctx context.Context, description string) (*Cult
 
 	result, err := h.llm.GenerateContent(ctx, request)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract culture details: %w", err)
+		return fmt.Errorf("failed to extract culture details: %w", err)
 	}
 
 	var culture Culture
 	if err := json.Unmarshal([]byte(result.String()), &culture); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal culture details: %w", err)
+		h.logger.Error("Failed to unmarshal culture details", "error", err, "response", result.String())
+		return fmt.Errorf("failed to unmarshal culture details: %w", err)
 	}
 
 	h.logger.Debug("Extracted culture details",
@@ -121,5 +112,16 @@ func (h *CultureHandler) extract(ctx context.Context, description string) (*Cult
 		"team_dynamics", culture.TeamDynamics,
 		"work_style", culture.WorkStyle)
 
-	return &culture, nil
+	// Publish the extracted culture
+	cultureJSON, err := json.Marshal(culture)
+	if err != nil {
+		return fmt.Errorf("failed to marshal culture: %w", err)
+	}
+
+	_, err = h.generic.js.Publish(ctx, h.GetOutputTopic(), cultureJSON)
+	if err != nil {
+		return fmt.Errorf("failed to publish culture: %w", err)
+	}
+
+	return nil
 }

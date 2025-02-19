@@ -55,7 +55,7 @@ func NewCompensationHandler(ctx context.Context, js jetstream.JetStream, llm min
 	handler := &CompensationHandler{
 		llm:     llm,
 		logger:  logger.With(slog.String("component", "compensation_handler")),
-		generic: NewGenericHandler(js, logger),
+		generic: NewGenericHandler(js, logger, nil),
 	}
 
 	// Register the message handler
