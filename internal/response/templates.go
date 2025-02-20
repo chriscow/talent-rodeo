@@ -11,6 +11,63 @@ import (
 	"talent-rodeo/internal/funcs"
 )
 
+// TemplateCache holds the parsed templates
+type TemplateCache map[string]*template.Template
+
+// NewTemplateCache creates a new cache of parsed templates
+func NewTemplateCache() (TemplateCache, error) {
+	cache := make(TemplateCache)
+
+	pages, err := assets.EmbeddedFiles.ReadDir("templates/pages")
+	if err != nil {
+		return nil, err
+	}
+
+	for _, page := range pages {
+		name := page.Name()
+
+		// Skip directories
+		if page.IsDir() {
+			subpages, err := assets.EmbeddedFiles.ReadDir("templates/pages/" + name)
+			if err != nil {
+				return nil, err
+			}
+			for _, subpage := range subpages {
+				if !subpage.IsDir() {
+					patterns := []string{
+						"templates/base.html",
+						"templates/partials/*.html",
+						filepath.Join("templates/pages", name, subpage.Name()),
+					}
+
+					ts, err := template.New(name+"/"+subpage.Name()).Funcs(funcs.TemplateFuncs).ParseFS(assets.EmbeddedFiles, patterns...)
+					if err != nil {
+						return nil, err
+					}
+
+					cache[name+"/"+subpage.Name()] = ts
+				}
+			}
+			continue
+		}
+
+		patterns := []string{
+			"templates/base.html",
+			"templates/partials/*.html",
+			filepath.Join("templates/pages", name),
+		}
+
+		ts, err := template.New(name).Funcs(funcs.TemplateFuncs).ParseFS(assets.EmbeddedFiles, patterns...)
+		if err != nil {
+			return nil, err
+		}
+
+		cache[name] = ts
+	}
+
+	return cache, nil
+}
+
 func Partial(w http.ResponseWriter, status int, data any, partialPath string) error {
 	return PartialWithHeaders(w, status, data, nil, partialPath)
 }

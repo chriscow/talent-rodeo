@@ -29,6 +29,7 @@ var TemplateFuncs = template.FuncMap{
 	"timeUntil":      time.Until,
 	"formatTime":     formatTime,
 	"approxDuration": approxDuration,
+	"humanDate":      humanDate,
 
 	// String functions
 	"uppercase": strings.ToUpper,
@@ -53,6 +54,12 @@ var TemplateFuncs = template.FuncMap{
 	"formatFloat": formatFloat,
 	"mul": func(a, b float32) float32 {
 		return a * b
+	},
+	"add": func(a, b int) int {
+		return a + b
+	},
+	"sub": func(a, b int) int {
+		return a - b
 	},
 
 	// Boolean functions
@@ -232,4 +239,12 @@ func toInt64(i any) (int64, error) {
 	}
 
 	return 0, fmt.Errorf("unable to convert type %T to int", i)
+}
+
+// humanDate formats a time.Time into a human-readable date
+func humanDate(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format("02 Jan 2006 at 15:04")
 }

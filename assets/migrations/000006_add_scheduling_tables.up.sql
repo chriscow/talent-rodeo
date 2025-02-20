@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS appointments (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL,
-    scheduled_time TIMESTAMP NOT NULL,
+    scheduled_time TIMESTAMP WITH TIME ZONE NOT NULL,
     timezone TEXT NOT NULL,
     status TEXT NOT NULL CHECK (
         status IN (
@@ -15,8 +15,8 @@ CREATE TABLE IF NOT EXISTS appointments (
     call_sid TEXT, -- Twilio call SID
     transcript TEXT,
     transcript_summary TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (now() at time zone 'UTC'),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (now() at time zone 'UTC'),
     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 
@@ -28,8 +28,8 @@ CREATE TABLE IF NOT EXISTS scheduling_preferences (
     preferred_days TEXT, -- JSON array of preferred days (e.g., ["monday", "wednesday"])
     preferred_time_start TEXT, -- Time in 24hr format (e.g., "09:00")
     preferred_time_end TEXT, -- Time in 24hr format (e.g., "17:00")
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (now() at time zone 'UTC'),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (now() at time zone 'UTC'),
     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 
@@ -41,8 +41,8 @@ CREATE TABLE IF NOT EXISTS job_search_criteria (
     criteria_value TEXT NOT NULL,
     priority INTEGER NOT NULL DEFAULT 0,
     source TEXT NOT NULL DEFAULT 'phone_interview', -- Where this criteria came from
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (now() at time zone 'UTC'),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (now() at time zone 'UTC'),
     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 
@@ -57,7 +57,7 @@ CREATE INDEX idx_job_search_criteria_user ON job_search_criteria (user_id);
 CREATE OR REPLACE FUNCTION update_timestamp()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
+    NEW.updated_at = (now() at time zone 'UTC');
     RETURN NEW;
 END;
 $$ language 'plpgsql';

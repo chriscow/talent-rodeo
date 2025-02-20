@@ -96,16 +96,30 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 		return fmt.Errorf("failed to get pending tasks: %w", err)
 	}
 
-	p.logger.Debug("fetched pending tasks",
-		"count", len(tasks),
-	)
+	if len(tasks) > 0 {
+		p.logger.Info("processing tasks",
+			"count", len(tasks),
+			"task_ids", fmt.Sprintf("%v", tasks),
+		)
+	}
 
 	for _, task := range tasks {
 		handler, exists := p.handlers[task.Type]
 		if !exists {
-			p.logger.Error("no handler for task type", "type", task.Type, "task_id", task.ID)
+			p.logger.Error("no handler for task type",
+				"type", task.Type,
+				"task_id", task.ID,
+				"run_at", task.RunAt,
+				"status", task.Status,
+			)
 			continue
 		}
+
+		p.logger.Info("found handler for task",
+			"task_id", task.ID,
+			"type", task.Type,
+			"handler", fmt.Sprintf("%T", handler),
+		)
 
 		// Start transaction for task processing
 		tx, err := p.db.BeginTxx(ctx, nil)

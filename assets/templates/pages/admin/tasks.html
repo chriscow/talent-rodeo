@@ -1,0 +1,26 @@
+{{define "title"}}Tasks{{end}}
+
+{{define "page:main"}}
+<div class="container">
+    <h1>Tasks</h1>
+
+    <div class="grid">
+        <div>
+            <label for="status">Status</label>
+            <select id="status" name="status" hx-get="/admin/tasks/partial" hx-trigger="change"
+                hx-target="#tasks-table">
+                <option value="">All</option>
+                <option value="pending">Pending</option>
+                <option value="running">Running</option>
+                <option value="complete">Complete</option>
+                <option value="failed">Failed</option>
+                <option value="cancelled">Cancelled</option>
+            </select>
+        </div>
+    </div>
+
+    <div id="tasks-table" class="overflow-auto">
+        {{template "tasks-table" .}}
+    </div>
+</div>
+{{end}}
