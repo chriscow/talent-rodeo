@@ -81,7 +81,6 @@ func (ts *testServer) authenticatedRequest(t *testing.T, method, urlPath string,
 		Email:   "test@example.com",
 		Created: time.Now(),
 	}
-	req = contextSetAuthenticatedUser(req, user)
 
 	// Create a session and save it
 	session, err := ts.app.sessionStore.Get(req, "session")
@@ -112,9 +111,6 @@ func (ts *testServer) authenticatedRequest(t *testing.T, method, urlPath string,
 		}
 		req.AddCookie(cookie)
 	}
-
-	// Set the user in the context
-	req = contextSetAuthenticatedUser(req, user)
 
 	return req
 }
@@ -160,13 +156,46 @@ func (ts *testServer) authenticatedPostForm(t *testing.T, urlPath string, form u
 		req.AddCookie(cookie)
 	}
 
+	// Set up the user
 	user := &database.User{
 		ID:      1,
 		Email:   "test@example.com",
 		Created: time.Now(),
 	}
-	req = contextSetAuthenticatedUser(req, user)
+
+	// Create a session and save it
+	session, err := ts.app.sessionStore.Get(req, "session")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session.Values["UserID"] = user.ID
 	w := httptest.NewRecorder()
+	err = session.Save(req, w)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a new request with the session cookie
+	req = httptest.NewRequest("POST", urlPath, strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Add("Cookie", w.Header().Get("Set-Cookie"))
+
+	// Add CSRF token for POST requests
+	if req.Method == "POST" {
+		req.Header.Set("X-CSRF-Token", "test-csrf-token")
+		cookie := &http.Cookie{
+			Name:     "csrf_token",
+			Value:    "test-csrf-token",
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteLaxMode,
+		}
+		req.AddCookie(cookie)
+	}
+
+	req = contextSetAuthenticatedUser(req, user)
+	w = httptest.NewRecorder()
 	ts.app.routes().ServeHTTP(w, req)
 	return w.Code, w.Header(), w.Body.String()
 }

@@ -22,6 +22,9 @@ DROP TRIGGER IF EXISTS extracted_job_details_updated_at ON extracted_job_details
 
 DROP TRIGGER IF EXISTS user_keywords_updated_at ON user_keywords;
 
+-- Drop custom functions
+DROP FUNCTION IF EXISTS update_job_listings_timestamp ();
+
 -- Drop the junction table first
 -- We start with search_results since it has foreign key constraints
 -- pointing to both job_listings and job_searches

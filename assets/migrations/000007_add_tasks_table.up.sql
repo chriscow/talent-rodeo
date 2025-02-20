@@ -14,10 +14,10 @@ CREATE TABLE tasks (
     ),
     attempts INTEGER NOT NULL DEFAULT 0,
     max_attempts INTEGER NOT NULL DEFAULT 3,
-    run_at TIMESTAMP NOT NULL,
+    run_at TIMESTAMP WITH TIME ZONE NOT NULL,
     error TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (now() at time zone 'UTC'),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (now() at time zone 'UTC'),
     -- Add constraint to prevent tasks with run_at in the past
     CONSTRAINT tasks_run_at_future_check CHECK (run_at >= created_at)
 );

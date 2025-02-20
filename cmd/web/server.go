@@ -151,6 +151,12 @@ func (app *application) serve(srv *http.Server) error {
 		defer cancel()
 
 		app.logger.Info("attempting graceful shutdown")
+
+		// Stop the task processor first
+		app.logger.Info("stopping task processor")
+		app.processor.Stop()
+		app.logger.Info("task processor stopped")
+
 		err := srv.Shutdown(ctx)
 		if err != nil {
 			app.logger.Error("error during server shutdown", "error", err)

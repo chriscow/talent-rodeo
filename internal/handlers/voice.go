@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	tasks "talent-rodeo/internal/tasks/handlers"
+
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -67,9 +69,18 @@ func (h *VoiceHandler) handleMessage(ctx context.Context, msg jetstream.Msg) err
 		"subject", msg.Subject(),
 		"data_size", len(msg.Data()))
 
+	// First unmarshal into MessageData to get the inner data
+	var msgData tasks.MessageData
+	if err := json.Unmarshal(msg.Data(), &msgData); err != nil {
+		h.logger.Error("Failed to unmarshal message data",
+			"error", err,
+			"raw_data", string(msg.Data()))
+		return nil
+	}
+
 	// Parse the call request
 	var req CallRequest
-	if err := json.Unmarshal(msg.Data(), &req); err != nil {
+	if err := json.Unmarshal(msgData.Data, &req); err != nil {
 		h.logger.Error("Failed to unmarshal call request", "error", err)
 		return nil
 	}

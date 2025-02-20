@@ -215,12 +215,15 @@ func (app *application) updateUserResume(user *database.User, filename, resumeTe
 // Used to provide real-time feedback during resume processing.
 func (app *application) SendStatus(sessionID, eventName, level, message string) {
 	app.logger.Info("SendStatus", "sessionID", sessionID, "eventName", eventName, "level", level, "message", message)
-	err := app.pusher.Trigger(sessionID, eventName, map[string]string{
-		"level":   level,
-		"message": message,
-	})
 
-	if err != nil {
-		app.logger.Error("SendStatus: failed to send status", "error", err)
-	}
+	/*
+		err := app.pusher.Trigger(sessionID, eventName, map[string]string{
+			"level":   level,
+			"message": message,
+		})
+
+		if err != nil {
+			app.logger.Error("SendStatus: failed to send status", "error", err)
+		}
+	*/
 }

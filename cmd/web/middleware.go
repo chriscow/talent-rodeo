@@ -140,14 +140,15 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 
 func (app *application) requireSuperUser(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// app.logger.Warn("require super user middleware", "path", r.URL.Path)
-		authenticatedUser := contextGetAuthenticatedUser(r)
-
-		if authenticatedUser == nil || !authenticatedUser.IsSuperUser {
-			http.Redirect(w, r, "/", http.StatusSeeOther)
+		user := contextGetAuthenticatedUser(r)
+		if user == nil {
+			http.Redirect(w, r, "/auth/linkedin", http.StatusFound)
 			return
 		}
-
+		if !user.IsSuperUser {
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
 		next.ServeHTTP(w, r)
 	})
 }
