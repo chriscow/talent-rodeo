@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +16,20 @@ import (
 var (
 	taskMutex sync.Mutex
 )
+
+// Task represents a background task in the system
+type Task struct {
+	ID          int64          `db:"id"`
+	Type        string         `db:"type"`
+	Payload     []byte         `db:"payload"`
+	Status      string         `db:"status"`
+	Attempts    int            `db:"attempts"`
+	MaxAttempts int            `db:"max_attempts"`
+	RunAt       time.Time      `db:"run_at"`
+	Error       sql.NullString `db:"error"`
+	CreatedAt   time.Time      `db:"created_at"`
+	UpdatedAt   time.Time      `db:"updated_at"`
+}
 
 // CreateTask creates a new task
 func (db *DB) CreateTask(ctx context.Context, task *internal.Task) error {
@@ -337,4 +352,69 @@ func (db *DB) DeleteTaskTx(ctx context.Context, tx *sqlx.Tx, id int64) error {
 	}
 
 	return nil
+}
+
+// GetTasksWithFilter retrieves tasks with optional status filter
+func (db *DB) GetTasksWithFilter(ctx context.Context, statuses []string, limit int, offset int) ([]*Task, error) {
+	query := `
+		SELECT id, type, payload, status, attempts, max_attempts, run_at, error, created_at, updated_at
+		FROM tasks
+		WHERE 1=1
+	`
+	args := []any{}
+
+	if len(statuses) > 0 {
+		placeholders := make([]string, len(statuses))
+		for i, status := range statuses {
+			placeholders[i] = fmt.Sprintf("$%d", i+1)
+			args = append(args, status)
+		}
+		query += fmt.Sprintf(" AND status IN (%s)", strings.Join(placeholders, ","))
+	}
+
+	query += fmt.Sprintf(" ORDER BY run_at DESC LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2)
+	args = append(args, limit, offset)
+
+	rows, err := db.dbtx.QueryxContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("error querying tasks: %w", err)
+	}
+	defer rows.Close()
+
+	var tasks []*Task
+	for rows.Next() {
+		var task Task
+		if err := rows.StructScan(&task); err != nil {
+			return nil, fmt.Errorf("error scanning task: %w", err)
+		}
+		tasks = append(tasks, &task)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating tasks: %w", err)
+	}
+
+	return tasks, nil
+}
+
+// GetTasksCount returns total count of tasks matching the filter
+func (db *DB) GetTasksCount(ctx context.Context, statuses []string) (int, error) {
+	query := "SELECT COUNT(*) FROM tasks WHERE 1=1"
+	args := []any{}
+
+	if len(statuses) > 0 {
+		placeholders := make([]string, len(statuses))
+		for i, status := range statuses {
+			placeholders[i] = fmt.Sprintf("$%d", i+1)
+			args = append(args, status)
+		}
+		query += fmt.Sprintf(" AND status IN (%s)", strings.Join(placeholders, ","))
+	}
+
+	var count int
+	if err := db.dbtx.GetContext(ctx, &count, query, args...); err != nil {
+		return 0, fmt.Errorf("error counting tasks: %w", err)
+	}
+
+	return count, nil
 }

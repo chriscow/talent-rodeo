@@ -39,9 +39,21 @@ func (app *application) routes() http.Handler {
 
 		mux.Group(func(mux *flow.Mux) {
 			mux.Use(app.requireAuthenticatedUser)
+			// Main profile route - displays different templates based on user's onboarding state:
+			// - StepInitial: profile-resume-upload.html
+			// - StepResumeUploaded: profile-schedule-phone-call.html
+			// - StepPhoneCallScheduled: profile-waiting-call.html
+			// - StepPhoneCallCompleted: profile-preferences.html
+			// - StepPreferencesExtracted: profile-job-search.html
+			// - StepJobSearchStarted/Complete: profile-jobs.html
 			mux.HandleFunc("/profile", app.showProfilePage, "GET")
 			mux.HandleFunc("/profile/onboarding/reset", app.resetOnboardingState, "POST")
 			mux.HandleFunc("/profile/resume", app.deleteResume, "DELETE")
+			// Direct resume upload route - always shows the resume upload form regardless of onboarding state
+			// Used for:
+			// - Direct access to resume upload
+			// - Uploading a different resume
+			// - Resetting onboarding process
 			mux.HandleFunc("/profile/resume/upload", app.showUploadPage, "GET")
 			mux.HandleFunc("/profile/resume/upload", app.createResume, "POST")
 			mux.HandleFunc("/profile/schedule", app.showSchedulePage, "GET")
@@ -60,6 +72,9 @@ func (app *application) routes() http.Handler {
 			mux.Use(app.requireSuperUser)
 			mux.HandleFunc("/user/:id/keywords", app.editKeywords, "GET")
 			mux.HandleFunc("/user/:id/keywords", app.saveKeywords, "POST")
+			// Add tasks routes
+			mux.HandleFunc("/admin/tasks", app.showTasksPage, "GET")
+			mux.HandleFunc("/admin/tasks/partial", app.getTasksPartial, "GET")
 		})
 	})
 

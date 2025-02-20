@@ -251,6 +251,14 @@ func run(logger *slog.Logger) error {
 		handlers:     handlers,
 	}
 
+	// Start the task processor
+	go func() {
+		app.logger.Info("starting task processor")
+		if err := taskProcessor.Start(ctx); err != nil {
+			app.logger.Error("task processor error", "error", err)
+		}
+	}()
+
 	if cfg.autoHTTPS.domain != "" {
 		return app.serveAutoHTTPS()
 	}
@@ -312,7 +320,8 @@ func checkEnv() error {
 
 	requiredKeys := []string{"BASE_URL", "SESSION_SECRET", "SMTP_USERNAME",
 		"SMTP_PASSWORD", "LINKEDIN_AUTH_CLIENT_ID", "LINKEDIN_AUTH_CLIENT_SECRET",
-		"OPENAI_API_KEY", "PUSHER_APP_ID", "PUSHER_KEY", "PUSHER_SECRET", "PUSHER_CLUSTER"}
+		"OPENAI_API_KEY", "PUSHER_APP_ID", "PUSHER_KEY", "PUSHER_SECRET", "PUSHER_CLUSTER",
+		"TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER", "APP_DOMAIN"}
 
 	for _, key := range requiredKeys {
 		if os.Getenv(key) == "" {
