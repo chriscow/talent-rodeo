@@ -16,6 +16,7 @@ const preferencesPrompt = `
 	Provide your response in JSON.`
 
 type Preferences struct {
+	Summary            string       `json:"summary" description:"A summary of the preferences of the candidate or details not covered in the other fields"`
 	PreferredLocations []string     `json:"preferredLocations" description:"The preferred locations of the candidate"`
 	RemotePreference   string       `json:"remotePreference" description:"The preferred remote preference of the candidate" enum:"remote,hybrid,onsite"`
 	WorkStyle          string       `json:"workStyle" description:"The preferred work style of the candidate" enum:"collaborative,independent"`

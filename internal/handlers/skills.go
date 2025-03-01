@@ -24,6 +24,7 @@ type Skills struct {
 }
 
 type Skill struct {
+	Summary    string  `json:"summary" description:"A summary of the skill as given in the transcript or details not covered in the other fields"`
 	Name       string  `json:"name" description:"The name of the skill"`
 	Level      string  `json:"level" description:"The level of expertise of the skill" enum:"expert,intermediate,beginner"`
 	YearsUsed  float64 `json:"yearsUsed" description:"The number of years of experience with the skill"`

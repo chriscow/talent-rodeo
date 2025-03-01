@@ -22,6 +22,7 @@ const (
 
 // Compensation defines the compensation details for a job
 type Compensation struct {
+	Summary                string       `json:"summary" description:"Summary of compensation details or details not covered in the other fields"`
 	SalaryRange            *SalaryRange `json:"salaryRange,omitempty" description:"Salary range"`
 	Benefits               []string     `json:"benefits" description:"Benefits"`
 	Equity                 *EquityRange `json:"equity,omitempty" description:"Equity"`

@@ -22,6 +22,7 @@ const (
 
 // Workplace defines the workplace details for a job
 type Workplace struct {
+	Summary     string   `json:"summary" description:"A summary of the workplace details or details not covered in the other fields"`
 	Location    string   `json:"location" description:"Location details (remote, hybrid, onsite)"`
 	Type        string   `json:"type" description:"Type of workplace (office, remote, hybrid)"`
 	Schedule    string   `json:"schedule" description:"Work schedule and hours"`
