@@ -22,6 +22,7 @@ type Experience struct {
 }
 
 type Role struct {
+	Summary     string   `json:"summary" description:"A summary of the role as detailed in the transcript or details not covered in the other fields"`
 	Title       string   `json:"title" description:"The title of the role"`
 	Company     string   `json:"company" description:"The company the candidate has worked at"`
 	YearsInRole float64  `json:"yearsInRole" description:"The number of years the candidate has held the role"`

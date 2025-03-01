@@ -22,6 +22,7 @@ const (
 
 // Requirements defines the requirements for a job
 type Requirements struct {
+	Summary                  string        `json:"summary" description:"A summary of the requirements for the job and details not covered in the other fields"`
 	MustHave                 []Requirement `json:"mustHave" description:"Must have skills"`
 	NiceToHave               []Requirement `json:"niceToHave" description:"Nice to have skills"`
 	MinYearsExperience       float64       `json:"minYearsExperience" description:"Minimum years of experience required"`
