@@ -18,6 +18,7 @@ import (
 
 	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/handlers"
+	"github.com/chriscow/minds/providers/gemini"
 	"github.com/chriscow/minds/providers/openai"
 	"github.com/fatih/color"
 	"github.com/google/uuid"
@@ -101,7 +102,7 @@ func eval(ctx context.Context, recruiterPrompt, personaPrompt utils.Prompt, conv
 	}
 
 	// Create the providers
-	recruiter, candidate, candidateName, shouldEndCall, systemPrompt, providerName, model, err := createProviders(cfg, resume)
+	recruiter, candidate, candidateName, shouldEndCall, systemPrompt, providerName, model, err := createProviders(ctx, cfg, resume)
 	if err != nil {
 		errCh <- fmt.Errorf("failed to create providers: %w", err)
 		return
@@ -146,7 +147,7 @@ func loadResume(personaPrompt utils.Prompt) (string, error) {
 	return string(resume), nil
 }
 
-func createProviders(cfg evalConfig, resume string) (recruiter, candidate *openai.Provider, candidateName string, shouldEndCall *bool, systemPrompt string, providerName, model string, err error) {
+func createProviders(ctx context.Context, cfg evalConfig, resume string) (recruiter, candidate minds.ThreadHandler, candidateName string, shouldEndCall *bool, systemPrompt string, providerName, model string, err error) {
 	// Prepare recruiter prompt with resume
 	recuiterBuffer := bytes.Buffer{}
 	data := struct {
@@ -180,28 +181,20 @@ func createProviders(cfg evalConfig, resume string) (recruiter, candidate *opena
 		return nil, nil, "", nil, "", "", "", fmt.Errorf("failed to create end call tool: %w", err)
 	}
 
+	_ = endCallTool
+
 	// Create recruiter provider
 	recruiterName := funcs.Slugify(cfg.recruiterPrompt.Header.Name)
 	providerName = "openai"
-	model = "gpt-4"
-	recruiter, err = openai.NewProvider(
-		openai.WithName(recruiterName),
-		openai.WithSystemPrompt(recuiterBuffer.String()),
-		openai.WithTool(endCallTool),
-		openai.WithModel(model),
-	)
+	// model = "gpt-4o-mini"
+	recruiter, err = createOpenAIProvider(recruiterName, recuiterBuffer.String())
 	if err != nil {
 		return nil, nil, "", nil, "", "", "", fmt.Errorf("failed to create recruiter provider: %w", err)
 	}
 
 	// Create candidate provider
 	candidateName = funcs.Slugify(cfg.personaPrompt.Header.Name)
-	candidate, err = openai.NewProvider(
-		openai.WithName(candidateName),
-		openai.WithSystemPrompt(cfg.personaPrompt.Body()),
-		openai.WithModel(model),
-		// openai.WithTool(endCallTool),
-	)
+	candidate, err = createGeminiProvider(ctx, candidateName, cfg.personaPrompt.Body())
 	if err != nil {
 		return nil, nil, "", nil, "", "", "", fmt.Errorf("failed to create candidate provider: %w", err)
 	}
@@ -209,7 +202,39 @@ func createProviders(cfg evalConfig, resume string) (recruiter, candidate *opena
 	return recruiter, candidate, candidateName, shouldEndCall, systemPrompt, providerName, model, nil
 }
 
-func createConversationHandler(cfg evalConfig, recruiter, candidate *openai.Provider, shouldEndCall *bool, systemPrompt string, db *sql.DB) (minds.ThreadHandler, error) {
+func createOpenAIProvider(name string, systemPrompt string, tools ...minds.Tool) (*openai.Provider, error) {
+	registry := minds.NewToolRegistry()
+	for _, tool := range tools {
+		registry.Register(tool)
+	}
+	provider, err := openai.NewProvider(
+		openai.WithName(name),
+		openai.WithSystemPrompt(systemPrompt),
+		openai.WithToolRegistry(registry),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create openai provider: %w", err)
+	}
+	return provider, nil
+}
+
+func createGeminiProvider(ctx context.Context, name string, systemPrompt string, tools ...minds.Tool) (*gemini.Provider, error) {
+	registry := minds.NewToolRegistry()
+	for _, tool := range tools {
+		registry.Register(tool)
+	}
+	provider, err := gemini.NewProvider(ctx,
+		gemini.WithName(name),
+		gemini.WithSystemPrompt(systemPrompt),
+		gemini.WithToolRegistry(registry),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create gemini provider: %w", err)
+	}
+	return provider, nil
+}
+
+func createConversationHandler(cfg evalConfig, recruiter minds.ThreadHandler, candidate minds.ThreadHandler, shouldEndCall *bool, systemPrompt string, db *sql.DB) (minds.ThreadHandler, error) {
 	// Create the sequence handler
 	turn := handlers.NewSequence(cfg.conversationID+"-seq", recruiter, candidate)
 
@@ -228,7 +253,7 @@ func createConversationHandler(cfg evalConfig, recruiter, candidate *openai.Prov
 	}))
 
 	turn.Use(ReverseRoles())
-	turn.Use(ConversationSummarizer(recruiter, systemPrompt))
+	turn.Use(ConversationSummarizer(recruiter.(minds.ContentGenerator), systemPrompt))
 
 	// Create the loop handler
 	loop := handlers.NewFor(cfg.conversationID+"-loop", 50, turn, func(tc minds.ThreadContext, iteration int) bool {
