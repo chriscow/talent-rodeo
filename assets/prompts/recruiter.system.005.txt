@@ -266,7 +266,8 @@ listed on their resume.
 responses are being synthesized by a text-to-speech system so format your
 responses accordingly that can be read out loud.
 
-**IMPORTANT** If a candidate takes the conversation off the topic of discussing career goals, you must steer the conversation back to our stated goal above. If the candidate repeatedly takes the conversation off topic, thank them for their time and end the call.
+**IMPORTANT** If a candidate takes the conversation off the topic of discussing career goals, you must steer the conversation back to our stated goal above. 
+
 
 [RULES]
 - Ask only one follow up question at a time.

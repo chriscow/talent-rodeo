@@ -5,7 +5,6 @@ import (
 
 	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/handlers"
-	"github.com/chriscow/minds/providers/openai"
 )
 
 type summarizer struct {
@@ -13,7 +12,7 @@ type summarizer struct {
 }
 
 // ConversationSummarizer creates middleware that asynchronously summarizes conversations
-func ConversationSummarizer(provider *openai.Provider, systemMsg string) minds.Middleware {
+func ConversationSummarizer(provider minds.ContentGenerator, systemMsg string) minds.Middleware {
 	return &summarizer{
 		handler: handlers.NewSummarizer(provider, systemMsg),
 	}
