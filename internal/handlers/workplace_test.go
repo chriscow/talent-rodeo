@@ -28,7 +28,7 @@ func TestWorkplaceHandleMessage(t *testing.T) {
 	}
 
 	// Create handler
-	handler, err := NewWorkplaceHandler(context.Background(), env.js, env.llm, env.logger)
+	handler, err := NewWorkplaceHandler(context.Background(), env.js, env.llm, env.logger, env.db)
 	if err != nil {
 		t.Fatalf("Failed to create handler: %v", err)
 	}

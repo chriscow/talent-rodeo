@@ -61,11 +61,19 @@ func (app *application) routes() http.Handler {
 			mux.HandleFunc("/profile/schedule/appointment", app.createAppointment, "POST")
 			mux.HandleFunc("/profile/schedule/appointment/:id", app.cancelAppointment, "DELETE")
 			mux.HandleFunc("/profile/schedule/reschedule", app.rescheduleAppointment, "POST")
+			mux.HandleFunc("/profile/preferences", app.showPreferencesPage, "GET")
+			mux.HandleFunc("/profile/preferences", app.updatePreferences, "POST")
+
 			mux.HandleFunc("/interview", app.showInterviewPage, "GET")
 			mux.HandleFunc("/interview/start", app.startInterview, "GET")
 			mux.HandleFunc("/interview/end", app.completeInterview, "POST")
 			mux.HandleFunc("/interview/audio", app.handleAudioUpload, "POST")
+
 			mux.HandleFunc("/logout", app.logoutUser, "POST")
+
+			// Skill CRUD operations
+			mux.HandleFunc("/profile/skills/add", app.addSkill, "POST")
+			mux.HandleFunc("/profile/skills/:id", app.handleSkill, "DELETE", "PUT")
 		})
 
 		mux.Group(func(mux *flow.Mux) {

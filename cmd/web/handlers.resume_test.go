@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"talent-rodeo/internal/database"
 	"testing"
+	"time"
 )
 
 func TestResumeUpload(t *testing.T) {
@@ -53,7 +54,16 @@ func TestResumeUpload(t *testing.T) {
 		}
 
 		// Create authenticated request
-		req := ts.authenticatedRequest(t, "POST", "/profile/resume/upload", body)
+		now := time.Now()
+		role := "candidate"
+		user := &database.User{
+			ID:        1,
+			Email:     "test@example.com",
+			Created:   now,
+			UpdatedAt: &now,
+			Role:      &role,
+		}
+		req := ts.authenticatedRequest(t, "POST", "/profile/resume/upload", user, body)
 		req.Header.Set("Content-Type", writer.FormDataContentType())
 		w := httptest.NewRecorder()
 
@@ -75,7 +85,6 @@ func TestResumeUpload(t *testing.T) {
 		req.Header.Add("X-CSRF-Token", "test-token")
 
 		// Set the user in the context
-		user := &database.User{ID: 1}
 		ctx := context.WithValue(req.Context(), authenticatedUserContextKey, user)
 		req = req.WithContext(ctx)
 
@@ -120,7 +129,16 @@ func TestResumeUpload(t *testing.T) {
 		}
 
 		// Create authenticated request
-		req := ts.authenticatedRequest(t, "POST", "/profile/resume/upload", body)
+		now := time.Now()
+		role := "candidate"
+		user := &database.User{
+			ID:        1,
+			Email:     "test@example.com",
+			Created:   now,
+			UpdatedAt: &now,
+			Role:      &role,
+		}
+		req := ts.authenticatedRequest(t, "POST", "/profile/resume/upload", user, body)
 		req.Header.Set("Content-Type", writer.FormDataContentType())
 		w := httptest.NewRecorder()
 
@@ -142,7 +160,6 @@ func TestResumeUpload(t *testing.T) {
 		req.Header.Add("X-CSRF-Token", "test-token")
 
 		// Set the user in the context
-		user := &database.User{ID: 1}
 		ctx := context.WithValue(req.Context(), authenticatedUserContextKey, user)
 		req = req.WithContext(ctx)
 
@@ -177,7 +194,16 @@ func TestResumeUpload(t *testing.T) {
 		}
 
 		// Create authenticated request
-		req := ts.authenticatedRequest(t, "POST", "/profile/resume/upload", body)
+		now := time.Now()
+		role := "candidate"
+		user := &database.User{
+			ID:        1,
+			Email:     "test@example.com",
+			Created:   now,
+			UpdatedAt: &now,
+			Role:      &role,
+		}
+		req := ts.authenticatedRequest(t, "POST", "/profile/resume/upload", user, body)
 		req.Header.Set("Content-Type", writer.FormDataContentType())
 		w := httptest.NewRecorder()
 
@@ -199,7 +225,6 @@ func TestResumeUpload(t *testing.T) {
 		req.Header.Add("X-CSRF-Token", "test-token")
 
 		// Set the user in the context
-		user := &database.User{ID: 1}
 		ctx := context.WithValue(req.Context(), authenticatedUserContextKey, user)
 		req = req.WithContext(ctx)
 

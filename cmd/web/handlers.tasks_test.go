@@ -26,21 +26,13 @@ func TestShowTasksPage(t *testing.T) {
 			wantCode: http.StatusFound,
 		},
 		{
-			name: "non-admin user",
-			user: &database.User{
-				ID:          1,
-				Email:       "test@example.com",
-				IsSuperUser: false,
-			},
+			name:     "non-admin user",
+			user:     ts.createCandidateUser(3, "test@example.com"),
 			wantCode: http.StatusFound,
 		},
 		{
-			name: "admin user",
-			user: &database.User{
-				ID:          1,
-				Email:       "test@example.com",
-				IsSuperUser: true,
-			},
+			name:     "admin user",
+			user:     ts.createAdminUser(4, "admin2@example.com"),
 			wantCode: http.StatusOK,
 		},
 	}
@@ -49,7 +41,7 @@ func TestShowTasksPage(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			path := "/admin/tasks"
 
-			req := ts.authenticatedRequest(t, "GET", path, nil)
+			req := ts.authenticatedRequest(t, "GET", path, tt.user, nil)
 			if tt.user != nil {
 				req = contextSetAuthenticatedUser(req, tt.user)
 			}
@@ -103,42 +95,26 @@ func TestGetTasksPartial(t *testing.T) {
 			wantCode: http.StatusFound,
 		},
 		{
-			name: "non-admin user",
-			user: &database.User{
-				ID:          1,
-				Email:       "test@example.com",
-				IsSuperUser: false,
-			},
+			name:     "non-admin user",
+			user:     ts.createCandidateUser(3, "test@example.com"),
 			path:     "/admin/tasks/partial",
 			wantCode: http.StatusFound,
 		},
 		{
-			name: "admin user - no filters",
-			user: &database.User{
-				ID:          1,
-				Email:       "test@example.com",
-				IsSuperUser: true,
-			},
+			name:     "admin user - no filters",
+			user:     ts.createAdminUser(4, "admin2@example.com"),
 			path:     "/admin/tasks/partial",
 			wantCode: http.StatusOK,
 		},
 		{
-			name: "admin user - with status filter",
-			user: &database.User{
-				ID:          1,
-				Email:       "test@example.com",
-				IsSuperUser: true,
-			},
+			name:     "admin user - with status filter",
+			user:     ts.createAdminUser(5, "admin3@example.com"),
 			path:     "/admin/tasks/partial?status=pending",
 			wantCode: http.StatusOK,
 		},
 		{
-			name: "admin user - with pagination",
-			user: &database.User{
-				ID:          1,
-				Email:       "test@example.com",
-				IsSuperUser: true,
-			},
+			name:     "admin user - with pagination",
+			user:     ts.createAdminUser(6, "admin4@example.com"),
 			path:     "/admin/tasks/partial?page=1&size=10",
 			wantCode: http.StatusOK,
 		},
@@ -146,7 +122,7 @@ func TestGetTasksPartial(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := ts.authenticatedRequest(t, "GET", tt.path, nil)
+			req := ts.authenticatedRequest(t, "GET", tt.path, tt.user, nil)
 			if tt.user != nil {
 				req = contextSetAuthenticatedUser(req, tt.user)
 			}

@@ -9,6 +9,7 @@ import (
 	"os"
 	"runtime/debug"
 	"sync"
+	"text/template"
 
 	"talent-rodeo/internal/auth"
 	"talent-rodeo/internal/database"
@@ -93,6 +94,7 @@ type application struct {
 	pusher        *pusher.Client
 	keywordsMutex sync.RWMutex
 	handlers      map[string]any
+	templates     *template.Template
 
 	natsServer   *server.Server
 	natsShutdown chan struct{}
@@ -399,7 +401,7 @@ func setupPipelineHandlers(
 	logger.Debug("search handler configured")
 
 	// TODO: skills handler
-	skillsHandler, err := handlers.NewSkillsHandler(ctx, js, llm, logger)
+	skillsHandler, err := handlers.NewSkillsHandler(ctx, js, llm, logger, db)
 	if err != nil {
 		return nil, fmt.Errorf("error setting up skills handler: %w", err)
 	}

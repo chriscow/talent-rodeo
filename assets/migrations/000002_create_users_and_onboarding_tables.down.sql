@@ -18,17 +18,25 @@ DROP TRIGGER IF EXISTS candidates_updated_at ON candidates;
 
 DROP TRIGGER IF EXISTS ensure_candidate_role ON candidates;
 
--- Drop the candidates table
-DROP TABLE IF EXISTS candidates;
-
--- Drop the onboarding_progress table
-DROP TABLE IF EXISTS onboarding_progress;
-
--- Drop the onboarding_feedback table
+-- Drop tables in reverse order of creation
 DROP TABLE IF EXISTS onboarding_feedback;
 
--- Drop the users table
+DROP TABLE IF EXISTS onboarding_progress;
+
+DROP TABLE IF EXISTS candidate_preferences;
+
+DROP TABLE IF EXISTS candidate_skills;
+
+DROP TABLE IF EXISTS candidates;
+
 DROP TABLE IF EXISTS users;
 
--- Drop the user_role type
-DROP TYPE IF EXISTS user_role;
+-- Drop functions
+DROP FUNCTION IF EXISTS update_timestamp;
+
+DROP FUNCTION IF EXISTS validate_candidate_role;
+
+DROP FUNCTION IF EXISTS update_candidates_updated_at;
+
+-- Drop types
+DROP TYPE IF EXISTS role;

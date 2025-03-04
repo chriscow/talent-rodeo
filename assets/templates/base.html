@@ -87,6 +87,10 @@
         console.log('-------------------')
     })
 
+    document.body.addEventListener('htmx:afterSwap', function(evt) {
+        feather.replace();
+    });
+
     feather.replace()  // feather icons
 </script>
 <script src="/static/js/minimal-theme-switcher.js"></script>

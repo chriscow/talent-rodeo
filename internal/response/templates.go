@@ -127,6 +127,7 @@ func NamedTemplateWithHeaders(w http.ResponseWriter, status int, data any, heade
 	for key, value := range headers {
 		w.Header()[key] = value
 	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 	_, err = buf.WriteTo(w)
 

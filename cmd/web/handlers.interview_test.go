@@ -29,13 +29,18 @@ func TestInterview(t *testing.T) {
 
 	t.Run("Authenticated user without resume is redirected", func(t *testing.T) {
 		// Set up user without resume
+		now := time.Now()
+		role := "candidate"
 		user := &database.User{
-			ID:    1,
-			Email: "test@example.com",
+			ID:        1,
+			Email:     "test@example.com",
+			Created:   now,
+			UpdatedAt: &now,
+			Role:      &role,
 		}
 
 		// Create authenticated request
-		req := ts.authenticatedRequest(t, "GET", "/interview", nil)
+		req := ts.authenticatedRequest(t, "GET", "/interview", user, nil)
 		w := httptest.NewRecorder()
 
 		// Create and save a session
@@ -71,7 +76,16 @@ func TestInterview(t *testing.T) {
 
 	t.Run("Authenticated user without appointment is redirected", func(t *testing.T) {
 		t.Skip("Redirection path mismatch - expected /profile/schedule but getting /profile/resume/upload")
-		req := ts.authenticatedRequest(t, "GET", "/interview", nil)
+		now := time.Now()
+		role := "candidate"
+		user := &database.User{
+			ID:        1,
+			Email:     "test@example.com",
+			Created:   now,
+			UpdatedAt: &now,
+			Role:      &role,
+		}
+		req := ts.authenticatedRequest(t, "GET", "/interview", user, nil)
 		w := httptest.NewRecorder()
 
 		// Create and save a session with a user that has a resume
@@ -91,7 +105,7 @@ func TestInterview(t *testing.T) {
 
 		// Set resume for the user
 		filename := "test.pdf"
-		user := &database.User{ID: 1, ResumeFilename: &filename}
+		user = &database.User{ID: 1, ResumeFilename: &filename}
 		ctx := context.WithValue(req.Context(), authenticatedUserContextKey, user)
 		req = req.WithContext(ctx)
 
@@ -130,10 +144,15 @@ func TestInterview(t *testing.T) {
 		}
 
 		// Set up the user with a resume
+		now := time.Now()
+		role := "candidate"
 		filename := "test.pdf"
 		user := &database.User{
 			ID:             1,
 			Email:          "test@example.com",
+			Created:        now,
+			UpdatedAt:      &now,
+			Role:           &role,
 			ResumeFilename: &filename,
 		}
 
@@ -150,7 +169,7 @@ func TestInterview(t *testing.T) {
 		}
 
 		// Create authenticated request
-		req := ts.authenticatedRequest(t, "GET", "/interview", nil)
+		req := ts.authenticatedRequest(t, "GET", "/interview", user, nil)
 		w := httptest.NewRecorder()
 
 		// Create and save a session
@@ -192,7 +211,16 @@ func TestInterview(t *testing.T) {
 	})
 
 	t.Run("Audio endpoint requires resume", func(t *testing.T) {
-		req := ts.authenticatedRequest(t, "POST", "/interview/audio", nil)
+		now := time.Now()
+		role := "candidate"
+		user := &database.User{
+			ID:        1,
+			Email:     "test@example.com",
+			Created:   now,
+			UpdatedAt: &now,
+			Role:      &role,
+		}
+		req := ts.authenticatedRequest(t, "POST", "/interview/audio", user, nil)
 		w := httptest.NewRecorder()
 
 		// Create and save a session
@@ -212,7 +240,6 @@ func TestInterview(t *testing.T) {
 		req.Header.Add("X-CSRF-Token", "test-token")
 
 		// Set the user in the context
-		user := &database.User{ID: 1}
 		ctx := context.WithValue(req.Context(), authenticatedUserContextKey, user)
 		req = req.WithContext(ctx)
 
@@ -226,15 +253,20 @@ func TestInterview(t *testing.T) {
 
 	t.Run("Audio endpoint requires appointment", func(t *testing.T) {
 		// Set up the user with a resume
+		now := time.Now()
+		role := "candidate"
 		filename := "test.pdf"
 		user := &database.User{
 			ID:             1,
 			Email:          "test@example.com",
+			Created:        now,
+			UpdatedAt:      &now,
+			Role:           &role,
 			ResumeFilename: &filename,
 		}
 
 		// Create authenticated request
-		req := ts.authenticatedRequest(t, "POST", "/interview/audio", nil)
+		req := ts.authenticatedRequest(t, "POST", "/interview/audio", user, nil)
 		w := httptest.NewRecorder()
 
 		// Create and save a session

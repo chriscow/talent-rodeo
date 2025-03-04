@@ -2,9 +2,12 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
+
+	tasks "talent-rodeo/internal/tasks/handlers"
 )
 
 // mockTwilioClient implements TwilioClient for testing
@@ -87,15 +90,27 @@ func TestVoiceHandleMessage(t *testing.T) {
 				t.Fatalf("Failed to create handler: %v", err)
 			}
 
+			// Wrap the input in MessageData
+			inputData, err := json.Marshal(tt.input)
+			if err != nil {
+				t.Fatalf("Failed to marshal input: %v", err)
+			}
+			wrappedInput := tasks.MessageData{
+				Data: inputData,
+				Metadata: map[string]string{
+					"test": "true",
+				},
+			}
+
 			// Send test message and verify response
-			got, err := SendAndReceiveMessage[CallRequest, CallResult](
+			got, err := SendAndReceiveMessage[tasks.MessageData, CallResult](
 				t,
 				context.Background(),
 				env.js,
 				rodeoStream,
 				TopicVoiceInput,
 				TopicVoiceResult,
-				tt.input,
+				wrappedInput,
 				1*time.Second,
 			)
 			if (err != nil) != tt.wantErr {

@@ -187,8 +187,9 @@ func TestCallScheduler_RescheduleCallTx(t *testing.T) {
 					t.Fatalf("failed to get task: %v", err)
 				}
 
-				if !task.RunAt.Equal(tt.wantRunAt) {
-					t.Errorf("task run_at = %v, want %v", task.RunAt, tt.wantRunAt)
+				// Compare times in UTC and truncate to microsecond precision
+				if !task.RunAt.Truncate(time.Microsecond).Equal(tt.wantRunAt.Truncate(time.Microsecond)) {
+					t.Errorf("task run_at = %v, want %v", task.RunAt.Truncate(time.Microsecond), tt.wantRunAt.Truncate(time.Microsecond))
 				}
 			}
 

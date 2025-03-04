@@ -9,9 +9,12 @@ import (
 
 	"talent-rodeo/internal/onboarding"
 
+	"log/slog"
+
 	"github.com/markbates/goth"
 )
 
+// User represents a user in the database
 type User struct {
 	ID           int       `db:"id"`
 	Created      time.Time `db:"created"`
@@ -46,7 +49,7 @@ type User struct {
 	OnboardingStepUpdatedAt *time.Time      `db:"onboarding_step_updated_at"`
 
 	UpdatedAt *time.Time `db:"updated_at"`
-	UserRole  *string    `db:"user_role"`
+	Role      *string    `db:"role"`
 }
 
 type UserKeyword struct {
@@ -56,7 +59,7 @@ type UserKeyword struct {
 	Priority int    `db:"priority"`
 }
 
-func (db *DB) NewUserFromGothUser(gothUser goth.User) (*User, error) {
+func (db *DB) NewUserFromGothUser(gothUser goth.User, role string) (*User, error) {
 	user := User{
 		Email:       gothUser.Email,
 		Provider:    gothUser.Provider,
@@ -68,6 +71,7 @@ func (db *DB) NewUserFromGothUser(gothUser goth.User) (*User, error) {
 		UserID:      gothUser.UserID,
 		AvatarURL:   gothUser.AvatarURL,
 		Location:    gothUser.Location,
+		Role:        &role,
 	}
 
 	id, err := db.InsertUser(user)
@@ -84,14 +88,27 @@ func (db *DB) InsertUser(user User) (int, error) {
 	defer cancel()
 
 	query := `
-		INSERT INTO users (email, hashed_secret, provider, name, first_name, last_name, nick_name, description, user_id, avatar_url, location)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		INSERT INTO users (
+			email, hashed_secret, provider, name, first_name, last_name,
+			nick_name, description, user_id, avatar_url, location,
+			is_superuser, resume_filename, full_resume, summarized_resume,
+			phone, created, updated_at, onboarding_started_at,
+			onboarding_completed_at, onboarding_step_updated_at,
+			onboarding_step, role
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+			$13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+		)
 		RETURNING id`
 
 	var id int
 	err := db.QueryRowContext(ctx, query, user.Email, user.HashedSecret,
 		user.Provider, user.Name, user.FirstName, user.LastName, user.NickName,
-		user.Description, user.UserID, user.AvatarURL, user.Location).Scan(&id)
+		user.Description, user.UserID, user.AvatarURL, user.Location,
+		user.IsSuperUser, user.ResumeFilename, user.FullResume, user.SummarizedResume,
+		user.Phone, user.Created, user.UpdatedAt,
+		user.OnboardingStartedAt, user.OnboardingCompletedAt,
+		user.OnboardingStepUpdatedAt, user.OnboardingStep, user.Role).Scan(&id)
 	if err != nil {
 		return 0, err
 	}
@@ -195,6 +212,7 @@ func (db *DB) UpdateUserKeywords(userID int, keywords []UserKeyword) error {
 
 	return tx.Commit()
 }
+
 func (db *DB) UpdateFullResume(userID int, fileName, resume string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
@@ -257,4 +275,52 @@ func (db *DB) GetUserByPhone(phone string) (*User, error) {
 	}
 
 	return &user, nil
+}
+
+// GetCandidateIDForUser retrieves the candidate ID for a given user ID.
+// Returns an error if the user is not found or if they are not a candidate.
+func (db *DB) GetCandidateIDForUser(ctx context.Context, userID int) (string, error) {
+	logger := db.logger.With(
+		slog.String("method", "GetCandidateIDForUser"),
+		slog.Int("user_id", userID),
+	)
+
+	logger.Debug("retrieving candidate ID for user")
+
+	var candidateID string
+	query := `SELECT id FROM candidates WHERE user_id = $1`
+
+	err := db.GetContext(ctx, &candidateID, query, userID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", fmt.Errorf("no candidate found for user %d", userID)
+		}
+		return "", fmt.Errorf("failed to get candidate ID: %w", err)
+	}
+
+	logger.Debug("found candidate ID", slog.String("candidate_id", candidateID))
+	return candidateID, nil
+}
+
+// CreateCandidate creates a new candidate record for a user.
+// Returns the candidate ID as a string.
+func (db *DB) CreateCandidate(ctx context.Context, userID int) (string, error) {
+	logger := db.logger.With(
+		slog.String("method", "CreateCandidate"),
+		slog.Int("user_id", userID),
+	)
+
+	logger.Debug("creating candidate record")
+
+	var candidateID string
+	err := db.GetContext(ctx, &candidateID, `
+		INSERT INTO candidates (user_id) 
+		VALUES ($1) 
+		RETURNING id`, userID)
+	if err != nil {
+		return "", fmt.Errorf("failed to create candidate: %w", err)
+	}
+
+	logger.Debug("created candidate record", slog.String("candidate_id", candidateID))
+	return candidateID, nil
 }

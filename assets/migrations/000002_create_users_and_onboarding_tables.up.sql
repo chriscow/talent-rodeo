@@ -1,4 +1,4 @@
-CREATE TYPE user_role AS ENUM( 'admin', 'candidate', 'recruiter' );
+CREATE TYPE role AS ENUM ( 'admin', 'candidate', 'recruiter' );
 
 CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
@@ -22,13 +22,13 @@ CREATE TABLE users (
     --
     phone TEXT,
     --
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     onboarding_started_at TIMESTAMP, -- Added onboarding column
     onboarding_completed_at TIMESTAMP, -- Added onboarding column
     onboarding_step_updated_at TIMESTAMP, -- Added onboarding column
     onboarding_step TEXT NOT NULL DEFAULT 'initial', -- Added onboarding column
     --
-    user_role user_role NOT NULL DEFAULT 'candidate'
+    role role NOT NULL DEFAULT 'candidate'
 );
 
 -- Create function for updating timestamps if it doesn't exist
@@ -44,12 +44,81 @@ CREATE TABLE IF NOT EXISTS candidates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
     user_id BIGINT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     culture_preferences TEXT,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    CONSTRAINT unique_user_id UNIQUE (user_id)
+    created_at TIMESTAMP
+    WITH
+        TIME ZONE NOT NULL DEFAULT NOW (),
+        updated_at TIMESTAMP
+    WITH
+        TIME ZONE NOT NULL DEFAULT NOW (),
+        CONSTRAINT unique_user_id UNIQUE (user_id)
 );
 
 CREATE INDEX idx_candidates_user_id ON candidates (user_id);
+
+-- Create candidate_skills table to store skills extracted from resume and interview
+CREATE TABLE IF NOT EXISTS candidate_skills (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    candidate_id UUID NOT NULL REFERENCES candidates (id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    level TEXT NOT NULL CHECK (
+        level IN (
+            'expert',
+            'intermediate',
+            'beginner'
+        )
+    ),
+    years_used DECIMAL(4, 1) NOT NULL,
+    confidence TEXT NOT NULL CHECK (
+        confidence IN ('low', 'medium', 'high')
+    ),
+    summary TEXT,
+    preference_value INTEGER CHECK (
+        preference_value BETWEEN 1 AND 5
+    ),
+    is_search_term BOOLEAN DEFAULT false,
+    created_at TIMESTAMP
+    WITH
+        TIME ZONE NOT NULL DEFAULT NOW (),
+        updated_at TIMESTAMP
+    WITH
+        TIME ZONE NOT NULL DEFAULT NOW (),
+        UNIQUE (candidate_id, name)
+);
+
+CREATE INDEX idx_candidate_skills_candidate_id ON candidate_skills (candidate_id);
+
+CREATE INDEX idx_candidate_skills_name ON candidate_skills (name);
+
+CREATE INDEX idx_candidate_skills_level ON candidate_skills (level);
+
+-- Create candidate_preferences table to store preferences from interview
+CREATE TABLE IF NOT EXISTS candidate_preferences (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    candidate_id UUID NOT NULL REFERENCES candidates (id) ON DELETE CASCADE,
+    category TEXT NOT NULL CHECK (
+        category IN (
+            'work_location',
+            'work_style',
+            'company_size',
+            'industry',
+            'compensation'
+        )
+    ),
+    name TEXT NOT NULL,
+    value INTEGER CHECK (value BETWEEN 1 AND 5),
+    is_search_term BOOLEAN DEFAULT false,
+    created_at TIMESTAMP
+    WITH
+        TIME ZONE NOT NULL DEFAULT NOW (),
+        updated_at TIMESTAMP
+    WITH
+        TIME ZONE NOT NULL DEFAULT NOW (),
+        UNIQUE (candidate_id, category, name)
+);
+
+CREATE INDEX idx_candidate_preferences_candidate_id ON candidate_preferences (candidate_id);
+
+CREATE INDEX idx_candidate_preferences_category ON candidate_preferences (category);
 
 -- Function to validate candidate role
 CREATE OR REPLACE FUNCTION validate_candidate_role()
@@ -68,8 +137,7 @@ $$ LANGUAGE plpgsql;
 -- Trigger to validate role before insert or update
 CREATE TRIGGER ensure_candidate_role BEFORE INSERT
 OR
-UPDATE ON candidates FOR EACH ROW
-EXECUTE FUNCTION validate_candidate_role ();
+UPDATE ON candidates FOR EACH ROW EXECUTE FUNCTION validate_candidate_role ();
 
 -- Add trigger to update updated_at
 CREATE OR REPLACE FUNCTION update_candidates_updated_at()
@@ -81,8 +149,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER candidates_updated_at BEFORE
-UPDATE ON candidates FOR EACH ROW
-EXECUTE FUNCTION update_candidates_updated_at ();
+UPDATE ON candidates FOR EACH ROW EXECUTE FUNCTION update_candidates_updated_at ();
 
 -- Create onboarding_progress table
 CREATE TABLE onboarding_progress (
@@ -121,9 +188,7 @@ CREATE INDEX idx_onboarding_feedback_step ON onboarding_feedback (step);
 
 -- Create triggers for updating timestamps
 CREATE TRIGGER onboarding_progress_updated_at BEFORE
-UPDATE ON onboarding_progress FOR EACH ROW
-EXECUTE FUNCTION update_timestamp ();
+UPDATE ON onboarding_progress FOR EACH ROW EXECUTE FUNCTION update_timestamp ();
 
 CREATE TRIGGER onboarding_feedback_updated_at BEFORE
-UPDATE ON onboarding_feedback FOR EACH ROW
-EXECUTE FUNCTION update_timestamp ();
+UPDATE ON onboarding_feedback FOR EACH ROW EXECUTE FUNCTION update_timestamp ();
