@@ -2,7 +2,7 @@
 
 {{define "page:main"}}
 <main class="container">
-    <article>
+    <section>
         <header>
             <h1>Thanks for the chat!</h1>
         </header>
@@ -13,10 +13,55 @@
             This will help us find the best job matches for you.
         </p>
 
-        <form hx-post="/preferences">
-            <fieldset>
-                <legend>Work Location</legend>
-                <div class="grid">
+        <div class="grid">
+            <div>
+                {{template "partial:skills" dict "Skills" .Skills}}
+            </div>
+            <div>
+                <article>
+                    <hgroup>
+                        <h2>Minimum Base Salary</h2>
+                        <p>
+                            When enabled, jobs that list a base salary must meet or exceed your minimum to be included in search results. Jobs that don't disclose salary information will still be shown. Note that this filter only considers base salary, not total compensation elements like equity, bonuses, or benefits.
+                        </p>
+                    </hgroup>
+                    <div class="grid">
+                        <div>
+                            <label>
+                                <input type="checkbox" 
+                                       name="enable_salary_filter" 
+                                       {{if .EnableSalaryFilter}}checked{{end}}
+                                       hx-post="/profile/salary"
+                                       hx-trigger="change"
+                                       hx-swap="none">
+                                Filter jobs by minimum salary
+                            </label>
+                        </div>
+                        <div>
+                            <input type="number" 
+                                   name="minimum_salary" 
+                                   value="{{.MinimumSalary}}"
+                                   min="0"
+                                   step="5000"
+                                   {{if not .EnableSalaryFilter}}disabled{{end}}
+                                   hx-post="/profile/salary"
+                                   hx-trigger="change"
+                                   hx-swap="none">
+                        </div>
+                    </div>
+                </article>
+            </div>
+        </div>
+        <!--
+        <div class="grid" id="other-preferences">
+            <div>
+                <article>
+                    <hgroup>
+                        <h2>Work Location</h2>
+                        <p>
+                            Please select the work locations that you are interested in.
+                        </p>
+                    </hgroup>
                     {{range $type := .WorkLocations}}
                     <label>
                         <input type="checkbox" name="work_location" value="{{$type}}" {{if
@@ -24,12 +69,15 @@
                         {{$type.Label}}
                     </label>
                     {{end}}
-                </div>
-            </fieldset>
+                </article>
 
-            <fieldset>
-                <legend>Company Size</legend>
-                <div class="grid">
+                <article>
+                    <hgroup>
+                        <h2>Company Size</h2>
+                        <p>
+                            Please select the company sizes that you are interested in.
+                        </p>
+                    </hgroup>
                     {{range $size := .CompanySizes}}
                     <label>
                         <input type="checkbox" name="company_size" value="{{$size}}" {{if
@@ -37,33 +85,37 @@
                         {{$size.Label}}
                     </label>
                     {{end}}
-                </div>
-            </fieldset>
+                </article>
 
-            <fieldset>
-                <legend>Salary Range</legend>
-                <input type="range" min="50000" max="500000" step="10000" value="{{.SalaryRange}}">
-                <div class="grid">
-                    <small>$50k</small>
-                    <small>${{.SalaryRange}}k</small>
-                    <small>$500k+</small>
-                </div>
-            </fieldset>
+            </div>
 
-            <fieldset>
-                <legend>Culture Preferences</legend>
-                {{range $pref := .CulturePreferences}}
-                <label>
-                    {{$pref.Label}}
-                    <input type="range" min="1" max="5" value="{{$pref.Value}}">
-                </label>
-                {{end}}
-            </fieldset>
+            <div>
+                <article>
+                    <hgroup>
+                        <h2>Culture Preferences</h2>
+                    </hgroup>
+                    {{range $pref := .CulturePreferences}}
+                    <label>
+                        {{$pref.Label}}
+                        <input type="range" min="1" max="5" value="{{$pref.Value}}">
+                    </label>
+                    {{end}}
+                </article>
 
-            <footer>
-                <button type="submit">Save & Continue</button>
-            </footer>
-        </form>
-    </article>
+                <article>
+                    <hgroup>
+                        <h2>Work Schedule</h2>
+                    </hgroup>
+                    {{range $schedule := .WorkSchedules}}
+                    <label>
+                        {{$schedule.Label}}
+                        <input type="range" min="1" max="5" value="{{$schedule.Value}}">
+                    </label>
+                    {{end}}
+                </article>
+            </div>
+        </div>
+        -->
+    </section>
 </main>
 {{end}}

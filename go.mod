@@ -12,13 +12,13 @@ replace github.com/chriscow/minds => ../thoughtnet/minds
 
 replace github.com/chriscow/minds/tools => ../thoughtnet/minds/tools
 
-replace github.com/WqyJh/go-openai-realtime => /Users/chris/github.com/go-openai-realtime
+replace github.com/chriscow/go-openai-realtime => ../go-openai-realtime
 
 require (
 	github.com/ThreeDotsLabs/watermill v1.4.4
 	github.com/ThreeDotsLabs/watermill-nats/v2 v2.1.2
-	github.com/WqyJh/go-openai-realtime v0.0.0-00010101000000-000000000000
 	github.com/alexedwards/flow v0.1.0
+	github.com/chriscow/go-openai-realtime v0.0.0-20241204034519-5e45cbb1f315
 	github.com/chriscow/minds v0.0.7
 	github.com/chriscow/minds/providers/gemini v0.0.0-00010101000000-000000000000
 	github.com/chriscow/minds/providers/openai v0.0.0-00010101000000-000000000000

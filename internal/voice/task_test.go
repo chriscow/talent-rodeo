@@ -110,7 +110,7 @@ func TestSimpleTaskCreateAndRead(t *testing.T) {
 	if readTask.Status != task.Status {
 		t.Errorf("task status mismatch: got %v, want %v", readTask.Status, task.Status)
 	}
-	if !readTask.RunAt.Equal(task.RunAt) {
-		t.Errorf("task run_at mismatch: got %v, want %v", readTask.RunAt, task.RunAt)
+	if !readTask.RunAt.Truncate(time.Microsecond).Equal(task.RunAt.Truncate(time.Microsecond)) {
+		t.Errorf("task run_at mismatch: got %v, want %v", readTask.RunAt.Truncate(time.Microsecond), task.RunAt.Truncate(time.Microsecond))
 	}
 }

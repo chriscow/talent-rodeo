@@ -1,0 +1,45 @@
+{{define "partial:skill-item"}}
+
+
+<tr id="skill-{{.Skill.ID}}" 
+    class="skill-row"
+    hx-swap="outerHTML swap:1s">
+    <td>{{.Skill.Name}}</td>
+    <td colspan="2">
+        <div class="grid" style="grid-template-columns: 1fr; gap: 0.5rem;">
+            <select hx-put="/profile/skills/{{.Skill.ID}}"
+                    hx-trigger="change"
+                    hx-swap="none"
+                    name="preference">
+                <option value="5" {{if eq .Skill.PreferenceValue 5}}selected{{end}}>Must (Primary Skill)</option>
+                <option value="4" {{if eq .Skill.PreferenceValue 4}}selected{{end}}>Prefer (Secondary Skill)</option>
+                <option value="3" {{if eq .Skill.PreferenceValue 3}}selected{{end}}>Neutral (No Preference)</option>
+                <option value="2" {{if eq .Skill.PreferenceValue 2}}selected{{end}}>Avoid (Soft Avoidance)</option>
+                <option value="1" {{if eq .Skill.PreferenceValue 1}}selected{{end}}>Must Avoid (Hard Avoidance)</option>
+            </select>
+            <small class="preference-help" style="margin-top: -0.5rem;">
+                {{if eq .Skill.PreferenceValue 5}}
+                    You are highly skilled in this area and want it to be the main focus of the job.
+                {{else if eq .Skill.PreferenceValue 4}}
+                    You have this skill and would like to use it, but not as the main focus.
+                {{else if eq .Skill.PreferenceValue 3}}
+                    You have this skill but don't have a strong preference about using it.
+                {{else if eq .Skill.PreferenceValue 2}}
+                    You have some experience but would prefer not to use this skill.
+                {{else if eq .Skill.PreferenceValue 1}}
+                    You don't have this skill or absolutely don't want to use it.
+                {{end}}
+            </small>
+        </div>
+    </td>
+    <td>
+        <button class="outline" 
+                aria-label="Delete skill"
+                hx-delete="/profile/skills/{{.Skill.ID}}"
+                hx-target="closest tr"
+                hx-swap="outerHTML swap:1s">
+            <i data-feather="trash-2"></i>
+        </button>
+    </td>
+</tr>
+{{end}} 

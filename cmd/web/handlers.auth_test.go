@@ -4,6 +4,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
+
+	"talent-rodeo/internal/database"
 )
 
 func TestAuthFlow(t *testing.T) {
@@ -22,7 +25,16 @@ func TestAuthFlow(t *testing.T) {
 	})
 
 	t.Run("Authenticated user can access profile", func(t *testing.T) {
-		req := ts.authenticatedRequest(t, "GET", "/profile", nil)
+		now := time.Now()
+		role := "candidate"
+		user := &database.User{
+			ID:        1,
+			Email:     "test@example.com",
+			Created:   now,
+			UpdatedAt: &now,
+			Role:      &role,
+		}
+		req := ts.authenticatedRequest(t, "GET", "/profile", user, nil)
 		w := httptest.NewRecorder()
 		ts.app.routes().ServeHTTP(w, req)
 
@@ -34,7 +46,16 @@ func TestAuthFlow(t *testing.T) {
 	t.Run("Logout clears session", func(t *testing.T) {
 		t.Skip("Session clearing functionality needs to be fixed - current implementation does not properly clear session values")
 		// Create an authenticated request
-		req := ts.authenticatedRequest(t, "POST", "/logout", nil)
+		now := time.Now()
+		role := "candidate"
+		user := &database.User{
+			ID:        1,
+			Email:     "test@example.com",
+			Created:   now,
+			UpdatedAt: &now,
+			Role:      &role,
+		}
+		req := ts.authenticatedRequest(t, "POST", "/logout", user, nil)
 
 		// Debug: Print request details
 		t.Logf("Request Method: %s", req.Method)

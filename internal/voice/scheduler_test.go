@@ -90,9 +90,9 @@ func TestCallScheduler_ScheduleCall(t *testing.T) {
 					t.Fatalf("failed to get task: %v", err)
 				}
 
-				// Compare times in UTC to avoid timezone issues
-				if !task.RunAt.Equal(tt.runAt) {
-					t.Errorf("task run_at = %v, want %v", task.RunAt, tt.runAt)
+				// Compare times in UTC and truncate to microsecond precision
+				if !task.RunAt.Truncate(time.Microsecond).Equal(tt.runAt.Truncate(time.Microsecond)) {
+					t.Errorf("task run_at = %v, want %v", task.RunAt.Truncate(time.Microsecond), tt.runAt.Truncate(time.Microsecond))
 				}
 
 				// Verify task type and status
@@ -324,7 +324,7 @@ func TestCallScheduler_RescheduleCall(t *testing.T) {
 					t.Fatalf("failed to get task: %v", err)
 				}
 
-				if !task.RunAt.Equal(tt.newTime) {
+				if !task.RunAt.Truncate(time.Microsecond).Equal(tt.newTime.Truncate(time.Microsecond)) {
 					t.Errorf("task run_at = %v, want %v", task.RunAt, tt.newTime)
 				}
 			}

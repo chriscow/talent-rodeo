@@ -321,6 +321,7 @@ func TestPhoneCallHandler_IntegrationTest(t *testing.T) {
 	// Create a test user with the test phone number
 	phone := "+14258295443"
 	now := time.Now().UTC()
+	role := "candidate"
 	testUser := &database.User{
 		ID:        1,
 		Phone:     &phone,
@@ -329,6 +330,7 @@ func TestPhoneCallHandler_IntegrationTest(t *testing.T) {
 		Email:     "test@example.com",
 		Created:   now,
 		UpdatedAt: &now,
+		Role:      &role,
 	}
 	if _, err := env.db.InsertUser(*testUser); err != nil {
 		t.Fatalf("Failed to create test user: %v", err)
@@ -374,10 +376,7 @@ func TestPhoneCallHandler_IntegrationTest(t *testing.T) {
 		}
 		taskProc := &MockTaskProcessor{}
 
-		// Setup test database
-		db := database.SetupTestDB(t)
-
-		handler := NewPhoneCallHandler(realClient, logger, config, taskProc, db)
+		handler := NewPhoneCallHandler(realClient, logger, config, taskProc, env.db)
 
 		// Start a test server for Twilio webhook
 		mux := http.NewServeMux()
@@ -460,6 +459,7 @@ func TestPhoneCallHandler_WebSocketIntegration(t *testing.T) {
 	// Create a test user with the test phone number
 	phone2 := "+14258295443"
 	now2 := time.Now().UTC()
+	role := "candidate"
 	testUser2 := &database.User{
 		ID:        2,
 		Phone:     &phone2,
@@ -468,6 +468,7 @@ func TestPhoneCallHandler_WebSocketIntegration(t *testing.T) {
 		Email:     "test2@example.com",
 		Created:   now2,
 		UpdatedAt: &now2,
+		Role:      &role,
 	}
 	if _, err := env.db.InsertUser(*testUser2); err != nil {
 		t.Fatalf("Failed to create test user: %v", err)
@@ -511,10 +512,7 @@ func TestPhoneCallHandler_WebSocketIntegration(t *testing.T) {
 		}
 		taskProc := &MockTaskProcessor{}
 
-		// Setup test database
-		db := database.SetupTestDB(t)
-
-		handler := NewPhoneCallHandler(realClient, logger, config, taskProc, db)
+		handler := NewPhoneCallHandler(realClient, logger, config, taskProc, env.db)
 
 		// Start a test server for Twilio webhook
 		mux := http.NewServeMux()

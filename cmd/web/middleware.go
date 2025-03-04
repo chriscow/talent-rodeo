@@ -145,7 +145,8 @@ func (app *application) requireSuperUser(next http.Handler) http.Handler {
 			http.Redirect(w, r, "/auth/linkedin", http.StatusFound)
 			return
 		}
-		if !user.IsSuperUser {
+		// Check both is_superuser flag and role for admin access
+		if !user.IsSuperUser || (user.Role != nil && *user.Role != "admin") {
 			http.Redirect(w, r, "/", http.StatusFound)
 			return
 		}

@@ -47,6 +47,25 @@ Important Database Constraints and Timing Requirements for Tasks:
    - Don't set created_at in the past without adjusting run_at accordingly
    - Don't expect immediate processing without waiting for run_at time
 
+6. Timestamp Precision Requirements:
+   - All timestamps (run_at, created_at, updated_at) must be truncated to microsecond precision
+   - Always use UTC for timestamps stored in the database
+   - Example pattern:
+     ```go
+     task := &models.Task{
+         RunAt:     runAt.UTC().Truncate(time.Microsecond),
+         CreatedAt: time.Now().UTC().Truncate(time.Microsecond),
+         UpdatedAt: time.Now().UTC().Truncate(time.Microsecond),
+     }
+     ```
+   - When comparing timestamps in tests, ensure both sides use the same precision:
+     ```go
+     if !task.RunAt.Truncate(time.Microsecond).Equal(expectedTime.Truncate(time.Microsecond)) {
+         t.Errorf("got run_at = %v, want %v", task.RunAt, expectedTime)
+     }
+     ```
+   - This precision requirement ensures consistent behavior across different databases and test environments
+
 Remember: These constraints exist to ensure task scheduling integrity and proper retry behavior.
 
 ## Files

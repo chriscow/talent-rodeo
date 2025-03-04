@@ -1,0 +1,58 @@
+{{define "page:skills"}}
+    {{template "partial:skills" .}}
+{{end}}
+
+{{define "partial:skills"}}
+<style>
+    tr.skill-row.htmx-swapping {
+        opacity: 0;
+        transition: opacity 100ms ease-out;
+    }
+</style>
+<article id="skills">
+    <hgroup>
+        <h2>Skills</h2>
+        <p>
+            Please select the skills that you are interested in.
+        </p>
+    </hgroup>
+
+    <!-- Add Skill Form -->
+    <form hx-post="/profile/skills/add" 
+          hx-target="#skills"
+          hx-swap="outerHTML">
+        {{if .Form.Validator.HasErrors}}
+            <p class="error">Something was wrong. Please correct the errors below and try again.</p>
+        {{end}}
+        <div class="grid">
+            <label for="skill-name">Add New Skill</label>
+            <input type="text" 
+                   id="skill-name" 
+                   name="Name" 
+                   value="{{.Form.Name}}"
+                   required>
+            {{with .Form.Validator.FieldErrors.Name}}
+                <span class='error'>{{.}}</span>
+            {{end}}
+            <button type="submit">Add Skill</button>
+        </div>
+    </form>
+
+    <!-- Skills Table -->
+    <table id="skills-table" role="grid" class="striped">
+        <thead>
+            <tr>
+                <th style="width: 20%">Skill</th>
+                <th style="width: 60%">Preference</th>
+                <th style="width: 10%"></th>
+                <th style="width: 10%"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Skills}}
+                {{template "partial:skill-item" dict "Skill" .}}
+            {{end}}
+        </tbody>
+    </table>
+</article>
+{{end}} 
