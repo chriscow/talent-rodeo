@@ -51,64 +51,6 @@ func WithLogger(logger *slog.Logger) Option {
 	}
 }
 
-// WithForeignKeys enables foreign key support
-// func WithForeignKeys() Option {
-// 	return func(db *DB) error {
-// 		db.logger.Debug("enabling foreign keys")
-// 		_, err := db.dbtx.Exec("PRAGMA foreign_keys = ON")
-// 		if err != nil {
-// 			return fmt.Errorf("failed to enable foreign keys: %w", err)
-// 		}
-// 		db.logger.Debug("foreign keys enabled")
-// 		return nil
-// 	}
-// }
-
-// WithTasksTable creates and verifies the tasks table
-// func WithTasksTable() Option {
-// 	return func(db *DB) error {
-// 		db.logger.Debug("creating tasks table")
-// 		_, err := db.dbtx.Exec(`
-// 			CREATE TABLE IF NOT EXISTS tasks (
-// 				id BIGINT PRIMARY KEY,
-// 				type TEXT NOT NULL,
-// 				payload JSONB NOT NULL,
-// 				status TEXT NOT NULL CHECK (
-// 					status IN (
-// 						'pending',
-// 						'running',
-// 						'complete',
-// 						'failed',
-// 						'cancelled'
-// 					)
-// 				),
-// 				attempts INTEGER NOT NULL DEFAULT 0,
-// 				max_attempts INTEGER NOT NULL DEFAULT 3,
-// 				run_at TIMESTAMP NOT NULL,
-// 				error TEXT,
-// 				created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-// 				updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-// 			)
-// 		`)
-// 		if err != nil {
-// 			return fmt.Errorf("failed to create tasks table: %w", err)
-// 		}
-
-// 		// Verify table exists and has correct schema
-// 		var count int
-// 		err = db.dbtx.Get(&count, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='tasks'")
-// 		if err != nil {
-// 			return fmt.Errorf("failed to verify tasks table: %w", err)
-// 		}
-// 		if count != 1 {
-// 			return errors.New("tasks table not found after creation")
-// 		}
-
-// 		db.logger.Debug("tasks table created and verified\n")
-// 		return nil
-// 	}
-// }
-
 // TxFn is a function that executes in a transaction
 type TxFn func(*DB) error
 

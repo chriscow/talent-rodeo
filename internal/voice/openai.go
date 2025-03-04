@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	openairt "github.com/WqyJh/go-openai-realtime"
+	openairt "github.com/chriscow/go-openai-realtime"
 	"github.com/gorilla/websocket"
 )
 

@@ -55,9 +55,9 @@ func (s *CallScheduler) ScheduleCall(ctx context.Context, msg *internal.Message,
 		Payload:     payload,
 		Status:      internal.TaskStatusPending,
 		MaxAttempts: 3,
-		RunAt:       runAt.UTC(), // Always store time in UTC
-		CreatedAt:   time.Now().UTC(),
-		UpdatedAt:   time.Now().UTC(),
+		RunAt:       runAt.UTC().Truncate(time.Microsecond), // Truncate to microsecond precision
+		CreatedAt:   time.Now().UTC().Truncate(time.Microsecond),
+		UpdatedAt:   time.Now().UTC().Truncate(time.Microsecond),
 	}
 
 	if err := s.db.CreateTask(ctx, task); err != nil {
@@ -247,8 +247,8 @@ func (s *CallScheduler) RescheduleCallTx(ctx context.Context, tx *sqlx.Tx, taskI
 	}
 
 	// Update task run time
-	task.RunAt = newTime.UTC()
-	task.UpdatedAt = time.Now().UTC()
+	task.RunAt = newTime.UTC().Truncate(time.Microsecond)
+	task.UpdatedAt = time.Now().UTC().Truncate(time.Microsecond)
 
 	s.logger.Debug("updating task in transaction",
 		"task_id", task.ID,

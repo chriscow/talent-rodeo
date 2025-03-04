@@ -74,3 +74,23 @@ func (app *application) badRequest(w http.ResponseWriter, r *http.Request, err e
 		app.serverError(w, r, err)
 	}
 }
+
+func (app *application) clientError(w http.ResponseWriter, status int) {
+	data := app.newTemplateData(nil)
+	data["ErrorMessage"] = http.StatusText(status)
+
+	err := response.Page(w, status, data, "pages/errors/400.html")
+	if err != nil {
+		app.serverError(w, nil, err)
+	}
+}
+
+func (app *application) failedValidation(w http.ResponseWriter, r *http.Request, errors map[string]string) {
+	data := app.newTemplateData(r)
+	data["FieldErrors"] = errors
+
+	err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/errors/422.html")
+	if err != nil {
+		app.serverError(w, r, err)
+	}
+}

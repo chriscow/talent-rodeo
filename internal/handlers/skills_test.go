@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 	"time"
+
+	_ "github.com/lib/pq"
 )
 
 func TestHandleSkillsMessage(t *testing.T) {
@@ -43,7 +45,7 @@ func TestHandleSkillsMessage(t *testing.T) {
 	}
 
 	// Create handler
-	handler, err := NewSkillsHandler(context.Background(), env.js, env.llm, env.logger)
+	handler, err := NewSkillsHandler(context.Background(), env.js, env.llm, env.logger, env.db)
 	if err != nil {
 		t.Fatalf("Failed to create handler: %v", err)
 	}

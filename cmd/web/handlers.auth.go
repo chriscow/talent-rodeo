@@ -72,9 +72,16 @@ func (app *application) completeSocialAuth(w http.ResponseWriter, r *http.Reques
 	}
 
 	if !found {
-		dbUser, err = app.db.NewUserFromGothUser(user)
+		dbUser, err = app.db.NewUserFromGothUser(user, "candidate")
 		if err != nil {
 			app.serverError(w, r, err)
+			return
+		}
+
+		// Create candidate record for new user
+		_, err = app.db.CreateCandidate(r.Context(), dbUser.ID)
+		if err != nil {
+			app.serverError(w, r, fmt.Errorf("failed to create candidate record: %w", err))
 			return
 		}
 	}
