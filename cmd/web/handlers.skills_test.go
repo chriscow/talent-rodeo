@@ -29,84 +29,99 @@ func TestHandleSkillPreferences(t *testing.T) {
 	tests := []struct {
 		name       string
 		method     string
-		body       []skillPreferenceData
+		skillID    string
+		formData   url.Values
 		setupAuth  bool
 		wantStatus int
 	}{
 		{
-			name:       "valid GET request",
-			method:     http.MethodGet,
-			setupAuth:  true,
-			wantStatus: http.StatusOK,
-		},
-		{
 			name:      "valid PUT request",
 			method:    http.MethodPut,
+			skillID:   skills[0].ID,
 			setupAuth: true,
-			body: []skillPreferenceData{
-				{
-					SkillID:         skills[0].ID,
-					PreferenceValue: 5,
-					IsSearchTerm:    true,
-				},
+			formData: url.Values{
+				"preference": []string{"5"},
 			},
 			wantStatus: http.StatusOK,
 		},
 		{
-			name:       "unauthenticated request",
-			method:     http.MethodGet,
-			setupAuth:  false,
-			wantStatus: http.StatusFound, // Handler redirects to login
-		},
-		{
-			name:       "invalid method",
-			method:     http.MethodPost, // Only GET and PUT are allowed
-			setupAuth:  true,
-			wantStatus: http.StatusOK, // Our current implementation doesn't enforce method restrictions
+			name:      "unauthenticated PUT request",
+			method:    http.MethodPut,
+			skillID:   skills[0].ID,
+			setupAuth: false,
+			formData: url.Values{
+				"preference": []string{"5"},
+			},
+			wantStatus: http.StatusFound, // 302 redirect
 		},
 		{
 			name:      "invalid preference value",
 			method:    http.MethodPut,
+			skillID:   skills[0].ID,
 			setupAuth: true,
-			body: []skillPreferenceData{
-				{
-					SkillID:         skills[0].ID,
-					PreferenceValue: 6, // Invalid value
-					IsSearchTerm:    false,
-				},
+			formData: url.Values{
+				"preference": []string{"6"}, // Invalid value
 			},
-			wantStatus: http.StatusOK, // Still returns OK as invalid values are just logged and skipped
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "missing preference value",
+			method:     http.MethodPut,
+			skillID:    skills[0].ID,
+			setupAuth:  true,
+			formData:   url.Values{},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:      "invalid skill ID",
+			method:    http.MethodPut,
+			skillID:   "invalid-id",
+			setupAuth: true,
+			formData: url.Values{
+				"preference": []string{"5"},
+			},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "invalid method",
+			method:     http.MethodPost,
+			skillID:    skills[0].ID,
+			setupAuth:  true,
+			wantStatus: http.StatusMethodNotAllowed,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var req *http.Request
+			url := fmt.Sprintf("/profile/skills/%s", tt.skillID)
 
-			if tt.method == http.MethodPut && tt.body != nil {
-				// Create form data for skill preferences
-				form := url.Values{}
-				for _, pref := range tt.body {
-					key := fmt.Sprintf("skills[%s][preference]", pref.SkillID)
-					form.Set(key, strconv.Itoa(pref.PreferenceValue))
-				}
-
-				req = httptest.NewRequest(tt.method, "/profile/skills", strings.NewReader(form.Encode()))
+			if tt.formData != nil {
+				req = httptest.NewRequest(tt.method, url, strings.NewReader(tt.formData.Encode()))
 				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-				if tt.setupAuth {
-					req = ts.authenticatedRequest(t, tt.method, "/profile/skills", user, strings.NewReader(form.Encode()))
-					req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-				}
 			} else {
-				req = httptest.NewRequest(tt.method, "/profile/skills", nil)
-				if tt.setupAuth {
-					req = ts.authenticatedRequest(t, tt.method, "/profile/skills", user, nil)
+				req = httptest.NewRequest(tt.method, url, nil)
+			}
+
+			if tt.setupAuth {
+				if tt.formData != nil {
+					req = ts.authenticatedRequest(t, tt.method, url, user, strings.NewReader(tt.formData.Encode()))
+					req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				} else {
+					req = ts.authenticatedRequest(t, tt.method, url, user, nil)
 				}
 			}
 
+			// Add the skill ID to the request context
+			ctx := context.WithValue(req.Context(), "params", map[string]string{
+				"id": tt.skillID,
+			})
+			req = req.WithContext(ctx)
+
 			rr := httptest.NewRecorder()
-			ts.app.updateSkillPreference(rr, req)
+
+			// IMPORTANT: Use the routes() method to get the handler because the mux is responsible for determining the correct handler based on the request
+			ts.app.routes().ServeHTTP(rr, req)
 
 			got := rr.Code
 			want := tt.wantStatus
@@ -115,53 +130,29 @@ func TestHandleSkillPreferences(t *testing.T) {
 				t.Errorf("got status %d; want %d", got, want)
 			}
 
-			// For successful GET requests, verify the skills are returned
-			if tt.method == http.MethodGet && got == http.StatusOK {
-				// The response is HTML, so we can't decode it as JSON
-				// Instead, we can verify the content type and that the response contains the expected skills
-				contentType := rr.Header().Get("Content-Type")
-				if contentType != "text/html; charset=utf-8" {
-					t.Errorf("got content type %s; want text/html; charset=utf-8", contentType)
-				}
-
-				// Check that the response body contains the skill names
-				body := rr.Body.String()
-				for _, skill := range skills {
-					if !strings.Contains(body, skill.Name) {
-						t.Errorf("response body does not contain skill name %s", skill.Name)
-					}
-				}
-			}
-
 			// For successful PUT requests, verify the preference was updated
-			if tt.method == http.MethodPut && got == http.StatusOK && tt.body != nil {
+			if tt.method == http.MethodPut && got == http.StatusOK {
 				// Verify the database was updated
 				updatedSkills, err := ts.app.db.GetCandidateSkills(context.Background(), candidateID)
 				if err != nil {
 					t.Fatal(err)
 				}
 
-				for _, pref := range tt.body {
-					// Skip verification for invalid preference values
-					if pref.PreferenceValue < 1 || pref.PreferenceValue > 5 {
-						continue
-					}
-
-					// Find the updated skill
-					var found bool
-					for _, skill := range updatedSkills {
-						if skill.ID == pref.SkillID {
-							found = true
-							if skill.PreferenceValue != pref.PreferenceValue {
-								t.Errorf("got preference value %d, want %d", skill.PreferenceValue, pref.PreferenceValue)
-							}
-							break
+				// Find the updated skill
+				var found bool
+				for _, skill := range updatedSkills {
+					if skill.ID == tt.skillID {
+						found = true
+						prefVal, _ := strconv.Atoi(tt.formData.Get("preference"))
+						if skill.PreferenceValue != prefVal {
+							t.Errorf("got preference value %d, want %d", skill.PreferenceValue, prefVal)
 						}
+						break
 					}
+				}
 
-					if !found {
-						t.Errorf("skill %s not found after update", pref.SkillID)
-					}
+				if !found {
+					t.Errorf("skill %s not found after update", tt.skillID)
 				}
 			}
 		})
@@ -426,7 +417,7 @@ func TestHandleDeleteSkill(t *testing.T) {
 			wantStatus: http.StatusBadRequest,
 			checkResponse: func(t *testing.T, response map[string]interface{}) {
 				if response["error"] != "Skill ID not found in candidate's skills" {
-					t.Errorf("got error %v; want 'Failed to delete skill'", response["error"])
+					t.Errorf("got error %v; want 'Skill ID not found in candidate's skills'", response["error"])
 				}
 			},
 		},
@@ -435,7 +426,7 @@ func TestHandleDeleteSkill(t *testing.T) {
 			method:     http.MethodDelete,
 			skillID:    skills[0].ID,
 			setupAuth:  false,
-			wantStatus: http.StatusFound, // redirect to login
+			wantStatus: http.StatusFound, // 302 redirect
 		},
 		{
 			name:       "invalid method",
@@ -444,28 +435,23 @@ func TestHandleDeleteSkill(t *testing.T) {
 			setupAuth:  true,
 			wantStatus: http.StatusMethodNotAllowed,
 		},
-		{
-			name:       "missing skill ID",
-			method:     http.MethodDelete,
-			skillID:    "invalid-id",
-			setupAuth:  true,
-			wantStatus: http.StatusBadRequest,
-			checkResponse: func(t *testing.T, response map[string]interface{}) {
-				if response["error"] != "Skill ID not found in candidate's skills" {
-					t.Errorf("got error %v; want 'Skill ID not found in candidate's skills'", response["error"])
-				}
-			},
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create request
-			req := httptest.NewRequest(tt.method, "/profile/skills/"+tt.skillID, nil)
+			url := fmt.Sprintf("/profile/skills/%s", tt.skillID)
+			req := httptest.NewRequest(tt.method, url, nil)
 
 			if tt.setupAuth {
-				req = ts.authenticatedRequest(t, tt.method, "/profile/skills/"+tt.skillID, user, nil)
+				req = ts.authenticatedRequest(t, tt.method, url, user, nil)
 			}
+
+			// Add the skill ID to the request context
+			ctx := context.WithValue(req.Context(), "params", map[string]string{
+				"id": tt.skillID,
+			})
+			req = req.WithContext(ctx)
 
 			// Send request
 			w := httptest.NewRecorder()

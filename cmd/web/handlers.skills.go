@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"talent-rodeo/internal/database"
 	"talent-rodeo/internal/request"
 	"talent-rodeo/internal/response"
 	"talent-rodeo/internal/validator"
@@ -161,7 +162,39 @@ func (app *application) handleSkill(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		w.WriteHeader(http.StatusOK)
+		// Get the updated skill to render the template
+		skills, err := app.db.GetCandidateSkills(r.Context(), candidateID)
+		if err != nil {
+			logger.Error("error getting updated skill",
+				slog.String("error", err.Error()),
+				slog.String("skill_id", skillID))
+			app.serverError(w, r, fmt.Errorf("failed to get updated skill: %w", err))
+			return
+		}
+
+		// Find the updated skill
+		var updatedSkill *database.CandidateSkill
+		for _, skill := range skills {
+			if skill.ID == skillID {
+				updatedSkill = &skill
+				break
+			}
+		}
+
+		if updatedSkill == nil {
+			logger.Error("updated skill not found",
+				slog.String("skill_id", skillID))
+			app.serverError(w, r, fmt.Errorf("updated skill not found"))
+			return
+		}
+
+		// Return the updated skill item template
+		data := app.newTemplateData(r)
+		data["Skill"] = updatedSkill
+		err = response.NamedTemplate(w, http.StatusOK, data, "partial:skill-item", "partials/skill-item.html")
+		if err != nil {
+			app.serverError(w, r, err)
+		}
 
 	case http.MethodDelete:
 		// Delete skill
