@@ -9,7 +9,8 @@
         <div class="grid" style="grid-template-columns: 1fr; gap: 0.5rem;">
             <select hx-put="/profile/skills/{{.Skill.ID}}"
                     hx-trigger="change"
-                    hx-swap="none"
+                    hx-target="closest tr"
+                    hx-swap="outerHTML"
                     name="preference">
                 <option value="5" {{if eq .Skill.PreferenceValue 5}}selected{{end}}>Must (Primary Skill)</option>
                 <option value="4" {{if eq .Skill.PreferenceValue 4}}selected{{end}}>Prefer (Secondary Skill)</option>
