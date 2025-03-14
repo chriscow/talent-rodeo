@@ -116,6 +116,19 @@
             </div>
         </div>
         -->
+
+        <div class="grid" style="margin-top: 2rem;">
+            <button hx-post="/profile/search/start"
+                    hx-push-url="/profile/search/progress"
+                    hx-target="body"
+                    hx-indicator="#search-indicator"
+                    class="primary">
+                Ready to Search
+            </button>
+            <div id="search-indicator" class="htmx-indicator">
+                Starting your job search...
+            </div>
+        </div>
     </section>
 </main>
 {{end}}

@@ -6,6 +6,14 @@ import (
 	"github.com/google/uuid"
 )
 
+// SearchInput represents the input message for job searches
+type SearchInput struct {
+	CandidateID     string   `json:"candidate_id"`
+	MustHaveSkills  []string `json:"must_have_skills"`
+	PreferredSkills []string `json:"preferred_skills"`
+	Page            int      `json:"page"`
+}
+
 // Result represents a job search result with metadata
 type Result struct {
 	Job       JobListing `json:"job"`
