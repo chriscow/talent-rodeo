@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS candidates (
         updated_at TIMESTAMP
     WITH
         TIME ZONE NOT NULL DEFAULT NOW (),
+        last_page INTEGER,
         CONSTRAINT unique_user_id UNIQUE (user_id)
 );
 

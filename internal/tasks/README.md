@@ -216,4 +216,79 @@ The package provides comprehensive error handling:
    - Include error context
    - Log failures
    - Track metrics
-   - Monitor retries 
+   - Monitor retries
+
+## Search Scheduler Implementation
+
+The Search Scheduler is a key component of our background task processing system, responsible for scheduling and managing job searches based on user tiers.
+
+### Tier System Overview
+
+1. Tier Levels and Limits
+   - Free tier: Maximum 3 pages of search results
+   - Mid tier: Maximum 50 pages of search results
+   - Top tier: Maximum 200 pages of search results
+   - Each tier has its own search frequency:
+     * Free: Every 72 hours (3 days)
+     * Mid: Every 24 hours (daily)
+     * Top: Every 6 hours (4 times daily)
+
+2. Tier Management Features
+   - Automatic tier detection from database
+   - Subscription end date validation
+   - Seamless tier upgrades with page continuity
+   - Tier downgrade handling with appropriate page resetting
+   - Support for tier skipping (e.g., free to top)
+
+3. Search Implementation
+   - Sequential page processing (1 to tier limit)
+   - Separate NATS message for each page
+   - Proper consumer management for message retrieval
+   - Transaction-based state updates
+   - Concurrent search prevention with database locking
+
+### Key Implementation Details
+
+1. MockTaskProcessor
+   - Properly initializes with database connection and publisher
+   - Reads candidate tier from database during task processing
+   - Handles subscription end dates to determine current tier limits
+   - Publishes appropriate number of messages based on tier
+   - Maintains proper logging for debugging
+
+2. NATS Consumer Configuration
+   - Uses unique consumer names for each test case
+   - Implements `DeliverNewPolicy` to prevent message overlap between tests
+   - Properly configures FilterSubject for message routing
+   - Handles consumer cleanup between tests
+   - Sanitizes consumer names to prevent NATS naming errors
+
+3. Test Environment Setup
+   - Creates isolated test environment for each test case
+   - Manages NATS JetStream for message publishing and consumption
+   - Properly configures database for tier management
+   - Handles consumer creation and deletion
+   - Implements message acknowledgment
+
+### Troubleshooting
+
+1. Common Issues and Solutions
+   - Nil pointer dereferences: Ensure all dependencies are properly initialized
+   - Consumer name conflicts: Use unique names and sanitize special characters
+   - Message overlap between tests: Use DeliverNewPolicy instead of DeliverAllPolicy
+   - Transaction issues: Ensure proper error handling and rollback
+   - State inconsistencies: Use database locking with NOWAIT
+
+2. Testing Best Practices
+   - Create unique consumer names for each test case
+   - Purge or delete consumers between test runs
+   - Verify database state before and after test execution
+   - Check actual message contents, not just counts
+   - Use proper timeout handling for message fetching
+
+3. Debugging Tools
+   - Enable DEBUG level logging during tests
+   - Inspect consumer configurations
+   - Verify message subjects and routing
+   - Check database locks and transactions
+   - Monitor message acknowledgment 
