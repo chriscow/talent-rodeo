@@ -1,19 +1,31 @@
-import subprocess
-import time
-import sys
-from playwright.sync_api import sync_playwright
-import signal
 import os
-import requests
-from dotenv import load_dotenv
-import sqlite3
-from tabulate import tabulate
+import sys
+import time
 import json
-from datetime import datetime
+import sqlite3
 import argparse
+import subprocess
+import signal
+import requests
+from datetime import datetime, timedelta
+from pathlib import Path
+from tabulate import tabulate
 
-# Load environment variables
-load_dotenv()
+# Import dotenv for environment variables
+try:
+    from dotenv import load_dotenv
+    # Load environment variables
+    load_dotenv()
+except ImportError:
+    print("python-dotenv not installed. Install with: pip install python-dotenv")
+    # Continue without loading environment variables
+
+# Make sure the necessary modules are imported
+try:
+    from playwright.sync_api import sync_playwright
+except ImportError:
+    print("Playwright not installed. Install with: pip install playwright")
+    print("Then run: playwright install")
 
 def wait_for_server(url, timeout=30):
     """Wait for server to be ready"""
@@ -705,11 +717,257 @@ def get_memories(category=None, tags=None, since=None, format="table"):
         if 'conn' in locals():
             conn.close()
 
+def test_tier_system(package_path="./internal/tasks/handlers/...", tier_test=None, with_isolation=True):
+    """Run tier system search scheduler tests with proper isolation.
+    
+    This function helps run the tier system tests with the right configuration to
+    prevent test interference due to shared NATS consumers.
+    
+    Args:
+        package_path (str): Path to the package containing tier tests
+        tier_test (str, optional): Specific tier test to run (e.g. "TestSearchScheduler_TierLimits")
+        with_isolation (bool): Whether to run tests with isolation to prevent consumer overlap
+    
+    Returns:
+        bool: True if tests passed, False otherwise
+    """
+    cmd = ["go", "test", "-v"]
+    
+    # Add test filter if specified
+    if tier_test:
+        cmd.extend(["-run", tier_test])
+    
+    # Add package path
+    cmd.append(package_path)
+    
+    # For testing with isolation, run one test at a time
+    if with_isolation and not tier_test:
+        cmd.append("-parallel=1")
+    
+    print(f"Running tier system tests: {' '.join(cmd)}")
+    
+    try:
+        result = subprocess.run(cmd, 
+                              text=True,
+                              capture_output=True)
+        
+        # Print output
+        print(result.stdout)
+        if result.stderr:
+            print("Errors:", result.stderr, file=sys.stderr)
+            
+        # Check if tests passed
+        if result.returncode != 0:
+            print(f"Tier tests failed with exit code: {result.returncode}")
+            return False
+            
+        print("All tier system tests passed successfully")
+        return True
+            
+    except subprocess.CalledProcessError as e:
+        print(f"Error running tier tests: {e}", file=sys.stderr)
+        return False
+
+def analyze_tier_consumer_issues(test_output):
+    """Analyze test output for common tier system consumer issues.
+    
+    Args:
+        test_output (str): The output from a failed tier system test
+        
+    Returns:
+        dict: Analysis results with issue type and suggested fixes
+    """
+    issues = {
+        "consumer_name_conflicts": False,
+        "delivery_policy_issues": False,
+        "message_overlap": False,
+        "nil_pointer": False,
+        "suggestions": []
+    }
+    
+    # Check for consumer name conflicts
+    if "consumer name already in use" in test_output or "consumer name contains invalid characters" in test_output:
+        issues["consumer_name_conflicts"] = True
+        issues["suggestions"].append(
+            "Use unique consumer names for each test case and sanitize special characters like '/' in the names."
+        )
+    
+    # Check for message overlap issues
+    if "unexpected number of messages" in test_output or "got messages, want" in test_output:
+        issues["message_overlap"] = True
+        issues["suggestions"].append(
+            "Use DeliverNewPolicy instead of DeliverAllPolicy to prevent message overlap between tests."
+        )
+    
+    # Check for nil pointer dereferences
+    if "nil pointer dereference" in test_output:
+        issues["nil_pointer"] = True
+        issues["suggestions"].append(
+            "Ensure the MockTaskProcessor is properly initialized with database connection and logger."
+        )
+    
+    # Check for delivery policy issues
+    if "failed to create consumer" in test_output:
+        issues["delivery_policy_issues"] = True
+        issues["suggestions"].append(
+            "Check consumer configuration and ensure FilterSubject matches the stream name prefix."
+        )
+    
+    print("\nTier System Test Analysis:")
+    print("="*80)
+    for issue, present in issues.items():
+        if issue != "suggestions" and present:
+            print(f"✗ {issue.replace('_', ' ').title()}: Detected")
+    
+    if issues["suggestions"]:
+        print("\nSuggested fixes:")
+        for i, suggestion in enumerate(issues["suggestions"], 1):
+            print(f"{i}. {suggestion}")
+    else:
+        print("\nNo common issues detected. Check test output for more details.")
+    
+    return issues
+
+def setup_test_candidate(tier='free', last_page=None, last_search_at=None, subscription_end=None):
+    """
+    Generate Go code to set up a test candidate with specific tier settings.
+    
+    Args:
+        tier (str): The tier to set ('free', 'mid', or 'top')
+        last_page (int, optional): The last page number processed
+        last_search_at (str, optional): ISO time string for last search time
+        subscription_end (str, optional): ISO time string for subscription end date
+        
+    Returns:
+        str: Go code snippet for setting up a test candidate
+    """
+    code = """
+// Create test user and candidate
+user, err := env.db.CreateTestUser(t)
+if err != nil {
+    t.Fatalf("failed to create test user: %v", err)
+}
+
+candidateID, err := env.db.CreateTestCandidate(t, user.ID)
+if err != nil {
+    t.Fatalf("failed to create test candidate: %v", err)
+}
+
+// Update candidate with specific tier settings
+_, err = env.db.Exec(`
+    UPDATE candidates 
+    SET tier = $1::tier_type"""
+    
+    # Add last_page if specified
+    if last_page is not None:
+        code += ",\n        last_page = $2"
+    
+    # Add last_search_at if specified
+    if last_search_at is not None:
+        next_param = 3 if last_page is not None else 2
+        code += f",\n        last_search_at = ${next_param}"
+    
+    # Add subscription_end_date if specified
+    if subscription_end is not None:
+        next_param = 2
+        if last_page is not None:
+            next_param += 1
+        if last_search_at is not None:
+            next_param += 1
+        code += f",\n        subscription_end_date = ${next_param}"
+    
+    code += """
+    WHERE id = $"""
+    
+    next_param = 2
+    if last_page is not None:
+        next_param += 1
+    if last_search_at is not None:
+        next_param += 1
+    if subscription_end is not None:
+        next_param += 1
+    
+    code += str(next_param) + "`"
+    
+    # Add parameters array
+    params = [tier]
+    if last_page is not None:
+        params.append(str(last_page))
+    if last_search_at is not None:
+        params.append(last_search_at)
+    if subscription_end is not None:
+        params.append(subscription_end)
+    params.append("candidateID")
+    
+    # Join parameters for the SQL query
+    param_str = ", ".join(params)
+    code += f",\n    {param_str})"
+    
+    code += """
+if err != nil {
+    t.Fatalf("failed to update candidate: %v", err)
+}
+"""
+    
+    print(code)
+    return code
+
 if __name__ == "__main__":
     # Parse command line arguments when run directly
-    parser = argparse.ArgumentParser(description='Run UI tests')
-    parser.add_argument('--test-name', type=str, help='Name of the test to run (optional)')
+    parser = argparse.ArgumentParser(description='Talent Rodeo Testing and Development Tools')
+    
+    # Create subparsers for different command groups
+    subparsers = parser.add_subparsers(dest='command', help='Command to run')
+    
+    # UI Test command
+    ui_test_parser = subparsers.add_parser('ui-test', help='Run UI tests')
+    ui_test_parser.add_argument('--test-name', type=str, help='Name of the test to run (optional)')
+    
+    # Go Test command
+    go_test_parser = subparsers.add_parser('go-test', help='Run Go tests')
+    go_test_parser.add_argument('--package', type=str, help='Package path to test (optional)')
+    go_test_parser.add_argument('--no-race', action='store_true', help='Disable race detection')
+    go_test_parser.add_argument('--coverage', action='store_true', help='Enable coverage reporting')
+    
+    # Tier Test command
+    tier_test_parser = subparsers.add_parser('tier-test', help='Run tier system tests')
+    tier_test_parser.add_argument('--test', type=str, help='Specific tier test to run (optional)')
+    tier_test_parser.add_argument('--no-isolation', action='store_true', help='Disable test isolation')
+    
+    # Candidate Setup command
+    candidate_parser = subparsers.add_parser('setup-candidate', help='Generate code for test candidate setup')
+    candidate_parser.add_argument('--tier', type=str, default='free', choices=['free', 'mid', 'top'], help='Candidate tier')
+    candidate_parser.add_argument('--last-page', type=int, help='Last page processed')
+    candidate_parser.add_argument('--last-search', type=str, help='Last search time (ISO format)')
+    candidate_parser.add_argument('--subscription-end', type=str, help='Subscription end date (ISO format)')
+    
+    # Parse arguments
     args = parser.parse_args()
     
-    success = run_ui_test(args.test_name)
-    sys.exit(0 if success else 1) 
+    # Execute command based on arguments
+    if args.command == 'ui-test':
+        success = run_ui_test(args.test_name)
+        sys.exit(0 if success else 1)
+    elif args.command == 'go-test':
+        success = run_go_tests(
+            package_path=args.package,
+            with_race=not args.no_race, 
+            with_coverage=args.coverage
+        )
+        sys.exit(0 if success else 1)
+    elif args.command == 'tier-test':
+        success = test_tier_system(
+            tier_test=args.test,
+            with_isolation=not args.no_isolation
+        )
+        sys.exit(0 if success else 1)
+    elif args.command == 'setup-candidate':
+        setup_test_candidate(
+            tier=args.tier,
+            last_page=args.last_page,
+            last_search_at=args.last_search,
+            subscription_end=args.subscription_end
+        )
+    else:
+        parser.print_help()
+        sys.exit(1) 

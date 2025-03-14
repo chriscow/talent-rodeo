@@ -1,4 +1,39 @@
+// Package handlers provides task handlers for processing various types of scheduled jobs.
 package handlers
+
+/*
+Important Notes for Search Scheduler Unit Tests:
+
+1. Time Handling:
+   - Use fixed time functions (h.now) for deterministic testing
+   - Always truncate times to microsecond precision
+   - Test both UTC and non-UTC input times
+   - Zero time (time.Time{}) indicates no previous search
+
+2. Tier-based Scheduling:
+   - Free tier: 72 hour interval
+   - Mid tier: 24 hour interval
+   - Top tier: 6 hour interval
+   - Default to free tier (72h) for unknown tiers
+   - Test both exact and inexact intervals
+
+3. Search Time Calculation:
+   - Immediate scheduling if no previous search
+   - Immediate scheduling if next calculated time is in the past
+   - Future scheduling based on tier interval
+   - Time calculations should handle DST transitions
+
+4. Task Processing:
+   - Search tasks and scheduler tasks are created in pairs
+   - Scheduler task runs 1 minute after its corresponding search task
+   - All tasks should have proper CreatedAt timestamps
+   - RunAt must never be before CreatedAt
+
+5. Mock Components:
+   - Use MockTaskProcessor for task creation verification
+   - Use mockPublisher for NATS message testing
+   - Ensure mocks properly record all interactions
+*/
 
 import (
 	"context"
@@ -127,55 +162,67 @@ func (m *mockPublisher) Publish(ctx context.Context, subject string, data []byte
 }
 
 func TestSearchScheduler_GetNextSearchTime(t *testing.T) {
-	scheduler := &SearchScheduler{}
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	fixedTime := func() time.Time { return now }
 
 	tests := []struct {
 		name       string
 		tier       string
 		lastSearch time.Time
-		want       time.Duration // Duration from now
+		want       time.Time
 	}{
 		{
-			name:       "free tier with no previous search",
+			name:       "free_tier_with_no_previous_search",
 			tier:       "free",
 			lastSearch: time.Time{},
-			want:       0,
+			want:       now,
 		},
 		{
-			name:       "free tier with recent search",
+			name:       "free_tier_with_past_search",
 			tier:       "free",
-			lastSearch: now.Add(-24 * time.Hour),
-			want:       48 * time.Hour, // 72h - 24h = 48h remaining
+			lastSearch: now.Add(-73 * time.Hour),
+			want:       now,
 		},
 		{
-			name:       "mid tier with recent search",
+			name:       "free_tier_with_recent_search",
+			tier:       "free",
+			lastSearch: now.Add(-71 * time.Hour),
+			want:       now.Add(-71 * time.Hour).Add(72 * time.Hour),
+		},
+		{
+			name:       "mid_tier_with_past_search",
 			tier:       "mid",
-			lastSearch: now.Add(-12 * time.Hour),
-			want:       12 * time.Hour, // 24h - 12h = 12h remaining
+			lastSearch: now.Add(-25 * time.Hour),
+			want:       now,
 		},
 		{
-			name:       "top tier with recent search",
+			name:       "mid_tier_with_recent_search",
+			tier:       "mid",
+			lastSearch: now.Add(-23 * time.Hour),
+			want:       now.Add(-23 * time.Hour).Add(24 * time.Hour),
+		},
+		{
+			name:       "top_tier_with_past_search",
 			tier:       "top",
-			lastSearch: now.Add(-2 * time.Hour),
-			want:       4 * time.Hour, // 6h - 2h = 4h remaining
+			lastSearch: now.Add(-7 * time.Hour),
+			want:       now,
 		},
 		{
-			name:       "overdue search",
-			tier:       "free",
-			lastSearch: now.Add(-96 * time.Hour),
-			want:       0, // Should schedule immediately
+			name:       "top_tier_with_recent_search",
+			tier:       "top",
+			lastSearch: now.Add(-5 * time.Hour),
+			want:       now.Add(-5 * time.Hour).Add(6 * time.Hour),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			scheduler := &SearchScheduler{
+				now: fixedTime,
+			}
 			got := scheduler.getNextSearchTime(tt.tier, tt.lastSearch)
-			wantTime := now.Add(tt.want)
-
-			// Allow 1 second tolerance for timing differences
-			if diff := got.Sub(wantTime); diff > time.Second || diff < -time.Second {
-				t.Errorf("getNextSearchTime() = %v, want %v (±1s)", got, wantTime)
+			if !got.Equal(tt.want) {
+				t.Errorf("getNextSearchTime() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -208,7 +255,7 @@ func TestSearchScheduler_ProcessTask(t *testing.T) {
 
 	// Create dependencies
 	publisher := &mockPublisher{js: env.js, stream: env.stream, streamName: env.streamName}
-	taskProc := &MockTaskProcessor{}
+	taskProc := NewMockTaskProcessor(publisher, env.db)
 	scheduler := NewSearchScheduler(publisher, env.logger, env.db, taskProc)
 
 	// Create and process a task
@@ -315,7 +362,7 @@ func TestSearchScheduler_ScheduleInitialSearch(t *testing.T) {
 
 	// Create dependencies
 	publisher := &mockPublisher{js: env.js, stream: env.stream, streamName: env.streamName}
-	taskProc := &MockTaskProcessor{}
+	taskProc := NewMockTaskProcessor(publisher, env.db)
 	scheduler := NewSearchScheduler(publisher, env.logger, env.db, taskProc)
 
 	// Schedule initial search
