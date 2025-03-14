@@ -1,13 +1,43 @@
 # Job Search Feature Overview
 
+# Next Steps are intentionally kept at the top of this document for visibility and to avoid duplication
+
+## Next Steps
+1. ~~Implement gocron scheduler~~
+   - ~~Create scheduler in application struct~~
+   - ~~Configure tier-based intervals~~
+   - ~~Add background worker (see /internal/tasks and /cmd/web/helpers.go)~~
+   - ~~Implement graceful shutdown~~
+2. ~~Implement tier tracking in candidates table~~
+   - ~~Add tier enum and columns~~
+   - ~~Add migration~~
+   - ~~Update handlers~~
+3. ~~Add periodic search scheduling~~
+   - ~~Integrate with gocron~~
+   - ~~Add logging~~
+   - ~~Add error handling~~
+4. Complete test suite implementation
+   - ~~Unit tests for tier management~~
+   - ~~Tests for periodic scheduling~~
+   - Integration tests for search flow
+5. Enhance results view with filtering
+   - Add filter UI components
+   - Implement filter logic
+   - Add filter persistence
+6. Integrate LLM-based assessment pipeline (see /internal/handlers/assessment.go to start)
+   - Configure NATS topics and queues
+   - Set up assessment result storage
+   - Implement result categorization
+   - Add confidence-based filtering
+
 ## Implementation Checklist
 
 ### 1. Database Updates (in 000002_create_users_and_onboarding_tables.up.sql)
-- [ ] Add tier management to candidates table
-  - [ ] Add tier enum type ('free', 'mid', 'top')
-  - [ ] Add tier column with default 'free'
-  - [ ] Add tier_updated_at timestamp for tracking last change
-- [ ] Add last_search_at timestamp column to track periodic search timing
+- [x] Add tier management to candidates table
+  - [x] Add tier enum type ('free', 'mid', 'top')
+  - [x] Add tier column with default 'free'
+  - [x] Add tier_updated_at timestamp for tracking last change
+- [x] Add last_search_at timestamp column to track periodic search timing
 
 ### 2. Search Button Integration
 - [x] Add "Ready to Search" button to profile-preferences.html
@@ -56,28 +86,32 @@
 - [ ] Add filtering capabilities (future enhancement)
 
 ### 5. Testing
-- [ ] Unit tests
-  - [ ] Test tier management
+- [x] Unit tests
+  - [x] Test tier management
   - [x] Test search criteria building
   - [x] Test result limiting
-  - [ ] Test periodic search scheduling
+  - [x] Test periodic search scheduling
 - [ ] Integration tests
   - [x] Test search flow
   - [x] Test KV store updates
   - [x] Test error handling
+  - [ ] Test end-to-end search process with real NATS messages
+  - [ ] Test tier-based search limits
+  - [ ] Test concurrent search handling
 
-### 6. Periodic Search Implementation (New)
-- [ ] Integrate go-co-op/gocron
-  - [ ] Create scheduler in application struct
-  - [ ] Configure tier-based intervals:
+### 6. Periodic Search Implementation
+- [x] Implement search scheduler
+  - [x] Create scheduler in application struct
+  - [x] Configure tier-based intervals:
     - Free: Every three days
     - Basic: Daily
     - Pro: Four times daily
-  - [ ] Implement background worker for periodic searches
-  - [ ] Add graceful shutdown handling
-  - [ ] Add logging and error handling
+  - [x] Implement background worker for periodic searches
+  - [x] Add graceful shutdown handling
+  - [x] Add logging and error handling
+  - [x] Add test coverage for scheduler
 
-### 7. Search Progress KV Store (New)
+### 7. Search Progress KV Store
 - [x] Implement user-specific KV buckets
   - [x] Bucket naming: `search_progress_{user_id}`
   - [x] TTL: 5 minutes
@@ -99,66 +133,34 @@
    - [x] Added route for "/profile/search/start" in `routes.go`
    - [x] Implemented KV store for progress tracking
    - [x] Added user-specific search progress buckets
-   - [ ] Added gocron scheduler for periodic searches
+   - [x] Added search scheduler for periodic searches
 
-### Testing Requirements (New)
+### Next Steps (Updated)
+1. Complete remaining integration tests
+   - Implement end-to-end search process tests
+   - Add tier-based search limit tests
+   - Test concurrent search handling
+2. Implement results filtering
+   - Design and implement filter UI components
+   - Add filter persistence
+   - Add filter-based result sorting
+3. Begin LLM integration
+   - Set up NATS topics for assessment
+   - Implement assessment result storage
+   - Add confidence-based filtering
 
-#### Available Test Utilities
-1. `cmd/web/handlers_test.go`:
-   - Provides `testServer` struct for HTTP handler testing
-   - Includes utilities for creating test users and authenticated requests
-   - Handles session management and CSRF tokens
-   - Supports both GET and POST request testing
+### Current State Analysis
+The search scheduler implementation is now complete with:
+- Tier-based scheduling intervals
+- Proper error handling and logging
+- Test coverage for core functionality
+- Integration with NATS JetStream
+- Progress tracking via KV store
 
-2. `internal/handlers/common_test.go`:
-   - Provides `testEnv` struct for integration testing
-   - Sets up test NATS server with JetStream
-   - Includes mock LLM implementation
-   - Manages test database connections
-   - Handles cleanup of test resources
-
-3. `internal/handlers/test_harness.go`:
-   - Provides `SendAndReceiveMessage` generic function for NATS testing
-   - Supports publishing and receiving messages in tests
-   - Handles consumer creation and message acknowledgment
-   - Includes debug logging for test troubleshooting
-
-4. `internal/database/database_test.go`:
-   - Provides `SetupTestDB` function for database testing
-   - Manages test database lifecycle
-
-#### Test Implementation Plan
-- [ ] Unit Tests
-  - [ ] Test `startJobSearch` handler
-    - [ ] Test unauthenticated user redirect
-    - [ ] Test invalid candidate ID error
-    - [ ] Test missing skills error
-    - [ ] Test successful message publishing
-    - [ ] Test JSON response format
-  - [ ] Test skill categorization
-    - [ ] Test must-have skills extraction (rating = 5)
-    - [ ] Test preferred skills extraction (rating = 4)
-    - [ ] Test empty skills handling
-  - [ ] Test NATS message publishing
-    - [ ] Test message format
-    - [ ] Test page number increments
-    - [ ] Test error handling
-
-- [ ] Integration Tests
-  - [ ] Test full search flow
-    - [ ] Test HTMX button interaction
-    - [ ] Test URL push to progress page
-    - [ ] Test loading indicator
-  - [ ] Test NATS message handling
-    - [ ] Test message receipt by search handler
-    - [ ] Test message processing
-    - [ ] Test error propagation
-
-### Next Steps
-1. Implement test suite for recent changes
-2. Complete database tier management implementation
-3. Proceed with search progress page implementation
-4. Set up Pusher integration for real-time updates
+Next focus should be on:
+1. Strengthening integration tests
+2. Implementing results filtering
+3. Beginning LLM integration for improved job matching
 
 ## Current State Analysis
 
@@ -316,17 +318,6 @@ The following filters are available but we are not using them yet:
    - Should we implement a feedback loop to improve LLM assessments?
    - How do we handle assessment timeouts or failures?
    - What is the optimal batch size for LLM analysis?
-
-## Next Steps
-1. Implement gocron scheduler
-2. Implement tier tracking in candidates table
-3. Add periodic search scheduling
-4. Enhance results view with filtering
-5. Integrate LLM-based assessment pipeline:
-   - Configure NATS topics and queues
-   - Set up assessment result storage
-   - Implement result categorization
-   - Add confidence-based filtering
 
 ## Notes
 - Following Go coding guidelines for implementation `.cursor/go-coding-guidelines.mdc`
