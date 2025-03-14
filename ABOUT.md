@@ -14,6 +14,40 @@ Some items are not search terms and are purely filters or terms used to evaluate
 
 There will be other criteria we will consider such as "compensation".  If given, it must be in the range indicated by the candidate.
 
-Once all of the preferences are set, the user can click a button to search for jobs.  The app will primarily use the skills to search for jobs. A search is started by sending a message to NATS.  Review the internal/handlers/search.go file for the details.
+## Search Functionality
 
-The search will store the search result (`rodeo.search.result`).
+1. Manual First Search:
+   - Once all of the preferences are initially set and verified by the user, they 
+     can click a "Ready to Search" button to initiate an immediate search
+   - Progress is tracked in real-time using a user-specific key-value store
+   - Results are displayed on a dedicated progress page
+   - Manual searches are no longer available after the first search is performed.
+   - If the user updates their preferences, they can click a "Ready to Search" button 
+     but the search will be performed on the next scheduled search.
+
+2. Automatic Periodic Search:
+   - After the first search is performed, the system automatically performs 
+     searches based on the user's subscription tier:
+     * Free Tier: Every three days
+     * Basic Tier: Daily searches
+     * Pro Tier: Four times daily searches
+   - Only one search runs at a time per user
+   - Each search uses the latest preferences and skills from the user's profile
+   - Results are stored and accessible through the dashboard
+
+Once all of the preferences are set, the user can click a button to search for jobs. The app will primarily use the skills to search for jobs. A search is started by sending a message to NATS. Review the internal/handlers/search.go file for the details.
+
+The search will store the search result (`rodeo.search.result`). Results are automatically pruned based on tier limits:
+- Free Tier: First 3 pages analyzed
+- Mid Tier: Up to 50 pages
+- Top Tier: Up to 200 pages
+
+## Search Progress Tracking
+
+Each search, whether manual or automatic, is tracked using a dedicated key-value store that:
+- Shows real-time progress of job analysis
+- Displays counts of total jobs found and good matches
+- Automatically cleans up after completion
+- Prevents duplicate searches from running simultaneously
+
+This ensures users always have visibility into their search status while maintaining system efficiency.

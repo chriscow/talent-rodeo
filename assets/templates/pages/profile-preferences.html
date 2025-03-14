@@ -118,17 +118,40 @@
         -->
 
         <div class="grid" style="margin-top: 2rem;">
-            <button hx-post="/profile/search/start"
-                    hx-push-url="/profile/search/progress"
-                    hx-target="body"
-                    hx-indicator="#search-indicator"
-                    class="primary">
-                Ready to Search
-            </button>
+            <article>
+                <header>
+                    <h3>Search</h3>
+                </header>
+                <div class="search-actions">
+                    <form method="POST" action="/profile/search/start" hx-push-url="/profile/search/progress">
+                        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                        <button type="submit" class="primary">Ready to Search</button>
+                    </form>
+                    <p>{{.User.Email}}</p>
+                    {{if eq .User.Email "madcow@gmail.com"}}
+                    <form method="POST" action="/profile/search/mock" hx-push-url="/profile/search/progress">
+                        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                        <button type="submit" class="secondary">Test Search Progress</button>
+                    </form>
+                    {{end}}
+                </div>
+            </article>
             <div id="search-indicator" class="htmx-indicator">
                 Starting your job search...
             </div>
         </div>
     </section>
 </main>
+{{end}}
+
+{{define "page:scripts"}}
+<style>
+.search-actions {
+    display: flex;
+    gap: 1rem;
+}
+.search-actions form {
+    margin: 0;
+}
+</style>
 {{end}}

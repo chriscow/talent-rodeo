@@ -69,7 +69,7 @@
         if (event.detail.xhr.status === 422) {
             // Replace the form content with the response
             var targetElem = htmx.find(event.detail.elt, 'closest', 'form') || event.detail.elt;
-            targetElem.outerHTML = event.detail.xhr.response;
+            targetElem.outerHTML = event.detail.xhr.responseText;
             return;
         }
 
@@ -94,6 +94,9 @@
     feather.replace()  // feather icons
 </script>
 <script src="/static/js/minimal-theme-switcher.js"></script>
+
+{{block "page:scripts" .}}{{end}}
+</body>
 
 </html>
 {{end}}

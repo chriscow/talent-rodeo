@@ -64,6 +64,8 @@ func (app *application) routes() http.Handler {
 			mux.HandleFunc("/profile/preferences", app.showPreferencesPage, "GET")
 			mux.HandleFunc("/profile/preferences", app.updatePreferences, "POST")
 			mux.HandleFunc("/profile/search/start", app.startJobSearch, "POST")
+			mux.HandleFunc("/profile/search/mock", app.mockSearchProgress, "POST")
+			mux.HandleFunc("/api/search/progress/:id", app.getSearchProgress, "GET")
 
 			mux.HandleFunc("/interview", app.showInterviewPage, "GET")
 			mux.HandleFunc("/interview/start", app.startInterview, "GET")
