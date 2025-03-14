@@ -20,6 +20,8 @@ const (
 		- Travel requirements
 
 		Provide structured output with clear categorization of all workplace aspects.`
+
+	concurrentWorkplaceProcessing = 10
 )
 
 // Workplace defines the workplace details for a job
@@ -47,7 +49,7 @@ func NewWorkplaceHandler(ctx context.Context, js jetstream.JetStream, llm minds.
 		db:      db,
 	}
 
-	if err := handler.generic.RegisterLLMHandler(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-JOBDESC-WORKPLACE-QUEUE", handler); err != nil {
+	if err := handler.generic.RegisterLLMHandler(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-JOBDESC-WORKPLACE-QUEUE", handler, concurrentWorkplaceProcessing); err != nil {
 		return nil, fmt.Errorf("failed to register workplace handler: %w", err)
 	}
 

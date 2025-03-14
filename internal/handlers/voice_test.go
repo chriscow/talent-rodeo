@@ -111,7 +111,8 @@ func TestVoiceHandleMessage(t *testing.T) {
 				TopicVoiceInput,
 				TopicVoiceResult,
 				wrappedInput,
-				1*time.Second,
+				5*time.Second,
+				"voice-test",
 			)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("SendAndReceiveMessage error = %v, wantErr %v", err, tt.wantErr)

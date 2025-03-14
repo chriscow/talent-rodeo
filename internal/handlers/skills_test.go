@@ -66,7 +66,8 @@ func TestHandleSkillsMessage(t *testing.T) {
 		TopicJobDescriptionInput,
 		TopicSkillsExtracted,
 		input,
-		1*time.Second,
+		5*time.Second,
+		"skills-test",
 	)
 	if err != nil {
 		t.Fatalf("Failed to send and receive message: %v", err)

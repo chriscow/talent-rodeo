@@ -124,7 +124,8 @@ CREATE TABLE job_searches (
     company_filter TEXT,
     last_searched_at TIMESTAMP NOT NULL,
     total_results INTEGER,
-    search_hash TEXT NOT NULL UNIQUE
+    search_hash TEXT NOT NULL UNIQUE,
+    candidate_id UUID REFERENCES candidates(id)
 );
 
 -- Create job listings table
@@ -174,6 +175,19 @@ CREATE TABLE user_keywords (
     UNIQUE (user_id, keyword)
 );
 
+-- Create candidate_search_results table for candidate-specific results
+CREATE TABLE candidate_search_results (
+    id BIGSERIAL PRIMARY KEY,
+    candidate_id UUID NOT NULL REFERENCES candidates(id),
+    search_id BIGINT NOT NULL REFERENCES job_searches(id),
+    job_listing_id BIGINT NOT NULL REFERENCES job_listings(id),
+    score INTEGER NOT NULL,  -- Store the candidate-specific score
+    status TEXT CHECK (status IN ('new', 'viewed', 'interested', 'not_interested')),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (candidate_id, job_listing_id)  -- Prevent duplicate results for a candidate
+);
+
 -- Create indexes
 CREATE INDEX idx_jobs_company ON jobs (company_id);
 
@@ -218,6 +232,8 @@ CREATE INDEX idx_job_listings_company_name ON job_listings (company_name);
 CREATE INDEX idx_job_listings_location ON job_listings (location);
 
 CREATE INDEX idx_job_listings_posting_date ON job_listings (posting_date);
+
+CREATE INDEX idx_candidate_search_results_candidate ON candidate_search_results(candidate_id);
 
 -- Create a new trigger function specifically for job_listings
 CREATE OR REPLACE FUNCTION update_job_listings_timestamp()

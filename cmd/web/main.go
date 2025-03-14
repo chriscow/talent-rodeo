@@ -13,7 +13,7 @@ import (
 	"talent-rodeo/internal/auth"
 	"talent-rodeo/internal/database"
 	"talent-rodeo/internal/handlers"
-	"talent-rodeo/internal/handlers/search/providers/scrapingdog"
+	"talent-rodeo/internal/services/search/providers/scrapingdog"
 	"talent-rodeo/internal/smtp"
 	"talent-rodeo/internal/tasks"
 	th "talent-rodeo/internal/tasks/handlers"
@@ -394,7 +394,7 @@ func setupPipelineHandlers(
 
 	// Setup search handler with ScrapingDog provider
 	searchProvider := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"))
-	searchHandler, err := handlers.NewSearchHandler(ctx, js, searchProvider, logger)
+	searchHandler, err := handlers.NewSearchHandler(ctx, js, searchProvider, logger, db)
 	if err != nil {
 		return nil, fmt.Errorf("error setting up search handler: %w", err)
 	}

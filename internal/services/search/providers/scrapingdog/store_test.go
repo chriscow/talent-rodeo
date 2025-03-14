@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"talent-rodeo/internal/database"
-	"talent-rodeo/internal/handlers/search"
+	"talent-rodeo/internal/services/search"
 
 	"github.com/joho/godotenv"
 )

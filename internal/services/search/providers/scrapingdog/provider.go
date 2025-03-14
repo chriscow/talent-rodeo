@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"talent-rodeo/internal/database"
-	"talent-rodeo/internal/handlers/search"
+	"talent-rodeo/internal/services/search"
 	"time"
 
 	"github.com/chriscow/minds"
@@ -93,7 +93,7 @@ func NewProvider(apiKey string, opts ...Option) *Provider {
 	p := &Provider{
 		apiKey:  apiKey,
 		baseURL: defaultBaseURL,
-		client:  &http.Client{Timeout: 30 * time.Second},
+		client:  &http.Client{Timeout: 60 * time.Second},
 	}
 
 	for _, opt := range opts {
@@ -238,6 +238,8 @@ func (p *Provider) searchJobs(ctx context.Context, criteria search.Criteria) ([]
 	}
 	defer resp.Body.Close()
 
+	log.Printf("ScrapingDog response received with status: %d", resp.StatusCode)
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
@@ -247,13 +249,15 @@ func (p *Provider) searchJobs(ctx context.Context, criteria search.Criteria) ([]
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
+	log.Printf("ScrapingDog response decoded successfully, found %d listings", len(listings))
+
 	// Convert to provider jobs
 	jobs, err := convertJobListings(listings)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert job listings: %w", err)
 	}
 
-	log.Printf("Found %d job listings", len(jobs))
+	log.Printf("Successfully converted %d job listings to search.JobListing format", len(jobs))
 	return jobs, nil
 }
 

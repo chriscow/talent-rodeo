@@ -18,6 +18,8 @@ const (
 		- Education requirements
 
 		Provide structured output with clear categorization and detailed context for each requirement.`
+
+	concurrentRequirementsProcessing = 10
 )
 
 // Requirements defines the requirements for a job
@@ -51,7 +53,7 @@ func NewRequirementsHandler(ctx context.Context, js jetstream.JetStream, llm min
 		generic: NewGenericHandler(js, logger, llm),
 	}
 
-	if err := handler.generic.RegisterLLMHandler(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-JOBDESC-REQUIREMENTS-QUEUE", handler); err != nil {
+	if err := handler.generic.RegisterLLMHandler(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-JOBDESC-REQUIREMENTS-QUEUE", handler, concurrentRequirementsProcessing); err != nil {
 		return nil, fmt.Errorf("failed to register requirements handler: %w", err)
 	}
 

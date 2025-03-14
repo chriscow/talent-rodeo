@@ -14,6 +14,8 @@ import (
 const (
 	TopicAssessmentInput  = "rodeo.assessment.input"
 	TopicAssessmentResult = "rodeo.assessment.result"
+
+	concurrentAssessmentProcessing = 10
 )
 
 type CandidateProfile struct {
@@ -119,7 +121,7 @@ func NewAssessmentHandler(ctx context.Context, js jetstream.JetStream, llm minds
 		generic: NewGenericHandler(js, logger, llm),
 	}
 
-	if err := handler.generic.RegisterLLMHandler(ctx, rodeoStream, TopicAssessmentInput, "RODEO-ASSESSMENT-QUEUE", handler); err != nil {
+	if err := handler.generic.RegisterLLMHandler(ctx, rodeoStream, TopicAssessmentInput, "RODEO-ASSESSMENT-QUEUE", handler, concurrentAssessmentProcessing); err != nil {
 		return nil, fmt.Errorf("failed to register assessment handler: %w", err)
 	}
 

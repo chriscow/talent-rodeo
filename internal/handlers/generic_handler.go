@@ -12,6 +12,10 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 )
 
+const (
+	DefaultMaxAckPending = 0
+)
+
 // HandlerFunc defines a callback function signature for processing messages.
 type HandlerFunc func(ctx context.Context, msg jetstream.Msg) error
 
@@ -47,13 +51,16 @@ func NewGenericHandler(js jetstream.JetStream, logger *slog.Logger, llm minds.Co
 // Register registers a message subject along with a callback function.
 // It creates (or updates) a consumer for the given stream and subject,
 // subscribes to messages, and processes them using the callback.
-func (h *GenericHandler) Register(ctx context.Context, streamName string, subject string, durable string, callback HandlerFunc) error {
+// maxAckPending is the maximum number of messages that can be processed concurrently.
+// If maxAckPending is 0, the default value (1000) will be used. Set to -1 for unlimited.
+func (h *GenericHandler) Register(ctx context.Context, streamName string, subject string, durable string, maxAckPending int, callback HandlerFunc) error {
 	consumerConfig := jetstream.ConsumerConfig{
 		Name:          durable,
 		FilterSubject: subject,
 		AckPolicy:     jetstream.AckExplicitPolicy,
 		DeliverPolicy: jetstream.DeliverAllPolicy,
 		AckWait:       30 * time.Second,
+		MaxAckPending: maxAckPending,
 	}
 
 	// Create or update consumer for this subject.
@@ -118,7 +125,7 @@ func (h *GenericHandler) Register(ctx context.Context, streamName string, subjec
 
 // RegisterLLMHandler registers a handler that uses LLM processing.
 // It creates a consumer for the given stream and subject, and processes messages using LLM.
-func (h *GenericHandler) RegisterLLMHandler(ctx context.Context, streamName string, subject string, durable string, processor LLMProcessor) error {
+func (h *GenericHandler) RegisterLLMHandler(ctx context.Context, streamName string, subject string, durable string, processor LLMProcessor, maxAckPending int) error {
 	if h.llm == nil {
 		return fmt.Errorf("LLM content generator is required for LLM handlers")
 	}
@@ -174,5 +181,5 @@ func (h *GenericHandler) RegisterLLMHandler(ctx context.Context, streamName stri
 	}
 
 	// Register using the standard registration method
-	return h.Register(ctx, streamName, subject, durable, callback)
+	return h.Register(ctx, streamName, subject, durable, maxAckPending, callback)
 }

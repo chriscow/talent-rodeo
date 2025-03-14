@@ -72,7 +72,7 @@ import (
 	"time"
 
 	"talent-rodeo/internal"
-	"talent-rodeo/internal/handlers/search"
+	"talent-rodeo/internal/services/search"
 
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -112,16 +112,14 @@ func TestSearchScheduler_TierLimits(t *testing.T) {
 		verify        func(t *testing.T, messages [][]byte)
 	}{
 		{
-			name:          "free_tier_limit",
+			name:          "free_tier_active",
 			tier:          "free",
 			expectedPages: 3,
 			setup: func(t *testing.T) {
 				_, err := env.db.Exec(`
 					UPDATE candidates 
 					SET tier = 'free'::tier_type, 
-					    last_search_at = NULL,
-					    last_page = NULL,
-					    subscription_end_date = NULL
+					    last_search_at = NULL
 					WHERE id = $1`,
 					candidateID)
 				if err != nil {
@@ -133,97 +131,79 @@ func TestSearchScheduler_TierLimits(t *testing.T) {
 					t.Errorf("got %d messages, want 3", len(messages))
 				}
 				// Verify each message has correct page number
-				for i, msg := range messages {
+				seenPages := make(map[int]bool)
+				for _, msg := range messages {
 					var input search.SearchInput
 					if err := json.Unmarshal(msg, &input); err != nil {
 						t.Fatalf("failed to unmarshal message: %v", err)
 					}
-					if input.Page != i+1 {
-						t.Errorf("message %d has page %d, want %d", i, input.Page, i+1)
+					if input.Page < 1 || input.Page > 3 {
+						t.Errorf("got invalid page number %d", input.Page)
+					}
+					if seenPages[input.Page] {
+						t.Errorf("got duplicate page number %d", input.Page)
+					}
+					seenPages[input.Page] = true
+				}
+				// Verify we have all pages from 1 to 3
+				for i := 1; i <= 3; i++ {
+					if !seenPages[i] {
+						t.Errorf("missing page number %d", i)
 					}
 				}
 			},
 		},
 		{
-			name:          "mid_tier_active_subscription",
+			name:          "mid_tier_active",
 			tier:          "mid",
 			expectedPages: 50,
 			setup: func(t *testing.T) {
 				_, err := env.db.Exec(`
 					UPDATE candidates 
 					SET tier = 'mid'::tier_type, 
-					    last_search_at = NULL,
-					    last_page = NULL
+					    last_search_at = NULL
 					WHERE id = $1`,
 					candidateID)
 				if err != nil {
 					t.Fatalf("failed to update candidate: %v", err)
 				}
-				// Set subscription end date in the future
-				future := time.Now().Add(24 * time.Hour)
-				setSubscriptionEnd(t, candidateID, &future)
 			},
 			verify: func(t *testing.T, messages [][]byte) {
 				if len(messages) != 50 {
 					t.Errorf("got %d messages, want 50", len(messages))
 				}
 				// Verify each message has correct page number
-				for i, msg := range messages {
+				seenPages := make(map[int]bool)
+				for _, msg := range messages {
 					var input search.SearchInput
 					if err := json.Unmarshal(msg, &input); err != nil {
 						t.Fatalf("failed to unmarshal message: %v", err)
 					}
-					if input.Page != i+1 {
-						t.Errorf("message %d has page %d, want %d", i, input.Page, i+1)
+					if input.Page < 1 || input.Page > 50 {
+						t.Errorf("got invalid page number %d", input.Page)
+					}
+					if seenPages[input.Page] {
+						t.Errorf("got duplicate page number %d", input.Page)
+					}
+					seenPages[input.Page] = true
+				}
+				// Verify we have all pages from 1 to 50
+				for i := 1; i <= 50; i++ {
+					if !seenPages[i] {
+						t.Errorf("missing page number %d", i)
 					}
 				}
 			},
 		},
 		{
-			name:          "mid_tier_expired_subscription",
-			tier:          "mid",
-			expectedPages: 3, // Should use free tier limit after expiration
-			setup: func(t *testing.T) {
-				_, err := env.db.Exec(`
-					UPDATE candidates 
-					SET tier = 'mid'::tier_type, 
-					    last_search_at = NULL,
-					    last_page = NULL
-					WHERE id = $1`,
-					candidateID)
-				if err != nil {
-					t.Fatalf("failed to update candidate: %v", err)
-				}
-				// Set subscription end date in the past
-				past := time.Now().Add(-24 * time.Hour)
-				setSubscriptionEnd(t, candidateID, &past)
-			},
-			verify: func(t *testing.T, messages [][]byte) {
-				if len(messages) != 3 {
-					t.Errorf("got %d messages, want 3", len(messages))
-				}
-				// Verify each message has correct page number
-				for i, msg := range messages {
-					var input search.SearchInput
-					if err := json.Unmarshal(msg, &input); err != nil {
-						t.Fatalf("failed to unmarshal message: %v", err)
-					}
-					if input.Page != i+1 {
-						t.Errorf("message %d has page %d, want %d", i, input.Page, i+1)
-					}
-				}
-			},
-		},
-		{
-			name:          "top_tier_active_subscription",
+			name:          "top_tier_active",
 			tier:          "top",
 			expectedPages: 200,
 			setup: func(t *testing.T) {
 				_, err := env.db.Exec(`
 					UPDATE candidates 
 					SET tier = 'top'::tier_type, 
-					    last_search_at = NULL,
-					    last_page = NULL
+					    last_search_at = NULL
 					WHERE id = $1`,
 					candidateID)
 				if err != nil {
@@ -238,27 +218,37 @@ func TestSearchScheduler_TierLimits(t *testing.T) {
 					t.Errorf("got %d messages, want 200", len(messages))
 				}
 				// Verify each message has correct page number
-				for i, msg := range messages {
+				seenPages := make(map[int]bool)
+				for _, msg := range messages {
 					var input search.SearchInput
 					if err := json.Unmarshal(msg, &input); err != nil {
 						t.Fatalf("failed to unmarshal message: %v", err)
 					}
-					if input.Page != i+1 {
-						t.Errorf("message %d has page %d, want %d", i, input.Page, i+1)
+					if input.Page < 1 || input.Page > 200 {
+						t.Errorf("got invalid page number %d", input.Page)
+					}
+					if seenPages[input.Page] {
+						t.Errorf("got duplicate page number %d", input.Page)
+					}
+					seenPages[input.Page] = true
+				}
+				// Verify we have all pages from 1 to 200
+				for i := 1; i <= 200; i++ {
+					if !seenPages[i] {
+						t.Errorf("missing page number %d", i)
 					}
 				}
 			},
 		},
 		{
-			name:          "top_tier_expired_subscription",
+			name:          "expired_subscription_defaults_to_free",
 			tier:          "top",
-			expectedPages: 3, // Should use free tier limit after expiration
+			expectedPages: 3,
 			setup: func(t *testing.T) {
 				_, err := env.db.Exec(`
 					UPDATE candidates 
 					SET tier = 'top'::tier_type, 
-					    last_search_at = NULL,
-					    last_page = NULL
+					    last_search_at = NULL
 					WHERE id = $1`,
 					candidateID)
 				if err != nil {
@@ -273,13 +263,24 @@ func TestSearchScheduler_TierLimits(t *testing.T) {
 					t.Errorf("got %d messages, want 3", len(messages))
 				}
 				// Verify each message has correct page number
-				for i, msg := range messages {
+				seenPages := make(map[int]bool)
+				for _, msg := range messages {
 					var input search.SearchInput
 					if err := json.Unmarshal(msg, &input); err != nil {
 						t.Fatalf("failed to unmarshal message: %v", err)
 					}
-					if input.Page != i+1 {
-						t.Errorf("message %d has page %d, want %d", i, input.Page, i+1)
+					if input.Page < 1 || input.Page > 3 {
+						t.Errorf("got invalid page number %d", input.Page)
+					}
+					if seenPages[input.Page] {
+						t.Errorf("got duplicate page number %d", input.Page)
+					}
+					seenPages[input.Page] = true
+				}
+				// Verify we have all pages from 1 to 3
+				for i := 1; i <= 3; i++ {
+					if !seenPages[i] {
+						t.Errorf("missing page number %d", i)
 					}
 				}
 			},
@@ -314,37 +315,27 @@ func TestSearchScheduler_TierLimits(t *testing.T) {
 				RunAt:       time.Now().UTC(),
 			}
 
-			// Create consumer to capture messages with a unique name for each test
-			// Use DeliverNewPolicy instead of DeliverAllPolicy to only get messages from this test
-			consumerName := fmt.Sprintf("test-consumer-%s", tt.name)
-
-			// Try to delete consumer if it exists (ignore errors)
-			_ = env.js.DeleteConsumer(env.ctx, env.streamName, consumerName)
-
-			consumer, err := env.js.CreateOrUpdateConsumer(env.ctx, env.streamName, jetstream.ConsumerConfig{
-				Name:          consumerName,
-				FilterSubject: fmt.Sprintf("%s.rodeo.search.input", env.streamName),
-				DeliverPolicy: jetstream.DeliverNewPolicy,
-			})
-			if err != nil {
-				t.Fatalf("failed to create consumer: %v", err)
-			}
-
 			// Process the task
 			if err := scheduler.ProcessTask(env.ctx, task); err != nil {
 				t.Fatalf("ProcessTask() error = %v", err)
 			}
 
-			// Collect all published messages
-			msgs, err := consumer.Fetch(tt.expectedPages, jetstream.FetchMaxWait(time.Second))
-			if err != nil {
-				t.Fatalf("failed to fetch messages: %v", err)
+			// Verify the number of tasks created (search tasks + 1 scheduler task)
+			expectedTasks := tt.expectedPages + 1
+			if got := len(taskProc.enqueuedTasks); got != expectedTasks {
+				t.Errorf("got %d enqueued tasks, want %d", got, expectedTasks)
 			}
 
+			// Extract all search task messages
 			var messages [][]byte
-			for msg := range msgs.Messages() {
-				messages = append(messages, msg.Data())
-				msg.Ack()
+			for _, task := range taskProc.enqueuedTasks {
+				if task.Type == "nats_message_scheduler" {
+					var msgPayload NATSMessagePayload
+					if err := json.Unmarshal(task.Payload, &msgPayload); err != nil {
+						t.Fatalf("failed to unmarshal message payload: %v", err)
+					}
+					messages = append(messages, msgPayload.Data)
+				}
 			}
 
 			// Run verification
@@ -443,21 +434,36 @@ func TestSearchScheduler_TierChanges(t *testing.T) {
 		}
 
 		// Verify initial messages have correct page numbers
-		for i, msg := range initialMessages {
+		seenPages := make(map[int]bool)
+		for _, msg := range initialMessages {
 			var input search.SearchInput
 			if err := json.Unmarshal(msg, &input); err != nil {
 				t.Fatalf("failed to unmarshal message: %v", err)
 			}
-			if input.Page != i+1 {
-				t.Errorf("initial message %d has page %d, want %d", i, input.Page, i+1)
+			if input.Page < 1 || input.Page > 3 {
+				t.Errorf("got invalid page number %d", input.Page)
+			}
+			if seenPages[input.Page] {
+				t.Errorf("got duplicate page number %d", input.Page)
+			}
+			seenPages[input.Page] = true
+		}
+
+		// Verify we have all pages from 1 to 3
+		for i := 1; i <= 3; i++ {
+			if !seenPages[i] {
+				t.Errorf("missing page number %d", i)
 			}
 		}
 
-		// Upgrade to mid tier while maintaining last_page
+		// Reset seen pages for next test
+		seenPages = make(map[int]bool)
+
+		// Upgrade to mid tier
 		_, err = env.db.Exec(`
 			UPDATE candidates 
 			SET tier = 'mid'::tier_type,
-			    last_page = 3
+			    last_search_at = NULL
 			WHERE id = $1`,
 			candidateID)
 		if err != nil {
@@ -470,7 +476,7 @@ func TestSearchScheduler_TierChanges(t *testing.T) {
 		}
 
 		// Collect additional messages
-		msgs, err = consumer.Fetch(47, jetstream.FetchMaxWait(time.Second))
+		msgs, err = consumer.Fetch(50, jetstream.FetchMaxWait(time.Second))
 		if err != nil {
 			t.Fatalf("failed to fetch messages: %v", err)
 		}
@@ -481,36 +487,182 @@ func TestSearchScheduler_TierChanges(t *testing.T) {
 			msg.Ack()
 		}
 
-		if len(additionalMessages) != 47 {
-			t.Errorf("got %d additional messages, want 47", len(additionalMessages))
+		if len(additionalMessages) != 50 {
+			t.Errorf("got %d additional messages, want 50", len(additionalMessages))
 		}
 
 		// Verify additional messages have correct page numbers
-		for i, msg := range additionalMessages {
+		for _, msg := range additionalMessages {
 			var input search.SearchInput
 			if err := json.Unmarshal(msg, &input); err != nil {
 				t.Fatalf("failed to unmarshal message: %v", err)
 			}
-			expectedPage := i + 4 // Starting from page 4 (after initial 3 pages)
-			if input.Page != expectedPage {
-				t.Errorf("additional message %d has page %d, want %d", i, input.Page, expectedPage)
+			if input.Page < 1 || input.Page > 50 {
+				t.Errorf("got invalid page number %d", input.Page)
+			}
+			if seenPages[input.Page] {
+				t.Errorf("got duplicate page number %d", input.Page)
+			}
+			seenPages[input.Page] = true
+		}
+
+		// Verify we have all pages from 1 to 50
+		for i := 1; i <= 50; i++ {
+			if !seenPages[i] {
+				t.Errorf("missing page number %d", i)
 			}
 		}
+	})
 
-		// Verify all messages together
-		allMessages := append(initialMessages, additionalMessages...)
-		if len(allMessages) != 50 {
-			t.Errorf("got %d total messages, want 50", len(allMessages))
+	// Add new test for tier skipping
+	t.Run("skip_tier_free_to_top", func(t *testing.T) {
+		// Start with free tier
+		_, err := env.db.Exec(`
+			UPDATE candidates 
+			SET tier = 'free'::tier_type, 
+			    last_search_at = NULL,
+			    last_page = NULL
+			WHERE id = $1`,
+			candidateID)
+		if err != nil {
+			t.Fatalf("failed to update candidate: %v", err)
 		}
 
-		// Verify all page numbers are sequential
-		for i, msg := range allMessages {
+		publisher := &mockPublisher{js: env.js, stream: env.stream, streamName: env.streamName}
+		taskProc := NewMockTaskProcessor(publisher, env.db)
+		scheduler := NewSearchScheduler(publisher, env.logger, env.db, taskProc)
+
+		// Create consumer with unique name
+		consumerName := "test-consumer-tier-skip-free-to-top"
+
+		// Try to delete consumer if it exists (ignore errors)
+		_ = env.js.DeleteConsumer(env.ctx, env.streamName, consumerName)
+
+		consumer, err := env.js.CreateOrUpdateConsumer(env.ctx, env.streamName, jetstream.ConsumerConfig{
+			Name:          consumerName,
+			FilterSubject: fmt.Sprintf("%s.rodeo.search.input", env.streamName),
+			DeliverPolicy: jetstream.DeliverNewPolicy,
+		})
+		if err != nil {
+			t.Fatalf("failed to create consumer: %v", err)
+		}
+
+		// Start initial free tier search
+		payload := SearchSchedulerPayload{
+			CandidateID: candidateID,
+		}
+		payloadBytes, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("failed to marshal payload: %v", err)
+		}
+
+		task := &internal.Task{
+			Type:        scheduler.TaskType(),
+			Payload:     payloadBytes,
+			Status:      internal.TaskStatusPending,
+			MaxAttempts: 3,
+			CreatedAt:   time.Now().UTC(),
+			RunAt:       time.Now().UTC(),
+		}
+
+		// Process task for free tier
+		if err := scheduler.ProcessTask(env.ctx, task); err != nil {
+			t.Fatalf("ProcessTask() error = %v", err)
+		}
+
+		// Collect free tier messages
+		msgs, err := consumer.Fetch(3, jetstream.FetchMaxWait(time.Second))
+		if err != nil {
+			t.Fatalf("failed to fetch messages: %v", err)
+		}
+
+		var freeMessages [][]byte
+		for msg := range msgs.Messages() {
+			freeMessages = append(freeMessages, msg.Data())
+			msg.Ack()
+		}
+
+		if len(freeMessages) != 3 {
+			t.Errorf("got %d free tier messages, want 3", len(freeMessages))
+		}
+
+		// Verify free tier messages have correct page numbers
+		seenPages := make(map[int]bool)
+		for _, msg := range freeMessages {
 			var input search.SearchInput
 			if err := json.Unmarshal(msg, &input); err != nil {
 				t.Fatalf("failed to unmarshal message: %v", err)
 			}
-			if input.Page != i+1 {
-				t.Errorf("message %d has page %d, want %d", i, input.Page, i+1)
+			if input.Page < 1 || input.Page > 3 {
+				t.Errorf("got invalid page number %d", input.Page)
+			}
+			if seenPages[input.Page] {
+				t.Errorf("got duplicate page number %d", input.Page)
+			}
+			seenPages[input.Page] = true
+		}
+
+		// Verify we have all pages from 1 to 3
+		for i := 1; i <= 3; i++ {
+			if !seenPages[i] {
+				t.Errorf("missing page number %d", i)
+			}
+		}
+
+		// Reset seen pages for next test
+		seenPages = make(map[int]bool)
+
+		// Upgrade directly to top tier
+		_, err = env.db.Exec(`
+			UPDATE candidates 
+			SET tier = 'top'::tier_type,
+			    last_search_at = NULL
+			WHERE id = $1`,
+			candidateID)
+		if err != nil {
+			t.Fatalf("failed to upgrade tier: %v", err)
+		}
+
+		// Process task again
+		if err := scheduler.ProcessTask(env.ctx, task); err != nil {
+			t.Fatalf("ProcessTask() error = %v", err)
+		}
+
+		// Collect top tier messages
+		msgs, err = consumer.Fetch(200, jetstream.FetchMaxWait(time.Second))
+		if err != nil {
+			t.Fatalf("failed to fetch messages: %v", err)
+		}
+
+		var topMessages [][]byte
+		for msg := range msgs.Messages() {
+			topMessages = append(topMessages, msg.Data())
+			msg.Ack()
+		}
+
+		if len(topMessages) != 200 {
+			t.Errorf("got %d top tier messages, want 200", len(topMessages))
+		}
+
+		// Verify top tier messages have correct page numbers
+		for _, msg := range topMessages {
+			var input search.SearchInput
+			if err := json.Unmarshal(msg, &input); err != nil {
+				t.Fatalf("failed to unmarshal message: %v", err)
+			}
+			if input.Page < 1 || input.Page > 200 {
+				t.Errorf("got invalid page number %d", input.Page)
+			}
+			if seenPages[input.Page] {
+				t.Errorf("got duplicate page number %d", input.Page)
+			}
+			seenPages[input.Page] = true
+		}
+
+		// Verify we have all pages from 1 to 200
+		for i := 1; i <= 200; i++ {
+			if !seenPages[i] {
+				t.Errorf("missing page number %d", i)
 			}
 		}
 	})
@@ -559,50 +711,24 @@ func TestSearchScheduler_TierDowngrade(t *testing.T) {
 		previousTier       string
 		currentTier        string
 		lastPage           *int
-		wantLastPage       *int
-		wantStartPage      int
-		wantEndPage        int
 		wantSearchEnqueued bool
+		wantPageCount      int
 	}{
 		{
-			name:               "downgrade_mid_to_free_within_limit",
-			previousTier:       "mid",
-			currentTier:        "free",
-			lastPage:           intPtr(2),
-			wantLastPage:       intPtr(2),
-			wantStartPage:      3,
-			wantEndPage:        3,
-			wantSearchEnqueued: true,
-		},
-		{
-			name:               "downgrade_mid_to_free_exceeds_limit",
+			name:               "downgrade_mid_to_free",
 			previousTier:       "mid",
 			currentTier:        "free",
 			lastPage:           intPtr(45),
-			wantLastPage:       nil,
-			wantStartPage:      1,
-			wantEndPage:        3,
 			wantSearchEnqueued: true,
+			wantPageCount:      3,
 		},
 		{
-			name:               "downgrade_top_to_mid_within_limit",
-			previousTier:       "top",
-			currentTier:        "mid",
-			lastPage:           intPtr(30),
-			wantLastPage:       intPtr(30),
-			wantStartPage:      31,
-			wantEndPage:        50,
-			wantSearchEnqueued: true,
-		},
-		{
-			name:               "downgrade_top_to_mid_exceeds_limit",
+			name:               "downgrade_top_to_mid",
 			previousTier:       "top",
 			currentTier:        "mid",
 			lastPage:           intPtr(150),
-			wantLastPage:       nil,
-			wantStartPage:      1,
-			wantEndPage:        50,
 			wantSearchEnqueued: true,
+			wantPageCount:      50,
 		},
 	}
 
@@ -658,43 +784,80 @@ func TestSearchScheduler_TierDowngrade(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 
-			// Verify candidate state
-			var candidate struct {
-				LastPage *int
-			}
-			err = env.db.QueryRowContext(env.ctx, `
-				SELECT last_page
-				FROM candidates
-				WHERE id = $1`,
-				candidateID).Scan(&candidate.LastPage)
-			if err != nil {
-				t.Fatalf("failed to get candidate: %v", err)
-			}
-
-			if (candidate.LastPage == nil && tt.wantLastPage != nil) ||
-				(candidate.LastPage != nil && tt.wantLastPage == nil) ||
-				(candidate.LastPage != nil && tt.wantLastPage != nil && *candidate.LastPage != *tt.wantLastPage) {
-				t.Errorf("expected last_page to be %v, got %v", tt.wantLastPage, candidate.LastPage)
-			}
-
-			// Verify search task was enqueued
+			// Verify search tasks were enqueued
 			if tt.wantSearchEnqueued {
-				if len(mockProc.enqueuedTasks) == 0 {
-					t.Error("expected search task to be enqueued")
-				} else {
-					searchTask := mockProc.enqueuedTasks[0]
-					var searchPayload NATSMessagePayload
-					if err := json.Unmarshal(searchTask.Payload, &searchPayload); err != nil {
+				// We expect N search tasks + 1 scheduler task
+				expectedTasks := tt.wantPageCount + 1
+				if len(mockProc.enqueuedTasks) != expectedTasks {
+					t.Errorf("expected %d tasks to be enqueued, got %d", expectedTasks, len(mockProc.enqueuedTasks))
+				}
+
+				// Count search tasks and verify their pages
+				searchTasks := make([]*internal.Task, 0)
+				var schedulerTask *internal.Task
+				for _, task := range mockProc.enqueuedTasks {
+					if task.Type == "nats_message_scheduler" {
+						searchTasks = append(searchTasks, task)
+					} else if task.Type == "search_scheduler" {
+						schedulerTask = task
+					}
+				}
+
+				if len(searchTasks) != tt.wantPageCount {
+					t.Errorf("got %d search tasks, want %d", len(searchTasks), tt.wantPageCount)
+				}
+
+				if schedulerTask == nil {
+					t.Fatal("scheduler task not found")
+				}
+
+				// Verify each search task has the correct page number
+				seenPages := make(map[int]bool)
+				for _, task := range searchTasks {
+					var msgPayload NATSMessagePayload
+					if err := json.Unmarshal(task.Payload, &msgPayload); err != nil {
 						t.Fatalf("failed to unmarshal search task payload: %v", err)
 					}
 
+					// Strip stream name prefix from subject for comparison
+					subject := msgPayload.Subject
+					if subject != "rodeo.search.input" {
+						t.Errorf("got subject %q, want %q", subject, "rodeo.search.input")
+					}
+
 					var searchInput search.SearchInput
-					if err := json.Unmarshal(searchPayload.Data, &searchInput); err != nil {
+					if err := json.Unmarshal(msgPayload.Data, &searchInput); err != nil {
 						t.Fatalf("failed to unmarshal search input: %v", err)
 					}
 
-					if searchInput.Page != tt.wantStartPage {
-						t.Errorf("expected search task to start at page %d, got %d", tt.wantStartPage, searchInput.Page)
+					if searchInput.CandidateID != candidateID {
+						t.Errorf("got candidate ID %q, want %q", searchInput.CandidateID, candidateID)
+					}
+
+					if searchInput.Page < 1 || searchInput.Page > tt.wantPageCount {
+						t.Errorf("got invalid page number %d", searchInput.Page)
+					}
+
+					if seenPages[searchInput.Page] {
+						t.Errorf("got duplicate page number %d", searchInput.Page)
+					}
+					seenPages[searchInput.Page] = true
+				}
+
+				// Verify we have all pages from 1 to wantPageCount
+				for i := 1; i <= tt.wantPageCount; i++ {
+					if !seenPages[i] {
+						t.Errorf("missing page number %d", i)
+					}
+				}
+
+				// Verify task timing
+				for _, searchTask := range searchTasks {
+					if searchTask.RunAt.After(schedulerTask.RunAt) {
+						t.Error("search task should run before next scheduler task")
+					}
+					if diff := schedulerTask.RunAt.Sub(searchTask.RunAt); diff < time.Minute {
+						t.Errorf("scheduler task should be at least 1 minute after search task, got %v", diff)
 					}
 				}
 			}

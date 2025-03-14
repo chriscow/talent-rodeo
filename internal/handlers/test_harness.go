@@ -15,17 +15,16 @@ import (
 // It marshals the input to JSON, publishes it, then fetches a single message from the consumer,
 // unmarshalling it into type R.
 // Debug logging is provided via t.Logf calls.
-func SendAndReceiveMessage[T any, R any](t *testing.T, ctx context.Context, js jetstream.JetStream, streamName string, publishSubject, responseSubject string, input T, fetchTimeout time.Duration) (R, error) {
+func SendAndReceiveMessage[T any, R any](t *testing.T, ctx context.Context, js jetstream.JetStream, streamName string, publishSubject, responseSubject string, input T, fetchTimeout time.Duration, consumerName string) (R, error) {
 	var zero R
 
 	// Create a new consumer each time with a DeliverPolicy that ensures we get responses
 	// even if they were published before the consumer was created.
-	const consumerName = "test_harness_consumer"
 	_, err := js.CreateOrUpdateConsumer(ctx, streamName, jetstream.ConsumerConfig{
 		Name:          consumerName,
 		FilterSubject: responseSubject,
 		AckPolicy:     jetstream.AckExplicitPolicy,
-		DeliverPolicy: jetstream.DeliverAllPolicy,
+		DeliverPolicy: jetstream.DeliverNewPolicy,
 	})
 	if err != nil {
 		t.Fatalf("SendAndReceiveMessage: Failed to create consumer: %v", err)
