@@ -7,63 +7,158 @@
   - [ ] Add tier enum type ('free', 'mid', 'top')
   - [ ] Add tier column with default 'free'
   - [ ] Add tier_updated_at timestamp for tracking last change
+- [ ] Add last_search_at timestamp column to track periodic search timing
 
 ### 2. Search Button Integration
-- [ ] Add "Ready to Search" button to profile-preferences.html
-  - [ ] Create button HTML with HTMX attributes
-  - [ ] Add loading state styles
-  - [ ] Add hx-push-url to navigate to progress page
-- [ ] Create endpoint handler for search initiation
-  - [ ] Validate user has completed profile
-  - [ ] Extract and categorize skills from candidate_skills
-    - [ ] Identify must-have skills (rating = 5)
-    - [ ] Collect preferred skills (rating = 4) for secondary search
-  - [ ] Generate search messages based on tier limits
-    - [ ] Create separate NATS message for each page to fetch
-    - [ ] Include page number in search criteria
-  - [ ] Redirect to search progress page
+- [x] Add "Ready to Search" button to profile-preferences.html
+  - [x] Create button HTML with HTMX attributes
+  - [x] Add loading state styles
+  - [x] Add hx-push-url to navigate to progress page
+- [x] Create endpoint handler for search initiation
+  - [x] Validate user has completed profile
+  - [x] Extract and categorize skills from candidate_skills
+    - [x] Identify must-have skills (rating = 5)
+    - [x] Collect preferred skills (rating = 4) for secondary search
+  - [x] Generate search messages based on tier limits
+    - [x] Create separate NATS message for each page to fetch
+    - [x] Include page number in search criteria
+  - [x] Redirect to search progress page
 
 ### 3. Search Progress Page
-- [ ] Create search-progress.html template
-  - [ ] Add progress indicators section
-    - [ ] Total jobs found counter
-    - [ ] Jobs analyzed counter
-    - [ ] Good fit jobs counter
-  - [ ] Add status message section
-  - [ ] Add loading animations
-  - [ ] Add placeholder for results view
-- [ ] Set up Pusher integration (pusher is already initialized on /cmd/web/main.go)
-  - [ ] Subscribe to search status channel
-  - [ ] Subscribe to job analysis channel
-  - [ ] Handle counter updates
-  - [ ] Handle search completion event
-- [ ] Implement progress tracking
-  - [ ] Track jobs found count
-  - [ ] Track analysis progress
-  - [ ] Track matching jobs count
-- [ ] Handle state transitions
-  - [ ] Show progress view during search
-  - [ ] Switch to results view when complete
-  - [ ] Handle error states
+- [x] Create search-progress.html template
+  - [x] Add progress indicators section
+    - [x] Total jobs found counter
+    - [x] Jobs analyzed counter
+    - [x] Good fit jobs counter
+  - [x] Add status message section
+  - [x] Add loading animations
+  - [x] Add placeholder for results view
+- [x] ~~Set up Pusher integration~~ Implement KV Store Progress Tracking
+  - [x] Create user-specific KV buckets for progress
+  - [x] Store progress updates in KV store
+  - [x] Client-side polling for progress updates
+  - [x] Handle search completion
+- [x] Implement progress tracking
+  - [x] Track jobs found count
+  - [x] Track analysis progress
+  - [x] Track matching jobs count
+- [x] Handle state transitions
+  - [x] Show progress view during search
+  - [x] Switch to results view when complete
+  - [x] Handle error states
 
-### 4. Results View (Placeholder)
-- [ ] Create basic results container
-  - [ ] Add results count summary
-  - [ ] Add placeholder for job listings
-  - [ ] Add placeholder for filters
-- [ ] Add minimal styling
-- [ ] Prepare for future enhancement
+### 4. Results View
+- [x] Create basic results container
+  - [x] Add results count summary
+  - [x] Add job listings with match scores
+  - [x] Add skill match indicators
+- [x] Add styling using PicoCSS
+- [ ] Add filtering capabilities (future enhancement)
 
 ### 5. Testing
 - [ ] Unit tests
   - [ ] Test tier management
-  - [ ] Test search criteria building
-  - [ ] Test result limiting
+  - [x] Test search criteria building
+  - [x] Test result limiting
+  - [ ] Test periodic search scheduling
 - [ ] Integration tests
-  - [ ] Test search flow
-  - [ ] Test Pusher updates
-  - [ ] Test error handling
+  - [x] Test search flow
+  - [x] Test KV store updates
+  - [x] Test error handling
 
+### 6. Periodic Search Implementation (New)
+- [ ] Integrate go-co-op/gocron
+  - [ ] Create scheduler in application struct
+  - [ ] Configure tier-based intervals:
+    - Free: Every three days
+    - Basic: Daily
+    - Pro: Four times daily
+  - [ ] Implement background worker for periodic searches
+  - [ ] Add graceful shutdown handling
+  - [ ] Add logging and error handling
+
+### 7. Search Progress KV Store (New)
+- [x] Implement user-specific KV buckets
+  - [x] Bucket naming: `search_progress_{user_id}`
+  - [x] TTL: 5 minutes
+  - [x] MaxBytes: 1MB
+- [x] Progress tracking
+  - [x] Store JSON-encoded progress updates
+  - [x] Include total jobs, analyzed jobs, good fits
+  - [x] Track completion status
+- [x] Client integration
+  - [x] Implement polling endpoint
+  - [x] Handle progress updates
+  - [x] Display results on completion
+
+### Recent Updates
+1. Code Organization
+   - [x] Moved `SearchInput` struct to `internal/handlers/search/types.go`
+   - [x] Added JetStream instance to `application` struct in `cmd/web/main.go`
+   - [x] Updated `handlers.search.go` to use `app.jetstream` for publishing
+   - [x] Added route for "/profile/search/start" in `routes.go`
+   - [x] Implemented KV store for progress tracking
+   - [x] Added user-specific search progress buckets
+   - [ ] Added gocron scheduler for periodic searches
+
+### Testing Requirements (New)
+
+#### Available Test Utilities
+1. `cmd/web/handlers_test.go`:
+   - Provides `testServer` struct for HTTP handler testing
+   - Includes utilities for creating test users and authenticated requests
+   - Handles session management and CSRF tokens
+   - Supports both GET and POST request testing
+
+2. `internal/handlers/common_test.go`:
+   - Provides `testEnv` struct for integration testing
+   - Sets up test NATS server with JetStream
+   - Includes mock LLM implementation
+   - Manages test database connections
+   - Handles cleanup of test resources
+
+3. `internal/handlers/test_harness.go`:
+   - Provides `SendAndReceiveMessage` generic function for NATS testing
+   - Supports publishing and receiving messages in tests
+   - Handles consumer creation and message acknowledgment
+   - Includes debug logging for test troubleshooting
+
+4. `internal/database/database_test.go`:
+   - Provides `SetupTestDB` function for database testing
+   - Manages test database lifecycle
+
+#### Test Implementation Plan
+- [ ] Unit Tests
+  - [ ] Test `startJobSearch` handler
+    - [ ] Test unauthenticated user redirect
+    - [ ] Test invalid candidate ID error
+    - [ ] Test missing skills error
+    - [ ] Test successful message publishing
+    - [ ] Test JSON response format
+  - [ ] Test skill categorization
+    - [ ] Test must-have skills extraction (rating = 5)
+    - [ ] Test preferred skills extraction (rating = 4)
+    - [ ] Test empty skills handling
+  - [ ] Test NATS message publishing
+    - [ ] Test message format
+    - [ ] Test page number increments
+    - [ ] Test error handling
+
+- [ ] Integration Tests
+  - [ ] Test full search flow
+    - [ ] Test HTMX button interaction
+    - [ ] Test URL push to progress page
+    - [ ] Test loading indicator
+  - [ ] Test NATS message handling
+    - [ ] Test message receipt by search handler
+    - [ ] Test message processing
+    - [ ] Test error propagation
+
+### Next Steps
+1. Implement test suite for recent changes
+2. Complete database tier management implementation
+3. Proceed with search progress page implementation
+4. Set up Pusher integration for real-time updates
 
 ## Current State Analysis
 
@@ -107,21 +202,19 @@ The following filters are available but we are not using them yet:
   - Skills matching
   - Salary range filtering
 
-### Search Process
-
-Please refer to `SEARCH-ALGORITHM.md` for the search algorithm.
+### Search Process Updates
 
 1. Search Initiation
-   - Triggered by user clicking "Ready to Search" button on profile-preferences.html
-   - Asynchronous processing via NATS messaging
-   - UI updates via Pusher to show search progress (total jobs found, jobs analyzed, good fit jobs)
-   - System extracts user's skills from candidate_skills table
-     - Search algorithm is below
-   - System generates multiple NATS messages based on tier limits
-     - Each message contains search criteria for a specific page
-     - Free tier: 3 pages
-     - Mid tier: 50 pages
-     - Top tier: 200 pages
+   - ~~Triggered only by user clicking "Ready to Search" button~~ Now supports:
+     * Manual trigger via "Ready to Search" button
+     * Automatic periodic searches based on user tier
+     * One search at a time per user enforced by KV store
+   - Progress tracking via user-specific KV buckets
+   - Automatic cleanup of progress data after completion
+   - Tier-based search frequency:
+     * Free: Every three days
+     * Basic: Daily searches
+     * Pro: Four times daily searches
 
 2. Search Execution and Assessment
    - System uses a multi-phase assessment approach:
@@ -225,10 +318,10 @@ Please refer to `SEARCH-ALGORITHM.md` for the search algorithm.
    - What is the optimal batch size for LLM analysis?
 
 ## Next Steps
-1. Review and clarify questions about search triggers and timing
+1. Implement gocron scheduler
 2. Implement tier tracking in candidates table
-3. Add search trigger to appropriate onboarding step
-4. Design and implement results view
+3. Add periodic search scheduling
+4. Enhance results view with filtering
 5. Integrate LLM-based assessment pipeline:
    - Configure NATS topics and queues
    - Set up assessment result storage
@@ -236,7 +329,7 @@ Please refer to `SEARCH-ALGORITHM.md` for the search algorithm.
    - Add confidence-based filtering
 
 ## Notes
-- Following Go coding guidelines for implementation
+- Following Go coding guidelines for implementation `.cursor/go-coding-guidelines.mdc`
 - Using HTMX for dynamic UI updates (see `skills.html` for examples and `handlers.skills.go` for the handler examples)
 - Implementing proper error handling and logging
 - Ensuring proper test coverage using only the standard library and the got/want pattern

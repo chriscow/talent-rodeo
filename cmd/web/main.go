@@ -94,11 +94,12 @@ type application struct {
 	keywordsMutex sync.RWMutex
 	handlers      map[string]any
 
-	natsServer   *server.Server
-	natsShutdown chan struct{}
-	jetstream    jetstream.JetStream
-	processor    *tasks.Processor
-	scheduler    *th.NATSMessageScheduler
+	natsServer     *server.Server
+	natsShutdown   chan struct{}
+	jetstream      jetstream.JetStream
+	processor      *tasks.Processor
+	scheduler      *th.NATSMessageScheduler
+	sessionManager *sessions.CookieStore
 }
 
 func run(logger *slog.Logger) error {
@@ -238,18 +239,19 @@ func run(logger *slog.Logger) error {
 	taskProcessor.RegisterHandler(scheduler)
 
 	app := &application{
-		config:       cfg,
-		db:           db,
-		logger:       logger,
-		mailer:       mailer,
-		sessionStore: sessionStore,
-		pusher:       &pusherClient,
-		natsServer:   natsServer,
-		jetstream:    js,
-		natsShutdown: make(chan struct{}),
-		processor:    taskProcessor,
-		scheduler:    scheduler,
-		handlers:     handlers,
+		config:         cfg,
+		db:             db,
+		logger:         logger,
+		mailer:         mailer,
+		sessionStore:   sessionStore,
+		pusher:         &pusherClient,
+		natsServer:     natsServer,
+		jetstream:      js,
+		natsShutdown:   make(chan struct{}),
+		processor:      taskProcessor,
+		scheduler:      scheduler,
+		handlers:       handlers,
+		sessionManager: sessionStore,
 	}
 
 	// Start the task processor
@@ -321,7 +323,7 @@ func checkEnv() error {
 
 	requiredKeys := []string{"BASE_URL", "SESSION_SECRET", "SMTP_USERNAME",
 		"SMTP_PASSWORD", "LINKEDIN_AUTH_CLIENT_ID", "LINKEDIN_AUTH_CLIENT_SECRET",
-		"OPENAI_API_KEY", "PUSHER_APP_ID", "PUSHER_KEY", "PUSHER_SECRET", "PUSHER_CLUSTER",
+		"OPENAI_API_KEY", "GEMINI_API_KEY", "PUSHER_APP_ID", "PUSHER_KEY", "PUSHER_SECRET", "PUSHER_CLUSTER",
 		"TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER", "APP_DOMAIN"}
 
 	for _, key := range requiredKeys {

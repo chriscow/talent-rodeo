@@ -1,0 +1,169 @@
+{{define "title"}}Search Progress{{end}}
+
+{{define "page:main"}}
+<main class="container">
+    <section>
+        <header>
+            <h1>Searching for Jobs</h1>
+        </header>
+
+        <div class="grid">
+            <div>
+                <article>
+                    <header>
+                        <h3>Progress</h3>
+                    </header>
+                    <div id="progress-container">
+                        <progress id="search-progress" value="0" max="100"></progress>
+                        <p id="progress-status">Starting search...</p>
+                        <p id="progress-stats"></p>
+                    </div>
+                </article>
+            </div>
+
+            <div>
+                <article>
+                    <header>
+                        <h3>Search Criteria</h3>
+                    </header>
+                    <div class="skills-summary">
+                        {{if .MustHaveSkills}}
+                        <div>
+                            <strong>Must Have Skills:</strong>
+                            <ul>
+                                {{range .MustHaveSkills}}
+                                <li>{{.}}</li>
+                                {{end}}
+                            </ul>
+                        </div>
+                        {{end}}
+                        {{if .PreferredSkills}}
+                        <div>
+                            <strong>Preferred Skills:</strong>
+                            <ul>
+                                {{range .PreferredSkills}}
+                                <li>{{.}}</li>
+                                {{end}}
+                            </ul>
+                        </div>
+                        {{end}}
+                    </div>
+                </article>
+            </div>
+        </div>
+
+        <div id="results-container" style="display: none;">
+            <!-- Results will be dynamically inserted here -->
+        </div>
+    </section>
+</main>
+{{end}}
+
+{{define "page:scripts"}}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const sessionID = "{{.SessionID}}";
+    const progressBar = document.getElementById('search-progress');
+    const progressStatus = document.getElementById('progress-status');
+    const progressStats = document.getElementById('progress-stats');
+    const resultsContainer = document.getElementById('results-container');
+
+    console.log('DOM Elements:', {
+        progressBar: progressBar,
+        progressStatus: progressStatus,
+        progressStats: progressStats,
+        resultsContainer: resultsContainer
+    });
+
+    // Function to update the UI with progress
+    function updateProgress(progress) {
+        console.log('Updating progress:', progress);
+        
+        if (!progressBar || !progressStatus || !progressStats) {
+            console.error('Progress elements not found!');
+            return false;
+        }
+
+        // Update progress bar
+        console.log('Setting progress bar value:', progress.percentComplete);
+        progressBar.setAttribute('value', progress.percentComplete || 0);
+        
+        // Update status message
+        if (progress.status) {
+            console.log('Setting status text:', progress.status);
+            progressStatus.textContent = progress.status;
+        }
+        
+        // Update stats
+        if (typeof progress.analyzedJobs !== 'undefined' && typeof progress.goodFitJobs !== 'undefined') {
+            const statsText = `Analyzed ${progress.analyzedJobs} jobs, found ${progress.goodFitJobs} good matches`;
+            console.log('Setting stats text:', statsText);
+            progressStats.textContent = statsText;
+        }
+
+        // Show results if complete
+        if (progress.isComplete && progress.results && progress.results.length > 0) {
+            console.log('Search complete, showing results:', progress.results);
+            resultsContainer.style.display = 'block';
+            resultsContainer.innerHTML = progress.results.map(job => `
+                <article>
+                    <header>
+                        <div class="grid">
+                            <div>
+                                <h2>${job.title}</h2>
+                                <p>${job.company}</p>
+                            </div>
+                            <mark class="${job.matchScore > 80 ? 'success' : job.matchScore > 60 ? 'warning' : 'error'}">
+                                ${job.matchScore}% Match
+                            </mark>
+                        </div>
+                    </header>
+                    <div class="grid">
+                        <p>
+                            <i data-feather="map-pin"></i>
+                            ${job.location}
+                        </p>
+                    </div>
+                    <h3>Skills Match:</h3>
+                    <ul>
+                        ${Object.entries(job.skillMatch).map(([skill, matches]) => `
+                            <li>${skill}: ${matches ? '✓' : '✗'}</li>
+                        `).join('')}
+                    </ul>
+                </article>
+            `).join('');
+            feather.replace();
+            return true; // Signal completion
+        }
+        return false; // Not complete yet
+    }
+
+    // Function to poll the KV store for updates
+    async function pollProgress() {
+        try {
+            console.log('Polling progress for session:', sessionID);
+            const response = await fetch(`/api/search/progress/${sessionID}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const progress = await response.json();
+            console.log('Received progress:', progress);
+            
+            const isComplete = updateProgress(progress);
+            if (!isComplete) {
+                setTimeout(pollProgress, 1000);
+            } else {
+                console.log('Search complete, stopping polling');
+            }
+        } catch (error) {
+            console.error('Error polling progress:', error);
+            setTimeout(pollProgress, 1000);
+        }
+    }
+
+    // Start polling when the page loads
+    console.log('Starting progress polling...');
+    pollProgress();
+});
+</script>
+{{end}} 
