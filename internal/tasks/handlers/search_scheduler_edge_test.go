@@ -52,6 +52,7 @@ import (
 	"time"
 
 	"talent-rodeo/internal"
+	"talent-rodeo/internal/services/search"
 
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -62,9 +63,11 @@ type mockFailingPublisher struct {
 	stream     jetstream.Stream
 	streamName string
 	failMode   string
+	callCount  int
 }
 
 func (p *mockFailingPublisher) Publish(ctx context.Context, subject string, data []byte) error {
+	p.callCount++
 	switch p.failMode {
 	case "timeout":
 		return context.DeadlineExceeded
@@ -72,6 +75,12 @@ func (p *mockFailingPublisher) Publish(ctx context.Context, subject string, data
 		return errors.New("nats: connection closed")
 	case "stream":
 		return errors.New("nats: stream not found")
+	case "partial":
+		// Fail after the first 10 messages
+		if p.callCount > 10 {
+			return errors.New("nats: connection lost")
+		}
+		return nil
 	default:
 		return nil
 	}
@@ -116,13 +125,12 @@ func TestSearchScheduler_ProviderFailures(t *testing.T) {
 				}
 			},
 			verify: func(t *testing.T, taskProc *MockTaskProcessor) {
-				// Verify last_search_at and last_page weren't updated
+				// Verify last_search_at wasn't updated
 				var candidate struct {
 					LastSearchAt *time.Time `db:"last_search_at"`
-					LastPage     *int       `db:"last_page"`
 				}
 				err := env.db.GetContext(env.ctx, &candidate,
-					`SELECT last_search_at, last_page 
+					`SELECT last_search_at
 					FROM candidates 
 					WHERE id = $1`,
 					candidateID)
@@ -131,9 +139,6 @@ func TestSearchScheduler_ProviderFailures(t *testing.T) {
 				}
 				if candidate.LastSearchAt != nil {
 					t.Error("last_search_at should not be updated on failure")
-				}
-				if candidate.LastPage != nil {
-					t.Error("last_page should not be updated on failure")
 				}
 
 				// Verify no tasks were enqueued
@@ -160,6 +165,45 @@ func TestSearchScheduler_ProviderFailures(t *testing.T) {
 				}
 			},
 			verify: func(t *testing.T, taskProc *MockTaskProcessor) {
+				// Verify no tasks were enqueued
+				if len(taskProc.enqueuedTasks) != 0 {
+					t.Errorf("expected no enqueued tasks on failure, got %d", len(taskProc.enqueuedTasks))
+				}
+			},
+		},
+		{
+			name:      "partial_failure",
+			failMode:  "partial",
+			wantError: true,
+			setup: func(t *testing.T) {
+				// Set up a candidate with mid tier (50 pages)
+				_, err := env.db.Exec(`
+					UPDATE candidates 
+					SET tier = 'mid'::tier_type, 
+					    last_search_at = NULL
+					WHERE id = $1`,
+					candidateID)
+				if err != nil {
+					t.Fatalf("failed to update candidate: %v", err)
+				}
+			},
+			verify: func(t *testing.T, taskProc *MockTaskProcessor) {
+				// Verify last_search_at wasn't updated
+				var candidate struct {
+					LastSearchAt *time.Time `db:"last_search_at"`
+				}
+				err := env.db.GetContext(env.ctx, &candidate,
+					`SELECT last_search_at
+					FROM candidates 
+					WHERE id = $1`,
+					candidateID)
+				if err != nil {
+					t.Fatalf("failed to get candidate: %v", err)
+				}
+				if candidate.LastSearchAt != nil {
+					t.Error("last_search_at should not be updated on failure")
+				}
+
 				// Verify no tasks were enqueued
 				if len(taskProc.enqueuedTasks) != 0 {
 					t.Errorf("expected no enqueued tasks on failure, got %d", len(taskProc.enqueuedTasks))
@@ -232,7 +276,7 @@ func TestSearchScheduler_ConcurrencyEdgeCases(t *testing.T) {
 		t.Fatalf("failed to create test candidate: %v", err)
 	}
 
-	// Set up initial candidate state
+	// Set up initial candidate state with mid tier (50 pages)
 	_, err = env.db.Exec(`
 		UPDATE candidates 
 		SET tier = 'mid'::tier_type, 
@@ -301,5 +345,47 @@ func TestSearchScheduler_ConcurrencyEdgeCases(t *testing.T) {
 	}
 	if updateCount != 1 {
 		t.Errorf("expected exactly one last_search_at update, got %d", updateCount)
+	}
+
+	// Count the number of search tasks and verify we have exactly 50 pages
+	searchTasks := make([]*internal.Task, 0)
+	for _, task := range taskProc.enqueuedTasks {
+		if task.Type == "nats_message_scheduler" {
+			searchTasks = append(searchTasks, task)
+		}
+	}
+
+	if len(searchTasks) != 50 {
+		t.Errorf("expected exactly 50 search tasks, got %d", len(searchTasks))
+	}
+
+	// Verify each page number appears exactly once
+	seenPages := make(map[int]bool)
+	for _, task := range searchTasks {
+		var msgPayload NATSMessagePayload
+		if err := json.Unmarshal(task.Payload, &msgPayload); err != nil {
+			t.Fatalf("failed to unmarshal message payload: %v", err)
+		}
+
+		var searchInput search.SearchInput
+		if err := json.Unmarshal(msgPayload.Data, &searchInput); err != nil {
+			t.Fatalf("failed to unmarshal search input: %v", err)
+		}
+
+		if searchInput.Page < 1 || searchInput.Page > 50 {
+			t.Errorf("got invalid page number %d", searchInput.Page)
+		}
+
+		if seenPages[searchInput.Page] {
+			t.Errorf("got duplicate page number %d", searchInput.Page)
+		}
+		seenPages[searchInput.Page] = true
+	}
+
+	// Verify we have all pages from 1 to 50
+	for i := 1; i <= 50; i++ {
+		if !seenPages[i] {
+			t.Errorf("missing page number %d", i)
+		}
 	}
 }

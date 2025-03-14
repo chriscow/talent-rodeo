@@ -18,6 +18,8 @@ const (
 		Provide your response in JSON.`
 
 	TopicSkillsExtracted = "rodeo.transcript.extracted.skills"
+
+	concurrentSkillsProcessing = 10
 )
 
 type Skills struct {
@@ -47,7 +49,7 @@ func NewSkillsHandler(ctx context.Context, js jetstream.JetStream, llm minds.Con
 		db:      db,
 	}
 
-	if err := handler.generic.RegisterLLMHandler(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-TRANSCRIPT-SKILLS-QUEUE", handler); err != nil {
+	if err := handler.generic.RegisterLLMHandler(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-TRANSCRIPT-SKILLS-QUEUE", handler, concurrentSkillsProcessing); err != nil {
 		return nil, fmt.Errorf("failed to register skills handler: %w", err)
 	}
 

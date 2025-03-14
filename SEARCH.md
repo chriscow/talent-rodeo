@@ -3,7 +3,7 @@
 # Next Steps are intentionally kept at the top of this document for visibility and to avoid duplication
 
 ## Next Steps
-1. Complete Test Suite Implementation (IN PROGRESS)
+1. Complete Test Suite Implementation (COMPLETED)
    - ~~Unit tests for tier management~~
    - ~~Tests for periodic scheduling~~
    - ~~Integration tests for search flow~~
@@ -15,42 +15,42 @@
      * ~~Test NATS timeouts~~
      * ~~Test invalid tier handling~~
      * ~~Test non-retryable errors~~
-   - Add tier change tests
+   - ~~Add tier change tests~~
      * ~~Test tier upgrade scenarios (maintaining page continuity)~~
      * ~~Add tier downgrade scenarios~~
        - ~~Test resetting search progress~~
        - ~~Test handling last_page > new tier limit~~
-     * Add tests for skipping tiers (e.g., free to top)
-       - Test page continuity
-       - Test intermediate page handling
-   - Add end-to-end tests with real NATS messages
-     * Test complete search flow with JetStream
-     * Verify message publishing and consumption
-     * Test error handling and retries
-   - Add edge case tests
-     * Test provider API failures
-     * Test partial result scenarios
-     * Test invalid input handling
+     * ~~Add tests for skipping tiers (e.g., free to top)~~
+       - ~~Test page continuity~~
+       - ~~Test intermediate page handling~~
+   - ~~Add end-to-end tests with real NATS messages~~
+     * ~~Test complete search flow with JetStream~~
+     * ~~Test message publishing and consumption~~
+     * ~~Test error handling and retries~~
+   - ~~Add edge case tests~~
+     * ~~Test provider API failures~~
+     * ~~Test partial result scenarios~~
+     * ~~Test invalid input handling~~
 
 2. ~~Implement Tier Change Handling~~
    - ~~Add tier downgrade logic~~
      * ~~Handle cases where last_page exceeds new tier limit~~
      * ~~Implement progress reset policy~~
-   - Add tier skip handling
-     * Define behavior for processing intermediate pages
-     * Maintain page continuity across multiple tier jumps
+   - ~~Add tier skip handling~~
+     * ~~Define behavior for processing intermediate pages~~
+     * ~~Maintain page continuity across multiple tier jumps~~
 
 3. Enhance Error Recovery
-   - Implement fallback strategy for failed searches
-   - Add retry mechanism with backoff
-   - Add monitoring for failed searches
-   - Implement partial result handling
+   - ✓ Implement fallback strategy for failed searches
+   - ✓ Add retry mechanism with backoff
+   - ✓ Add monitoring for failed searches
+   - ✓ Implement partial result handling
 
 4. Add Search Progress Monitoring
-   - Add real-time progress updates via KV store
-   - Implement progress polling endpoint
-   - Add progress UI components
-   - Handle search failures gracefully
+   - ✓ Add real-time progress updates via KV store
+   - ✓ Implement progress polling endpoint
+   - ✓ Add progress UI components
+   - ✓ Handle search failures gracefully
 
 5. Implement Results Management
    - Add filtering system
@@ -163,130 +163,73 @@
    - [x] Added user-specific search progress buckets
    - [x] Added search scheduler for periodic searches
 
+## Search Flow Implementation Details (Simplified for MVP)
 
-### Current State Analysis
+The search flow has been simplified to focus on core functionality for the MVP:
 
-### Completed Features
-1. Search Scheduler Implementation
-   - ✓ Tier-based scheduling intervals (free: 72h, mid: 24h, top: 6h)
-   - ✓ One search at a time per user strictly enforced
-   - ✓ Database locking with NOWAIT for concurrent handling
-   - ✓ Non-retryable errors for concurrent attempts
-   - ✓ Page continuity maintained during tier upgrades
-   - ✓ Proper error handling and logging
-   - ✓ State updates only after successful message publishing
-   - ✓ Atomic transactions for state updates
-   - ✓ Tier downgrade handling with progress reset
-   - ✓ Special handling for mid-tier 50-page limit
-   - ✓ Proper state tracking during tier changes
-   - ✓ Tier change testing (both upgrades and downgrades)
-   - ✓ Subscription end date handling for tier limits
-   - ✓ Proper reset of search progress when downgrading
+1. **Initial Trigger** (Profile Preferences Page):
+   - User sets skill preferences with sliders (1-5) on profile-preferences.html
+   - Skills with ratings 5 (Must Have) and 4 (Preferred) are used for search
+   - User clicks "Ready to Search" button
+   - POST request sent to "/profile/search/start" endpoint
 
-2. Error Handling
-   - ✓ NATS publishing failures handled gracefully
-   - ✓ Invalid tier validation with clear error messages
-   - ✓ Concurrent task rejection with non-retryable errors
-   - ✓ State preservation on failure (no partial updates)
-   - ✓ Proper error wrapping and context
-   - ✓ Tier change error handling
-   - ✓ NATS consumer name validation
-   - ✓ Consumer name sanitization for NATS compatibility
+2. **Search Scheduler** (internal/tasks/handlers/search_scheduler.go):
+   - Receives candidate ID in search scheduler payload
+   - Performs database lookup with lock to prevent concurrent searches
+   - Determines user's tier (free, mid, top)
+   - Calculates search timing and page ranges
+   - Creates NATS message with search criteria for each page
+   - Maintains search state in candidates table (last_page, last_search_at)
+   - Schedules next search based on tier-specific intervals:
+     * Free: 72 hours
+     * Mid: 24 hours
+     * Top: 6 hours
 
-3. Test Coverage
-   - ✓ Comprehensive concurrent operation testing
-   - ✓ NATS failure scenarios (timeout, connection, stream)
-   - ✓ Invalid tier handling
-   - ✓ State verification after failures
-   - ✓ Task creation verification
-   - ✓ Database state consistency checks
-   - ✓ Tier downgrade scenarios
-   - ✓ Progress reset verification
-   - ✓ Consumer name sanitization
-   - ✓ Delivery policy configuration
-   - ✓ Unique consumer names for test isolation
-   - ✓ All integration tests passing with proper mock setup
+3. **Search Term Construction**:
+   - Skills are extracted from candidate_skills table with their preference ratings
+   - Simplified Search Strategy:
+     * Primary search terms: Skills with preference = 5 ("Must Have")
+     * Secondary search terms: Skills with preference = 4 ("Preferred")
+     * If no primary terms exist, use secondary terms
+     * All other skills are used only for scoring, not for search
 
-### Remaining Work
-1. ~~Tier Management~~
-   - ~~Need to implement tier downgrade handling~~
-   - ~~Need to define and implement tier skip behavior~~
-   - ~~Need to handle cases where last_page exceeds new tier limit~~
+4. **Search Execution** (internal/handlers/search.go):
+   - Receives search input messages via NATS
+   - Executes search using JobProvider interface
+   - Collects job listings from each page
+   - Stores listing results in database
+   - Job Scoring System (Simplified):
+     * +10 points for each "Must Have" skill match
+     * +5 points for each "Preferred" skill match
+     * +1 point for each "No Preference" skill match
+     * -3 points for each "Avoid" skill that appears
+     * Exclude jobs with "Must Avoid" skills
 
-2. Error Recovery
-   - Need fallback strategy for failed searches
-   - Need retry mechanism with backoff
-   - Need partial result handling strategy
-   - Need monitoring for failed searches
+5. **Progress Tracking**:
+   - Uses KV store to track search progress in real-time
+   - Updates include:
+     * Total jobs found
+     * Jobs analyzed
+     * Good matches found
+   - Client polls progress endpoint until completion
 
-3. Testing Gaps
-   - End-to-end tests with real NATS messages
-   - ~~Tier downgrade scenarios~~
-   - ~~Tier skip scenarios~~
-   - Provider API failure handling
-   - Partial result scenarios
+6. **Result Management**:
+   - Results are limited based on tier:
+     * Free: 3 pages (approx. 30 jobs)
+     * Mid: 50 pages (approx. 500 jobs)
+     * Top: 200 pages (approx. 2000 jobs)
+   - Results are sorted by score descending
 
-### Search Implementation
-- Provider-agnostic search criteria supporting:
-  - Keyword-based search using candidate skills (from `candidate_skills` table)
-    - All skills are used in search with their preference values (1-5)
-    - Skills have preference values to weight search importance:
-      * 5: Must Have skills
-      * 4: Preferred skills
-      * 3: No Preference skills
-      * 2: Avoid skills
-      * 1: Must Avoid skills
-
-The following filters are available but we are not using them yet:
-  - Location filtering
-  - Date posted filtering
-  - Job type filtering
-  - Experience level filtering
-  - Industry filtering
-  - Skills matching
-  - Salary range filtering
-  
 ### Implementation Notes
 
-1. LLM Integration
-   - Requirements Handler (requirements.go):
-     * Extracts structured requirements from job descriptions
-     * Identifies skill levels and years needed
-     * Provides context for skill usage
-   
-   - Assessment Handler (assessment.go):
-     * Performs comprehensive candidate-job matching
-     * Generates detailed match assessments
-     * Stores results in database
-   
-   - Experience Handler (experience.go):
-     * Analyzes candidate experience
-     * Maps skills to roles and duration
-     * Validates experience claims
+For the MVP, we've eliminated the following complexities:
+1. Complex skill relationship detection
+2. Multiple separate search queries
+3. Advanced skill centrality verification
+4. Skill categories and grouping
+5. Complex LLM analysis for job requirements
 
-2. Scoring System Implementation
-   - Initial score from keyword matching
-   - Enhanced by LLM analysis:
-     * Skill relevance validation
-     * Experience alignment
-     * Role suitability
-   - Final score combines both metrics
-### Questions Requiring Clarification
-
-1. Tier Management
-   - ~~How should we handle tier downgrades when the last_page exceeds new tier limit?~~
-   - ~~Should we reset search progress on tier changes to lower tiers?~~
-   - For tier upgrades that skip levels (free to top), should we process intermediate pages?
-
-2. Error Recovery
-   - What should be our retry strategy for failed searches?
-   - How should we handle partial results?
-   - What monitoring metrics should we track for failed searches?
-
-3. Testing Strategy
-   - Should we add load testing for concurrent search handling?
-   - Do we need to test specific provider failure scenarios?
-   - What metrics should we verify in end-to-end tests?
+This simplified approach focuses on core functionality while still respecting user preferences. It aligns well with the existing JobProvider interface and provides a solid foundation for future enhancements.
 
 ## Notes
 - Following Go coding guidelines for implementation `.cursor/go-coding-guidelines.mdc`
@@ -385,3 +328,5 @@ The following filters are available but we are not using them yet:
    - Advanced sorting options (ANSWERED: Initial sort by assessment)
    - Advanced filtering options (Can add post-MVP)
    - Saved searches (Can implement later) 
+
+

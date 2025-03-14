@@ -14,8 +14,7 @@ import (
 
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/database"
-	searchapi "talent-rodeo/internal/handlers/search"
-	searchsvc "talent-rodeo/internal/services/search"
+	"talent-rodeo/internal/services/search"
 )
 
 // Publisher defines the minimal interface needed for publishing messages.
@@ -69,6 +68,8 @@ func NewSearchScheduler(publisher Publisher, logger *slog.Logger, db *database.D
 
 // TaskType returns the type of task this handler processes.
 // This is used to identify which tasks should be routed to this handler.
+//
+// Returns the string identifier for the task type.
 func (h *SearchScheduler) TaskType() string {
 	return "search_scheduler"
 }
@@ -82,6 +83,12 @@ func (h *SearchScheduler) TaskType() string {
 //
 // If the calculated next search time is in the past, the search is scheduled
 // immediately. All times are handled in UTC to avoid timezone issues.
+//
+// Parameters:
+//   - tier: The subscription tier of the candidate
+//   - lastSearch: The time of the last search performed
+//
+// Returns the calculated time for the next search.
 func (h *SearchScheduler) getNextSearchTime(tier string, lastSearch time.Time) time.Time {
 	now := h.now().UTC().Truncate(time.Microsecond)
 
@@ -114,7 +121,12 @@ func (h *SearchScheduler) getNextSearchTime(tier string, lastSearch time.Time) t
 	return nextSearch
 }
 
-// getMaxPages returns the maximum number of pages allowed for a given tier
+// getMaxPages returns the maximum number of pages allowed for a given tier.
+//
+// Parameters:
+//   - tier: The subscription tier of the candidate
+//
+// Returns the maximum number of pages allowed for the specified tier.
 func (h *SearchScheduler) getMaxPages(tier string) int {
 	switch tier {
 	case "free":
@@ -137,6 +149,10 @@ func (h *SearchScheduler) getMaxPages(tier string) int {
 // The function ensures that searches are performed at appropriate intervals based
 // on the candidate's subscription tier and maintains the scheduling chain.
 //
+// Parameters:
+//   - ctx: Context for the operation, which can be used to cancel it
+//   - task: The task to be processed, containing the candidate's information
+//
 // Returns an error if any step in the process fails.
 func (h *SearchScheduler) ProcessTask(ctx context.Context, task *internal.Task) error {
 	var payload SearchSchedulerPayload
@@ -146,7 +162,6 @@ func (h *SearchScheduler) ProcessTask(ctx context.Context, task *internal.Task) 
 
 	var nextSearchTime time.Time
 	var nextSchedulerTime time.Time
-	var resetProgress bool
 
 	err := h.db.WithTx(ctx, func(tx *database.DB) error {
 		// Get candidate with exclusive lock
@@ -154,11 +169,10 @@ func (h *SearchScheduler) ProcessTask(ctx context.Context, task *internal.Task) 
 			ID              string
 			Tier            string     `db:"tier"`
 			LastSearchAt    *time.Time `db:"last_search_at"`
-			LastPage        *int       `db:"last_page"`
 			SubscriptionEnd *time.Time `db:"subscription_end_date"`
 		}
 		err := tx.GetContext(ctx, &candidate,
-			`SELECT id, tier::text as tier, last_search_at, last_page, subscription_end_date
+			`SELECT id, tier::text as tier, last_search_at, subscription_end_date
 			FROM candidates 
 			WHERE id = $1 
 			FOR UPDATE NOWAIT`,
@@ -176,11 +190,30 @@ func (h *SearchScheduler) ProcessTask(ctx context.Context, task *internal.Task) 
 			return fmt.Errorf("failed to get candidate: %w", err)
 		}
 
+		// Check for tier changes
+		var previousTier string
+		err = tx.GetContext(ctx, &previousTier, `
+			SELECT tier::text
+			FROM candidates_tier_history
+			WHERE candidate_id = $1
+			ORDER BY created_at DESC
+			LIMIT 1`,
+			candidate.ID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("failed to get previous tier: %w", err)
+		}
+
+		h.logger.Debug("checking tier changes",
+			"candidate_id", candidate.ID,
+			"current_tier", candidate.Tier,
+			"previous_tier", previousTier,
+			"last_search_at", candidate.LastSearchAt)
+
 		// Log initial state
 		h.logger.Info("processing candidate",
 			"candidate_id", candidate.ID,
 			"tier", candidate.Tier,
-			"last_page", candidate.LastPage,
+			"previous_tier", previousTier,
 			"subscription_end", candidate.SubscriptionEnd)
 
 		// Validate tier
@@ -205,7 +238,6 @@ func (h *SearchScheduler) ProcessTask(ctx context.Context, task *internal.Task) 
 				"subscription_end", candidate.SubscriptionEnd,
 				"current_time", now,
 				"tier", candidate.Tier,
-				"last_page", candidate.LastPage,
 				"max_pages", maxPages)
 
 			// After subscription expires, use free tier limit
@@ -213,42 +245,6 @@ func (h *SearchScheduler) ProcessTask(ctx context.Context, task *internal.Task) 
 			h.logger.Info("using free tier limit after subscription expiry",
 				"candidate_id", candidate.ID,
 				"new_max_pages", maxPages)
-
-			// Always reset progress when subscription expires
-			resetProgress = true
-			result, err := tx.ExecContext(ctx,
-				`UPDATE candidates 
-				SET last_page = NULL,
-				    last_search_at = NULL
-				WHERE id = $1`,
-				candidate.ID)
-			if err != nil {
-				return fmt.Errorf("failed to reset search progress: %w", err)
-			}
-
-			rowsAffected, err := result.RowsAffected()
-			if err != nil {
-				return fmt.Errorf("failed to get rows affected: %w", err)
-			}
-			if rowsAffected == 0 {
-				return &internal.TaskError{
-					Err:         fmt.Errorf("candidate %s was updated by another process", payload.CandidateID),
-					ShouldRetry: false,
-				}
-			}
-
-			candidate.LastPage = nil
-			candidate.LastSearchAt = nil
-
-			h.logger.Info("progress reset completed",
-				"candidate_id", candidate.ID,
-				"reset_progress", resetProgress,
-				"new_last_page", candidate.LastPage)
-		} else {
-			h.logger.Debug("subscription active or no end date",
-				"candidate_id", candidate.ID,
-				"subscription_end", candidate.SubscriptionEnd,
-				"current_time", now)
 		}
 
 		// Calculate next search time
@@ -256,6 +252,16 @@ func (h *SearchScheduler) ProcessTask(ctx context.Context, task *internal.Task) 
 		if candidate.LastSearchAt != nil {
 			lastSearchTime = *candidate.LastSearchAt
 		}
+
+		// If tier has changed, force an immediate search
+		if previousTier != "" && previousTier != candidate.Tier {
+			h.logger.Info("tier changed, forcing immediate search",
+				"candidate_id", candidate.ID,
+				"previous_tier", previousTier,
+				"current_tier", candidate.Tier)
+			lastSearchTime = time.Time{} // Reset last search time to force immediate search
+		}
+
 		nextSearchTime = h.getNextSearchTime(candidate.Tier, lastSearchTime)
 		nextSchedulerTime = nextSearchTime.Add(time.Minute)
 
@@ -265,92 +271,29 @@ func (h *SearchScheduler) ProcessTask(ctx context.Context, task *internal.Task) 
 			"next_search_time", nextSearchTime,
 			"next_scheduler_time", nextSchedulerTime)
 
-		// Initialize page range variables
-		pageRangeInput := searchsvc.PageRangeInput{
-			CurrentTier:   candidate.Tier,
-			LastPage:      candidate.LastPage,
-			ResetProgress: resetProgress,
-		}
-
-		// If this is a tier change, get the previous tier from the database
-		if candidate.LastPage != nil {
-			var prevTier string
-			err := tx.GetContext(ctx, &prevTier,
-				`SELECT tier::text
-				FROM candidates_tier_history
-				WHERE candidate_id = $1
-				ORDER BY created_at DESC
-				LIMIT 1`,
-				candidate.ID)
-			if err != nil && !errors.Is(err, sql.ErrNoRows) {
-				return fmt.Errorf("failed to get previous tier: %w", err)
-			}
-			if prevTier != "" && prevTier != candidate.Tier {
-				pageRangeInput.PreviousTier = prevTier
-				pageRangeInput.IsTierChange = true
-			}
-		}
-
-		pageRange, err := searchsvc.CalculatePageRange(pageRangeInput)
+		// Update candidate with new search time
+		_, err = tx.ExecContext(ctx, `
+			UPDATE candidates 
+			SET last_search_at = $1
+			WHERE id = $2`,
+			nextSearchTime,
+			candidate.ID)
 		if err != nil {
-			return fmt.Errorf("failed to calculate page range: %w", err)
+			return fmt.Errorf("failed to update candidate: %w", err)
 		}
 
-		startPage := pageRange.StartPage
-		endPage := pageRange.EndPage
-		skipSearch := false
-		shouldResetLastPage := pageRange.ShouldResetState
-
-		h.logger.Info("calculated page range",
-			"candidate_id", candidate.ID,
-			"start_page", startPage,
-			"end_page", endPage,
-			"max_pages", endPage,
-			"reset_progress", resetProgress,
-			"skip_search", skipSearch,
-			"last_page", candidate.LastPage,
-			"should_reset_state", shouldResetLastPage)
-
-		// If we're beyond the page limit, skip this search
-		if startPage > endPage {
-			h.logger.Info("skipping search, already at max pages for tier",
+		// Create NATS messages for all pages
+		seenPages := make(map[int]bool)
+		for page := 1; page <= maxPages; page++ {
+			h.logger.Debug("scheduling search task",
+				"candidate_id", candidate.ID,
 				"tier", candidate.Tier,
-				"start_page", startPage,
-				"end_page", endPage)
-			skipSearch = true
-		}
+				"page", page,
+				"max_pages", maxPages)
 
-		// Update candidate with new search time and last_page
-		if !skipSearch {
-			var lastPage *int
-			if shouldResetLastPage {
-				lastPage = nil
-			} else {
-				// Keep the current last_page if within limits
-				if candidate.LastPage != nil && *candidate.LastPage < endPage {
-					lastPage = candidate.LastPage
-				} else {
-					// Reset last_page if it exceeds the current tier's limit
-					lastPage = nil
-				}
-			}
-
-			_, err = tx.ExecContext(ctx, `
-				UPDATE candidates 
-				SET last_search_at = $1,
-				    last_page = $2
-				WHERE id = $3`,
-				nextSearchTime,
-				lastPage,
-				candidate.ID)
-			if err != nil {
-				return fmt.Errorf("failed to update candidate: %w", err)
-			}
-
-			// Create search task for next time
-			searchInput := searchapi.SearchInput{
+			searchInput := search.SearchInput{
 				CandidateID: candidate.ID,
-				Page:        startPage,
+				Page:        page,
 			}
 			searchInputBytes, err := json.Marshal(searchInput)
 			if err != nil {
@@ -358,7 +301,7 @@ func (h *SearchScheduler) ProcessTask(ctx context.Context, task *internal.Task) 
 			}
 
 			messagePayload := NATSMessagePayload{
-				Subject: "rodeo.search.input",
+				Subject: search.TopicSearchInput,
 				Data:    searchInputBytes,
 			}
 			messagePayloadBytes, err := json.Marshal(messagePayload)
@@ -374,27 +317,36 @@ func (h *SearchScheduler) ProcessTask(ctx context.Context, task *internal.Task) 
 				RunAt:       nextSearchTime,
 			}
 			if err := h.taskProc.EnqueueTask(ctx, searchTask); err != nil {
-				return fmt.Errorf("failed to enqueue search task: %w", err)
+				return fmt.Errorf("failed to enqueue search task for page %d: %w", page, err)
 			}
+			seenPages[page] = true
+		}
 
-			// Schedule next scheduler task
-			nextTask := &internal.Task{
-				Type:        h.TaskType(),
-				Payload:     task.Payload,
-				Status:      internal.TaskStatusPending,
-				MaxAttempts: 3,
-				RunAt:       nextSchedulerTime,
-			}
-			if err := h.taskProc.EnqueueTask(ctx, nextTask); err != nil {
-				return fmt.Errorf("failed to schedule next task: %w", err)
-			}
+		h.logger.Debug("scheduled pages summary",
+			"candidate_id", candidate.ID,
+			"tier", candidate.Tier,
+			"max_pages", maxPages,
+			"pages_scheduled", len(seenPages),
+			"seen_pages", seenPages)
+
+		// Schedule next scheduler task
+		nextTask := &internal.Task{
+			Type:        h.TaskType(),
+			Payload:     task.Payload,
+			Status:      internal.TaskStatusPending,
+			MaxAttempts: 3,
+			RunAt:       nextSchedulerTime,
+		}
+		if err := h.taskProc.EnqueueTask(ctx, nextTask); err != nil {
+			return fmt.Errorf("failed to schedule next task: %w", err)
 		}
 
 		h.logger.Info("search scheduled successfully",
 			"component", "search_scheduler",
 			"candidate_id", payload.CandidateID,
 			"next_search", nextSearchTime,
-			"next_scheduler", nextSchedulerTime)
+			"next_scheduler", nextSchedulerTime,
+			"pages_scheduled", maxPages)
 
 		return nil
 	})

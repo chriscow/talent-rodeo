@@ -9,12 +9,16 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 )
 
-const experiencePrompt = `Analyze interview transcripts and extract work experience details.
+const (
+	experiencePrompt = `Analyze interview transcripts and extract work experience details.
 Include total years of experience and details about each role mentioned.
 
 Provide a JSON object with experience details including:
 - totalYears: Total years of professional experience
 - roles: Array of roles with title, company, years in role, and skills used`
+
+	concurrentExperienceProcessing = 10
+)
 
 type Experience struct {
 	TotalYears float64 `json:"totalYears" description:"The total number of years of experience"`
@@ -42,7 +46,7 @@ func NewExperienceHandler(ctx context.Context, js jetstream.JetStream, llm minds
 		generic: NewGenericHandler(js, logger, llm),
 	}
 
-	if err := handler.generic.RegisterLLMHandler(ctx, rodeoStream, TopicTranscriptInput, "RODEO-TRANSCRIPT-EXPERIENCE-QUEUE", handler); err != nil {
+	if err := handler.generic.RegisterLLMHandler(ctx, rodeoStream, TopicTranscriptInput, "RODEO-TRANSCRIPT-EXPERIENCE-QUEUE", handler, concurrentExperienceProcessing); err != nil {
 		return nil, fmt.Errorf("failed to register experience handler: %w", err)
 	}
 

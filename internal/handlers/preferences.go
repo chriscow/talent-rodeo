@@ -9,11 +9,15 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 )
 
-const preferencesPrompt = `
+const (
+	preferencesPrompt = `
 	Analyze interview transcripts and extract job preferences.
 	Focus on location preferences, work style, company preferences, and salary expectations.
 
 	Provide your response in JSON.`
+
+	concurrentPreferencesProcessing = 10
+)
 
 type Preferences struct {
 	Summary            string       `json:"summary" description:"A summary of the preferences of the candidate or details not covered in the other fields"`
@@ -38,7 +42,7 @@ func NewPreferencesHandler(ctx context.Context, js jetstream.JetStream, llm mind
 		generic: NewGenericHandler(js, logger, llm),
 	}
 
-	if err := handler.generic.RegisterLLMHandler(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-TRANSCRIPT-PREFERENCES-QUEUE", handler); err != nil {
+	if err := handler.generic.RegisterLLMHandler(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-TRANSCRIPT-PREFERENCES-QUEUE", handler, concurrentPreferencesProcessing); err != nil {
 		return nil, fmt.Errorf("failed to register preferences handler: %w", err)
 	}
 

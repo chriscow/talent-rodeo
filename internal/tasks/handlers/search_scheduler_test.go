@@ -46,7 +46,7 @@ import (
 
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/database"
-	"talent-rodeo/internal/handlers/search"
+	"talent-rodeo/internal/services/search"
 
 	"github.com/nats-io/nats-server/v2/test"
 	"github.com/nats-io/nats.go"
@@ -282,56 +282,79 @@ func TestSearchScheduler_ProcessTask(t *testing.T) {
 		t.Fatalf("ProcessTask() error = %v", err)
 	}
 
-	// Verify that two tasks were enqueued (search and next scheduler)
-	if got := len(taskProc.enqueuedTasks); got != 2 {
-		t.Errorf("got %d enqueued tasks, want 2", got)
+	// For mid tier, we expect 50 search tasks plus 1 scheduler task
+	expectedTasks := 51
+	if got := len(taskProc.enqueuedTasks); got != expectedTasks {
+		t.Errorf("got %d enqueued tasks, want %d", got, expectedTasks)
 	}
 
-	// Verify the search task
-	var searchTask *internal.Task
+	// Count search tasks and verify their pages
+	searchTasks := make([]*internal.Task, 0)
 	var nextSchedulerTask *internal.Task
 	for _, task := range taskProc.enqueuedTasks {
 		if task.Type == "nats_message_scheduler" {
-			searchTask = task
+			searchTasks = append(searchTasks, task)
 		} else if task.Type == "search_scheduler" {
 			nextSchedulerTask = task
 		}
 	}
 
-	if searchTask == nil {
-		t.Fatal("search task not found")
+	if len(searchTasks) != 50 {
+		t.Errorf("got %d search tasks, want 50", len(searchTasks))
 	}
+
+	// Verify each search task has the correct page number
+	seenPages := make(map[int]bool)
+	for _, task := range searchTasks {
+		var msgPayload NATSMessagePayload
+		if err := json.Unmarshal(task.Payload, &msgPayload); err != nil {
+			t.Fatalf("failed to unmarshal search task payload: %v", err)
+		}
+
+		// Strip stream name prefix from subject for comparison
+		subject := msgPayload.Subject
+		if subject != "rodeo.search.input" {
+			t.Errorf("got subject %q, want %q", subject, "rodeo.search.input")
+		}
+
+		var searchInput search.SearchInput
+		if err := json.Unmarshal(msgPayload.Data, &searchInput); err != nil {
+			t.Fatalf("failed to unmarshal search input: %v", err)
+		}
+
+		if searchInput.CandidateID != candidateID {
+			t.Errorf("got candidate ID %q, want %q", searchInput.CandidateID, candidateID)
+		}
+
+		if searchInput.Page < 1 || searchInput.Page > 50 {
+			t.Errorf("got invalid page number %d", searchInput.Page)
+		}
+
+		if seenPages[searchInput.Page] {
+			t.Errorf("got duplicate page number %d", searchInput.Page)
+		}
+		seenPages[searchInput.Page] = true
+	}
+
+	// Verify we have all pages from 1 to 50
+	for i := 1; i <= 50; i++ {
+		if !seenPages[i] {
+			t.Errorf("missing page number %d", i)
+		}
+	}
+
 	if nextSchedulerTask == nil {
 		t.Fatal("next scheduler task not found")
 	}
 
-	// Verify search task payload
-	var msgPayload NATSMessagePayload
-	if err := json.Unmarshal(searchTask.Payload, &msgPayload); err != nil {
-		t.Fatalf("failed to unmarshal search task payload: %v", err)
-	}
-
-	// Strip stream name prefix from subject for comparison
-	subject := msgPayload.Subject
-	if subject != "rodeo.search.input" {
-		t.Errorf("got subject %q, want %q", subject, "rodeo.search.input")
-	}
-
-	var searchInput search.SearchInput
-	if err := json.Unmarshal(msgPayload.Data, &searchInput); err != nil {
-		t.Fatalf("failed to unmarshal search input: %v", err)
-	}
-
-	if searchInput.CandidateID != candidateID {
-		t.Errorf("got candidate ID %q, want %q", searchInput.CandidateID, candidateID)
-	}
-
 	// Verify task timing
-	if searchTask.RunAt.After(nextSchedulerTask.RunAt) {
-		t.Error("search task should run before next scheduler task")
-	}
-	if diff := nextSchedulerTask.RunAt.Sub(searchTask.RunAt); diff < time.Minute {
-		t.Errorf("scheduler task should be at least 1 minute after search task, got %v", diff)
+	for _, searchTask := range searchTasks {
+		if searchTask.RunAt.After(nextSchedulerTask.RunAt) {
+			t.Error("search task should run before next scheduler task")
+		}
+		if diff := nextSchedulerTask.RunAt.Sub(searchTask.RunAt); diff < time.Minute {
+			t.Errorf("scheduler task should be at least 1 minute after search task, got %v", diff)
+		}
 	}
 }
 

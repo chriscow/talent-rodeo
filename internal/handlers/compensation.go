@@ -18,6 +18,8 @@ const (
 		- Additional compensation elements
 
 		Provide structured output with clear categorization of all compensation components.`
+
+	concurrentCompensationProcessing = 10
 )
 
 // Compensation defines the compensation details for a job
@@ -58,7 +60,7 @@ func NewCompensationHandler(ctx context.Context, js jetstream.JetStream, llm min
 		generic: NewGenericHandler(js, logger, llm),
 	}
 
-	if err := handler.generic.RegisterLLMHandler(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-JOBDESC-COMPENSATION-QUEUE", handler); err != nil {
+	if err := handler.generic.RegisterLLMHandler(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-JOBDESC-COMPENSATION-QUEUE", handler, concurrentCompensationProcessing); err != nil {
 		return nil, fmt.Errorf("failed to register compensation handler: %w", err)
 	}
 

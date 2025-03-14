@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 	"talent-rodeo/internal/database"
-	"talent-rodeo/internal/handlers/search"
+	"talent-rodeo/internal/services/search"
 	"time"
 
 	"github.com/lib/pq"

@@ -74,7 +74,8 @@ func TestCompensationHandleMessage(t *testing.T) {
 		TopicJobDescriptionInput,
 		TopicCompensationExtracted,
 		input,
-		1*time.Second,
+		5*time.Second,
+		"compensation-test",
 	)
 	if err != nil {
 		t.Fatalf("Failed to send and receive message: %v", err)

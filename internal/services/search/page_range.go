@@ -26,16 +26,17 @@ var TierLimits = map[string]int{
 }
 
 // CalculatePageRange determines the appropriate page range for a search based on
-// the candidate's tier, last page searched, and whether this is a tier change.
+// the candidate's tier and last page searched.
 //
 // The function follows these rules:
 // 1. For new searches (LastPage is nil): Start from page 1
-// 2. For tier upgrades: Continue from LastPage + 1
-// 3. For tier downgrades:
-//   - If LastPage is within new tier limit: Continue from LastPage + 1
+// 2. For continuing searches: Continue from LastPage + 1
+// 3. For tier changes (including skips): Continue from LastPage + 1
+// 4. For tier downgrades:
 //   - If LastPage exceeds new tier limit: Reset to page 1
 //
-// 4. For normal searches: Continue from LastPage + 1, wrapping to 1 if at limit
+// The function always respects the current tier's page limit regardless of
+// previous tier or tier changes.
 func CalculatePageRange(input PageRangeInput) (*PageRange, error) {
 	// Validate tier
 	maxPages, ok := TierLimits[input.CurrentTier]
@@ -61,9 +62,8 @@ func CalculatePageRange(input PageRangeInput) (*PageRange, error) {
 		return result, nil
 	}
 
-	// Handle tier changes
-	if input.IsTierChange {
-		// For downgrades, check if last_page exceeds new tier limit
+	// For tier downgrades, check if last_page exceeds new tier limit
+	if input.IsTierChange && input.PreviousTier != "" {
 		prevMaxPages, ok := TierLimits[input.PreviousTier]
 		if !ok {
 			return nil, fmt.Errorf("invalid previous tier: %s", input.PreviousTier)
@@ -75,7 +75,7 @@ func CalculatePageRange(input PageRangeInput) (*PageRange, error) {
 		}
 	}
 
-	// Continue from last page + 1
+	// Continue from last page + 1, regardless of tier changes
 	result.StartPage = *input.LastPage + 1
 
 	// If we've reached the end, start over from page 1

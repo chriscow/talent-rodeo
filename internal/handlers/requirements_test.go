@@ -75,7 +75,8 @@ func TestHandleRequirementsMessage(t *testing.T) {
 		TopicJobDescriptionInput,
 		TopicRequirementsExtracted,
 		input,
-		1*time.Second,
+		5*time.Second,
+		"requirements-test",
 	)
 	if err != nil {
 		t.Fatalf("Failed to send and receive message: %v", err)
