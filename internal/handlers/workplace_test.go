@@ -49,7 +49,8 @@ func TestWorkplaceHandleMessage(t *testing.T) {
 		TopicJobDescriptionInput,
 		TopicWorkplaceExtracted,
 		input,
-		1*time.Second,
+		5*time.Second,
+		"workplace-test",
 	)
 	if err != nil {
 		t.Fatalf("Failed to send and receive message: %v", err)

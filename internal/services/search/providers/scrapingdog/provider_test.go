@@ -9,7 +9,7 @@ import (
 	"os"
 	"testing"
 
-	"talent-rodeo/internal/handlers/search"
+	"talent-rodeo/internal/services/search"
 
 	"github.com/joho/godotenv"
 )

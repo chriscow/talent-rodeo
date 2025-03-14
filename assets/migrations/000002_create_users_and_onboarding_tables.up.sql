@@ -195,7 +195,12 @@ CREATE TRIGGER onboarding_feedback_updated_at BEFORE
 UPDATE ON onboarding_feedback FOR EACH ROW EXECUTE FUNCTION update_timestamp ();
 
 -- Create tier enum type
-CREATE TYPE tier_type AS ENUM ('free', 'mid', 'top');
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tier_type') THEN
+        CREATE TYPE tier_type AS ENUM ('free', 'mid', 'top');
+    END IF;
+END $$;
 
 -- Add tier management columns to candidates table
 ALTER TABLE candidates

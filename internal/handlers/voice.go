@@ -56,7 +56,7 @@ func NewVoiceHandler(ctx context.Context, js jetstream.JetStream, twilio TwilioC
 		generic: NewGenericHandler(js, logger, nil),
 	}
 
-	if err := handler.generic.Register(ctx, rodeoStream, TopicVoiceInput, "RODEO-VOICE-CALLER-QUEUE", handler.handleMessage); err != nil {
+	if err := handler.generic.Register(ctx, rodeoStream, TopicVoiceInput, "RODEO-VOICE-CALLER-QUEUE", 0, handler.handleMessage); err != nil {
 		return nil, fmt.Errorf("failed to register voice handler: %w", err)
 	}
 

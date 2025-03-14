@@ -18,6 +18,8 @@ const (
 		- Work style and expectations
 
 		Provide structured output with clear categorization of all cultural aspects.`
+
+	concurrentCultureProcessing = 10
 )
 
 // Culture defines the cultural aspects of a job
@@ -41,7 +43,7 @@ func NewCultureHandler(ctx context.Context, js jetstream.JetStream, llm minds.Co
 		generic: NewGenericHandler(js, logger, llm),
 	}
 
-	if err := handler.generic.RegisterLLMHandler(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-JOBDESC-CULTURE-QUEUE", handler); err != nil {
+	if err := handler.generic.RegisterLLMHandler(ctx, rodeoStream, TopicJobDescriptionInput, "RODEO-JOBDESC-CULTURE-QUEUE", handler, concurrentCultureProcessing); err != nil {
 		return nil, fmt.Errorf("failed to register culture handler: %w", err)
 	}
 

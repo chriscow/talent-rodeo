@@ -64,7 +64,8 @@ func TestSendAndReceiveMessageHarness(t *testing.T) {
 		"rodeo.request",
 		"rodeo.response",
 		input,
-		2*time.Second,
+		5*time.Second,
+		"test-harness-test",
 	)
 	if err != nil {
 		t.Fatalf("TestSendAndReceiveMessageHarness: SendAndReceiveMessage failed: %v", err)

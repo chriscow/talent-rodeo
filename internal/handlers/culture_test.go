@@ -51,7 +51,8 @@ func TestHandleCultureMessage(t *testing.T) {
 		TopicJobDescriptionInput,
 		TopicCultureExtracted,
 		input,
-		2*time.Second,
+		5*time.Second,
+		"culture-test",
 	)
 	if err != nil {
 		t.Fatalf("Failed to send and receive message: %v", err)

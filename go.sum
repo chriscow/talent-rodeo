@@ -20,6 +20,8 @@ github.com/ThreeDotsLabs/watermill v1.4.4 h1:aLClMl6EYIOQy4BML9yb2VpTekbynDatvQb
 github.com/ThreeDotsLabs/watermill v1.4.4/go.mod h1:lBnrLbxOjeMRgcJbv+UiZr8Ylz8RkJ4m6i/VN/Nk+to=
 github.com/ThreeDotsLabs/watermill-nats/v2 v2.1.2 h1:9d7Vb2gepq73Rn/aKaAJWbBiJzS6nDyOm4O353jVsTM=
 github.com/ThreeDotsLabs/watermill-nats/v2 v2.1.2/go.mod h1:stjbT+s4u/s5ime5jdIyvPyjBGwGeJewIN7jxH8gp4k=
+github.com/WqyJh/go-openai-realtime v0.5.0 h1:y7AWnvVayR7Swl/Fb2RHrWKUH4KEA6yO7ZQuv+M6UkE=
+github.com/WqyJh/go-openai-realtime v0.5.0/go.mod h1:BCN7J7AUbfSFkLLVnhGWF2OkvoQ7GqTWrU/w+d+QwR4=
 github.com/alexedwards/flow v0.1.0 h1:2JY6lesAFIxB5uEcm4coM6FM8tLNGZovVXqRRTic8a4=
 github.com/alexedwards/flow v0.1.0/go.mod h1:RtjEm3RTnsKqwE98bem/60/9cxEyZ0AQEz8GUZ0X+Ww=
 github.com/beevik/etree v1.1.0/go.mod h1:r8Aw8JqVegEf0w2fDnATrX9VpkMcyFeM0FhwO62wh+A=

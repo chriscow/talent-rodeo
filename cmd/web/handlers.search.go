@@ -5,9 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"talent-rodeo/internal/handlers"
-	"talent-rodeo/internal/handlers/search"
 	"talent-rodeo/internal/response"
+	"talent-rodeo/internal/services/search"
 	"time"
 
 	"github.com/alexedwards/flow"
@@ -69,7 +68,7 @@ func (app *application) startJobSearch(w http.ResponseWriter, r *http.Request) {
 		// Schedule the message to be published immediately
 		_, err = app.jetstream.Publish(
 			r.Context(),
-			handlers.TopicSearchInput,
+			search.TopicSearchInput,
 			searchMsgBytes,
 		)
 		if err != nil {

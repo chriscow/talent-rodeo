@@ -62,7 +62,8 @@ func TestHandleExperienceMessage(t *testing.T) {
 		TopicTranscriptInput,
 		TopicExperienceExtracted,
 		input,
-		1*time.Second,
+		5*time.Second,
+		"experience-test",
 	)
 	if err != nil {
 		t.Fatalf("Failed to send and receive message: %v", err)

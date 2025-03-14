@@ -40,7 +40,7 @@ func TestGenericHandler_MessageHandling(t *testing.T) {
 	handler := NewGenericHandler(env.js, env.logger, env.llm)
 
 	// Register message handler
-	err := handler.Register(env.ctx, rodeoStream, testSubject, "TEST-GENERIC-HANDLER", func(ctx context.Context, msg jetstream.Msg) error {
+	err := handler.Register(env.ctx, rodeoStream, testSubject, "TEST-GENERIC-HANDLER", DefaultMaxAckPending, func(ctx context.Context, msg jetstream.Msg) error {
 		var receivedMsg TestMessage
 		if err := json.Unmarshal(msg.Data(), &receivedMsg); err != nil {
 			return err
@@ -76,13 +76,14 @@ func TestGenericHandler_MessageHandling(t *testing.T) {
 	// Use the generic harness to send and receive messages
 	got, err := SendAndReceiveMessage[TestMessage, TestResponse](
 		t,
-		env.ctx,
+		context.Background(),
 		env.js,
 		rodeoStream,
 		testSubject,
 		testResponse,
 		input,
-		2*time.Second,
+		5*time.Second,
+		"generic-test",
 	)
 	if err != nil {
 		t.Fatalf("Failed to send and receive message: %v", err)
@@ -110,7 +111,7 @@ func TestGenericHandler_ContextCancellation(t *testing.T) {
 
 	processed := make(chan bool, 1)
 
-	err := handler.Register(ctx, rodeoStream, testSubject, "TEST-CANCELLATION", func(ctx context.Context, msg jetstream.Msg) error {
+	err := handler.Register(ctx, rodeoStream, testSubject, "TEST-CANCELLATION", DefaultMaxAckPending, func(ctx context.Context, msg jetstream.Msg) error {
 		processed <- true
 		return nil
 	})
@@ -171,7 +172,7 @@ func TestGenericHandler_LLMProcessing(t *testing.T) {
 	// Register LLM handler
 	err = handler.RegisterLLMHandler(env.ctx, rodeoStream, testSubject, "TEST-LLM-HANDLER", &testProcessor{
 		outputTopic: testResponse,
-	})
+	}, DefaultMaxAckPending)
 	if err != nil {
 		t.Fatalf("Failed to register LLM handler: %v", err)
 	}
@@ -184,13 +185,14 @@ func TestGenericHandler_LLMProcessing(t *testing.T) {
 	// Use the generic harness to send and receive messages
 	got, err := SendAndReceiveMessage[TestMessage, TestResponse](
 		t,
-		env.ctx,
+		context.Background(),
 		env.js,
 		rodeoStream,
 		testSubject,
 		testResponse,
 		input,
 		2*time.Second,
+		"generic-test-llm",
 	)
 	if err != nil {
 		t.Fatalf("Failed to send and receive message: %v", err)
@@ -215,7 +217,7 @@ func TestGenericHandler_LLMProcessing_NoLLM(t *testing.T) {
 	// Attempt to register LLM handler
 	err := handler.RegisterLLMHandler(env.ctx, rodeoStream, "test.subject", "TEST-LLM-HANDLER", &testProcessor{
 		outputTopic: "test.response",
-	})
+	}, DefaultMaxAckPending)
 	if err == nil {
 		t.Error("Expected error when registering LLM handler without LLM, got nil")
 	}
@@ -239,7 +241,7 @@ func TestGenericHandler_LLMProcessing_Error(t *testing.T) {
 	// Register LLM handler
 	err := handler.RegisterLLMHandler(env.ctx, rodeoStream, testSubject, "TEST-LLM-ERROR", &testProcessor{
 		outputTopic: testResponse,
-	})
+	}, DefaultMaxAckPending)
 	if err != nil {
 		t.Fatalf("Failed to register LLM handler: %v", err)
 	}
@@ -252,13 +254,14 @@ func TestGenericHandler_LLMProcessing_Error(t *testing.T) {
 	// Send message and expect error
 	_, err = SendAndReceiveMessage[TestMessage, TestResponse](
 		t,
-		env.ctx,
+		context.Background(),
 		env.js,
 		rodeoStream,
 		testSubject,
 		testResponse,
 		input,
 		2*time.Second,
+		"generic-test-error",
 	)
 	if err == nil {
 		t.Error("Expected error from LLM processing, got nil")

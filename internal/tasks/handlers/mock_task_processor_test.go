@@ -10,7 +10,7 @@ import (
 
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/database"
-	"talent-rodeo/internal/handlers/search"
+	"talent-rodeo/internal/services/search"
 )
 
 // MockTaskProcessor implements TaskProcessor for testing
@@ -48,11 +48,8 @@ func (m *MockTaskProcessor) EnqueueTask(ctx context.Context, task *internal.Task
 				return fmt.Errorf("failed to unmarshal search input: %w", err)
 			}
 
-			// Default values
-			startPage := searchInput.Page
+			// Get max pages for validation
 			maxPages := 3 // Default to free tier
-
-			// If we have a database connection, get the candidate's tier to determine max pages
 			if m.db != nil {
 				type candidateInfo struct {
 					Tier            string  `db:"tier"`
@@ -86,60 +83,40 @@ func (m *MockTaskProcessor) EnqueueTask(ctx context.Context, task *internal.Task
 						maxPages = 3 // Default to free tier
 					}
 				}
-			} else {
-				// Fallback to determining max pages based on start page
-				if startPage <= 3 {
-					maxPages = 3 // Free tier
-				} else if startPage <= 50 {
-					maxPages = 50 // Mid tier
-				} else {
-					maxPages = 200 // Top tier
-				}
-				m.logger.Debug("no database connection, using fallback logic",
-					"start_page", startPage,
-					"max_pages", maxPages)
 			}
 
-			m.logger.Debug("publishing search messages",
-				"start_page", startPage,
+			// Validate the page number is within bounds
+			if searchInput.Page < 1 || searchInput.Page > maxPages {
+				return fmt.Errorf("invalid page number %d for max pages %d", searchInput.Page, maxPages)
+			}
+
+			m.logger.Debug("publishing search message",
+				"page", searchInput.Page,
 				"max_pages", maxPages,
 				"candidate_id", searchInput.CandidateID)
 
-			// Publish a message for each page from startPage to maxPages
-			for page := startPage; page <= maxPages; page++ {
-				// Create a new search input for this page
-				pageInput := search.SearchInput{
-					CandidateID: searchInput.CandidateID,
-					Page:        page,
-				}
-
-				// Marshal the page input
-				pageData, err := json.Marshal(pageInput)
-				if err != nil {
-					return fmt.Errorf("failed to marshal page input: %w", err)
-				}
-
-				// Publish the message
-				if err := m.publisher.Publish(ctx, payload.Subject, pageData); err != nil {
-					m.logger.Error("failed to publish message", "error", err, "page", page)
-					return fmt.Errorf("failed to publish message: %w", err)
-				}
-
-				m.logger.Debug("published message", "page", page, "candidate_id", searchInput.CandidateID)
+			// Publish just this single page
+			if err := m.publisher.Publish(ctx, payload.Subject, payload.Data); err != nil {
+				m.logger.Error("failed to publish message", "error", err, "page", searchInput.Page)
+				// On any publish error, clear all enqueued tasks before returning the error
+				m.enqueuedTasks = nil
+				return fmt.Errorf("failed to publish message: %w", err)
 			}
 
-			// Only add to enqueuedTasks if publishing succeeds
-			m.enqueuedTasks = append(m.enqueuedTasks, task)
-			return nil
-		}
-
-		// For non-search messages, just publish directly
-		if err := m.publisher.Publish(ctx, payload.Subject, payload.Data); err != nil {
-			return fmt.Errorf("failed to publish message: %w", err)
+			m.logger.Debug("published message",
+				"page", searchInput.Page,
+				"candidate_id", searchInput.CandidateID)
+		} else {
+			// For non-search messages, just publish directly
+			if err := m.publisher.Publish(ctx, payload.Subject, payload.Data); err != nil {
+				// On any publish error, clear all enqueued tasks before returning the error
+				m.enqueuedTasks = nil
+				return fmt.Errorf("failed to publish message: %w", err)
+			}
 		}
 	}
 
-	// Add to enqueuedTasks after successful publishing or for non-publishing tasks
+	// Only add to enqueuedTasks if we get here (no errors occurred)
 	m.enqueuedTasks = append(m.enqueuedTasks, task)
 	return nil
 }

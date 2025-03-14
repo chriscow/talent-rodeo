@@ -5,9 +5,12 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
+	"talent-rodeo/internal/tasks/handlers"
 	"testing"
 	"time"
 
@@ -128,22 +131,39 @@ func TestIntegrationVoiceCalls(t *testing.T) {
 				t.Fatalf("Failed to create handler: %v", err)
 			}
 
-			// Start the handler
+			// Register the handler
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			go handler.Start(ctx)
+
+			if err := handler.generic.Register(ctx, rodeoStream, TopicVoiceInput, "voice-test", handler.handleMessage); err != nil {
+				t.Fatalf("Failed to register handler: %v", err)
+			}
 			time.Sleep(100 * time.Millisecond) // Allow handler to initialize
 
 			// Send and receive message
-			got, err := SendAndReceiveMessage[CallRequest, CallResult](
+			callReq := CallRequest{PhoneNumber: tt.phoneNumber}
+			callReqJSON, err := json.Marshal(callReq)
+			if err != nil {
+				t.Fatalf("Failed to marshal call request: %v", err)
+			}
+
+			msgData := handlers.MessageData{
+				Data: callReqJSON,
+				Metadata: map[string]string{
+					"test": "true",
+				},
+			}
+
+			got, err := SendAndReceiveMessage[handlers.MessageData, CallResult](
 				t,
 				context.Background(),
 				env.js,
 				rodeoStream,
 				TopicVoiceInput,
 				TopicVoiceResult,
-				CallRequest{PhoneNumber: tt.phoneNumber},
+				msgData,
 				5*time.Second,
+				fmt.Sprintf("voice-test-%s", strings.ReplaceAll(tt.name, " ", "-")),
 			)
 			if err != nil {
 				t.Fatalf("Failed to send and receive message: %v", err)
