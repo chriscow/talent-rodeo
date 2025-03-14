@@ -106,3 +106,23 @@ const (
 	ExperienceMidSenior  ExperienceLevel = "mid_senior_level"
 	ExperienceDirector   ExperienceLevel = "director"
 )
+
+// ProgressUpdate represents a search progress update message
+type ProgressUpdate struct {
+	TotalJobs       int         `json:"totalJobs"`
+	AnalyzedJobs    int         `json:"analyzedJobs"`
+	GoodFitJobs     int         `json:"goodFitJobs"`
+	Status          string      `json:"status"`
+	IsComplete      bool        `json:"isComplete"`
+	PercentComplete float64     `json:"percentComplete"`
+	Results         []JobResult `json:"results,omitempty"`
+}
+
+// JobResult represents a job search result
+type JobResult struct {
+	Title      string          `json:"title"`
+	Company    string          `json:"company"`
+	Location   string          `json:"location"`
+	MatchScore int             `json:"matchScore"`
+	SkillMatch map[string]bool `json:"skillMatch"`
+}

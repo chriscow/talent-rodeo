@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/nats-io/nats.go/jetstream"
 	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -192,4 +193,23 @@ func (app *application) serve(srv *http.Server) error {
 
 	app.logger.Info("stopped server", slog.Group("server", "addr", srv.Addr))
 	return nil
+}
+
+func (app *application) getKV(config jetstream.KeyValueConfig) (jetstream.KeyValue, error) {
+	/* KEEP THIS
+	jetstream.KeyValueConfig{
+		Bucket:      "todos",
+		Description: "Datastar Todos",
+		Compression: true,
+		TTL:         time.Hour,
+		MaxBytes:    16 * 1024 * 1024,
+	}
+	*/
+	kv, err := app.jetstream.CreateOrUpdateKeyValue(context.Background(), config)
+
+	if err != nil {
+		return nil, fmt.Errorf("error creating key value: %w", err)
+	}
+
+	return kv, nil
 }
