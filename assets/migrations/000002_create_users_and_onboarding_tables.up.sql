@@ -192,3 +192,15 @@ UPDATE ON onboarding_progress FOR EACH ROW EXECUTE FUNCTION update_timestamp ();
 
 CREATE TRIGGER onboarding_feedback_updated_at BEFORE
 UPDATE ON onboarding_feedback FOR EACH ROW EXECUTE FUNCTION update_timestamp ();
+
+-- Create tier enum type
+CREATE TYPE tier_type AS ENUM ('free', 'mid', 'top');
+
+-- Add tier management columns to candidates table
+ALTER TABLE candidates
+ADD COLUMN tier tier_type NOT NULL DEFAULT 'free',
+ADD COLUMN tier_updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN last_search_at TIMESTAMP WITH TIME ZONE;
+
+-- Add index for tier and last_search_at for efficient scheduling queries
+CREATE INDEX idx_candidates_tier_last_search ON candidates(tier, last_search_at);
