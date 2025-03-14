@@ -17,26 +17,17 @@ const (
 	StreamName = "rodeo"
 )
 
-// NATSConfig holds configuration for NATS server
-type NATSConfig struct {
-	Port      int
-	JetStream bool
-}
-
 // DefaultNATSConfig returns default NATS configuration
-func DefaultNATSConfig() NATSConfig {
-	return NATSConfig{
+func DefaultNATSConfig() server.Options {
+	return server.Options{
 		Port:      42223,
 		JetStream: true,
 	}
 }
 
 // StartNATSServer creates and starts a NATS server with the given configuration
-func StartNATSServer(ctx context.Context, cfg NATSConfig) (*server.Server, error) {
-	svr, err := server.NewServer(&server.Options{
-		Port:      cfg.Port,
-		JetStream: cfg.JetStream,
-	})
+func StartNATSServer(ctx context.Context, cfg server.Options) (*server.Server, error) {
+	svr, err := server.NewServer(&cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create NATS server: %w", err)
 	}

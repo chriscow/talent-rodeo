@@ -9,7 +9,6 @@ import (
 	"os"
 	"runtime/debug"
 	"sync"
-	"text/template"
 
 	"talent-rodeo/internal/auth"
 	"talent-rodeo/internal/database"
@@ -94,13 +93,12 @@ type application struct {
 	pusher        *pusher.Client
 	keywordsMutex sync.RWMutex
 	handlers      map[string]any
-	templates     *template.Template
 
 	natsServer   *server.Server
 	natsShutdown chan struct{}
-
-	processor *tasks.Processor
-	scheduler *th.NATSMessageScheduler
+	jetstream    jetstream.JetStream
+	processor    *tasks.Processor
+	scheduler    *th.NATSMessageScheduler
 }
 
 func run(logger *slog.Logger) error {
@@ -193,7 +191,7 @@ func run(logger *slog.Logger) error {
 	// Create NATS server if embedded mode is enabled
 	var natsServer *server.Server
 	if cfg.nats.embedded {
-		natsServer, err = handlers.StartNATSServer(ctx, handlers.NATSConfig{
+		natsServer, err = handlers.StartNATSServer(ctx, server.Options{
 			Port:      cfg.nats.port,
 			JetStream: true,
 		})
@@ -219,7 +217,7 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("failed to create stream: %w", err)
 	}
-	_ = stream // We keep the stream reference even though we don't use it directly
+	_ = stream
 
 	// Setup all pipeline handlers
 	handlers, err := setupPipelineHandlers(ctx, db, js, logger)
@@ -247,6 +245,7 @@ func run(logger *slog.Logger) error {
 		sessionStore: sessionStore,
 		pusher:       &pusherClient,
 		natsServer:   natsServer,
+		jetstream:    js,
 		natsShutdown: make(chan struct{}),
 		processor:    taskProcessor,
 		scheduler:    scheduler,
