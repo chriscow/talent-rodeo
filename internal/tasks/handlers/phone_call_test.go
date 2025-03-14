@@ -74,7 +74,7 @@ func NewMockPhoneCallHandler(t *testing.T) *MockPhoneCallHandler {
 				<Say>Welcome to your scheduled call. Please wait while we connect you.</Say>
 			</Response>`,
 	}
-	taskProc := &MockTaskProcessor{}
+	taskProc := NewMockTaskProcessor(nil, db)
 
 	handler := &MockPhoneCallHandler{
 		PhoneCallHandler: NewPhoneCallHandler(twilio, logger, config, taskProc, db),
@@ -200,20 +200,10 @@ func TestPhoneCallHandler_ProcessTask(t *testing.T) {
 	})
 }
 
-// MockTaskProcessor implements TaskProcessor for testing
-type MockTaskProcessor struct {
-	enqueuedTasks []*internal.Task
-}
-
-func (m *MockTaskProcessor) EnqueueTask(ctx context.Context, task *internal.Task) error {
-	m.enqueuedTasks = append(m.enqueuedTasks, task)
-	return nil
-}
-
 func TestPhoneCallHandler_ScheduleCall(t *testing.T) {
 	t.Run("schedule valid call", func(t *testing.T) {
 		handler := NewMockPhoneCallHandler(t)
-		taskProc := &MockTaskProcessor{}
+		taskProc := NewMockTaskProcessor(nil, handler.db)
 		handler.taskProc = taskProc
 
 		// Schedule a call for 1 hour from now
@@ -257,7 +247,7 @@ func TestPhoneCallHandler_ScheduleCall(t *testing.T) {
 
 	t.Run("handle missing phone number", func(t *testing.T) {
 		handler := NewMockPhoneCallHandler(t)
-		taskProc := &MockTaskProcessor{}
+		taskProc := NewMockTaskProcessor(nil, handler.db)
 		handler.taskProc = taskProc
 
 		params := ScheduleCallParams{
@@ -276,7 +266,7 @@ func TestPhoneCallHandler_ScheduleCall(t *testing.T) {
 
 	t.Run("handle past schedule time", func(t *testing.T) {
 		handler := NewMockPhoneCallHandler(t)
-		taskProc := &MockTaskProcessor{}
+		taskProc := NewMockTaskProcessor(nil, handler.db)
 		handler.taskProc = taskProc
 
 		params := ScheduleCallParams{
@@ -296,7 +286,7 @@ func TestPhoneCallHandler_ScheduleCall(t *testing.T) {
 
 	t.Run("handle invalid timezone", func(t *testing.T) {
 		handler := NewMockPhoneCallHandler(t)
-		taskProc := &MockTaskProcessor{}
+		taskProc := NewMockTaskProcessor(nil, handler.db)
 		handler.taskProc = taskProc
 
 		params := ScheduleCallParams{
@@ -374,7 +364,7 @@ func TestPhoneCallHandler_IntegrationTest(t *testing.T) {
 			FromNumber: fromNumber,
 			Twiml:      twiml,
 		}
-		taskProc := &MockTaskProcessor{}
+		taskProc := NewMockTaskProcessor(nil, env.db)
 
 		handler := NewPhoneCallHandler(realClient, logger, config, taskProc, env.db)
 
@@ -510,7 +500,7 @@ func TestPhoneCallHandler_WebSocketIntegration(t *testing.T) {
 					<Say>Welcome to your scheduled call. Please wait while we connect you.</Say>
 				</Response>`, webhookURL),
 		}
-		taskProc := &MockTaskProcessor{}
+		taskProc := NewMockTaskProcessor(nil, env.db)
 
 		handler := NewPhoneCallHandler(realClient, logger, config, taskProc, env.db)
 

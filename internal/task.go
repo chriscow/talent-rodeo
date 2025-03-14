@@ -15,6 +15,23 @@ const (
 	TaskStatusRetrying  = "retrying"
 )
 
+// TaskError represents an error that occurred during task processing.
+// It includes information about whether the error should trigger a retry.
+type TaskError struct {
+	Err         error // The underlying error
+	ShouldRetry bool  // Whether the task should be retried
+}
+
+// Error implements the error interface.
+func (e *TaskError) Error() string {
+	return e.Err.Error()
+}
+
+// Unwrap returns the underlying error.
+func (e *TaskError) Unwrap() error {
+	return e.Err
+}
+
 // Task represents a background job to be processed
 type Task struct {
 	ID          int64           `db:"id" json:"id"`
