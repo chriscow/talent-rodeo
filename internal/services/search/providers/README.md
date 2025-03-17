@@ -19,10 +19,18 @@ This directory contains implementations of various job search providers for the 
 All providers must implement the following interface:
 
 ```go
-type Provider interface {
-    Search(ctx context.Context, req Request) ([]Job, error)
+type JobProvider interface {
+    // SearchJobs performs a search for jobs based on the provided criteria.
+    SearchJobs(ctx context.Context, criteria Criteria) ([]JobListing, error)
+    
+    // GetJobDetails retrieves detailed information about a specific job.
+    GetJobDetails(ctx context.Context, jobID string) (*JobDetail, error)
+    
+    // Name returns the unique identifier for this provider.
     Name() string
-    Validate() error
+    
+    // Validate verifies that the provider is properly configured and can make API calls.
+    Validate(ctx context.Context) error
 }
 ```
 
@@ -46,6 +54,8 @@ providers/
 └── provider_name/
     ├── provider.go      # Main implementation
     ├── provider_test.go # Tests
+    ├── store.go         # Data storage implementation
+    ├── store_test.go    # Data storage tests
     ├── types.go         # Provider-specific types
     └── README.md        # Provider documentation
 ```
@@ -66,7 +76,7 @@ Provider tests should cover:
 To add a new provider:
 
 1. Create a new directory under `providers/`
-2. Implement the Provider interface
+2. Implement the JobProvider interface
 3. Add necessary configuration
 4. Write comprehensive tests
 5. Document usage and requirements
