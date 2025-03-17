@@ -2,6 +2,26 @@
 
 This document outlines the consistent patterns used across handlers in the `internal/handlers` package.
 
+## Handlers Overview
+
+The `internal/handlers` package contains handlers for various message types processed through NATS JetStream. The package follows a consistent pattern for message handling, with specializations for LLM-based processing and job search functionality.
+
+### Key Handlers
+
+| Handler | Purpose | File |
+|---------|---------|------|
+| GenericHandler | Base handler providing common NATS functionality | `generic_handler.go` |
+| SearchHandler | Processes job search requests | `search.go` |
+| AssessmentHandler | Analyzes assessment data with LLM | `assessment.go` |
+| CultureHandler | Processes culture fit data with LLM | `culture.go` |
+| CompensationHandler | Handles compensation requirements with LLM | `compensation.go` |
+| ExperienceHandler | Processes experience data with LLM | `experience.go` |
+| PreferencesHandler | Handles job preferences with LLM | `preferences.go` |
+| RequirementsHandler | Processes job requirements with LLM | `requirements.go` |
+| SkillsHandler | Analyzes skills data with LLM | `skills.go` |
+| WorkplaceHandler | Processes workplace preferences with LLM | `workplace.go` |
+| VoiceHandler | Manages voice-related functionality | `voice.go` |
+
 ## Handler Structure
 
 ### Core Components
@@ -72,7 +92,85 @@ This document outlines the consistent patterns used across handlers in the `inte
    - Logs errors with appropriate context
    - Messages are automatically terminated on error or acknowledged on success
 
-## Testing Patterns
+## Testing Tools and Patterns
+
+### Test Harness
+
+The package provides a robust test harness in `test_harness.go` to simplify testing handlers:
+
+```go
+// SendAndReceiveMessage is a generic test harness function that publishes an input message of type T
+// to a given subject and waits for a response message of type R from an existing consumer
+func SendAndReceiveMessage[T any, R any](
+    t *testing.T, 
+    ctx context.Context, 
+    js jetstream.JetStream, 
+    streamName string, 
+    publishSubject, 
+    responseSubject string, 
+    input T, 
+    fetchTimeout time.Duration, 
+    consumerName string
+) (R, error)
+```
+
+Key features:
+- Generic types for input and output messages
+- Automatic consumer creation and configuration
+- Message marshaling and unmarshaling
+- Timeout handling
+- Detailed test logging
+
+Usage example:
+```go
+result, err := SendAndReceiveMessage(
+    t, ctx, js, "RODEO", 
+    "rodeo.skills.input", "rodeo.skills.processed",
+    inputMessage, 5*time.Second, "test-consumer"
+)
+```
+
+### Common Test Utilities
+
+The `common_test.go` file provides several critical testing utilities:
+
+1. **testEnv - Test Environment**
+   ```go
+   type testEnv struct {
+       db       *database.DB
+       js       jetstream.JetStream
+       nc       *nats.Conn
+       llm      *mockLLM
+       logger   *slog.Logger
+       ctx      context.Context
+       cancel   context.CancelFunc
+       cleanups []func()
+   }
+   ```
+   
+   - Provides a complete test environment with all dependencies
+   - Automatically sets up NATS server, JetStream, mock LLM
+   - Handles cleanup with defer env.cleanup()
+   - Created with `env := newTestEnv(t)`
+
+2. **mockLLM - LLM Mock**
+   ```go
+   type mockLLM struct {
+       responses map[string]string
+       queue     []string
+       index     int
+   }
+   ```
+   
+   Key functions:
+   - `SetResponse(response string)` - Sets single response
+   - `SetResponses(responses []string)` - Sets multiple responses in sequence
+   - Implements full `minds.ContentGenerator` interface
+
+3. **Helper Functions**
+   - `deleteConsumers` - Cleans up test consumers
+   - `deleteStreams` - Removes test streams
+   - Various setup and teardown utilities
 
 ### Test Structure
 
@@ -112,6 +210,7 @@ This document outlines the consistent patterns used across handlers in the `inte
    - Test full message flow through NATS
    - Verify end-to-end functionality
    - Test consumer creation and message processing
+   - Examples: `search_integration_test.go`, `voice_integration_test.go`
 
 ### Testing Best Practices
 
@@ -184,7 +283,7 @@ Many handlers in this package follow a consistent pattern for LLM-based content 
 - WorkplaceHandler
 - CompensationHandler
 
-The one that does not is: SearchHandler
+The SearchHandler uses a different pattern as it processes job search requests rather than LLM content.
 
 ### Common Pattern Structure
 
@@ -296,34 +395,29 @@ func (h *ExampleHandler) GetOutputTopic() string {
 }
 ```
 
-### Planned GenericHandler Enhancement
+### Search Handler Pattern
 
-To centralize this pattern, we should modify `GenericHandler` to support LLM processing:
+The SearchHandler follows a different pattern:
 
-1. **Interface Requirements**
+1. **Job Search Processing**
+   - Consumes messages from `rodeo.search.input`
+   - Uses the configured search provider to perform job searches
+   - Constructs search criteria from input message
+   - Scores job results based on relevance to candidate requirements
+   - Publishes results to `rodeo.search.result`
+
+2. **Implementation**
    ```go
-   type LLMProcessor interface {
-       GetSystemPrompt() string
-       GetResponseSchema() interface{}
+   func (h *SearchHandler) handleMessage(ctx context.Context, msg jetstream.Msg) error {
+       // Unmarshal search input
+       // Construct search criteria
+       // Perform search
+       // Score results
+       // Publish results
    }
    ```
 
-2. **GenericHandler Updates**
-   - Add LLM field to GenericHandler
-   - Add methods for LLM processing
-   - Support both raw message handling and LLM processing
-
-3. **Implementation Plan**
-   a. Update GenericHandler struct to include LLM
-   b. Add new registration method for LLM handlers
-   c. Add helper methods for schema creation and content generation
-   d. Modify existing handlers to use new interface
-   e. Update tests to cover new functionality
-
-4. **Migration Strategy**
-   - Create new methods alongside existing ones
-   - Gradually migrate handlers to new pattern
-   - Maintain backward compatibility
-   - Add comprehensive tests for new functionality
-
-This enhancement will reduce code duplication and standardize LLM processing across all handlers. 
+3. **Testing**
+   - Integration tests cover end-to-end search flow
+   - Unit tests validate scoring and criteria construction
+   - Mock search providers for repeatable tests 
