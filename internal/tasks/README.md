@@ -1,10 +1,10 @@
 # Tasks Package
 
-This package implements a robust background task processing system for the Talent Rodeo application, with a focus on reliable task execution and phone call handling.
+This package implements a robust background task processing system for the Talent Rodeo application, with a focus on reliable task execution, search scheduling, message handling, and phone call management.
 
 ## Overview
 
-The tasks package provides a flexible and reliable system for processing background tasks, with built-in support for retries, transaction management, and task-specific handlers. It includes specialized support for phone call scheduling and execution through Twilio integration.
+The tasks package provides a flexible and reliable system for processing background tasks, with built-in support for retries, transaction management, and task-specific handlers. It includes specialized handlers for job search scheduling, message publishing, and phone call execution through Twilio integration.
 
 ## Important Notes
 DO NOT DELETE THIS SECTION
@@ -90,11 +90,10 @@ Comprehensive tests for:
 
 ### handlers/
 Task-specific handlers including:
-- Phone call management
-- Twilio integration
-- Call scheduling
-- Status tracking
-- Error handling
+- **SearchScheduler**: Job search management based on subscription tiers
+- **NATSMessageScheduler**: Scheduled message publishing
+- **PhoneCallHandler**: Twilio-based phone call management
+- Supporting files for Twilio integration and testing
 
 ## Key Features
 
@@ -105,14 +104,31 @@ Task-specific handlers including:
    - Status tracking
    - Error handling
 
-2. Phone Call Management
+2. Job Search Scheduling
+   - Tier-based scheduling (Free, Mid, Top)
+   - Different search frequencies by tier:
+     * Free: Every 72 hours (3 days)
+     * Mid: Every 24 hours (daily)
+     * Top: Every 6 hours (4 times daily)
+   - Page limits by tier:
+     * Free: Maximum 3 pages of search results
+     * Mid: Maximum 50 pages of search results
+     * Top: Maximum 200 pages of search results
+
+3. Message Scheduling
+   - Delayed message publishing
+   - NATS JetStream integration
+   - Structured message data
+   - Metadata support
+
+4. Phone Call Management
    - Call scheduling
    - Status monitoring
    - Twilio integration
    - Timezone handling
    - Failure recovery
 
-3. Handler System
+5. Handler System
    - Pluggable handlers
    - Type safety
    - Context support
@@ -125,14 +141,25 @@ Initialize task processor:
 ```go
 processor := tasks.NewProcessor(db, logger)
 processor.RegisterHandler(phoneCallHandler)
+processor.RegisterHandler(searchScheduler)
+processor.RegisterHandler(messageScheduler)
 processor.Start(ctx)
+```
+
+Schedule a job search:
+```go
+err := searchScheduler.ScheduleInitialSearch(ctx, candidateID)
+```
+
+Schedule a message:
+```go
+err := messageScheduler.ScheduleMessage(ctx, "subject.name", data, metadata, runAt, taskProc)
 ```
 
 Schedule a phone call:
 ```go
 params := handlers.ScheduleCallParams{
     PhoneNumber: "+1234567890",
-    Message:     "Hello, this is your reminder call",
     ScheduledAt: time.Now().Add(1 * time.Hour),
     TimeZone:    "America/New_York",
 }
@@ -249,26 +276,25 @@ The Search Scheduler is a key component of our background task processing system
 
 ### Key Implementation Details
 
-1. MockTaskProcessor
-   - Properly initializes with database connection and publisher
-   - Reads candidate tier from database during task processing
+1. SearchScheduler
+   - Properly determines candidate tier from database
    - Handles subscription end dates to determine current tier limits
    - Publishes appropriate number of messages based on tier
-   - Maintains proper logging for debugging
+   - Schedules the next search based on tier-specific intervals
+   - Maintains proper search history and state tracking
 
-2. NATS Consumer Configuration
-   - Uses unique consumer names for each test case
-   - Implements `DeliverNewPolicy` to prevent message overlap between tests
-   - Properly configures FilterSubject for message routing
-   - Handles consumer cleanup between tests
-   - Sanitizes consumer names to prevent NATS naming errors
+2. NATS Integration
+   - Uses appropriate subject naming conventions
+   - Handles message publishing with error retries
+   - Properly formats search payloads
+   - Includes metadata for tracking and debugging
 
 3. Test Environment Setup
    - Creates isolated test environment for each test case
-   - Manages NATS JetStream for message publishing and consumption
    - Properly configures database for tier management
-   - Handles consumer creation and deletion
-   - Implements message acknowledgment
+   - Tests tier-specific behaviors (edge_test, tier_test)
+   - Tests integration with other components
+   - Mocks external dependencies for unit testing
 
 ### Troubleshooting
 
@@ -280,11 +306,11 @@ The Search Scheduler is a key component of our background task processing system
    - State inconsistencies: Use database locking with NOWAIT
 
 2. Testing Best Practices
-   - Create unique consumer names for each test case
-   - Purge or delete consumers between test runs
+   - Create unique test cases for each tier transition
    - Verify database state before and after test execution
    - Check actual message contents, not just counts
    - Use proper timeout handling for message fetching
+   - Test edge cases like subscription expiration
 
 3. Debugging Tools
    - Enable DEBUG level logging during tests

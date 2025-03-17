@@ -5,25 +5,30 @@ The `search` package provides a flexible and extensible job search infrastructur
 ## Package Structure
 
 ```
-/internal/pipeline/search/
-├── search.go          # Core search functionality
-├── provider.go        # Provider interface definition
+/internal/services/search/
+├── provider.go        # JobProvider interface definition
 ├── company.go         # Company data structures
-├── job.go            # Job data structures and methods
-├── errors.go         # Package-specific errors
-├── registry.go       # Provider registry management
+├── job.go             # Job data structures and methods
+├── errors.go          # Package-specific errors
+├── registry.go        # Provider registry management
+├── types.go           # Core data types and constants
+├── store.go           # Storage interface
+├── page_range.go      # Pagination utilities
+├── page_range_test.go # Tests for pagination
 └── providers/        # Provider implementations
     ├── README.md     # Provider documentation
     └── scrapingdog/  # ScrapingDog LinkedIn provider
         ├── provider.go
         ├── provider_test.go
+        ├── store.go
+        ├── store_test.go
         └── types.go
 ```
 
 ## Key Features
 
 ### Provider Management
-- Generic provider interface
+- Generic JobProvider interface
 - Provider registry with dynamic registration
 - Extensible provider configuration
 - Error handling and validation
@@ -57,17 +62,19 @@ The `search` package provides a flexible and extensible job search infrastructur
 ```go
 // Register providers
 registry := search.NewRegistry()
-registry.Register("linkedin", scrapingdog.NewProvider(cfg))
+registry.Register(scrapingdog.NewProvider("apiKey"))
 
-// Create search service
-searcher := search.NewSearcher(registry)
+// Get a provider
+provider, err := registry.Get("scrapingdog")
+if err != nil {
+    // handle error
+}
 
 // Perform search
-results, err := searcher.Search(ctx, search.Request{
-    Provider: "linkedin",
+results, err := provider.SearchJobs(ctx, search.Criteria{
     Keywords: []string{"software engineer"},
     Location: "San Francisco",
-    Remote:   true,
+    WorkType: search.WorkTypeRemote,
 })
 ```
 
@@ -112,7 +119,7 @@ SCRAPINGDOG_API_KEY=your-key-here
 To implement a new provider:
 
 1. Create a new directory under `providers/`
-2. Implement the `Provider` interface
+2. Implement the `JobProvider` interface
 3. Add provider-specific types
 4. Implement comprehensive tests
 5. Add provider documentation
