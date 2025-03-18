@@ -1,3 +1,19 @@
+I'm working on an app that is an LLM agent that helps match people to jobs.
+The user sends a direct message to the bot on LinkedIn that includes their phone number and resume attached.
+The system will call them on the phone and talk to them to find out more about their history, what they are interested in generally (what motivates them), their skills and what they are looking for or to get out of this.  If the call is missed, it could send an email telling the user to call back when they get a chance.
+The LLM will offer to schedule regular check-in calls and follow ups to get updates on their job search. 
+The LLM tries to build a solid profile of the candidate. It's possible it will uncover traits or experience that aren't well expressed on a resume.  
+Premium features could include more frequent checkins or allow the person to call the agent at anytime.  Another feature could be to allow the user to submit a job description and the service can revise their resume to better reflect the best traits to put forward plus write a custom cover letter.
+Recruiters can sign up and put in job descriptions and find candidates that match. The LLM could make a custom write up or phone call introducing candidates that are great matches for the role.  For a fee, the service could make the introduction.
+Here are some topics / features I'm considering so far.
+## Initial Call
+## Follow up / Checkin Calls
+## Mock Interviews
+## Custom Resume + Cover Letter per Job Description
+## Handling Abuse
+## Privacy Concerns
+
+
 We are building a web app for job seekers. The app uses LLMs to automate the process of reviewing job description and finding jobs that are ideally suited for the user.
 
 There are many properties of a job and many properties of a candidate's preferences. Everything from the skills, knowledge, experience and educational requirements to preferred or nice to have. There are also candidate preferences for location, remote work, compensation, benefits and even culture!

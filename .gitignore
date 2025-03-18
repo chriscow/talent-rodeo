@@ -5,6 +5,7 @@
 .venv
 .vscode
 .weaviate
+.boardy-calls
 **/dist/
 __pycache__
 **/*.csv
