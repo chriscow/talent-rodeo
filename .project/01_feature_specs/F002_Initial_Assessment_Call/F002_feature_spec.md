@@ -5,25 +5,21 @@ The Initial Assessment Call feature enables Talent Rodeo to conduct an automated
 
 This feature serves as a key step in the candidate onboarding process, bridging the gap between initial registration and meaningful job matching. Once a candidate completes their basic profile, they are prompted to schedule an assessment call.
 
-## Business Value
-- **Scalability**: Enables processing of large numbers of candidates without proportional increase in human resources
-- **Data Quality**: Collects richer, more structured candidate information than forms or resume parsing alone
-- **Candidate Experience**: Provides a convenient, personalized experience that respects candidates' time
-- **Efficiency**: Automates initial screening to allow recruiters to focus on qualified candidates
-- **Consistency**: Ensures all candidates receive the same quality of initial assessment
-- **Insights**: Generates valuable data on candidate qualifications and market trends
 
 ## User Experience
 From the candidate's perspective, the Initial Assessment Call feature consists of these key steps:
 
 1. After completing basic profile creation, candidates are prompted to schedule an assessment call
-2. Candidates select a convenient time from available slots in an intuitive scheduling interface
+2. Candidates select a convenient time from the interface to receive a call
 3. At the scheduled time, they receive an automated call from the system
 4. The call begins with a clear introduction explaining the purpose and process
 5. The system engages in a natural conversation about their skills, experience, and preferences
-6. After the call concludes, candidates receive a summary of the information collected
-7. Candidates can review, confirm, or edit the information extracted from the call
-8. They are presented with initial job matches based on their enhanced profile
+6. The call concludes with the AI summarizing key search criteria and obtaining verbal confirmation
+7. The AI clearly communicates next steps, including the preliminary search and follow-up process
+8. After the call concludes, candidates receive an immediate email recap with search criteria summary
+9. A limited initial job search begins automatically to find at least 3 matching positions
+10. Candidates review initial matches and provide feedback to refine future searches
+11. The system learns from this feedback to improve future searches and interviews
 
 ## Implementation Status
 - Automated Outbound Calling: **Mostly Implemented** - Twilio client interface, call scheduling, and WebSocket handling exist
@@ -65,6 +61,11 @@ The conversation is structured into distinct phases with a configurable number o
 2. **Work Experience Exploration**: Detailed discussion of each work experience, including responsibilities, challenges, and skills used
 3. **Skills Assessment**: Identifying skills the candidate wants and doesn't want to use in their next role, with proficiency evaluation
 4. **Preference Collection**: Gathering job preferences including salary expectations, non-negotiables, location preferences, and more
+5. **Conclusion & Confirmation**: Summarizing key search criteria and obtaining verbal confirmation, then clearly explaining next steps
+
+The conclusion phase must include:
+- A clear summary of identified search criteria: "Based on what we've discussed, I'll start searching for roles that match your experience in [field] with [key skills] at companies that offer [preferences]. Does all this sound alright?"
+- Clear communication about next steps: "I'm going to do a preliminary search. I will send you an email to let you know when it is finished. I will need you log back into the web site and let me know if these jobs look right or if there are adjustments I need to make. Once you have done that, I will begin an extensive search. Does that make sense?"
 
 For each conversation phase, the system uses specially crafted prompts that guide the AI to elicit the required information while maintaining a natural, engaging dialogue.
 
@@ -199,17 +200,29 @@ This subfeature transforms extracted information from assessment calls into a co
 #### Description
 After the assessment call concludes, the system processes the transcript to extract skills and preferences, updates the candidate's profile, and provides a UI for the candidate to review and adjust the extracted information.
 
+Immediately following the call, the system sends an automated email recap that includes:
+- A clear summary of the search criteria extracted from the conversation
+- A prominent option to adjust criteria if needed
+- The estimated timeline for receiving initial job matches
+
+Simultaneously, the system initiates a limited initial job search to identify at least 3 positions that match the criteria (conserving resources while providing meaningful examples).
+
 The assessment call will end with the LLM telling the user that their information will be processed and their preferences page will be updated. When a user navigates to the preferences page while processing is still ongoing, they are redirected to a "processing" page that displays the current status of the transcript analysis. Once processing is complete, they are automatically redirected to the preferences page where they can review and adjust the extracted preferences.
 
 The preferences page displays the extracted information in a user-friendly format, allowing candidates to make additional adjustments before proceeding with job matching. Some inferred preferences that influence job matching may not be directly editable as they are derived from complex analysis of the conversation.
 
+Initial job matches are presented with embedded feedback mechanisms, allowing users to indicate which matches are most relevant and why. This feedback is used to refine future searches.
+
 #### Implementation Details
 - Post-call transcript processing workflow
+- Immediate email recap generation and delivery
+- Limited initial job search execution
 - Processing status tracking and display
 - Redirect logic for handling in-progress processing
 - Preferences page UI for displaying and editing extracted information
 - Clear distinction between editable and non-editable (inferred) preferences
 - Integration with job search initiation process
+- Feedback collection mechanisms for initial job matches
 
 #### Current Implementation
 - Basic preferences display page exists at `assets/templates/pages/profile-preferences.html`
@@ -226,6 +239,43 @@ The preferences page displays the extracted information in a user-friendly forma
 - Enhance preferences display to include all relevant extracted information
 - Add clear explanations for non-editable inferred preferences
 - Implement automatic redirection from processing page to preferences page when complete
+
+### SF002.7: Continuous Learning System
+
+#### Description
+The system implements a learning mechanism that continuously improves both the interview process and job matching algorithms based on user interactions and feedback. This creates a virtuous cycle where each candidate interaction helps improve the experience for future candidates.
+
+The learning system analyzes:
+1. Interview transcripts
+2. Extracted search criteria
+3. Initial job search results
+4. User feedback on job matches
+5. User adjustments to search criteria
+
+Based on this analysis, the system generates insights about how to improve the interview process to better capture relevant information and how to refine the job matching algorithms for more accurate results.
+
+#### Implementation Details
+- Background process to analyze interview transcripts alongside job search results and feedback
+- LLM-powered analysis to identify patterns and opportunities for improvement
+- Automatic generation of "What we learned and how we can adjust" reports
+- Periodic review and incorporation of learnings into interview prompts
+- Version control for interview prompts to track improvements over time
+- Feedback loop between job matching results and interview question design
+- Performance metrics to validate effectiveness of learning-driven improvements
+
+#### Current Implementation
+- Not yet implemented
+- Requires integration with existing transcript processing system
+- Will build on existing LLM infrastructure 
+- Database schema extensions needed for storing learning outcomes and prompt versions
+
+#### Planned Implementation
+- Create database schema for storing learning outcomes
+- Implement background job for transcript and feedback analysis
+- Develop LLM prompt for identifying improvements
+- Build version control system for interview prompts
+- Implement automated reporting of learnings
+- Create admin interface for reviewing and approving prompt updates
 
 ## Security and Privacy Considerations
 - All calls are recorded with explicit candidate consent
@@ -293,4 +343,5 @@ The feature tracks the following key metrics:
 - Implement conversation summarization for recruiters
 - Improved career path recommendations based on call data
 - Adaptive conversation flows based on candidate responses
-- Mobile app notifications and call handling 
+- Mobile app notifications and call handling
+- Advanced analytics dashboard showing learning system insights and improvements over time 
