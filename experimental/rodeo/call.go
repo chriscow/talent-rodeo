@@ -3,19 +3,19 @@ package rodeo
 import (
 	"context"
 	"fmt"
-	"talent-rodeo/experimental/vapi"
+	"talent-rodeo/internal/vapi"
 
 	"github.com/chriscow/minds"
 )
 
-func callCandidate(ctx context.Context, sessionID, systemPrompt string, status StatusSender) ([]byte, error) {
+func callCandidate(ctx context.Context, sessionID, systemPrompt string, status StatusSender) (*vapi.CallResult, error) {
 	status.SendStatus(sessionID, "info", "Calling candidate ...")
 
 	assistantID := "30709dea-4c26-457a-96a0-4ee7488f6b72"
 	outboundPhoneID := "16bbd5bb-2e5a-4a3b-937b-0665e1648dff"
 
 	modelConfig := vapi.DefaultModelConfig
-	modelConfig.Messages = []vapi.Message{{
+	modelConfig.Messages = []vapi.ModelMessage{{
 		Role:    "system",
 		Content: systemPrompt,
 	}}

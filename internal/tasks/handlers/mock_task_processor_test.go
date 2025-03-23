@@ -10,7 +10,8 @@ import (
 
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/database"
-	"talent-rodeo/internal/services/search"
+	"talent-rodeo/internal/search"
+	"talent-rodeo/internal/tasks"
 )
 
 // MockTaskProcessor implements TaskProcessor for testing
@@ -36,13 +37,13 @@ func NewMockTaskProcessor(publisher Publisher, db *database.DB) *MockTaskProcess
 func (m *MockTaskProcessor) EnqueueTask(ctx context.Context, task *internal.Task) error {
 	// If this is a nats_message_scheduler task, publish the message directly
 	if task.Type == "nats_message_scheduler" && m.publisher != nil {
-		var payload NATSMessagePayload
+		var payload tasks.NATSMessagePayload
 		if err := json.Unmarshal(task.Payload, &payload); err != nil {
 			return fmt.Errorf("failed to unmarshal message payload: %w", err)
 		}
 
 		// If this is a search message, we need to handle it specially by publishing multiple messages
-		if payload.Subject == "rodeo.search.input" {
+		if payload.Subject == search.TopicSearchInput {
 			var searchInput search.SearchInput
 			if err := json.Unmarshal(payload.Data, &searchInput); err != nil {
 				return fmt.Errorf("failed to unmarshal search input: %w", err)

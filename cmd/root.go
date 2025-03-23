@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"talent-rodeo/cmd/try"
+	_ "talent-rodeo/cmd/try/vapi-call" // Import for side effects to register the command
 
 	"github.com/joho/godotenv"
 )

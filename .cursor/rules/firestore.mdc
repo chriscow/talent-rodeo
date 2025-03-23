@@ -1,0 +1,6 @@
+---
+description: Helpful for Firestore development by following best practices
+globs: 
+alwaysApply: false
+---
+[Firestore Best Practices](https://firebase.google.com/docs/firestore/best-practices) 

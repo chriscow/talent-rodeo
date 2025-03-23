@@ -9,6 +9,7 @@ import (
 
 	"github.com/chriscow/minds"
 	"github.com/fumiama/go-docx"
+	"github.com/ledongthuc/pdf"
 )
 
 func convertResume(ctx context.Context, llm minds.ContentGenerator, resumeText string, sessionID string, status StatusSender) (string, error) {
@@ -68,7 +69,34 @@ func ExtractDOCX(file *os.File) (string, error) {
 }
 
 func ExtractPDF(file *os.File) (string, error) {
-	// TODO: Implement PDF text extraction
-	// You'll need to add a PDF library like github.com/ledongthuc/pdf
-	return "", fmt.Errorf("PDF extraction not implemented")
+	// Get file info for size
+	fileinfo, err := file.Stat()
+	if err != nil {
+		return "", fmt.Errorf("extractPDF: failed to get file info: %w", err)
+	}
+
+	// Create a reader for the PDF
+	reader, err := pdf.NewReader(file, fileinfo.Size())
+	if err != nil {
+		return "", fmt.Errorf("extractPDF: failed to create PDF reader: %w", err)
+	}
+
+	var sb strings.Builder
+	numPages := reader.NumPage()
+
+	// Extract text from each page
+	for pageNum := 1; pageNum <= numPages; pageNum++ {
+		page := reader.Page(pageNum)
+		if page.V.IsNull() {
+			continue // Skip empty pages
+		}
+
+		text, err := page.GetPlainText(nil)
+		if err != nil {
+			return "", fmt.Errorf("extractPDF: failed to extract text from page %d: %w", pageNum, err)
+		}
+		sb.WriteString(text)
+	}
+
+	return sb.String(), nil
 }

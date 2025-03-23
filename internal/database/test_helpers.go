@@ -1,7 +1,6 @@
 package database
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -22,7 +21,6 @@ var (
 )
 
 const (
-	testDBHost     = "localhost"
 	testDBPort     = 5432
 	testDBUser     = "postgres"
 	testDBPassword = "postgres"
@@ -33,6 +31,19 @@ const (
 // This function is safe for concurrent use.
 func SetupTestDB(t *testing.T) *DB {
 	t.Helper()
+
+	/*
+		POSTGRES_USER=postgres
+		POSTGRES_PASSWORD=postgres
+		POSTGRES_DB=postgres
+		POSTGRES_HOSTNAME=db
+	*/
+
+	// Get database host from environment variable, default to localhost
+	testDBHost := os.Getenv("POSTGRES_HOSTNAME")
+	if testDBHost == "" {
+		testDBHost = "db"
+	}
 
 	testDBMutex.Lock()
 	defer testDBMutex.Unlock()
@@ -127,7 +138,7 @@ func cleanupTestDB(t *testing.T, dbName string) {
 	// Connect to postgres to drop the test database
 	adminDSN := fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=postgres sslmode=disable",
-		testDBHost, testDBPort, testDBUser, testDBPassword,
+		os.Getenv("POSTGRES_HOSTNAME"), testDBPort, testDBUser, testDBPassword,
 	)
 	adminDB, err := sqlx.Connect("postgres", adminDSN)
 	if err != nil {
@@ -233,131 +244,4 @@ func waitForCondition(t *testing.T, condition func() bool) {
 			}
 		}
 	}
-}
-
-// CreateTestUser creates a test user with default values.
-// If you need to override any values, modify the returned User before inserting.
-func (db *DB) CreateTestUser(t *testing.T) (*User, error) {
-	t.Helper()
-
-	now := time.Now()
-	role := "candidate"
-	user := User{
-		Email:        fmt.Sprintf("test-%d@example.com", now.UnixNano()),
-		HashedSecret: "test-hash",
-		Provider:     "test",
-		FirstName:    "Test",
-		LastName:     "User",
-		Created:      now,
-		UpdatedAt:    &now,
-		Role:         &role,
-	}
-
-	db.logger.Debug("creating test user",
-		"email", user.Email,
-		"role", *user.Role,
-		"first_name", user.FirstName,
-		"last_name", user.LastName,
-	)
-
-	userID, err := db.InsertUser(user)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create test user: %w", err)
-	}
-
-	user.ID = userID
-	return &user, nil
-}
-
-// CreateTestCandidate creates a test candidate for the given user.
-// Returns the candidate ID as a string.
-func (db *DB) CreateTestCandidate(t *testing.T, userID int) (string, error) {
-	t.Helper()
-
-	db.logger.Debug("creating test candidate", "user_id", userID)
-
-	var candidateID string
-	err := db.GetContext(context.Background(), &candidateID, `
-		INSERT INTO candidates (user_id) 
-		VALUES ($1) 
-		RETURNING id`, userID)
-	if err != nil {
-		return "", fmt.Errorf("failed to create test candidate: %w", err)
-	}
-
-	db.logger.Debug("created test candidate", "candidate_id", candidateID)
-	return candidateID, nil
-}
-
-// CreateTestSkills creates test skills for the given candidate.
-// Returns the created skills.
-func (db *DB) CreateTestSkills(t *testing.T, candidateID string) ([]CandidateSkill, error) {
-	t.Helper()
-
-	skills := []CandidateSkill{
-		{
-			CandidateID:     candidateID,
-			Name:            "Go",
-			Level:           "expert",
-			YearsUsed:       5.5,
-			Confidence:      "high",
-			Summary:         &[]string{"Extensive Go experience"}[0],
-			PreferenceValue: 5,
-			IsSearchTerm:    true,
-		},
-		{
-			CandidateID:     candidateID,
-			Name:            "Python",
-			Level:           "intermediate",
-			YearsUsed:       3.0,
-			Confidence:      "medium",
-			Summary:         &[]string{"Some Python experience"}[0],
-			PreferenceValue: 3,
-			IsSearchTerm:    false,
-		},
-	}
-
-	db.logger.Debug("creating test skills",
-		"candidate_id", candidateID,
-		"skill_count", len(skills),
-	)
-
-	err := db.StoreSkills(context.Background(), candidateID, skills)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create test skills: %w", err)
-	}
-
-	return skills, nil
-}
-
-// CreateTestUserWithSkills creates a test user with a candidate profile and skills.
-// This is a convenience function that combines CreateTestUser, CreateTestCandidate and CreateTestSkills.
-func (db *DB) CreateTestUserWithSkills(t *testing.T) (*User, string, []CandidateSkill, error) {
-	t.Helper()
-
-	// Create user
-	user, err := db.CreateTestUser(t)
-	if err != nil {
-		return nil, "", nil, err
-	}
-
-	// Create candidate
-	candidateID, err := db.CreateTestCandidate(t, user.ID)
-	if err != nil {
-		return nil, "", nil, err
-	}
-
-	// Create skills
-	skills, err := db.CreateTestSkills(t, candidateID)
-	if err != nil {
-		return nil, "", nil, err
-	}
-
-	db.logger.Debug("created test user with skills",
-		"user_id", user.ID,
-		"candidate_id", candidateID,
-		"skill_count", len(skills),
-	)
-
-	return user, candidateID, skills, nil
 }

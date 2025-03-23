@@ -16,6 +16,11 @@ func (app *application) routes() http.Handler {
 	mux.Use(app.recoverPanic)
 	mux.Use(app.securityHeaders)
 	mux.Use(app.logAccess)
+	mux.Use(app.sessionManager.LoadAndSave)
+
+	// VAPI webhook endpoint
+	mux.HandleFunc("/vapi/call", app.handleVapiCall, "POST")
+	mux.HandleFunc("/vapi/webhook", app.handleVapiWebhook, "POST")
 
 	fileServer := http.FileServer(http.FS(assets.EmbeddedFiles))
 	mux.Handle("/static/...", fileServer, "GET")
@@ -48,7 +53,8 @@ func (app *application) routes() http.Handler {
 			// - StepJobSearchStarted/Complete: profile-jobs.html
 			mux.HandleFunc("/profile", app.showProfilePage, "GET")
 			mux.HandleFunc("/profile/onboarding/reset", app.resetOnboardingState, "POST")
-			mux.HandleFunc("/profile/resume", app.deleteResume, "DELETE")
+			mux.HandleFunc("/profile/resume/:resumeID", app.deleteResume, "DELETE")
+
 			// Direct resume upload route - always shows the resume upload form regardless of onboarding state
 			// Used for:
 			// - Direct access to resume upload
@@ -56,33 +62,19 @@ func (app *application) routes() http.Handler {
 			// - Resetting onboarding process
 			mux.HandleFunc("/profile/resume/upload", app.showUploadPage, "GET")
 			mux.HandleFunc("/profile/resume/upload", app.createResume, "POST")
+
 			mux.HandleFunc("/profile/schedule", app.showSchedulePage, "GET")
-			mux.HandleFunc("/profile/schedule/preferences", app.updateSchedulePreferences, "POST")
+
 			mux.HandleFunc("/profile/schedule/appointment", app.createAppointment, "POST")
 			mux.HandleFunc("/profile/schedule/appointment/:id", app.cancelAppointment, "DELETE")
 			mux.HandleFunc("/profile/schedule/reschedule", app.rescheduleAppointment, "POST")
-			mux.HandleFunc("/profile/preferences", app.showPreferencesPage, "GET")
-			mux.HandleFunc("/profile/preferences", app.updatePreferences, "POST")
-			mux.HandleFunc("/profile/search/start", app.startJobSearch, "POST")
-			mux.HandleFunc("/profile/search/mock", app.mockSearchProgress, "POST")
-			mux.HandleFunc("/api/search/progress/:id", app.getSearchProgress, "GET")
-
-			mux.HandleFunc("/interview", app.showInterviewPage, "GET")
-			mux.HandleFunc("/interview/start", app.startInterview, "GET")
-			mux.HandleFunc("/interview/end", app.completeInterview, "POST")
-			mux.HandleFunc("/interview/audio", app.handleAudioUpload, "POST")
+			mux.HandleFunc("/profile/schedule/call-now", app.callNow, "POST")
 
 			mux.HandleFunc("/logout", app.logoutUser, "POST")
-
-			// Skill CRUD operations
-			mux.HandleFunc("/profile/skills/add", app.addSkill, "POST")
-			mux.HandleFunc("/profile/skills/:id", app.handleSkill, "DELETE", "PUT")
 		})
 
 		mux.Group(func(mux *flow.Mux) {
 			mux.Use(app.requireSuperUser)
-			mux.HandleFunc("/user/:id/keywords", app.editKeywords, "GET")
-			mux.HandleFunc("/user/:id/keywords", app.saveKeywords, "POST")
 			// Add tasks routes
 			mux.HandleFunc("/admin/tasks", app.showTasksPage, "GET")
 			mux.HandleFunc("/admin/tasks/partial", app.getTasksPartial, "GET")

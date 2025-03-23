@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"os"
 
-	openairt "github.com/chriscow/go-openai-realtime"
+	openairt "github.com/WqyJh/go-openai-realtime"
 	"github.com/gorilla/websocket"
 )
 

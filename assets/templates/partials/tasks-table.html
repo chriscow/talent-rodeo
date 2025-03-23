@@ -31,32 +31,4 @@
         {{end}}
     </tbody>
 </table>
-
-{{with .Pagination}}
-<div class="grid">
-    <div>
-        <p>
-            Showing {{.Size}} of {{.Total}} tasks (Page {{.Page}} of {{.Pages}})
-        </p>
-    </div>
-    <div>
-        <nav>
-            <ul>
-                {{if gt .Page 1}}
-                <li>
-                    <a href="#" hx-get="/admin/tasks/partial?page={{sub .Page 1}}&size={{.Size}}"
-                        hx-target="#tasks-table">Previous</a>
-                </li>
-                {{end}}
-                {{if lt .Page .Pages}}
-                <li>
-                    <a href="#" hx-get="/admin/tasks/partial?page={{add .Page 1}}&size={{.Size}}"
-                        hx-target="#tasks-table">Next</a>
-                </li>
-                {{end}}
-            </ul>
-        </nav>
-    </div>
-</div>
-{{end}}
 {{end}}

@@ -1,0 +1,52 @@
+{{define "title"}}Processing Resume - Profile{{end}}
+
+{{define "page:main"}}
+<main class="container">
+    <article>
+        <header>
+            <h1>Processing Your Resume</h1>
+        </header>
+
+        <p>
+            Please wait while we analyze your resume. This should only take a moment.
+        </p>
+
+        <div class="grid">
+            <div style="text-align: center;">
+                <progress></progress>
+            </div>
+        </div>
+    </article>
+</main>
+
+<!-- Add user data for state monitoring -->
+<div data-user-id="{{.User.ID}}" 
+     data-pusher-key="{{.PusherKey}}" 
+     data-pusher-cluster="{{.PusherCluster}}"
+     hidden></div>
+{{end}}
+
+{{define "page:scripts"}}
+<script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
+<script src="/static/js/state-monitor.js"></script>
+<script>
+    // Additional processing-specific state handling
+    document.addEventListener('DOMContentLoaded', function() {
+        const userElement = document.querySelector('[data-user-id]');
+        if (!userElement) return;
+        
+        const pusher = new Pusher(userElement.dataset.pusherKey, {
+            cluster: userElement.dataset.pusherCluster
+        });
+        
+        const channel = pusher.subscribe(`user-${userElement.dataset.userId}`);
+        
+        channel.bind('state-update', function(data) {
+            // UserStatusResumeUploaded = 4 (from internal/users.go)
+            if (parseInt(data.state) === 4) {
+                window.location.href = '/profile/schedule';
+            }
+        });
+    });
+</script>
+{{end}} 

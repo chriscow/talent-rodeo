@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -8,11 +9,14 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"talent-rodeo/experimental/rodeo"
-	"talent-rodeo/internal/database"
-	"talent-rodeo/internal/onboarding"
+	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
 	"talent-rodeo/internal/validator"
+	"time"
+
+	"github.com/alexedwards/flow"
+	"github.com/fumiama/go-docx"
+	"github.com/ledongthuc/pdf"
 )
 
 type resumeUploadForm struct {
@@ -39,15 +43,16 @@ func (app *application) deleteResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	resumeID := flow.Param(r.Context(), "resumeID")
+
 	// Reset resume fields
-	err := app.db.UpdateFullResume(user.ID, "", "")
+	err := internal.DeleteResume(context.Background(), app.fs, user.ID, resumeID)
 	if err != nil {
 		app.serverError(w, r, fmt.Errorf("failed to reset resume: %w", err))
 		return
 	}
 
-	// Update onboarding state back to initial
-	if err := app.db.UpdateOnboardingStep(user.ID, onboarding.StepInitial); err != nil {
+	if err := internal.UpdateUserState(r.Context(), app.fs, user, internal.UserStatusPendingResumeUpload); err != nil {
 		app.serverError(w, r, fmt.Errorf("failed to update onboarding state: %w", err))
 		return
 	}
@@ -111,10 +116,16 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	form.Phone = r.FormValue("phone")
-	form.Filename = header.Filename
 
-	phoneRegex := regexp.MustCompile(`^\+?1?\d{10,}$`)
-	form.Validator.CheckField(validator.Matches(form.Phone, phoneRegex), "phone", "Invalid phone number")
+	// Ensure phone number is prefixed with +1 (E.164 format)
+	if !strings.HasPrefix(form.Phone, "+1") && !strings.HasPrefix(form.Phone, "1") {
+		form.Phone = "+1" + form.Phone
+	}
+
+	// Update regex to validate E.164 format
+	phoneRegex := regexp.MustCompile(`^\+1\d{10}$`)
+	form.Validator.CheckField(validator.Matches(form.Phone, phoneRegex), "phone", "Invalid phone number. Please use the format +1XXXXXXXXXX.")
+
 	form.Validator.CheckField(isValidFileType(header.Filename), "resume", "Invalid file type. Please upload a DOCX or PDF file.")
 
 	if form.Validator.HasErrors() {
@@ -123,6 +134,8 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+
+	form.Filename = header.Filename
 
 	tempFile, err := os.CreateTemp("", "resume-*."+filepath.Ext(header.Filename))
 	if err != nil {
@@ -153,7 +166,10 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := contextGetAuthenticatedUser(r)
-	if err := app.updateUserResume(user, header.Filename, resumeText); err != nil {
+	resume := internal.Resume{
+		RawText: resumeText,
+	}
+	if err := internal.CreateResume(r.Context(), app.fs, *user, &resume); err != nil {
 		form.Validator.AddFieldError("resume", "Failed to save resume. Please try again.")
 		if err := response.NamedTemplate(w, http.StatusUnprocessableEntity, data, "partial:resume-form", "partials/resume-form.html"); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
@@ -161,8 +177,19 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Save the phone number
-	if err := app.db.UpdateUserPhone(user.ID, form.Phone); err != nil {
+	userState := internal.UserState{
+		Status:    internal.UserStatusProcessingResume,
+		Started:   time.Now(),
+		Completed: nil,
+	}
+
+	user.Phone = &form.Phone
+
+	// Save the phone number and update state
+	if err := internal.UpdateUser(context.Background(), app.fs, user.ID, map[string]interface{}{
+		"phone": form.Phone,
+		"state": userState,
+	}); err != nil {
 		form.Validator.AddFieldError("phone", "Failed to save phone number. Please try again.")
 		if err := response.NamedTemplate(w, http.StatusUnprocessableEntity, data, "partial:resume-form", "partials/resume-form.html"); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
@@ -170,20 +197,37 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update onboarding state
-	if err := app.db.UpdateOnboardingStep(user.ID, onboarding.StepResumeUploaded); err != nil {
-		form.Validator.AddFieldError("resume", "Failed to update onboarding state. Please try again.")
-		if err := response.NamedTemplate(w, http.StatusUnprocessableEntity, data, "partial:resume-form", "partials/resume-form.html"); err != nil {
-			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
+	// Start resume processing in background
+	go func() {
+		if err := internal.AnnotateResume(context.Background(), app.fs, app.logger, user, &resume); err != nil {
+			app.logger.Error("Failed to annotate resume", "error", err)
 		}
-		return
+		app.sendUserStateUpdate(user)
+	}()
+
+	app.logger.Info("Initial resume uploaded successfully", "user", user.Name, "resume-id", resume.ID)
+
+	// Redirect to processing page
+	data = app.newTemplateData(r)
+	if err := response.Page(w, http.StatusOK, data, "pages/profile-resume-processing.html"); err != nil {
+		app.serverError(w, r, fmt.Errorf("failed to render processing page: %w", err))
+	}
+}
+
+// sendUserStateUpdate sends a real-time notification about user state changes via Pusher
+func (app *application) sendUserStateUpdate(user *internal.User) {
+	data := map[string]interface{}{
+		"state":       user.State.Status,
+		"status_text": user.State.Status.String(),
+		"description": user.State.Status.Description(),
+		"error":       user.State.Error,
 	}
 
-	app.processResumeKeywords(r, user, resumeText)
-
-	app.logger.Info("Resume uploaded successfully", "filename", header.Filename, "phone", form.Phone)
-	if err := response.Page(w, http.StatusOK, data, "pages/profile-schedule-phone-call.html"); err != nil {
-		app.serverError(w, r, fmt.Errorf("failed to render next page: %w", err))
+	err := app.pusher.Trigger(fmt.Sprintf("user-%s", user.ID), "state-update", data)
+	if err != nil {
+		app.logger.Error("Failed to send Pusher notification", "error", err, "user_id", user.ID)
+	} else {
+		app.logger.Info("Sent user state update notification", "user_id", user.ID, "state", user.State.Status)
 	}
 }
 
@@ -193,37 +237,72 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 // Supports both PDF and DOCX formats.
 func (app *application) extractResumeText(file *os.File, filename string) (string, error) {
 	if strings.HasSuffix(strings.ToLower(filename), ".docx") {
-		return rodeo.ExtractDOCX(file)
+		return extractDOCX(file)
 	} else if strings.HasSuffix(strings.ToLower(filename), ".pdf") {
-		return rodeo.ExtractPDF(file)
+		return extractPDF(file)
 	}
 	return "", fmt.Errorf("unsupported file type")
 }
 
-// updateUserResume updates a user's resume information in the database
-// and updates the user struct with the new resume data.
-func (app *application) updateUserResume(user *database.User, filename, resumeText string) error {
-	if err := app.db.UpdateFullResume(user.ID, filename, resumeText); err != nil {
-		return fmt.Errorf("failed to save resume: %w", err)
+func extractDOCX(file *os.File) (string, error) {
+	fileinfo, err := file.Stat()
+	if err != nil {
+		return "", fmt.Errorf("extractDOCX: failed to get file info")
 	}
-	user.FullResume = &resumeText
-	user.ResumeFilename = &filename
-	return nil
+
+	size := fileinfo.Size()
+
+	doc, err := docx.Parse(file, size)
+	if err != nil {
+		return "", fmt.Errorf("extractDOCX: failed to parse DOCX file")
+	}
+
+	sb := strings.Builder{}
+	for _, it := range doc.Document.Body.Items {
+		switch it.(type) {
+		case *docx.Paragraph, *docx.Table: // printable
+			s, ok := it.(fmt.Stringer)
+			if !ok {
+				return "", fmt.Errorf("extractDOCX: failed to convert inteface to string")
+			}
+			sb.WriteString(s.String())
+		}
+	}
+
+	println(sb.String())
+
+	return sb.String(), nil
 }
 
-// SendStatus sends a status update through the pusher service.
-// Used to provide real-time feedback during resume processing.
-func (app *application) SendStatus(sessionID, eventName, level, message string) {
-	app.logger.Info("SendStatus", "sessionID", sessionID, "eventName", eventName, "level", level, "message", message)
+func extractPDF(file *os.File) (string, error) {
+	// Get file info for size
+	fileinfo, err := file.Stat()
+	if err != nil {
+		return "", fmt.Errorf("extractPDF: failed to get file info: %w", err)
+	}
 
-	/*
-		err := app.pusher.Trigger(sessionID, eventName, map[string]string{
-			"level":   level,
-			"message": message,
-		})
+	// Create a reader for the PDF
+	reader, err := pdf.NewReader(file, fileinfo.Size())
+	if err != nil {
+		return "", fmt.Errorf("extractPDF: failed to create PDF reader: %w", err)
+	}
 
-		if err != nil {
-			app.logger.Error("SendStatus: failed to send status", "error", err)
+	var sb strings.Builder
+	numPages := reader.NumPage()
+
+	// Extract text from each page
+	for pageNum := 1; pageNum <= numPages; pageNum++ {
+		page := reader.Page(pageNum)
+		if page.V.IsNull() {
+			continue // Skip empty pages
 		}
-	*/
+
+		text, err := page.GetPlainText(nil)
+		if err != nil {
+			return "", fmt.Errorf("extractPDF: failed to extract text from page %d: %w", pageNum, err)
+		}
+		sb.WriteString(text)
+	}
+
+	return sb.String(), nil
 }
