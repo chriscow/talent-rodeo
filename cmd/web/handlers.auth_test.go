@@ -3,14 +3,14 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"talent-rodeo/internal"
 	"testing"
 	"time"
-
-	"talent-rodeo/internal/database"
 )
 
 func TestAuthFlow(t *testing.T) {
-	ts := newTestServer(t)
+	ts := newTestServer(t, "auth flow")
+	defer ts.Cleanup()
 
 	t.Run("Unauthenticated user is redirected to login", func(t *testing.T) {
 		code, headers, _ := ts.get(t, "/profile")
@@ -25,15 +25,9 @@ func TestAuthFlow(t *testing.T) {
 	})
 
 	t.Run("Authenticated user can access profile", func(t *testing.T) {
-		now := time.Now()
-		role := "candidate"
-		user := &database.User{
-			ID:        1,
-			Email:     "test@example.com",
-			Created:   now,
-			UpdatedAt: &now,
-			Role:      &role,
-		}
+		user := internal.CreateTestUser(t, ts.app.fs, "Test User", "test@example.com", "+14251234567", false)
+		defer internal.DeleteTestData(t, ts.app.fs, "test-user-")
+
 		req := ts.authenticatedRequest(t, "GET", "/profile", user, nil)
 		w := httptest.NewRecorder()
 		ts.app.routes().ServeHTTP(w, req)
@@ -44,16 +38,15 @@ func TestAuthFlow(t *testing.T) {
 	})
 
 	t.Run("Logout clears session", func(t *testing.T) {
-		t.Skip("Session clearing functionality needs to be fixed - current implementation does not properly clear session values")
 		// Create an authenticated request
 		now := time.Now()
-		role := "candidate"
-		user := &database.User{
-			ID:        1,
+		user := &internal.User{
+			ID:        "1",
 			Email:     "test@example.com",
-			Created:   now,
-			UpdatedAt: &now,
-			Role:      &role,
+			CreatedAt: now,
+			State: internal.UserState{
+				Status: internal.UserStatusPendingResumeUpload,
+			},
 		}
 		req := ts.authenticatedRequest(t, "POST", "/logout", user, nil)
 
@@ -77,17 +70,13 @@ func TestAuthFlow(t *testing.T) {
 			t.Errorf("want %d; got %d", http.StatusFound, w.Code)
 		}
 
-		if w.Header().Get("Location") != "/auth/linkedin" {
-			t.Errorf("want %s; got %s", "/auth/linkedin", w.Header().Get("Location"))
+		if w.Header().Get("Location") != "/" {
+			t.Errorf("want %s; got %s", "/", w.Header().Get("Location"))
 		}
 
 		// Check that the session was cleared
-		session, err := ts.app.sessionStore.Get(req, "session")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if session.Values["UserID"] != nil {
+		userID := ts.app.sessionManager.GetString(req.Context(), "UserID")
+		if userID != "" {
 			t.Error("session should be cleared")
 		}
 	})

@@ -2,14 +2,23 @@ package tasks
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"sync"
 	"time"
 
 	"talent-rodeo/internal"
-	"talent-rodeo/internal/database"
+
+	"cloud.google.com/go/firestore"
 )
+
+// NATSMessagePayload represents the data needed to publish a NATS message
+type NATSMessagePayload struct {
+	Subject  string            `json:"subject"`  // The subject to publish to
+	Data     json.RawMessage   `json:"data"`     // The data to publish
+	Metadata map[string]string `json:"metadata"` // Optional metadata for the message
+}
 
 // TaskHandler processes a specific type of task
 type TaskHandler interface {
@@ -21,7 +30,7 @@ type TaskHandler interface {
 
 // Processor manages the execution of background tasks
 type Processor struct {
-	db           *database.DB
+	storage      TaskStorage
 	handlers     map[string]TaskHandler
 	logger       *slog.Logger
 	wg           sync.WaitGroup
@@ -31,9 +40,9 @@ type Processor struct {
 }
 
 // NewProcessor creates a new task processor
-func NewProcessor(db *database.DB, logger *slog.Logger) *Processor {
+func NewProcessor(storage TaskStorage, logger *slog.Logger) *Processor {
 	return &Processor{
-		db:           db,
+		storage:      storage,
 		handlers:     make(map[string]TaskHandler),
 		logger:       logger,
 		done:         make(chan struct{}),
@@ -90,8 +99,8 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	// Get pending tasks from database
-	tasks, err := p.db.GetPendingTasks(ctx)
+	// Get pending tasks from storage
+	tasks, err := p.storage.GetPendingTasks(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get pending tasks: %w", err)
 	}
@@ -121,42 +130,50 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 			"handler", fmt.Sprintf("%T", handler),
 		)
 
-		// Start transaction for task processing
-		tx, err := p.db.BeginTxx(ctx, nil)
-		if err != nil {
-			p.logger.Error("failed to begin transaction",
-				"error", err,
-				"task_id", task.ID,
-			)
-			continue
-		}
+		// Process the task within a transaction
+		err := p.storage.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+			// Get the latest task state to ensure we have the current attempts count
+			latestTask, err := p.storage.GetTask(ctx, task.ID)
+			if err != nil {
+				return fmt.Errorf("failed to get latest task state: %w", err)
+			}
+			if latestTask == nil {
+				return fmt.Errorf("task not found: %d", task.ID)
+			}
 
-		// Update task status to running within transaction
-		oldStatus := task.Status
-		task.Status = internal.TaskStatusRunning
-		task.Attempts++ // Always increment attempts when processing starts
-		p.logger.Debug("updating task status",
-			"task_id", task.ID,
-			"type", task.Type,
-			"old_status", oldStatus,
-			"new_status", task.Status,
-			"attempts", task.Attempts,
-			"max_attempts", task.MaxAttempts,
-		)
-		if err := p.db.UpdateTaskTx(ctx, tx, task); err != nil {
-			tx.Rollback()
-			p.logger.Error("failed to update task status",
-				"error", err,
-				"task_id", task.ID,
+			p.logger.Debug("starting task processing transaction",
+				"task_id", latestTask.ID,
+				"current_status", latestTask.Status,
+				"current_attempts", latestTask.Attempts,
+				"max_attempts", latestTask.MaxAttempts,
+				"run_at", latestTask.RunAt,
+			)
+
+			// Update task status to running within transaction
+			oldStatus := latestTask.Status
+			latestTask.Status = internal.TaskStatusRunning
+			latestTask.Attempts++ // Always increment attempts when processing starts
+			p.logger.Debug("updating task status in transaction",
+				"task_id", latestTask.ID,
+				"type", latestTask.Type,
 				"old_status", oldStatus,
-				"new_status", task.Status,
+				"new_status", latestTask.Status,
+				"old_attempts", latestTask.Attempts-1,
+				"new_attempts", latestTask.Attempts,
+				"max_attempts", latestTask.MaxAttempts,
 			)
-			continue
-		}
 
-		// Commit the initial transaction before spawning the goroutine
-		if err := tx.Commit(); err != nil {
-			p.logger.Error("failed to commit initial transaction",
+			if err := p.storage.UpdateTask(ctx, latestTask); err != nil {
+				return fmt.Errorf("failed to update task status: %w", err)
+			}
+
+			// Update our task reference to match the latest state
+			task = latestTask
+			return nil
+		})
+
+		if err != nil {
+			p.logger.Error("failed to update task status",
 				"error", err,
 				"task_id", task.ID,
 			)
@@ -165,117 +182,106 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 
 		// Process the task
 		p.wg.Add(1)
-		taskID := task.ID // Capture task ID for the goroutine
+		taskID := task.ID             // Capture task ID for the goroutine
+		taskAttempts := task.Attempts // Capture current attempts count
 		go func() {
 			defer p.wg.Done()
 
-			// Start a new transaction for task completion
-			completionTx, err := p.db.BeginTxx(ctx, nil)
-			if err != nil {
-				p.logger.Error("failed to begin completion transaction",
-					"error", err,
-					"task_id", taskID,
-				)
-				return
-			}
-
-			// Get the latest task state within transaction
-			t, err := p.db.GetTaskTx(ctx, completionTx, taskID)
-			if err != nil {
-				completionTx.Rollback()
-				p.logger.Error("failed to get task",
-					"error", err,
-					"task_id", taskID,
-				)
-				return
-			}
-			if t == nil {
-				completionTx.Rollback()
-				p.logger.Error("task not found",
-					"task_id", taskID,
-				)
-				return
-			}
-
-			p.logger.Debug("processing task",
-				"task_id", t.ID,
-				"type", t.Type,
-				"status", t.Status,
-				"attempts", t.Attempts,
-				"max_attempts", t.MaxAttempts,
-			)
-
-			err = handler.ProcessTask(ctx, t)
-			if err != nil {
-				p.logger.Error("task processing failed",
-					"error", err,
-					"task_id", t.ID,
-					"type", t.Type,
-					"attempts", t.Attempts,
-					"max_attempts", t.MaxAttempts,
-					"old_status", t.Status,
-				)
-
-				t.Error = err.Error()
-				oldStatus = t.Status
-				if t.Attempts >= t.MaxAttempts {
-					p.logger.Debug("task exceeded max attempts, marking as failed",
-						"task_id", t.ID,
-						"attempts", t.Attempts,
-						"max_attempts", t.MaxAttempts,
-						"old_status", oldStatus,
-						"new_status", internal.TaskStatusFailed,
-					)
-					t.Status = internal.TaskStatusFailed
-				} else {
-					t.Status = internal.TaskStatusRetrying
-					t.RunAt = time.Now().Add(p.retryBackoff * time.Duration(t.Attempts))
-					t.Error = fmt.Sprintf("Call failed with status: %s, will retry", t.Status)
+			// Process the task and update its status within a transaction
+			err := p.storage.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+				// Get the latest task state
+				t, err := p.storage.GetTask(ctx, taskID)
+				if err != nil {
+					return fmt.Errorf("failed to get task: %w", err)
 				}
-			} else {
-				oldStatus = t.Status
-				t.Status = internal.TaskStatusComplete
-				t.Error = ""
-				p.logger.Debug("task completed successfully",
+				if t == nil {
+					return fmt.Errorf("task not found: %d", taskID)
+				}
+
+				p.logger.Debug("processing task in goroutine",
 					"task_id", t.ID,
 					"type", t.Type,
-					"attempts", t.Attempts,
-					"old_status", oldStatus,
+					"status", t.Status,
+					"current_attempts", t.Attempts,
+					"captured_attempts", taskAttempts,
+					"max_attempts", t.MaxAttempts,
+					"run_at", t.RunAt,
+				)
+
+				err = handler.ProcessTask(ctx, t)
+				if err != nil {
+					p.logger.Error("task processing failed",
+						"error", err,
+						"task_id", t.ID,
+						"type", t.Type,
+						"current_attempts", t.Attempts,
+						"captured_attempts", taskAttempts,
+						"max_attempts", t.MaxAttempts,
+						"old_status", t.Status,
+					)
+
+					t.Error = err.Error()
+					oldStatus := t.Status
+					if taskAttempts >= t.MaxAttempts {
+						p.logger.Warn("task exceeded max attempts, marking as failed",
+							"task_id", t.ID,
+							"current_attempts", t.Attempts,
+							"captured_attempts", taskAttempts,
+							"max_attempts", t.MaxAttempts,
+							"old_status", oldStatus,
+							"new_status", internal.TaskStatusFailed,
+						)
+						t.Status = internal.TaskStatusFailed
+					} else {
+						p.logger.Info("task will retry",
+							"task_id", t.ID,
+							"current_attempts", t.Attempts,
+							"captured_attempts", taskAttempts,
+							"max_attempts", t.MaxAttempts,
+							"old_status", oldStatus,
+							"new_status", internal.TaskStatusRetrying,
+							"retry_backoff", p.retryBackoff*time.Duration(taskAttempts),
+						)
+						t.Status = internal.TaskStatusRetrying
+						t.RunAt = time.Now().Add(p.retryBackoff * time.Duration(taskAttempts))
+						t.Error = fmt.Sprintf("Call failed with status: %s, will retry", t.Status)
+					}
+				} else {
+					oldStatus := t.Status
+					t.Status = internal.TaskStatusComplete
+					t.Error = ""
+					p.logger.Info("task completed successfully",
+						"task_id", t.ID,
+						"type", t.Type,
+						"current_attempts", t.Attempts,
+						"captured_attempts", taskAttempts,
+						"old_status", oldStatus,
+						"new_status", t.Status,
+					)
+				}
+
+				p.logger.Debug("updating task after processing",
+					"task_id", t.ID,
+					"old_status", t.Status,
 					"new_status", t.Status,
+					"current_attempts", t.Attempts,
+					"captured_attempts", taskAttempts,
+					"error", t.Error != "",
 				)
-			}
 
-			p.logger.Debug("updating task after processing",
-				"task_id", t.ID,
-				"old_status", oldStatus,
-				"new_status", t.Status,
-				"attempts", t.Attempts,
-				"error", t.Error != "",
-			)
-			if err := p.db.UpdateTaskTx(ctx, completionTx, t); err != nil {
-				completionTx.Rollback()
-				p.logger.Error("failed to update task after processing",
-					"error", err,
-					"task_id", t.ID,
-				)
-				return
-			}
+				return p.storage.UpdateTask(ctx, t)
+			})
 
-			if err := completionTx.Commit(); err != nil {
-				p.logger.Error("failed to commit completion transaction",
+			if err != nil {
+				p.logger.Error("failed to process task",
 					"error", err,
-					"task_id", t.ID,
+					"task_id", taskID,
 				)
 			}
 		}()
 	}
 
 	return nil
-}
-
-// generateTaskID creates a unique ID for a task
-func generateTaskID() (int64, error) {
-	return time.Now().UnixNano(), nil
 }
 
 // EnqueueTask adds a new task to be processed
@@ -294,7 +300,7 @@ func (p *Processor) EnqueueTask(ctx context.Context, task *internal.Task) error 
 		return fmt.Errorf("no handler registered for task type: %s", task.Type)
 	}
 
-	if err := p.db.CreateTask(ctx, task); err != nil {
+	if err := p.storage.CreateTask(ctx, task); err != nil {
 		p.logger.Error("failed to create task",
 			"error", err,
 			"task_id", task.ID,
@@ -319,18 +325,14 @@ func (p *Processor) CreateAndEnqueueTask(ctx context.Context, taskType string, p
 		return nil, fmt.Errorf("no handler registered for task type: %s", taskType)
 	}
 
-	id, err := generateTaskID()
-	if err != nil {
-		p.logger.Error("failed to generate task ID", "error", err)
-		return nil, fmt.Errorf("failed to generate task ID: %w", err)
-	}
+	id := time.Now().UnixNano()
 
 	task := &internal.Task{
 		ID:          id,
 		Type:        taskType,
 		Payload:     payload,
 		Status:      internal.TaskStatusPending,
-		MaxAttempts: 3, // Default to 3 attempts
+		MaxAttempts: 1, // Default to 3 attempts
 		RunAt:       runAt,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
@@ -341,4 +343,80 @@ func (p *Processor) CreateAndEnqueueTask(ctx context.Context, taskType string, p
 	}
 
 	return task, nil
+}
+
+// ScheduleMessage schedules a message to be published at the specified time
+func (h *Processor) ScheduleMessage(ctx context.Context, subject string, data any, metadata map[string]string, runAt time.Time) error {
+	h.logger.Debug("scheduling message",
+		"subject", subject,
+		"run_at", runAt,
+	)
+
+	// Validate parameters
+	if subject == "" {
+		return fmt.Errorf("subject is required")
+	}
+	if data == nil {
+		return fmt.Errorf("data is required")
+	}
+	if runAt.IsZero() {
+		return fmt.Errorf("run time is required")
+	}
+
+	// Don't schedule messages in the past
+	if runAt.Before(time.Now().UTC()) {
+		return fmt.Errorf("cannot schedule messages in the past")
+	}
+
+	// Marshal the message data
+	dataBytes, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal data: %w", err)
+	}
+
+	// Create task payload
+	payload := NATSMessagePayload{
+		Subject:  subject,
+		Data:     dataBytes,
+		Metadata: metadata,
+	}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	// Create unique task ID
+	taskID := time.Now().UnixNano()
+
+	// Create the task
+	task := &internal.Task{
+		ID:          taskID,
+		Type:        "nats_message_scheduler",
+		Payload:     payloadBytes,
+		Status:      internal.TaskStatusPending,
+		MaxAttempts: 3, // Allow up to 3 retry attempts
+		RunAt:       runAt.UTC(),
+		CreatedAt:   time.Now().UTC(),
+		UpdatedAt:   time.Now().UTC(),
+	}
+
+	h.logger.Debug("creating scheduler task",
+		"task_id", task.ID,
+		"subject", subject,
+		"run_at", task.RunAt,
+		"max_attempts", task.MaxAttempts,
+	)
+
+	// Enqueue the task
+	if err := h.EnqueueTask(ctx, task); err != nil {
+		return fmt.Errorf("failed to enqueue task: %w", err)
+	}
+
+	h.logger.Info("message scheduled",
+		"task_id", task.ID,
+		"subject", subject,
+		"run_at", runAt.UTC(),
+	)
+
+	return nil
 }

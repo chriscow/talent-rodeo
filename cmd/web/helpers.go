@@ -13,12 +13,7 @@ import (
 func (app *application) newTemplateData(r *http.Request) map[string]any {
 	user := contextGetAuthenticatedUser(r)
 
-	var sessionID string
-	session, err := app.sessionStore.Get(r, "session")
-	if err == nil {
-		sessionID, _ = session.Values["SessionID"].(string)
-	}
-
+	sessionID := app.sessionManager.GetString(r.Context(), "SessionID")
 	token := nosurf.Token(r)
 
 	data := map[string]any{

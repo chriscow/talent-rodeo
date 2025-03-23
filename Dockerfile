@@ -1,0 +1,15 @@
+ARG GO_VERSION=1
+FROM golang:${GO_VERSION}-bookworm as builder
+
+WORKDIR /usr/src/app
+COPY go.mod go.sum ./
+RUN go mod download && go mod verify
+COPY . .
+RUN go build -v -o /tr-web ./cmd/web
+
+
+FROM debian:bookworm
+RUN apt-get update -y && apt-get install -y ca-certificates fuse3 sqlite3
+COPY --from=flyio/litefs:0.5 /usr/local/bin/litefs /usr/local/bin/litefs
+COPY --from=builder /tr-web /usr/local/bin/
+ENTRYPOINT litefs mount

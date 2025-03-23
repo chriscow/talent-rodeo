@@ -2,8 +2,8 @@ package main
 
 import (
 	"net/http"
-	"strconv"
 	"talent-rodeo/internal/response"
+	"talent-rodeo/internal/tasks"
 )
 
 func (app *application) showTasksPage(w http.ResponseWriter, r *http.Request) {
@@ -18,31 +18,17 @@ func (app *application) showTasksPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get query parameters
-	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-	if page < 1 {
-		page = 1
-	}
-	size, _ := strconv.Atoi(r.URL.Query().Get("size"))
-	if size < 1 {
-		size = 10
-	}
+	// Create task storage
+	taskStorage := tasks.NewFirestoreTaskStorage(app.fs)
 
 	// Get status filter
-	var statuses []string
+	filter := &tasks.TaskFilter{}
 	if status := r.URL.Query().Get("status"); status != "" {
-		statuses = append(statuses, status)
+		filter.Status = status
 	}
 
-	// Get tasks from database
-	tasks, err := app.db.GetTasksWithFilter(r.Context(), statuses, size, (page-1)*size)
-	if err != nil {
-		app.serverError(w, r, err)
-		return
-	}
-
-	// Get total count for pagination
-	total, err := app.db.GetTasksCount(r.Context(), statuses)
+	// Get all tasks from Firestore
+	tasks, err := taskStorage.GetTasksWithFilter(r.Context(), filter)
 	if err != nil {
 		app.serverError(w, r, err)
 		return
@@ -50,12 +36,6 @@ func (app *application) showTasksPage(w http.ResponseWriter, r *http.Request) {
 
 	data := app.newTemplateData(r)
 	data["Tasks"] = tasks
-	data["Pagination"] = map[string]int{
-		"Page":  page,
-		"Size":  size,
-		"Total": total,
-		"Pages": (total + size - 1) / size,
-	}
 
 	err = response.Page(w, http.StatusOK, data, "pages/admin/tasks.html")
 	if err != nil {
@@ -75,31 +55,17 @@ func (app *application) getTasksPartial(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Get query parameters
-	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-	if page < 1 {
-		page = 1
-	}
-	size, _ := strconv.Atoi(r.URL.Query().Get("size"))
-	if size < 1 {
-		size = 10
-	}
+	// Create task storage
+	taskStorage := tasks.NewFirestoreTaskStorage(app.fs)
 
 	// Get status filter
-	var statuses []string
+	filter := &tasks.TaskFilter{}
 	if status := r.URL.Query().Get("status"); status != "" {
-		statuses = append(statuses, status)
+		filter.Status = status
 	}
 
-	// Get tasks from database
-	tasks, err := app.db.GetTasksWithFilter(r.Context(), statuses, size, (page-1)*size)
-	if err != nil {
-		app.serverError(w, r, err)
-		return
-	}
-
-	// Get total count for pagination
-	total, err := app.db.GetTasksCount(r.Context(), statuses)
+	// Get all tasks from Firestore
+	tasks, err := taskStorage.GetTasksWithFilter(r.Context(), filter)
 	if err != nil {
 		app.serverError(w, r, err)
 		return
@@ -107,12 +73,6 @@ func (app *application) getTasksPartial(w http.ResponseWriter, r *http.Request) 
 
 	data := app.newTemplateData(r)
 	data["Tasks"] = tasks
-	data["Pagination"] = map[string]int{
-		"Page":  page,
-		"Size":  size,
-		"Total": total,
-		"Pages": (total + size - 1) / size,
-	}
 
 	err = response.Partial(w, http.StatusOK, data, "partials/tasks-table.html")
 	if err != nil {

@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
+
+	"talent-rodeo/internal"
 
 	"github.com/alexedwards/flow"
 	"github.com/markbates/goth/gothic"
@@ -59,59 +62,53 @@ func (app *application) completeSocialAuth(w http.ResponseWriter, r *http.Reques
 	q.Set("provider", provider)
 	r.URL.RawQuery = q.Encode()
 
-	user, err := gothic.CompleteUserAuth(w, r)
+	gothUser, err := gothic.CompleteUserAuth(w, r)
 	if err != nil {
 		app.handleAuthError(w, r, err)
 		return
 	}
 
-	dbUser, found, err := app.db.GetUserByEmail(user.Email)
+	u, found, err := internal.GetUserByEmail(r.Context(), app.fs, gothUser.Email)
 	if err != nil {
 		app.serverError(w, r, err)
 		return
 	}
 
 	if !found {
-		dbUser, err = app.db.NewUserFromGothUser(user, "candidate")
-		if err != nil {
-			app.serverError(w, r, err)
-			return
+		app.logger.Info("User not found, creating new user", "email", gothUser.Email)
+
+		u = &internal.User{
+			ID:          gothUser.UserID,
+			Email:       gothUser.Email,
+			Provider:    gothUser.Provider,
+			Name:        gothUser.Name,
+			FirstName:   gothUser.FirstName,
+			LastName:    gothUser.LastName,
+			NickName:    gothUser.NickName,
+			Description: gothUser.Description,
+			UserID:      gothUser.UserID,
+			AvatarURL:   gothUser.AvatarURL,
+			Location:    gothUser.Location,
+			State: internal.UserState{
+				Status:  internal.UserStatusPendingResumeUpload,
+				Started: time.Now(),
+			},
 		}
 
-		// Create candidate record for new user
-		_, err = app.db.CreateCandidate(r.Context(), dbUser.ID)
-		if err != nil {
-			app.serverError(w, r, fmt.Errorf("failed to create candidate record: %w", err))
+		if err := internal.CreateUser(r.Context(), app.fs, u); err != nil {
+			app.serverError(w, r, fmt.Errorf("failed to create firestore user: %w", err))
 			return
 		}
 	}
 
-	session, err := app.sessionStore.Get(r, "session")
-	if err != nil {
-		app.serverError(w, r, err)
-		return
-	}
-
-	session.Values["UserID"] = dbUser.ID
-	r = contextSetAuthenticatedUser(r, dbUser)
-
-	// Check onboarding state
-	state, err := app.db.GetOnboardingState(dbUser.ID)
-	if err != nil {
-		app.serverError(w, r, fmt.Errorf("failed to get onboarding state: %w", err))
-		return
-	}
+	// Store user ID in session
+	app.sessionManager.Put(r.Context(), "UserID", u.ID)
+	r = contextSetAuthenticatedUser(r, u)
 
 	// If onboarding is not complete, redirect to profile
 	redirectPath := "/"
-	if !state.IsComplete() {
+	if u.State.Status < internal.UserStatusIntroCallScheduled {
 		redirectPath = "/profile"
-	}
-
-	err = session.Save(r, w)
-	if err != nil {
-		app.serverError(w, r, err)
-		return
 	}
 
 	http.Redirect(w, r, redirectPath, http.StatusFound)
@@ -144,38 +141,16 @@ func (app *application) handleAuthError(w http.ResponseWriter, r *http.Request, 
 func (app *application) logoutUser(w http.ResponseWriter, r *http.Request) {
 	app.logger.Info("Processing logout request", "method", r.Method, "url", r.URL.String())
 
-	session, err := app.sessionStore.Get(r, "session")
+	// Destroy the session
+	err := app.sessionManager.Destroy(r.Context())
 	if err != nil {
-		app.logger.Error("Failed to get session", "error", err)
+		app.logger.Error("Failed to destroy session", "error", err)
 		app.serverError(w, r, err)
 		return
 	}
 
-	app.logger.Info("Current session values", "values", session.Values)
+	app.logger.Info("Session cleared successfully, redirecting to home")
 
-	// Clear all session values
-	for key := range session.Values {
-		delete(session.Values, key)
-	}
-
-	if app.config.testing {
-		// In testing mode, explicitly reset session values
-		session.Values = make(map[any]any)
-	}
-
-	// Set MaxAge to -1 to expire the cookie immediately
-	session.Options.MaxAge = -1
-
-	// Save the session before redirecting
-	err = session.Save(r, w)
-	if err != nil {
-		app.logger.Error("Failed to save session", "error", err)
-		app.serverError(w, r, err)
-		return
-	}
-
-	app.logger.Info("Session cleared successfully, redirecting to login")
-
-	// Redirect to login page
-	http.Redirect(w, r, "/auth/linkedin", http.StatusFound)
+	// Redirect to home page instead of directly to LinkedIn auth
+	http.Redirect(w, r, "/", http.StatusFound)
 }

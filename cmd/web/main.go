@@ -9,27 +9,33 @@ import (
 	"os"
 	"runtime/debug"
 	"sync"
+	"time"
 
 	"talent-rodeo/internal/auth"
 	"talent-rodeo/internal/database"
-	"talent-rodeo/internal/handlers"
-	"talent-rodeo/internal/services/search/providers/scrapingdog"
 	"talent-rodeo/internal/smtp"
 	"talent-rodeo/internal/tasks"
 	th "talent-rodeo/internal/tasks/handlers"
 	"talent-rodeo/internal/version"
 
-	"github.com/chriscow/minds/providers/gemini"
+	"cloud.google.com/go/firestore"
+	firebase "firebase.google.com/go/v4"
+	"github.com/alexedwards/scs/v2"
 	"github.com/gorilla/sessions"
 	"github.com/joho/godotenv"
 	"github.com/lmittmann/tint"
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
 	"github.com/nats-io/nats-server/v2/server"
-	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/pusher/pusher-http-go/v5"
+	"google.golang.org/api/option"
 )
+
+// PusherInterface defines the interface for Pusher client
+type PusherInterface interface {
+	Trigger(channel string, eventName string, data interface{}) error
+}
 
 func main() {
 	logger := slog.New(tint.NewHandler(os.Stdout, &tint.Options{Level: slog.LevelDebug}))
@@ -62,6 +68,10 @@ type config struct {
 		dsn         string
 		automigrate bool
 	}
+	firebase struct {
+		projectID       string
+		credentialsFile string
+	}
 	notifications struct {
 		email string
 	}
@@ -84,22 +94,22 @@ type config struct {
 }
 
 type application struct {
-	config        config
-	db            *database.DB
-	logger        *slog.Logger
-	mailer        *smtp.Mailer
-	sessionStore  *sessions.CookieStore
-	wg            sync.WaitGroup
-	pusher        *pusher.Client
-	keywordsMutex sync.RWMutex
-	handlers      map[string]any
+	config   config
+	db       *database.DB
+	fs       *firestore.Client
+	logger   *slog.Logger
+	mailer   *smtp.Mailer
+	wg       sync.WaitGroup
+	pusher   PusherInterface
+	handlers map[string]any
 
-	natsServer     *server.Server
-	natsShutdown   chan struct{}
-	jetstream      jetstream.JetStream
-	processor      *tasks.Processor
-	scheduler      *th.NATSMessageScheduler
-	sessionManager *sessions.CookieStore
+	natsServer   *server.Server
+	natsShutdown chan struct{}
+	jetstream    jetstream.JetStream
+	processor    *tasks.Processor
+	whScheduler  *th.WebhookScheduler
+	// natsScheduler  *th.NATSMessageScheduler
+	sessionManager *scs.SessionManager
 }
 
 func run(logger *slog.Logger) error {
@@ -111,18 +121,28 @@ func run(logger *slog.Logger) error {
 
 	flag.StringVar(&cfg.baseURL, "base-url", os.Getenv("BASE_URL"), "base URL for the application")
 	flag.IntVar(&cfg.httpPort, "http-port", 2304, "port to listen on for HTTP requests")
+
 	flag.IntVar(&cfg.nats.port, "nats-port", 42223, "port to listen on for NATS")
 	flag.StringVar(&cfg.nats.url, "nats-url", "nats://localhost:42223", "URL for NATS server")
 	flag.BoolVar(&cfg.nats.embedded, "embedded-nats", true, "use embedded NATS server")
+
 	flag.StringVar(&cfg.autoHTTPS.domain, "auto-https-domain", "", "domain to enable automatic HTTPS for")
 	flag.StringVar(&cfg.autoHTTPS.email, "auto-https-email", "admin@example.com", "contact email address for problems with LetsEncrypt certificates")
 	flag.BoolVar(&cfg.autoHTTPS.staging, "auto-https-staging", false, "use LetsEncrypt staging environment")
+
 	flag.StringVar(&cfg.cookie.secretKey, "cookie-secret-key", os.Getenv("SESSION_SECRET"), "secret key for cookie authentication/encryption")
+
+	flag.StringVar(&cfg.firebase.projectID, "firebase-project-id", os.Getenv("FIREBASE_PROJECT_ID"), "Firebase project ID")
+	flag.StringVar(&cfg.firebase.credentialsFile, "firebase-credentials-file", os.Getenv("FIREBASE_CREDENTIALS_FILE"), "Firebase credentials file")
+
 	flag.StringVar(&cfg.db.dsn, "db-dsn", os.Getenv("DB_DSN"), "PostgreSQL DSN")
-	flag.BoolVar(&cfg.db.automigrate, "db-automigrate", true, "run migrations on startup")
+	flag.BoolVar(&cfg.db.automigrate, "db-automigrate", false, "run migrations on startup")
+
 	flag.StringVar(&cfg.notifications.email, "notifications-email", "", "contact email address for error notifications")
+
 	flag.StringVar(&cfg.session.secretKey, "session-secret-key", os.Getenv("SESSION_SECRET"), "secret key for session cookie authentication")
 	flag.StringVar(&cfg.session.oldSecretKey, "session-old-secret-key", "", "previous secret key for session cookie authentication")
+
 	flag.StringVar(&cfg.smtp.host, "smtp-host", "example.smtp.host", "smtp host")
 	flag.IntVar(&cfg.smtp.port, "smtp-port", 25, "smtp port")
 	flag.StringVar(&cfg.smtp.username, "smtp-username", "example_username", "smtp username")
@@ -145,18 +165,29 @@ func run(logger *slog.Logger) error {
 		return nil
 	}
 
-	var db *database.DB
-	fmt.Println("starting application", "version", version.Get(), "database:", cfg.db.dsn)
-	db, err := database.New(cfg.db.dsn, cfg.db.automigrate, database.WithLogger(logger))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	firestoreClient, err := setupFirestoreClient(ctx, cfg.firebase.projectID, cfg.firebase.credentialsFile)
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	defer func() {
-		logger.Debug("closing database connection")
-		db.Close()
-		logger.Info("database connection closed")
-	}()
+	defer firestoreClient.Close()
+
+	/*
+		var db *database.DB
+		fmt.Println("starting application", "version", version.Get(), "database:", cfg.db.dsn)
+		db, err = database.New(cfg.db.dsn, cfg.db.automigrate, database.WithLogger(logger))
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		defer func() {
+			logger.Debug("closing database connection")
+			db.Close()
+			logger.Info("database connection closed")
+		}()
+	*/
 
 	mailer, err := smtp.NewMailer(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.from)
 	if err != nil {
@@ -172,86 +203,81 @@ func run(logger *slog.Logger) error {
 		return fmt.Errorf("SESSION_SECRET must be at least 32 bytes long")
 	}
 
-	sessionStore := sessions.NewCookieStore(keyPairs...)
-	sessionStore.Options = &sessions.Options{
-		HttpOnly: true,
-		MaxAge:   86400 * 7,
-		Path:     "/",
-		SameSite: http.SameSiteLaxMode,
-		Secure:   true,
-	}
+	sessionManager := scs.New()
+	sessionManager.Lifetime = 24 * time.Hour
 
-	gothic.Store = sessionStore
+	// Create and set our adapter as the gothic store
+	gothic.Store = auth.NewSCSAdapter(sessionManager)
 	goth.UseProviders(
 		auth.New(cfg.linkedin.clientID, cfg.linkedin.clientSecret, cfg.baseURL+"/auth/linkedin/callback"),
 	)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	// Create NATS server if embedded mode is enabled
-	var natsServer *server.Server
-	if cfg.nats.embedded {
-		natsServer, err = handlers.StartNATSServer(ctx, server.Options{
-			Port:      cfg.nats.port,
-			JetStream: true,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to setup NATS: %w", err)
+	/*
+		var natsServer *server.Server
+		if cfg.nats.embedded {
+			natsServer, err = handlers.StartNATSServer(ctx, server.Options{
+				Port:      cfg.nats.port,
+				JetStream: true,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to setup NATS: %w", err)
+			}
 		}
-	}
 
-	// Create JetStream context
-	nc, err := nats.Connect(cfg.nats.url)
-	if err != nil {
-		return fmt.Errorf("failed to connect to NATS: %w", err)
-	}
-	defer nc.Close()
+		// Create JetStream context
+		nc, err := nats.Connect(cfg.nats.url)
+		if err != nil {
+			return fmt.Errorf("failed to connect to NATS: %w", err)
+		}
+		defer nc.Close()
 
-	js, err := jetstream.New(nc)
-	if err != nil {
-		return fmt.Errorf("failed to create JetStream context: %w", err)
-	}
+		js, err := jetstream.New(nc)
+		if err != nil {
+			return fmt.Errorf("failed to create JetStream context: %w", err)
+		}
 
-	// Create the main stream
-	stream, err := handlers.CreateStream(ctx, cfg.nats.url, logger)
-	if err != nil {
-		return fmt.Errorf("failed to create stream: %w", err)
-	}
-	_ = stream
+		// Create the main stream
+		stream, err := handlers.CreateStream(ctx, cfg.nats.url, logger)
+		if err != nil {
+			return fmt.Errorf("failed to create stream: %w", err)
+		}
+		_ = stream
 
-	// Setup all pipeline handlers
-	handlers, err := setupPipelineHandlers(ctx, db, js, logger)
-	if err != nil {
-		return fmt.Errorf("failed to setup pipeline handlers: %w", err)
-	}
+		// Setup all pipeline handlers
+		handlers, err := setupPipelineHandlers(ctx, db, js, logger)
+		if err != nil {
+			return fmt.Errorf("failed to setup pipeline handlers: %w", err)
+		}
+	*/
 
 	pusherClient := setupPusher(logger)
 
 	// This is to schedule delivery of messages for scheduled phone calls
-	taskProcessor := tasks.NewProcessor(db, logger)
+	taskProcessor := tasks.NewProcessor(tasks.NewFirestoreTaskStorage(firestoreClient), logger)
 
 	// Setup scheduler
-	scheduler, err := setupNATSHandler(cfg.nats.url, logger)
-	if err != nil {
-		return fmt.Errorf("error setting up NATS handler: %w", err)
-	}
-	taskProcessor.RegisterHandler(scheduler)
+	// scheduler, err := setupNATSHandler(cfg.nats.url, logger)
+	// if err != nil {
+	// 	return fmt.Errorf("error setting up NATS handler: %w", err)
+	// }
+	wh := th.NewWebhookScheduler(logger)
+	// taskProcessor.RegisterHandler(scheduler)
+	taskProcessor.RegisterHandler(wh)
 
 	app := &application{
-		config:         cfg,
-		db:             db,
-		logger:         logger,
-		mailer:         mailer,
-		sessionStore:   sessionStore,
-		pusher:         &pusherClient,
-		natsServer:     natsServer,
-		jetstream:      js,
-		natsShutdown:   make(chan struct{}),
-		processor:      taskProcessor,
-		scheduler:      scheduler,
-		handlers:       handlers,
-		sessionManager: sessionStore,
+		config: cfg,
+		fs:     firestoreClient,
+		logger: logger,
+		mailer: mailer,
+		pusher: &pusherClient,
+		// natsServer:     natsServer,
+		// jetstream:      js,
+		// natsShutdown:   make(chan struct{}),
+		processor: taskProcessor,
+		// natsScheduler: scheduler,
+		// handlers:       handlers,
+		sessionManager: sessionManager,
 	}
 
 	// Start the task processor
@@ -284,6 +310,7 @@ func setupPusher(logger *slog.Logger) pusher.Client {
 	return pusherClient
 }
 
+/*
 // setupNATSHandler sets up the NATS client and returns the handler.
 func setupNATSHandler(natsURL string, logger *slog.Logger) (*th.NATSMessageScheduler, error) {
 	// Connect to NATS
@@ -300,19 +327,38 @@ func setupNATSHandler(natsURL string, logger *slog.Logger) (*th.NATSMessageSched
 
 	return th.NewNATSMessageScheduler(js, logger), nil
 }
+*/
 
-func (app *application) setupSessionStore(authKey, encryptKey []byte) {
+func setupSessionStore(authKey, encryptKey []byte) *sessions.CookieStore {
+	// Add logging for key lengths to help diagnose issues
+	authKeyLength := len(authKey)
+	encryptKeyLength := 0
+	if encryptKey != nil {
+		encryptKeyLength = len(encryptKey)
+	}
+
+	fmt.Printf("Setting up session store with auth key length: %d, encrypt key length: %d\n",
+		authKeyLength, encryptKeyLength)
+
+	// Validate minimum key lengths
+	if authKeyLength < 32 {
+		fmt.Printf("Warning: Auth key length (%d) is less than recommended 32 bytes\n", authKeyLength)
+	}
+	if encryptKey != nil && encryptKeyLength < 32 {
+		fmt.Printf("Warning: Encrypt key length (%d) is less than recommended 32 bytes\n", encryptKeyLength)
+	}
+
 	store := sessions.NewCookieStore(authKey, encryptKey)
 
 	store.Options = &sessions.Options{
 		Path:     "/",
 		MaxAge:   86400 * 7, // 7 days
 		HttpOnly: true,
-		Secure:   false, // set to true in production
+		Secure:   true, // set to true in production
 		SameSite: http.SameSiteLaxMode,
 	}
 
-	app.sessionStore = store
+	return store
 }
 
 func checkEnv() error {
@@ -324,7 +370,14 @@ func checkEnv() error {
 	requiredKeys := []string{"BASE_URL", "SESSION_SECRET", "SMTP_USERNAME",
 		"SMTP_PASSWORD", "LINKEDIN_AUTH_CLIENT_ID", "LINKEDIN_AUTH_CLIENT_SECRET",
 		"OPENAI_API_KEY", "GEMINI_API_KEY", "PUSHER_APP_ID", "PUSHER_KEY", "PUSHER_SECRET", "PUSHER_CLUSTER",
-		"TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER", "APP_DOMAIN"}
+		"TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER", "APP_DOMAIN",
+		"FIREBASE_PROJECT_ID", "FIREBASE_CREDENTIALS_FILE",
+		"CLOUDFLARE_API_EMAIL", "CLOUDFLARE_API_TOKEN",
+		"CLOUDFLARE_GLOBAL_API_KEY", "CLOUDFLARE_KV_NAMESPACE_ID", "SCRAPINGDOG_API_KEY",
+		"VAPI_API_KEY", "VAPI_ASSISTANT_ID", "VAPI_OUTBOUND_PHONE_ID",
+		"VAPI_WEBHOOK_URL",    // URL that will receive webhooks from VAPI
+		"VAPI_START_CALL_URL", // URL that we will use to start a call (we will POST to this URL to start a call)
+	}
 
 	for _, key := range requiredKeys {
 		if os.Getenv(key) == "" {
@@ -345,97 +398,23 @@ func setupPipelineHandlers(
 	h := make(map[string]any)
 	logger.Debug("setting up pipeline handlers")
 
-	llm, err := gemini.NewProvider(ctx, gemini.WithAPIKey(os.Getenv("GEMINI_API_KEY")))
-	if err != nil {
-		return nil, fmt.Errorf("error setting up gemini provider: %w", err)
-	}
-
-	// Setup assessment handler
-	assessmentHandler, err := handlers.NewAssessmentHandler(ctx, js, llm, logger, db)
-	if err != nil {
-		return nil, fmt.Errorf("error setting up assessment handler: %w", err)
-	}
-	h["assessment"] = assessmentHandler
-	logger.Debug("assessment handler configured")
-
-	// Setup culture handler
-	cultureHandler, err := handlers.NewCultureHandler(ctx, js, llm, logger)
-	if err != nil {
-		return nil, fmt.Errorf("error setting up culture handler: %w", err)
-	}
-	h["culture"] = cultureHandler
-	logger.Debug("culture handler configured")
-
-	// TODO: experience handler
-
-	// Setup job description handler
-	jobDescHandler, err := handlers.NewRequirementsHandler(ctx, js, llm, logger)
-	if err != nil {
-		return nil, fmt.Errorf("error setting up job description handler: %w", err)
-	}
-	h["jobDesc"] = jobDescHandler
-	logger.Debug("job description handler configured")
-
-	// TODO: preferences handler
-	preferencesHandler, err := handlers.NewPreferencesHandler(ctx, js, llm, logger)
-	if err != nil {
-		return nil, fmt.Errorf("error setting up preferences handler: %w", err)
-	}
-	h["preferences"] = preferencesHandler
-	logger.Debug("preferences handler configured")
-
-	// TODO: requirements handler
-	requirementsHandler, err := handlers.NewRequirementsHandler(ctx, js, llm, logger)
-	if err != nil {
-		return nil, fmt.Errorf("error setting up requirements handler: %w", err)
-	}
-	h["requirements"] = requirementsHandler
-	logger.Debug("requirements handler configured")
-
-	// Setup search handler with ScrapingDog provider
-	searchProvider := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"))
-	searchHandler, err := handlers.NewSearchHandler(ctx, js, searchProvider, logger, db)
-	if err != nil {
-		return nil, fmt.Errorf("error setting up search handler: %w", err)
-	}
-	h["search"] = searchHandler
-	logger.Debug("search handler configured")
-
-	// TODO: skills handler
-	skillsHandler, err := handlers.NewSkillsHandler(ctx, js, llm, logger, db)
-	if err != nil {
-		return nil, fmt.Errorf("error setting up skills handler: %w", err)
-	}
-	h["skills"] = skillsHandler
-	logger.Debug("skills handler configured")
-
-	// Setup transcript handler
-	transcriptHandler, err := handlers.NewExperienceHandler(ctx, js, llm, logger)
-	if err != nil {
-		return nil, fmt.Errorf("error setting up transcript handler: %w", err)
-	}
-	h["transcript"] = transcriptHandler
-	logger.Debug("transcript handler configured")
-
-	// Setup voice handler
-	voiceConfig := handlers.CallConfig{
-		FromNumber: os.Getenv("TWILIO_FROM_NUMBER"),
-		Twiml:      fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?><Response><Connect><Stream url="wss://%s/schedule/voice"/></Connect><Start><Stream name="stream"/></Start><Say>Welcome to your scheduled call. Please wait while we connect you.</Say></Response>`, os.Getenv("APP_DOMAIN")),
-	}
-
-	voiceHandler, err := handlers.NewVoiceHandler(ctx, js, th.NewRealTwilioClient(
-		os.Getenv("TWILIO_ACCOUNT_SID"),
-		os.Getenv("TWILIO_AUTH_TOKEN"),
-		os.Getenv("TWILIO_FROM_NUMBER"),
-	), logger, voiceConfig)
-	if err != nil {
-		return nil, fmt.Errorf("error setting up voice handler: %w", err)
-	}
-	h["voice"] = voiceHandler
-	logger.Debug("voice handler configured")
-
-	// TODO: workplace handler
-
 	logger.Info("All pipeline handlers configured successfully")
 	return h, nil
+}
+
+func setupFirestoreClient(ctx context.Context, projectID, credentialsFile string) (*firestore.Client, error) {
+	opt := option.WithCredentialsFile(credentialsFile)
+	fbConfig := &firebase.Config{ProjectID: projectID}
+
+	fbApp, err := firebase.NewApp(ctx, fbConfig, opt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize firebase app: %w", err)
+	}
+
+	fs, err := fbApp.Firestore(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create firestore client: %w", err)
+	}
+
+	return fs, nil
 }
