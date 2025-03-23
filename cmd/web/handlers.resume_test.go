@@ -6,13 +6,13 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
-	"talent-rodeo/internal/database"
+	"talent-rodeo/internal"
 	"testing"
 	"time"
 )
 
 func TestResumeUpload(t *testing.T) {
-	ts := newTestServer(t)
+	ts := newTestServer(t, "test resume upload")
 
 	t.Run("Unauthenticated user cannot upload resume", func(t *testing.T) {
 		code, headers, _ := ts.get(t, "/profile/resume/upload")
@@ -55,28 +55,17 @@ func TestResumeUpload(t *testing.T) {
 
 		// Create authenticated request
 		now := time.Now()
-		role := "candidate"
-		user := &database.User{
-			ID:        1,
+		user := &internal.User{
+			ID:        "1",
 			Email:     "test@example.com",
-			Created:   now,
-			UpdatedAt: &now,
-			Role:      &role,
+			CreatedAt: now,
 		}
 		req := ts.authenticatedRequest(t, "POST", "/profile/resume/upload", user, body)
 		req.Header.Set("Content-Type", writer.FormDataContentType())
 		w := httptest.NewRecorder()
 
-		// Create and save a session
-		session, err := ts.app.sessionStore.Get(req, "session")
-		if err != nil {
-			t.Fatal(err)
-		}
-		session.Values["UserID"] = 1
-		err = session.Save(req, w)
-		if err != nil {
-			t.Fatal(err)
-		}
+		// Store user ID in session
+		ts.app.sessionManager.Put(req.Context(), "UserID", "1")
 
 		// Create a new request with the session cookie and CSRF token
 		req = httptest.NewRequest("POST", "/profile/resume/upload", body)
@@ -130,28 +119,17 @@ func TestResumeUpload(t *testing.T) {
 
 		// Create authenticated request
 		now := time.Now()
-		role := "candidate"
-		user := &database.User{
-			ID:        1,
+		user := &internal.User{
+			ID:        "1",
 			Email:     "test@example.com",
-			Created:   now,
-			UpdatedAt: &now,
-			Role:      &role,
+			CreatedAt: now,
 		}
 		req := ts.authenticatedRequest(t, "POST", "/profile/resume/upload", user, body)
 		req.Header.Set("Content-Type", writer.FormDataContentType())
 		w := httptest.NewRecorder()
 
-		// Create and save a session
-		session, err := ts.app.sessionStore.Get(req, "session")
-		if err != nil {
-			t.Fatal(err)
-		}
-		session.Values["UserID"] = 1
-		err = session.Save(req, w)
-		if err != nil {
-			t.Fatal(err)
-		}
+		// Store user ID in session
+		ts.app.sessionManager.Put(req.Context(), "UserID", "1")
 
 		// Create a new request with the session cookie and CSRF token
 		req = httptest.NewRequest("POST", "/profile/resume/upload", body)
@@ -195,28 +173,17 @@ func TestResumeUpload(t *testing.T) {
 
 		// Create authenticated request
 		now := time.Now()
-		role := "candidate"
-		user := &database.User{
-			ID:        1,
+		user := &internal.User{
+			ID:        "1",
 			Email:     "test@example.com",
-			Created:   now,
-			UpdatedAt: &now,
-			Role:      &role,
+			CreatedAt: now,
 		}
 		req := ts.authenticatedRequest(t, "POST", "/profile/resume/upload", user, body)
 		req.Header.Set("Content-Type", writer.FormDataContentType())
 		w := httptest.NewRecorder()
 
-		// Create and save a session
-		session, err := ts.app.sessionStore.Get(req, "session")
-		if err != nil {
-			t.Fatal(err)
-		}
-		session.Values["UserID"] = 1
-		err = session.Save(req, w)
-		if err != nil {
-			t.Fatal(err)
-		}
+		// Store user ID in session
+		ts.app.sessionManager.Put(req.Context(), "UserID", "1")
 
 		// Create a new request with the session cookie and CSRF token
 		req = httptest.NewRequest("POST", "/profile/resume/upload", body)

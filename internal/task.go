@@ -34,16 +34,16 @@ func (e *TaskError) Unwrap() error {
 
 // Task represents a background job to be processed
 type Task struct {
-	ID          int64           `db:"id" json:"id"`
-	Type        string          `db:"type" json:"type"`
-	Payload     json.RawMessage `db:"payload" json:"payload"`
-	Status      string          `db:"status" json:"status"`
-	Attempts    int             `db:"attempts" json:"attempts"`
-	MaxAttempts int             `db:"max_attempts" json:"max_attempts"`
-	RunAt       time.Time       `db:"run_at" json:"run_at"`
-	Error       string          `db:"error" json:"error"`
-	CreatedAt   time.Time       `db:"created_at" json:"created_at"`
-	UpdatedAt   time.Time       `db:"updated_at" json:"updated_at"`
+	ID          int64           `firestore:"id" json:"id"`
+	Type        string          `firestore:"type" json:"type"`
+	Payload     json.RawMessage `firestore:"payload" json:"payload"`
+	Status      string          `firestore:"status" json:"status"`
+	Attempts    int             `firestore:"attempts" json:"attempts"`
+	MaxAttempts int             `firestore:"max_attempts" json:"max_attempts"`
+	RunAt       time.Time       `firestore:"run_at" json:"run_at"`
+	Error       string          `firestore:"error" json:"error"`
+	CreatedAt   time.Time       `firestore:"created_at" json:"created_at"`
+	UpdatedAt   time.Time       `firestore:"updated_at" json:"updated_at"`
 }
 
 // NewTask creates a new task with default values

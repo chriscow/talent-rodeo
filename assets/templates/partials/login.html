@@ -1,25 +1,22 @@
 {{define "partial:login"}}
 <style>
+    /* larger headers and header groups */
     header h1 {
+        font-size: 3.5rem;
+        font-weight: 800;
         margin-bottom: 0.5rem;
     }
 
     header p {
+        font-size: 2rem;
+        font-weight: 400;
         margin-bottom: 1.5rem;
     }
 
-    header h1,
-    header p {
+    header {
         text-align: center;
     }
 
-    hgroup,
-    header h1,
-    header p {
-        max-width: 60ch;
-        margin-left: auto;
-        margin-right: auto;
-    }
 
     #linkedin-signin {
         display: flex;
@@ -38,22 +35,6 @@
 
     #linkedin-signin img {
         margin-right: 0.5rem;
-    }
-
-    body {
-        margin: 0;
-        display: flex;
-        flex-direction: column;
-        min-height: 100vh;
-    }
-
-    main {
-        flex: 1;
-    }
-
-    .loading-spinner {
-        opacity: 0;
-        transition: opacity 0.5s ease-in-out;
     }
 </style>
 <header>

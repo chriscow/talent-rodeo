@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
 
 	"github.com/justinas/nosurf"
@@ -91,37 +92,24 @@ func (app *application) preventCSRF(next http.Handler) http.Handler {
 }
 
 func (app *application) clearSession(w http.ResponseWriter, r *http.Request) {
-	session, _ := app.sessionStore.Get(r, "session")
-
-	// Set MaxAge to -1 to expire the cookie immediately
-	session.Options.MaxAge = -1
-
-	// Save will remove the cookie since MaxAge < 0
-	err := session.Save(r, w)
+	err := app.sessionManager.Destroy(r.Context())
 	if err != nil {
-		app.serverError(w, r, err)
-		return
+		app.logger.Error("error destroying session", "error", err.Error())
 	}
+	app.logger.Info("session successfully cleared")
 }
 
 func (app *application) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Get session
-		session, err := app.sessionStore.Get(r, "session")
-		if err != nil {
-			app.serverError(w, r, err)
-			return
-		}
-
 		// Check if user is authenticated
-		userID, ok := session.Values["UserID"].(int)
-		if !ok {
+		userID := app.sessionManager.GetString(r.Context(), "UserID")
+		if userID == "" {
 			next.ServeHTTP(w, r)
 			return
 		}
 
 		// Get user from database
-		user, found, err := app.db.GetUser(userID)
+		user, found, err := internal.GetUser(r.Context(), app.fs, userID)
 		if err != nil {
 			app.serverError(w, r, err)
 			return
@@ -146,7 +134,7 @@ func (app *application) requireSuperUser(next http.Handler) http.Handler {
 			return
 		}
 		// Check both is_superuser flag and role for admin access
-		if !user.IsSuperUser || (user.Role != nil && *user.Role != "admin") {
+		if !user.IsSuperUser {
 			http.Redirect(w, r, "/", http.StatusFound)
 			return
 		}

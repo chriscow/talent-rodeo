@@ -1,9 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 
+	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
 )
 
@@ -12,14 +12,10 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 
 	// If user is authenticated, check onboarding state
 	if user := contextGetAuthenticatedUser(r); user != nil {
-		state, err := app.db.GetOnboardingState(user.ID)
-		if err != nil {
-			app.serverError(w, r, fmt.Errorf("failed to get onboarding state: %w", err))
-			return
-		}
+		state := user.State
 
 		// Redirect to profile if onboarding is not complete
-		if !state.IsComplete() {
+		if state.Status < internal.UserStatusIntroCallCompleted {
 			http.Redirect(w, r, "/profile", http.StatusSeeOther)
 			return
 		}

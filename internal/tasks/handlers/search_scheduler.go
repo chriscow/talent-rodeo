@@ -4,17 +4,16 @@ package handlers
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"talent-rodeo/internal"
-	"talent-rodeo/internal/database"
-	"talent-rodeo/internal/services/search"
+	"talent-rodeo/internal/search"
+	"talent-rodeo/internal/tasks"
+
+	"cloud.google.com/go/firestore"
 )
 
 // Publisher defines the minimal interface needed for publishing messages.
@@ -30,7 +29,7 @@ type Publisher interface {
 // It contains the unique identifier of the candidate for whom the search
 // should be scheduled.
 type SearchSchedulerPayload struct {
-	CandidateID string `json:"candidate_id"` // Unique identifier of the candidate
+	UserID string `json:"user_id"` // Unique identifier of the candidate
 }
 
 // SearchScheduler processes scheduled job search tasks. It manages the scheduling
@@ -38,11 +37,11 @@ type SearchSchedulerPayload struct {
 // The scheduler ensures that searches are performed at appropriate intervals and
 // maintains the scheduling state in the database.
 type SearchScheduler struct {
-	publisher Publisher        // Used to publish search messages
-	logger    *slog.Logger     // Structured logger for the scheduler
-	db        *database.DB     // Database connection for persistence
-	taskProc  TaskProcessor    // Processor for enqueueing new tasks
-	now       func() time.Time // Function to get current time (for testing)
+	publisher Publisher         // Used to publish search messages
+	logger    *slog.Logger      // Structured logger for the scheduler
+	fs        *firestore.Client // Database connection for persistence
+	taskProc  *tasks.Processor  // Processor for enqueueing new tasks
+	now       func() time.Time  // Function to get current time (for testing)
 }
 
 // NewSearchScheduler creates a new search scheduler with the provided dependencies.
@@ -56,11 +55,11 @@ type SearchScheduler struct {
 //   - taskProc: Task processor for enqueueing new tasks
 //
 // Returns a configured SearchScheduler instance ready to process tasks.
-func NewSearchScheduler(publisher Publisher, logger *slog.Logger, db *database.DB, taskProc TaskProcessor) *SearchScheduler {
+func NewSearchScheduler(publisher Publisher, logger *slog.Logger, fs *firestore.Client, taskProc *tasks.Processor) *SearchScheduler {
 	return &SearchScheduler{
 		publisher: publisher,
 		logger:    logger.With(slog.String("component", "search_scheduler")),
-		db:        db,
+		fs:        fs,
 		taskProc:  taskProc,
 		now:       time.Now,
 	}
@@ -89,7 +88,7 @@ func (h *SearchScheduler) TaskType() string {
 //   - lastSearch: The time of the last search performed
 //
 // Returns the calculated time for the next search.
-func (h *SearchScheduler) getNextSearchTime(tier string, lastSearch time.Time) time.Time {
+func (h *SearchScheduler) getNextSearchTime(tier internal.UserTier, lastSearch time.Time) time.Time {
 	now := h.now().UTC().Truncate(time.Microsecond)
 
 	// If no previous search, schedule immediately
@@ -100,11 +99,11 @@ func (h *SearchScheduler) getNextSearchTime(tier string, lastSearch time.Time) t
 	// Calculate interval based on tier
 	var interval time.Duration
 	switch tier {
-	case "free":
+	case internal.UserTierFree:
 		interval = 72 * time.Hour // Every three days
-	case "mid":
+	case internal.UserTierPro:
 		interval = 24 * time.Hour // Daily
-	case "top":
+	case internal.UserTierEnterprise:
 		interval = 6 * time.Hour // Four times daily
 	default:
 		interval = 72 * time.Hour // Default to free tier interval
@@ -127,13 +126,13 @@ func (h *SearchScheduler) getNextSearchTime(tier string, lastSearch time.Time) t
 //   - tier: The subscription tier of the candidate
 //
 // Returns the maximum number of pages allowed for the specified tier.
-func (h *SearchScheduler) getMaxPages(tier string) int {
+func (h *SearchScheduler) getMaxPages(tier internal.UserTier) int {
 	switch tier {
-	case "free":
+	case internal.UserTierFree:
 		return 3
-	case "mid":
+	case internal.UserTierPro:
 		return 50
-	case "top":
+	case internal.UserTierEnterprise:
 		return 200
 	default:
 		return 3 // Default to free tier limit
@@ -163,193 +162,127 @@ func (h *SearchScheduler) ProcessTask(ctx context.Context, task *internal.Task) 
 	var nextSearchTime time.Time
 	var nextSchedulerTime time.Time
 
-	err := h.db.WithTx(ctx, func(tx *database.DB) error {
-		// Get candidate with exclusive lock
-		var candidate struct {
-			ID              string
-			Tier            string     `db:"tier"`
-			LastSearchAt    *time.Time `db:"last_search_at"`
-			SubscriptionEnd *time.Time `db:"subscription_end_date"`
-		}
-		err := tx.GetContext(ctx, &candidate,
-			`SELECT id, tier::text as tier, last_search_at, subscription_end_date
-			FROM candidates 
-			WHERE id = $1 
-			FOR UPDATE NOWAIT`,
-			payload.CandidateID)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return fmt.Errorf("candidate not found: %s", payload.CandidateID)
-			}
-			if strings.Contains(err.Error(), "could not obtain lock") {
-				return &internal.TaskError{
-					Err:         fmt.Errorf("candidate %s is already being processed", payload.CandidateID),
-					ShouldRetry: false,
-				}
-			}
-			return fmt.Errorf("failed to get candidate: %w", err)
-		}
+	user, found, err := internal.GetUser(ctx, h.fs, payload.UserID)
+	if err != nil {
+		return fmt.Errorf("failed to get user: %w", err)
+	}
+	if !found {
+		return fmt.Errorf("user not found: %s", payload.UserID)
+	}
 
-		// Check for tier changes
-		var previousTier string
-		err = tx.GetContext(ctx, &previousTier, `
-			SELECT tier::text
-			FROM candidates_tier_history
-			WHERE candidate_id = $1
-			ORDER BY created_at DESC
-			LIMIT 1`,
-			candidate.ID)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("failed to get previous tier: %w", err)
-		}
+	// Get max pages for this tier
+	maxPages := h.getMaxPages(user.Tier)
+	h.logger.Debug("initial tier limits",
+		"tier", user.Tier,
+		"max_pages", maxPages)
 
-		h.logger.Debug("checking tier changes",
-			"candidate_id", candidate.ID,
-			"current_tier", candidate.Tier,
-			"previous_tier", previousTier,
-			"last_search_at", candidate.LastSearchAt)
-
-		// Log initial state
-		h.logger.Info("processing candidate",
-			"candidate_id", candidate.ID,
-			"tier", candidate.Tier,
-			"previous_tier", previousTier,
-			"subscription_end", candidate.SubscriptionEnd)
-
-		// Validate tier
-		switch candidate.Tier {
-		case "free", "mid", "top":
-			// Valid tier, continue processing
-		default:
-			return fmt.Errorf("invalid tier: %s", candidate.Tier)
-		}
-
-		// Get max pages for this tier
-		maxPages := h.getMaxPages(candidate.Tier)
-		h.logger.Debug("initial tier limits",
-			"tier", candidate.Tier,
+	// Check if subscription has ended
+	now := h.now().UTC()
+	if user.SubscriptionEnd != nil && now.After(*user.SubscriptionEnd) {
+		h.logger.Info("subscription expired",
+			"user_id", user.ID,
+			"subscription_end", user.SubscriptionEnd,
+			"current_time", now,
+			"tier", user.Tier,
 			"max_pages", maxPages)
 
-		// Check if subscription has ended
-		now := h.now().UTC()
-		if candidate.SubscriptionEnd != nil && now.After(*candidate.SubscriptionEnd) {
-			h.logger.Info("subscription expired",
-				"candidate_id", candidate.ID,
-				"subscription_end", candidate.SubscriptionEnd,
-				"current_time", now,
-				"tier", candidate.Tier,
-				"max_pages", maxPages)
+		// After subscription expires, use free tier limit
+		maxPages = h.getMaxPages("free")
+		h.logger.Info("using free tier limit after subscription expiry",
+			"user_id", user.ID,
+			"new_max_pages", maxPages)
+	}
 
-			// After subscription expires, use free tier limit
-			maxPages = h.getMaxPages("free")
-			h.logger.Info("using free tier limit after subscription expiry",
-				"candidate_id", candidate.ID,
-				"new_max_pages", maxPages)
+	// Calculate next search time
+	var lastSearchTime time.Time
+	if user.LastSearchAt != nil {
+		lastSearchTime = *user.LastSearchAt
+	}
+
+	// TODO: If tier has changed, force an immediate search
+
+	nextSearchTime = h.getNextSearchTime(user.Tier, lastSearchTime)
+	nextSchedulerTime = nextSearchTime.Add(time.Minute)
+
+	h.logger.Debug("search timing",
+		"user_id", user.ID,
+		"last_search_time", lastSearchTime,
+		"next_search_time", nextSearchTime,
+		"next_scheduler_time", nextSchedulerTime)
+
+	// Update candidate with new search time
+	err = internal.UpdateUser(ctx, h.fs, user.ID, map[string]interface{}{
+		"last_search_at": nextSearchTime,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update candidate: %w", err)
+	}
+
+	// Create NATS messages for all pages
+	seenPages := make(map[int]bool)
+	for page := 1; page <= maxPages; page++ {
+		h.logger.Debug("scheduling search task",
+			"user_id", user.ID,
+			"tier", user.Tier,
+			"page", page,
+			"max_pages", maxPages)
+
+		searchInput := search.SearchInput{
+			CandidateID: user.ID,
+			Page:        page,
 		}
-
-		// Calculate next search time
-		var lastSearchTime time.Time
-		if candidate.LastSearchAt != nil {
-			lastSearchTime = *candidate.LastSearchAt
-		}
-
-		// If tier has changed, force an immediate search
-		if previousTier != "" && previousTier != candidate.Tier {
-			h.logger.Info("tier changed, forcing immediate search",
-				"candidate_id", candidate.ID,
-				"previous_tier", previousTier,
-				"current_tier", candidate.Tier)
-			lastSearchTime = time.Time{} // Reset last search time to force immediate search
-		}
-
-		nextSearchTime = h.getNextSearchTime(candidate.Tier, lastSearchTime)
-		nextSchedulerTime = nextSearchTime.Add(time.Minute)
-
-		h.logger.Debug("search timing",
-			"candidate_id", candidate.ID,
-			"last_search_time", lastSearchTime,
-			"next_search_time", nextSearchTime,
-			"next_scheduler_time", nextSchedulerTime)
-
-		// Update candidate with new search time
-		_, err = tx.ExecContext(ctx, `
-			UPDATE candidates 
-			SET last_search_at = $1
-			WHERE id = $2`,
-			nextSearchTime,
-			candidate.ID)
+		searchInputBytes, err := json.Marshal(searchInput)
 		if err != nil {
-			return fmt.Errorf("failed to update candidate: %w", err)
+			return fmt.Errorf("failed to marshal search input: %w", err)
 		}
 
-		// Create NATS messages for all pages
-		seenPages := make(map[int]bool)
-		for page := 1; page <= maxPages; page++ {
-			h.logger.Debug("scheduling search task",
-				"candidate_id", candidate.ID,
-				"tier", candidate.Tier,
-				"page", page,
-				"max_pages", maxPages)
-
-			searchInput := search.SearchInput{
-				CandidateID: candidate.ID,
-				Page:        page,
-			}
-			searchInputBytes, err := json.Marshal(searchInput)
-			if err != nil {
-				return fmt.Errorf("failed to marshal search input: %w", err)
-			}
-
-			messagePayload := NATSMessagePayload{
-				Subject: search.TopicSearchInput,
-				Data:    searchInputBytes,
-			}
-			messagePayloadBytes, err := json.Marshal(messagePayload)
-			if err != nil {
-				return fmt.Errorf("failed to marshal message payload: %w", err)
-			}
-
-			searchTask := &internal.Task{
-				Type:        "nats_message_scheduler",
-				Payload:     messagePayloadBytes,
-				Status:      internal.TaskStatusPending,
-				MaxAttempts: 3,
-				RunAt:       nextSearchTime,
-			}
-			if err := h.taskProc.EnqueueTask(ctx, searchTask); err != nil {
-				return fmt.Errorf("failed to enqueue search task for page %d: %w", page, err)
-			}
-			seenPages[page] = true
+		messagePayload := tasks.NATSMessagePayload{
+			Subject: search.TopicSearchInput,
+			Data:    searchInputBytes,
+		}
+		messagePayloadBytes, err := json.Marshal(messagePayload)
+		if err != nil {
+			return fmt.Errorf("failed to marshal message payload: %w", err)
 		}
 
-		h.logger.Debug("scheduled pages summary",
-			"candidate_id", candidate.ID,
-			"tier", candidate.Tier,
-			"max_pages", maxPages,
-			"pages_scheduled", len(seenPages),
-			"seen_pages", seenPages)
-
-		// Schedule next scheduler task
-		nextTask := &internal.Task{
-			Type:        h.TaskType(),
-			Payload:     task.Payload,
+		searchTask := &internal.Task{
+			Type:        "nats_message_scheduler",
+			Payload:     messagePayloadBytes,
 			Status:      internal.TaskStatusPending,
 			MaxAttempts: 3,
-			RunAt:       nextSchedulerTime,
+			RunAt:       nextSearchTime,
 		}
-		if err := h.taskProc.EnqueueTask(ctx, nextTask); err != nil {
-			return fmt.Errorf("failed to schedule next task: %w", err)
+		if err := h.taskProc.EnqueueTask(ctx, searchTask); err != nil {
+			return fmt.Errorf("failed to enqueue search task for page %d: %w", page, err)
 		}
+		seenPages[page] = true
+	}
 
-		h.logger.Info("search scheduled successfully",
-			"component", "search_scheduler",
-			"candidate_id", payload.CandidateID,
-			"next_search", nextSearchTime,
-			"next_scheduler", nextSchedulerTime,
-			"pages_scheduled", maxPages)
+	h.logger.Debug("scheduled pages summary",
+		"user_id", user.ID,
+		"tier", user.Tier,
+		"max_pages", maxPages,
+		"pages_scheduled", len(seenPages),
+		"seen_pages", seenPages)
 
-		return nil
-	})
+	// Schedule next scheduler task
+	nextTask := &internal.Task{
+		Type:        h.TaskType(),
+		Payload:     task.Payload,
+		Status:      internal.TaskStatusPending,
+		MaxAttempts: 3,
+		RunAt:       nextSchedulerTime,
+	}
+	if err := h.taskProc.EnqueueTask(ctx, nextTask); err != nil {
+		return fmt.Errorf("failed to schedule next task: %w", err)
+	}
+
+	h.logger.Info("search scheduled successfully",
+		"component", "search_scheduler",
+		"user_id", payload.UserID,
+		"next_search", nextSearchTime,
+		"next_scheduler", nextSchedulerTime,
+		"pages_scheduled", maxPages)
 
 	return err
 }
@@ -363,12 +296,12 @@ func (h *SearchScheduler) ProcessTask(ctx context.Context, task *internal.Task) 
 //   - candidateID: The unique identifier of the candidate
 //
 // Returns an error if scheduling the initial search fails.
-func (h *SearchScheduler) ScheduleInitialSearch(ctx context.Context, candidateID string) error {
-	h.logger.Debug("scheduling initial search", "candidate_id", candidateID)
+func (h *SearchScheduler) ScheduleInitialSearch(ctx context.Context, userID string) error {
+	h.logger.Debug("scheduling initial search", "user_id", userID)
 
 	now := h.now().UTC().Truncate(time.Microsecond)
 	payload := SearchSchedulerPayload{
-		CandidateID: candidateID,
+		UserID: userID,
 	}
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {

@@ -1,15 +1,15 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
-	"talent-rodeo/internal/database"
-	"talent-rodeo/internal/handlers"
-	"talent-rodeo/internal/onboarding"
-	"talent-rodeo/internal/request"
+	"os"
+	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
+	"talent-rodeo/internal/tasks/handlers"
 	"talent-rodeo/internal/validator"
+	"time"
 
 	"github.com/alexedwards/flow"
 )
@@ -48,103 +48,32 @@ func (app *application) showSchedulePage(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	prefs, err := app.db.GetSchedulingPreferences(user.ID)
-	if err != nil {
-		app.serverError(w, r, err)
+	// Check if user is in error state - redirect to resume upload
+	if user.State.Status == internal.UserStatusError {
+		app.logger.Info("User in error state, redirecting to resume upload", "user_id", user.ID)
+
+		// Get error message if available
+		errorMsg := "There was a problem with your resume. Please upload a new one."
+		if user.State.Error != nil {
+			errorMsg = *user.State.Error
+		}
+
+		// Add flash message
+		app.sessionManager.Put(r.Context(), "flash", errorMsg)
+
+		http.Redirect(w, r, "/profile/resume/upload", http.StatusFound)
 		return
 	}
 
 	data := app.newTemplateData(r)
-	data["Preferences"] = prefs
 
-	// Get upcoming appointments
-	appointments, err := app.db.GetUserAppointments(user.ID)
-	if err != nil {
-		app.serverError(w, r, err)
-		return
+	// Only set the minimum date time
+	now := time.Now().UTC()
+	data["MinDateTime"] = now.Format("2006-01-02T15:04")
+
+	if err := response.Page(w, http.StatusOK, data, "pages/profile-schedule-phone-call.html"); err != nil {
+		app.serverError(w, r, fmt.Errorf("failed to render schedule page: %w", err))
 	}
-	data["Appointments"] = appointments
-
-	// Add websocket endpoint for voice
-	if r.URL.Path == "/schedule/voice" {
-		app.handleVoiceWebSocket(w, r)
-		return
-	}
-
-	err = response.Page(w, http.StatusOK, data, "pages/schedule.html")
-	if err != nil {
-		app.serverError(w, r, err)
-	}
-}
-
-// updateSchedulePreferences handles POST requests to update a user's scheduling preferences.
-// These preferences are used to determine available time slots for appointments.
-//
-// Flow:
-//  1. Validates form data (timezone, days, time range)
-//  2. Updates preferences in database
-//  3. Redirects back to schedule page
-//
-// Routes:
-//   - POST /profile/schedule/preferences
-//
-// Templates:
-//   - pages/schedule.html (on validation error)
-//
-// State:
-//   - Does not modify onboarding state
-//   - Accessible after StepResumeUploaded
-func (app *application) updateSchedulePreferences(w http.ResponseWriter, r *http.Request) {
-	user := contextGetAuthenticatedUser(r)
-	if user == nil {
-		http.Redirect(w, r, "/auth/linkedin", http.StatusFound)
-		return
-	}
-
-	err := r.ParseForm()
-	if err != nil {
-		app.badRequest(w, r, err)
-		return
-	}
-
-	form := scheduleFormData{}
-	err = request.DecodePostForm(r, &form)
-	if err != nil {
-		app.badRequest(w, r, err)
-		return
-	}
-
-	// Validate form data
-	form.CheckField(form.Timezone != "", "timezone", "Timezone is required")
-	form.CheckField(len(form.PreferredDays) > 0, "preferred_days", "Please select at least one preferred day")
-	form.CheckField(form.PreferredTimeStart != "", "preferred_time_start", "Start time is required")
-	form.CheckField(form.PreferredTimeEnd != "", "preferred_time_end", "End time is required")
-
-	if form.HasErrors() {
-		data := app.newTemplateData(r)
-		data["Form"] = form
-		err = response.Page(w, http.StatusBadRequest, data, "pages/schedule.html")
-		if err != nil {
-			app.serverError(w, r, err)
-		}
-		return
-	}
-
-	prefs := &database.SchedulingPreferences{
-		UserID:             user.ID,
-		Timezone:           form.Timezone,
-		PreferredDays:      form.PreferredDays,
-		PreferredTimeStart: form.PreferredTimeStart,
-		PreferredTimeEnd:   form.PreferredTimeEnd,
-	}
-
-	err = app.db.UpsertSchedulingPreferences(prefs)
-	if err != nil {
-		app.serverError(w, r, err)
-		return
-	}
-
-	http.Redirect(w, r, "/profile/schedule", http.StatusFound)
 }
 
 // createAppointment handles POST requests to schedule a new appointment.
@@ -174,15 +103,46 @@ func (app *application) createAppointment(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	if os.Getenv("VAPI_START_CALL_URL") == "" {
+		app.serverError(w, r, fmt.Errorf("VAPI_START_CALL_URL is not set"))
+		return
+	}
+
 	app.logger.Debug("Starting appointment scheduling",
 		"user_id", user.ID,
 		"method", r.Method,
 		"content_type", r.Header.Get("Content-Type"))
 
-	// Use the request decoder
-	scheduleReq, err := request.DecodeScheduleRequest(w, r)
+	// Parse form data
+	err := r.ParseForm()
 	if err != nil {
 		app.badRequest(w, r, err)
+		return
+	}
+
+	datetime := r.FormValue("datetime")
+	timezone := r.FormValue("timezone")
+
+	// Check required fields
+	if datetime == "" {
+		app.badRequest(w, r, fmt.Errorf("datetime is required"))
+		return
+	}
+	if timezone == "" {
+		app.badRequest(w, r, fmt.Errorf("timezone is required"))
+		return
+	}
+
+	// Parse the datetime string
+	scheduledTime, err := time.Parse("2006-01-02T15:04", datetime)
+	if err != nil {
+		app.badRequest(w, r, fmt.Errorf("invalid date format"))
+		return
+	}
+
+	// Check if time is in the past
+	if scheduledTime.Before(time.Now()) {
+		app.badRequest(w, r, fmt.Errorf("cannot schedule appointments in the past"))
 		return
 	}
 
@@ -193,78 +153,65 @@ func (app *application) createAppointment(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Validate time using helper
-	timeResult, err := request.ValidateScheduledTime(scheduleReq.DateTime, scheduleReq.Timezone)
-	if err != nil {
-		app.logger.Error("Time validation failed", "error", err)
-		app.badRequest(w, r, err)
-		return
-	}
-
-	// Create appointment using validated time
-	appointment := &database.Appointment{
+	// Create appointment
+	appointment := &internal.Appointment{
 		UserID:        user.ID,
-		ScheduledTime: timeResult.UserTime,
-		Timezone:      scheduleReq.Timezone,
-		Status:        database.AppointmentStatusScheduled,
+		ScheduledTime: scheduledTime.UTC(),
+		Timezone:      timezone,
+		Status:        internal.AppointmentStatusScheduled,
 	}
 
-	err = app.db.CreateAppointment(appointment)
+	err = internal.CreateAppointment(r.Context(), app.fs, *user, appointment)
 	if err != nil {
 		app.logger.Error("Failed to create appointment", "error", err)
 		http.Error(w, fmt.Sprintf("Failed to create appointment: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	// Create voice call request
-	callRequest := handlers.CallRequest{
-		PhoneNumber: *user.Phone,
+	// Create simple call request for webhook
+	callRequest := struct {
+		CustomerID string `json:"customer_id"`
+	}{
+		CustomerID: user.ID,
+	}
+
+	body, err := json.Marshal(callRequest)
+	if err != nil {
+		app.logger.Error("Failed to marshal call request", "error", err)
+		http.Error(w, fmt.Sprintf("Failed to marshal call request: %v", err), http.StatusInternalServerError)
+		return
 	}
 
 	app.logger.Debug("Scheduling voice call",
 		"phone_number", *user.Phone,
-		"scheduled_time", timeResult.UserTime,
-		"timezone", scheduleReq.Timezone,
+		"scheduled_time", scheduledTime.UTC(),
+		"timezone", timezone,
 	)
 
-	// Schedule the call
-	err = app.scheduler.ScheduleMessage(
-		r.Context(),
-		handlers.TopicVoiceInput,
-		callRequest,
-		map[string]string{
-			"appointment_id": fmt.Sprintf("%d", appointment.ID),
-			"user_id":        fmt.Sprintf("%d", user.ID),
-		},
-		timeResult.UserTime,
-		app.processor,
-	)
+	// Create webhook payload
+	payload := handlers.WebhookPayload{
+		URL:    os.Getenv("VAPI_START_CALL_URL"),
+		Method: "POST",
+		Body:   body,
+	}
+	payloadBytes, _ := json.Marshal(payload)
+
+	_, err = app.processor.CreateAndEnqueueTask(r.Context(), handlers.TaskTypeWebhookCall, payloadBytes, scheduledTime.UTC())
 	if err != nil {
-		app.logger.Error("Failed to schedule voice call",
-			"error", err,
-			"phone_number", *user.Phone,
-		)
-		http.Error(w, fmt.Sprintf("Failed to schedule call: %v", err), http.StatusInternalServerError)
+		app.logger.Error("Failed to create and enqueue task", "error", err)
+		http.Error(w, fmt.Sprintf("Failed to create and enqueue task: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	// Update onboarding state
-	if err := app.db.UpdateOnboardingStep(user.ID, onboarding.StepPhoneCallScheduled); err != nil {
+	err = internal.UpdateUserState(r.Context(), app.fs, user, internal.UserStatusIntroCallScheduled)
+	if err != nil {
 		app.logger.Error("Failed to update onboarding state", "error", err)
 		http.Error(w, fmt.Sprintf("Failed to update onboarding state: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	// Handle response based on request type
-	if request.IsHTMXRequest(r) {
-		data := app.newTemplateData(r)
-		err = response.Page(w, http.StatusOK, data, "partials/waiting-for-call.html")
-		if err != nil {
-			app.serverError(w, r, err)
-		}
-		return
-	}
-
+	// Always redirect to /profile on success
 	http.Redirect(w, r, "/profile", http.StatusFound)
 }
 
@@ -298,8 +245,10 @@ func (app *application) rescheduleAppointment(w http.ResponseWriter, r *http.Req
 	}
 
 	// Update onboarding state back to resume uploaded
-	if err := app.db.UpdateOnboardingStep(user.ID, onboarding.StepResumeUploaded); err != nil {
-		app.serverError(w, r, fmt.Errorf("failed to update onboarding state: %w", err))
+	err := internal.UpdateUserState(r.Context(), app.fs, user, internal.UserStatusResumeUploaded)
+	if err != nil {
+		app.logger.Error("Failed to update onboarding state", "error", err)
+		http.Error(w, fmt.Sprintf("Failed to update onboarding state: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -329,28 +278,128 @@ func (app *application) cancelAppointment(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	idParam := flow.Param(r.Context(), "id")
-	id, err := strconv.Atoi(idParam)
-	if err != nil || id < 1 {
-		app.badRequest(w, r, fmt.Errorf("invalid appointment ID"))
-		return
-	}
+	id := flow.Param(r.Context(), "id")
 
-	appointment, err := app.db.GetAppointment(id)
+	err := internal.CancelAppointment(r.Context(), app.fs, id)
 	if err != nil {
-		app.serverError(w, r, err)
-		return
-	}
-	if appointment == nil || appointment.UserID != user.ID {
-		http.NotFound(w, r)
+		app.serverError(w, r, fmt.Errorf("failed to cancel appointment: %w", err))
 		return
 	}
 
-	err = app.db.UpdateAppointmentStatus(id, database.AppointmentStatusCancelled)
+	http.Redirect(w, r, "/profile", http.StatusFound)
+}
+
+// callNow handles POST requests to initiate an immediate call.
+// It creates an appointment for the current time and schedules
+// the voice call to start immediately.
+//
+// Flow:
+//  1. Validates user has phone number
+//  2. Creates appointment record for now
+//  3. Schedules immediate voice call
+//  4. Updates onboarding state
+//  5. Returns appropriate view based on request type
+//
+// Routes:
+//   - POST /profile/schedule/call-now
+//
+// Templates:
+//   - partials/waiting-for-call.html (HTMX request)
+//
+// State Transitions:
+//   - StepResumeUploaded → StepPhoneCallScheduled
+func (app *application) callNow(w http.ResponseWriter, r *http.Request) {
+	user := contextGetAuthenticatedUser(r)
+	if user == nil {
+		http.Redirect(w, r, "/auth/linkedin", http.StatusFound)
+		return
+	}
+
+	app.logger.Debug("Starting immediate call",
+		"user_id", user.ID,
+		"method", r.Method,
+		"content_type", r.Header.Get("Content-Type"))
+
+	// Check phone number
+	if user.Phone == nil {
+		app.logger.Error("User has no phone number", "user_id", user.ID)
+		app.reportServerError(r, fmt.Errorf("user has no phone number"))
+		http.Redirect(w, r, "/profile", http.StatusFound)
+		return
+	}
+
+	// Schedule the call to happen in 1 second to avoid "in the past" error
+	scheduledTime := time.Now().UTC().Add(1 * time.Second)
+
+	// Create appointment
+	appointment := &internal.Appointment{
+		UserID:        user.ID,
+		ScheduledTime: scheduledTime,
+		Timezone:      "UTC", // Immediate calls don't need specific timezone
+		Status:        internal.AppointmentStatusScheduled,
+	}
+
+	err := internal.CreateAppointment(r.Context(), app.fs, *user, appointment)
 	if err != nil {
-		app.serverError(w, r, err)
+		app.logger.Error("Failed to create appointment", "error", err)
+		app.serverError(w, r, fmt.Errorf("failed to create appointment: %w", err))
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	// Create simple call request for webhook
+	callRequest := struct {
+		CustomerID string `json:"customer_id"`
+	}{
+		CustomerID: user.ID,
+	}
+
+	app.logger.Debug("Call request", "call_request", callRequest)
+
+	body, err := json.Marshal(callRequest)
+	if err != nil {
+		app.logger.Error("Failed to marshal call request", "error", err)
+		app.serverError(w, r, fmt.Errorf("failed to marshal call request: %w", err))
+		return
+	}
+
+	app.logger.Debug("Scheduling voice call",
+		"phone_number", *user.Phone,
+		"scheduled_time", scheduledTime.UTC(),
+		"timezone", "UTC",
+	)
+
+	// Create webhook payload
+	payload := handlers.WebhookPayload{
+		URL:    os.Getenv("VAPI_START_CALL_URL"),
+		Method: "POST",
+		Body:   body,
+	}
+	payloadBytes, _ := json.Marshal(payload)
+
+	_, err = app.processor.CreateAndEnqueueTask(r.Context(), handlers.TaskTypeWebhookCall, payloadBytes, scheduledTime)
+	if err != nil {
+		app.logger.Error("Failed to create and enqueue task", "error", err)
+		app.serverError(w, r, fmt.Errorf("failed to create and enqueue task: %w", err))
+		return
+	}
+
+	app.logger.Debug("Voice call scheduled",
+		"user_id", user.ID,
+		"phone_number", *user.Phone)
+
+	// Update onboarding state
+	err = internal.UpdateUserState(r.Context(), app.fs, user, internal.UserStatusIntroCallScheduled)
+	if err != nil {
+		app.logger.Error("Failed to update onboarding state",
+			"error", err,
+			"user_id", user.ID,
+		)
+		app.reportServerError(r, fmt.Errorf("failed to update onboarding state: %w", err))
+		// Don't return error here since the call is already scheduled
+	}
+
+	app.logger.Debug("Redirecting to profile",
+		"user_id", user.ID)
+
+	http.Redirect(w, r, "/profile", http.StatusFound)
 }

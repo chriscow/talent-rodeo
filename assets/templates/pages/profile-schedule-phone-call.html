@@ -23,107 +23,39 @@
         </ul>
 
         <div class="grid">
-            <div id="error-message" style="color: red; display: none;"></div>
+            {{if .Error}}
+            <div style="color: red;">{{.Error}}</div>
+            {{end}}
 
-            <form method="post" action="/profile/schedule/appointment" id="scheduleForm">
-                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                <input type="hidden" name="timezone" id="timezone" value="">
-                <label for="datetime">
-                    Preferred Time
-                    <input type="datetime-local" id="datetime" name="datetime" required min="">
-                </label>
+            <div class="grid">
+                <form method="post" action="/profile/schedule/appointment">
+                    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                    <input type="hidden" name="timezone" id="timezone">
+                    <label for="datetime">
+                        Preferred Time
+                        <input type="datetime-local" id="datetime" name="datetime" required min="{{.MinDateTime}}">
+                    </label>
 
-                <button type="submit">Schedule Call</button>
-            </form>
-
-            <script>
-                function showError(message) {
-                    const errorDiv = document.getElementById('error-message');
-                    errorDiv.textContent = message;
-                    errorDiv.style.display = 'block';
-                }
-
-                // Set timezone
-                const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                document.getElementById('timezone').value = timezone;
-                console.log('Set timezone:', timezone);
-
-                // Set min datetime to now
-                const now = new Date();
-                now.setMinutes(now.getMinutes() - now.getTimezoneOffset()); // Convert to local time
-                const minDatetime = now.toISOString().slice(0, 16);
-                document.getElementById('datetime').min = minDatetime;
-                console.log('Set min datetime:', minDatetime);
-
-                // Convert datetime to RFC3339 format on form submit
-                document.getElementById('scheduleForm').addEventListener('submit', async function (e) {
-                    e.preventDefault();
-
-                    // Clear any previous error
-                    document.getElementById('error-message').style.display = 'none';
-
-                    const datetimeInput = document.getElementById('datetime');
-                    const datetime = datetimeInput.value;
-                    console.log('Original datetime:', datetime);
-
-                    if (!datetime) {
-                        showError('Please select a date and time');
-                        return;
-                    }
-
-                    // Convert to Date object for validation
-                    const date = new Date(datetime);
-
-                    // Validate it's a valid date
-                    if (isNaN(date.getTime())) {
-                        showError('Invalid date selected');
-                        return;
-                    }
-
-                    // Validate it's in the future
-                    if (date <= now) {
-                        showError('Please select a future date and time');
-                        return;
-                    }
-
-                    // Convert to RFC3339 format
-                    const rfc3339 = date.toISOString();
-                    console.log('Converted to RFC3339:', rfc3339);
-
-                    try {
-                        const response = await fetch('/profile/schedule/appointment', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-CSRF-Token': document.querySelector('input[name="csrf_token"]').value
-                            },
-                            body: JSON.stringify({
-                                datetime: rfc3339,
-                                timezone: timezone
-                            })
-                        });
-
-                        if (!response.ok) {
-                            const errorText = await response.text();
-                            console.error('Server error:', errorText);
-                            showError(errorText);
-                            return;
-                        }
-
-                        // Success - redirect to profile
-                        window.location.href = '/profile';
-
-                    } catch (error) {
-                        console.error('Error:', error);
-                        showError('Failed to schedule appointment. Please try again.');
-                    }
-                });
-            </script>
+                    <button type="submit">Schedule Call</button>
+                </form>
+            </div>
         </div>
+
+        <script>
+            // Set timezone on both forms
+            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            document.getElementById('timezone').value = tz;
+            document.getElementById('timezone-now').value = tz;
+        </script>
+
+        <form method="post" action="/profile/schedule/call-now">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input type="hidden" name="timezone" id="timezone-now">
+            <button type="submit" class="contrast">Call Me Now!</button>
+        </form>
         <form method="get" action="/profile/resume/upload">
             <button type="submit" class="secondary">Upload Different Resume</button>
         </form>
-
     </article>
 </main>
 {{end}}
