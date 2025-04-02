@@ -43,7 +43,7 @@ func (app *application) showProfilePage(w http.ResponseWriter, r *http.Request) 
 		}
 
 		// Reset state to pending resume upload
-		if err := internal.UpdateUserState(r.Context(), app.fs, user, internal.UserStatusPendingResumeUpload); err != nil {
+		if err := internal.UpdateUserStatus(r.Context(), app.fs, user, internal.UserStatusPendingResumeUpload); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to reset user state: %w", err))
 			return
 		}
@@ -56,7 +56,7 @@ func (app *application) showProfilePage(w http.ResponseWriter, r *http.Request) 
 	default:
 		app.logger.Warn("unknown onboarding step", "step", user.State.Status)
 		// Reset to initial state for unknown states
-		if err := internal.UpdateUserState(r.Context(), app.fs, user, internal.UserStatusPendingResumeUpload); err != nil {
+		if err := internal.UpdateUserStatus(r.Context(), app.fs, user, internal.UserStatusPendingResumeUpload); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to reset user state: %w", err))
 			return
 		}
@@ -65,7 +65,34 @@ func (app *application) showProfilePage(w http.ResponseWriter, r *http.Request) 
 }
 
 func (app *application) showWaitingCallPage(w http.ResponseWriter, r *http.Request) {
+	user := contextGetAuthenticatedUser(r)
 	data := app.newTemplateData(r)
+
+	// Get the user's appointments
+	appointments, err := internal.GetAppointments(r.Context(), app.fs, user.ID)
+	if err != nil {
+		app.serverError(w, r, fmt.Errorf("failed to get appointments: %w", err))
+		return
+	}
+
+	// Find the most recent active appointment
+	var activeAppointment *internal.Appointment
+	for _, appt := range appointments {
+		if appt.Status == internal.AppointmentStatusScheduled || appt.Status == internal.AppointmentStatusRunning {
+			if activeAppointment == nil || appt.ScheduledTime.After(activeAppointment.ScheduledTime) {
+				activeAppointment = appt
+			}
+		}
+	}
+
+	if activeAppointment == nil {
+		app.logger.Error("No active appointment found", "user_id", user.ID)
+		app.serverError(w, r, fmt.Errorf("no active appointment found"))
+		return
+	}
+
+	data["Appointment"] = activeAppointment
+
 	if err := response.Page(w, http.StatusOK, data, "pages/profile-waiting-call.html"); err != nil {
 		app.serverError(w, r, fmt.Errorf("failed to render waiting call page: %w", err))
 	}

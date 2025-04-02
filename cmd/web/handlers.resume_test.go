@@ -17,8 +17,8 @@ func TestResumeUpload(t *testing.T) {
 	t.Run("Unauthenticated user cannot upload resume", func(t *testing.T) {
 		code, headers, _ := ts.get(t, "/profile/resume/upload")
 
-		if code != http.StatusFound {
-			t.Errorf("want %d; got %d", http.StatusFound, code)
+		if code != http.StatusSeeOther {
+			t.Errorf("want %d; got %d", http.StatusSeeOther, code)
 		}
 
 		if headers.Get("Location") != "/auth/linkedin" {
@@ -80,8 +80,8 @@ func TestResumeUpload(t *testing.T) {
 		w = httptest.NewRecorder()
 		ts.app.routes().ServeHTTP(w, req)
 
-		if w.Code != http.StatusFound {
-			t.Errorf("want %d; got %d", http.StatusFound, w.Code)
+		if w.Code != http.StatusSeeOther {
+			t.Errorf("want %d; got %d", http.StatusSeeOther, w.Code)
 		}
 
 		if w.Header().Get("Location") != "/profile" {

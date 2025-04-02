@@ -31,7 +31,7 @@ func (app *application) createCall(ctx context.Context, customerNumber, customer
 		Content: systemPrompt,
 	}}
 
-	result, err := vapi.CreateCall(ctx, vapi.CallConfig{
+	result, err := vapi.CreateCall(ctx, vapi.Call{
 		AssistantID:   &assistantID,
 		PhoneNumberID: &outboundPhoneID,
 		AssistantOverrides: &vapi.Assistant{

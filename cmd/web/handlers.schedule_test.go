@@ -68,8 +68,8 @@ func TestScheduling(t *testing.T) {
 		// Use get() instead of authenticatedGet() to test unauthenticated access
 		code, headers, _ := ts.get(t, "/profile/schedule")
 
-		if code != http.StatusFound {
-			t.Errorf("want %d; got %d", http.StatusFound, code)
+		if code != http.StatusSeeOther {
+			t.Errorf("want %d; got %d", http.StatusSeeOther, code)
 		}
 
 		if headers.Get("Location") != "/auth/linkedin" {
@@ -105,8 +105,8 @@ func TestScheduling(t *testing.T) {
 
 		code, headers, _ := ts.authenticatedPostForm(t, ts.user1, "/profile/schedule/appointment", form)
 
-		if code != http.StatusFound {
-			t.Errorf("want %d; got %d", http.StatusFound, code)
+		if code != http.StatusSeeOther {
+			t.Errorf("want %d; got %d", http.StatusSeeOther, code)
 		}
 
 		if headers.Get("Location") != "/profile" {
@@ -161,8 +161,8 @@ func TestScheduling(t *testing.T) {
 
 		code, headers, _ := ts.authenticatedPostForm(t, ts.user1, "/profile/schedule/call-now", form)
 
-		if code != http.StatusFound {
-			t.Errorf("want %d; got %d", http.StatusFound, code)
+		if code != http.StatusSeeOther {
+			t.Errorf("want %d; got %d", http.StatusSeeOther, code)
 		}
 
 		if headers.Get("Location") != "/profile" {
@@ -176,8 +176,8 @@ func TestScheduling(t *testing.T) {
 
 		code, headers, _ := ts.authenticatedPostForm(t, ts.user1, "/profile/schedule/call-now", form)
 
-		if code != http.StatusFound {
-			t.Errorf("want %d; got %d", http.StatusFound, code)
+		if code != http.StatusSeeOther {
+			t.Errorf("want %d; got %d", http.StatusSeeOther, code)
 		}
 
 		if headers.Get("Location") != "/profile" {

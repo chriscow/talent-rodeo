@@ -126,7 +126,7 @@ func TestWebhookHandler_ProcessTask(t *testing.T) {
 			tt.payload.URL = server.URL
 
 			// Create handler
-			handler := NewWebhookScheduler(logger)
+			handler := NewWebhookScheduler(logger, nil)
 
 			// Create task
 			payloadBytes, err := json.Marshal(tt.payload)
