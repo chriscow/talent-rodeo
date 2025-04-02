@@ -1,0 +1,184 @@
+{{define "title"}}Talent Rodeo - Your AI-Powered Job Search Partner{{end}}
+
+{{define "page-css"}}
+<style>
+    /* Hero section */
+    .hero {
+        padding: 4rem 0;
+        text-align: center;
+        background: linear-gradient(135deg, var(--pico-primary-background), var(--pico-card-background));
+        border-radius: var(--pico-border-radius);
+        margin-bottom: 2rem;
+    }
+
+    .hero h1 {
+        font-size: 3.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .hero p {
+        font-size: 1.25rem;
+        max-width: 800px;
+        margin: 0 auto 2rem;
+    }
+
+    /* Features section */
+    .features {
+        margin: 4rem 0;
+    }
+
+    .feature-card {
+        padding: 2rem;
+        border-radius: var(--pico-border-radius);
+        background: var(--pico-card-background);
+        transition: transform 0.2s;
+    }
+
+    .feature-card:hover {
+        transform: translateY(-5px);
+    }
+
+    .feature-icon {
+        font-size: 2rem;
+        margin-bottom: 1rem;
+        color: var(--pico-primary);
+    }
+
+    /* ShHIREly section */
+    .shirely-section {
+        background: var(--pico-card-background);
+        border-radius: var(--pico-border-radius);
+        padding: 3rem;
+        margin: 4rem 0;
+        text-align: center;
+    }
+
+    .shirely-section h2 {
+        font-size: 2.5rem;
+        margin-bottom: 2rem;
+    }
+
+    /* CTA section */
+    .cta-section {
+        text-align: center;
+        padding: 4rem 0;
+    }
+
+    .cta-section button {
+        font-size: 1.25rem;
+        padding: 1rem 2rem;
+    }
+
+    /* LinkedIn button styling */
+    #linkedin-signin {
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+    }
+
+    #linkedin-signin:hover {
+        opacity: 0.9;
+    }
+
+    #loading-spinner {
+        transition: opacity 0.3s ease;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .hero h1 {
+            font-size: 2.5rem;
+        }
+        
+        .feature-card {
+            margin-bottom: 1rem;
+        }
+    }
+</style>
+{{end}}
+
+{{define "page:main"}}
+<main class="container">
+    <!-- Hero Section -->
+    <section class="hero">
+        <h1>Find Your Dream Job with AI</h1>
+        <p>Let our AI-powered platform and S<strong>hire</strong>ly, your personal job search assistant, guide you to your next career opportunity.</p>
+        {{if not .User}}
+            <button id="linkedin-signin" class="contrast" onclick="login()">
+                <img src="/static/img/linkedin/retina/Sign-In-Large---Active.png" alt="LinkedIn Logo" />
+            </button>
+            <img id="loading-spinner" src="/static/img/puff.svg" style="opacity: 0" />
+        {{else}}
+            <a href="/profile" role="button">Go to Profile</a>
+        {{end}}
+    </section>
+
+    <!-- Features Section -->
+    <section class="features">
+        <div class="grid">
+            <div>
+                <article class="feature-card">
+                    <i data-feather="phone-call" class="feature-icon"></i>
+                    <h3>AI Assessment Call</h3>
+                    <p>Have a natural conversation with our AI to understand your career goals and preferences, no awkward interviews.</p>
+                    <br>
+                </article>
+            </div>
+            <div>
+                <article class="feature-card">
+                    <i data-feather="target" class="feature-icon"></i>
+                    <h3>Intelligent Matching</h3>
+                    <p>Our AI analyzes thousands of LinkedIn jobs to find opportunities that perfectly match your skills and preferences.</p>
+                    <br>
+                </article>
+            </div>
+            <div>
+                <article class="feature-card">
+                    <i data-feather="zap" class="feature-icon"></i>
+                    <h3>Stay Ahead of the Game</h3>
+                    <p>Free tier deeply analyzes hundreds of jobs every 3 days, or get Premium for daily analysis of thousands of jobs to be first in line.</p>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <!-- ShHIREly Section -->
+    <section class="shirely-section">
+        <h2>Meet Sh<span style="color: var(--pico-primary);">HIRE</span>ly</h2>
+        <p>Your AI-powered job search companion who learns your job search goals 
+        to find the perfect job for you. ShHIREly combines advanced AI with a 
+        personal touch to make your job search more effective and enjoyable.</p>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta-section">
+        <h2>Ready to Transform Your Job Search?</h2>
+        <p>Join thousands of job seekers who have found their perfect role with Talent Rodeo.</p>
+        {{if not .User}}
+            <button id="linkedin-signin" class="contrast" onclick="login()">
+                <img src="/static/img/linkedin/retina/Sign-In-Large---Active.png" alt="LinkedIn Logo" />
+            </button>
+            <img id="loading-spinner" src="/static/img/puff.svg" style="opacity: 0" />
+        {{else}}
+            <a href="/profile" role="button">Continue to Profile</a>
+        {{end}}
+    </section>
+</main>
+{{end}}
+
+{{define "page:scripts"}}
+<script>
+    // Ensure Feather icons are loaded
+    document.addEventListener('DOMContentLoaded', function() {
+        feather.replace();
+    });
+
+    // LinkedIn login handling
+    function login() {
+        document.getElementById('loading-spinner').style.opacity = 1;
+        document.getElementById('linkedin-signin').style.display = 'none';
+        window.location.href = "/auth/linkedin"
+    }
+</script>
+{{end}}

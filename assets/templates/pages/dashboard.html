@@ -1,21 +1,5 @@
 {{define "page:main"}}
-{{ if .User }}
-
-{{ else }}
-{{template "partial:login" .}}
-{{ end }}
-{{end}}
-
-{{ define "ResumeAnalysis" }}
-<article>
-    <h3>Resume Analysis</h3>
-    <pre><code>{{ .YAML }}</code></pre>
-</article>
-{{ end }}
-
-{{ define "UploadError" }}
-<article class="error">
-    <header>Error</header>
-    <p>{{ .Message }}</p>
-</article>
+<main class="container">
+    <h1>Dashboard</h1>
+</main>
 {{ end }}

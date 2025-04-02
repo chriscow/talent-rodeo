@@ -21,7 +21,7 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := response.Page(w, http.StatusOK, data, "pages/dashboard.html"); err != nil {
+	if err := response.Page(w, http.StatusOK, data, "pages/home.html"); err != nil {
 		app.serverError(w, r, err)
 	}
 }

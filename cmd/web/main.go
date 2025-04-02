@@ -261,7 +261,7 @@ func run(logger *slog.Logger) error {
 	// if err != nil {
 	// 	return fmt.Errorf("error setting up NATS handler: %w", err)
 	// }
-	wh := th.NewWebhookScheduler(logger)
+	wh := th.NewWebhookScheduler(logger, firestoreClient)
 	// taskProcessor.RegisterHandler(scheduler)
 	taskProcessor.RegisterHandler(wh)
 

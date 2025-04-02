@@ -15,8 +15,8 @@ func TestAuthFlow(t *testing.T) {
 	t.Run("Unauthenticated user is redirected to login", func(t *testing.T) {
 		code, headers, _ := ts.get(t, "/profile")
 
-		if code != http.StatusFound {
-			t.Errorf("want %d; got %d", http.StatusFound, code)
+		if code != http.StatusSeeOther {
+			t.Errorf("want %d; got %d", http.StatusSeeOther, code)
 		}
 
 		if headers.Get("Location") != "/auth/linkedin" {
@@ -66,8 +66,8 @@ func TestAuthFlow(t *testing.T) {
 		t.Logf("Response Headers: %v", w.Header())
 		t.Logf("Response Body: %s", w.Body.String())
 
-		if w.Code != http.StatusFound {
-			t.Errorf("want %d; got %d", http.StatusFound, w.Code)
+		if w.Code != http.StatusSeeOther {
+			t.Errorf("want %d; got %d", http.StatusSeeOther, w.Code)
 		}
 
 		if w.Header().Get("Location") != "/" {

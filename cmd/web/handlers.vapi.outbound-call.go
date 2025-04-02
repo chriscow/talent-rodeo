@@ -9,6 +9,7 @@ import (
 	"talent-rodeo/internal/response"
 	"talent-rodeo/internal/utils"
 	"talent-rodeo/internal/vapi"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -181,7 +182,7 @@ func (app *application) handleVapiCall(w http.ResponseWriter, r *http.Request) {
 	}}
 
 	// Create call config
-	callConfig := vapi.CallConfig{
+	callConfig := vapi.Call{
 		AssistantID:   &assistantID,
 		PhoneNumberID: &outboundPhoneID,
 		AssistantOverrides: &vapi.Assistant{
@@ -223,41 +224,37 @@ func (app *application) handleVapiCall(w http.ResponseWriter, r *http.Request) {
 		"status", result.Status,
 	)
 
+	// Create an appointment record for this call
+	appointment := &internal.Appointment{
+		UserID:        user.ID,
+		ScheduledTime: time.Now(),
+		Status:        internal.AppointmentStatusScheduled,
+		CallID:        &result.ID,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+
+	if err := internal.CreateAppointment(r.Context(), app.fs, *user, appointment); err != nil {
+		app.logger.Error("Failed to create appointment", "error", err)
+		app.reportServerError(r, fmt.Errorf("failed to create appointment: %w", err))
+		response.JSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "failed to create appointment",
+		})
+		return
+	}
+
+	// TODO: Get the user from Firestore and update the status to UserStatusIntroCallStarted
+	user.State.Status = internal.UserStatusIntroCallStarted
+	user.State.Started = time.Now()
+	if err := internal.UpdateUserStatus(r.Context(), app.fs, user, user.State.Status); err != nil {
+		app.logger.Error("Failed to update user", "error", err)
+		app.reportServerError(r, fmt.Errorf("failed to update user: %w", err))
+	}
+
 	// Return success response
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{
 		"call_id": result.ID,
 		"status":  result.Status,
-	})
-}
-
-// handleVapiWebhook handles incoming webhook notifications from VAPI
-func (app *application) handleVapiWebhook(w http.ResponseWriter, r *http.Request) {
-	app.logger.Debug("VAPI webhook received", "method", r.Method, "url", r.URL.String())
-
-	// Only accept POST requests
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Read and log the raw request body for initial debugging
-	var payload map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		app.logger.Error("Failed to decode webhook payload", "error", err)
-		app.reportServerError(r, fmt.Errorf("failed to decode webhook payload: %w", err))
-		response.JSON(w, http.StatusBadRequest, map[string]string{
-			"error": "invalid request body",
-		})
-		return
-	}
-
-	// Log the webhook payload for debugging
-	app.logger.Debug("Received VAPI webhook payload", "payload", payload)
-
-	// Return a 200 OK to acknowledge receipt
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{
-		"status": "received",
 	})
 }

@@ -6,7 +6,7 @@ import (
 	"talent-rodeo/internal/utils"
 )
 
-func GetDefaultVapiCallConfig(customerNumber, customerName, resume string) (*CallConfig, error) {
+func GetDefaultVapiCallConfig(customerNumber, customerName, resume string) (*Call, error) {
 	requiredEnvVars := []string{
 		"VAPI_WEBHOOK_URL",
 		"VAPI_ASSISTANT_ID",
@@ -41,7 +41,7 @@ func GetDefaultVapiCallConfig(customerNumber, customerName, resume string) (*Cal
 		Content: systemPrompt,
 	}}
 
-	return &CallConfig{
+	return &Call{
 		AssistantID:   &assistantID,
 		PhoneNumberID: &outboundPhoneID,
 		AssistantOverrides: &Assistant{

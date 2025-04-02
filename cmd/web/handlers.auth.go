@@ -12,6 +12,18 @@ import (
 	"github.com/markbates/goth/gothic"
 )
 
+// HTTP Status Code Notes:
+// We use http.StatusSeeOther (303) for all redirects in the authentication flow.
+// This is crucial for security and usability because:
+// 1. After login/logout operations (POST), we want to force a GET to the next page
+// 2. Prevents session fixation by ensuring a clean GET request
+// 3. Avoids browser caching of sensitive auth-related redirects
+// 4. Maintains consistency with OAuth providers that also use 303
+// 5. Follows security best practices for authentication flows
+//
+// The 303 status code is particularly important for auth handlers as it helps prevent
+// authentication/session related attacks and ensures clean session state transitions.
+
 // startSocialAuth handles GET requests to /auth/:provider.
 // It initiates the OAuth flow with the specified provider (e.g., LinkedIn).
 // The provider parameter is extracted from the URL and passed to the gothic library.
@@ -111,7 +123,7 @@ func (app *application) completeSocialAuth(w http.ResponseWriter, r *http.Reques
 		redirectPath = "/profile"
 	}
 
-	http.Redirect(w, r, redirectPath, http.StatusFound)
+	http.Redirect(w, r, redirectPath, http.StatusSeeOther)
 }
 
 // handleAuthError is a helper function that processes authentication errors.
@@ -152,5 +164,5 @@ func (app *application) logoutUser(w http.ResponseWriter, r *http.Request) {
 	app.logger.Info("Session cleared successfully, redirecting to home")
 
 	// Redirect to home page instead of directly to LinkedIn auth
-	http.Redirect(w, r, "/", http.StatusFound)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }

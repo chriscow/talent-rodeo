@@ -4,13 +4,21 @@
 <main class="container">
     <article>
         <header>
-            <h1>We'll be calling you shortly</h1>
+            <h1 id="page-title">We'll be calling you shortly</h1>
         </header>
 
-        <p>
-            Get ready for a brief conversation with our AI assistant about your career preferences.
-            The call should take about 5-10 minutes.
-        </p>
+        <div id="status-content">
+            {{if eq .Appointment.Status "scheduled"}}
+                <p>
+                    Your call is scheduled for <strong>{{.Appointment.ScheduledTime | humanDate}}</strong> in your local time.
+                    Please make sure you're available to take our call.
+                </p>
+            {{else if eq .Appointment.Status "running"}}
+                <p>
+                    We are currently calling you! Please answer your phone when it rings.
+                </p>
+            {{end}}
+        </div>
 
         <article aria-label="What to expect" class="secondary">
             <header>
@@ -33,10 +41,43 @@
     </article>
 </main>
 
+<!-- Add user data for state monitoring -->
+<div data-user-id="{{.User.ID}}" 
+     data-pusher-key="{{.PusherKey}}" 
+     data-pusher-cluster="{{.PusherCluster}}"
+     hidden></div>
+{{end}}
+
+{{define "page:scripts"}}
+<script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
 <script>
-    // Refresh the page every 30 seconds to check call status
-    setTimeout(() => {
-        window.location.reload();
-    }, 30000);
+    document.addEventListener('DOMContentLoaded', function() {
+        const userElement = document.querySelector('[data-user-id]');
+        if (!userElement) return;
+        
+        const pusher = new Pusher(userElement.dataset.pusherKey, {
+            cluster: userElement.dataset.pusherCluster
+        });
+        
+        const channel = pusher.subscribe(`user-${userElement.dataset.userId}`);
+        const statusContent = document.getElementById('status-content');
+        const pageTitle = document.getElementById('page-title');
+        
+        channel.bind('state-update', function(data) {
+            // Handle different states
+            if (data.error || data.status_text === 'Error') {
+                window.location.href = '/profile';
+            } else if (data.status_text === 'Call Started') {
+                pageTitle.textContent = 'Your Call is Starting';
+                statusContent.innerHTML = `
+                    <p>
+                        We are currently calling you! Please answer your phone when it rings.
+                    </p>
+                `;
+            } else if (data.status_text === 'Call Completed') {
+                window.location.href = '/dashboard';
+            }
+        });
+    });
 </script>
 {{end}}

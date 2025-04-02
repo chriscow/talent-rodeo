@@ -41,7 +41,7 @@ func callCandidate(ctx context.Context, sessionID, systemPrompt string, status S
 		return nil, fmt.Errorf("callCandidate: failed to generate schema: %w", err)
 	}
 
-	return vapi.CreateCall(ctx, vapi.CallConfig{
+	return vapi.CreateCall(ctx, vapi.Call{
 		AssistantID:   &assistantID,
 		PhoneNumberID: &outboundPhoneID,
 		AssistantOverrides: &vapi.Assistant{

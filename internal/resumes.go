@@ -154,7 +154,7 @@ func AnnotateResume(ctx context.Context, fs *firestore.Client, logger *slog.Logg
 		}
 	} else {
 		// If the resume is valid, update the user state to ResumeUploaded
-		err = UpdateUserState(ctx, fs, user, UserStatusResumeUploaded)
+		err = UpdateUserStatus(ctx, fs, user, UserStatusResumeUploaded)
 		if err != nil {
 			logger.Error("failed to update user state to ResumeUploaded", "error", err)
 		}

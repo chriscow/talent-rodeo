@@ -3,7 +3,6 @@ package handlers
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -11,6 +10,8 @@ import (
 	"time"
 
 	"talent-rodeo/internal"
+
+	"cloud.google.com/go/firestore"
 )
 
 const (
@@ -28,40 +29,17 @@ type WebhookPayload struct {
 	Body    []byte            `json:"body,omitempty"`
 }
 
-// WebhookScheduler handles webhook call tasks
+// WebhookScheduler handles scheduling and executing webhook calls
 type WebhookScheduler struct {
-	client *http.Client
 	logger *slog.Logger
-	// List of status codes that should trigger a retry
-	retryStatusCodes []int
+	fs     *firestore.Client
 }
 
-// NewWebhookScheduler creates a new webhook handler
-func NewWebhookScheduler(logger *slog.Logger) *WebhookScheduler {
-	// Create a custom transport that doesn't follow redirects
-	transport := &http.Transport{
-		DisableKeepAlives: true,
-	}
-
-	client := &http.Client{
-		Transport: transport,
-		Timeout:   30 * time.Second,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-
+// NewWebhookScheduler creates a new webhook scheduler
+func NewWebhookScheduler(logger *slog.Logger, fs *firestore.Client) *WebhookScheduler {
 	return &WebhookScheduler{
-		client: client,
 		logger: logger,
-		retryStatusCodes: []int{
-			408, // Request Timeout
-			429, // Too Many Requests
-			500, // Internal Server Error
-			502, // Bad Gateway
-			503, // Service Unavailable
-			504, // Gateway Timeout
-		},
+		fs:     fs,
 	}
 }
 
@@ -73,65 +51,72 @@ func (h *WebhookScheduler) TaskType() string {
 // ProcessTask handles the execution of a webhook call task
 func (h *WebhookScheduler) ProcessTask(ctx context.Context, task *internal.Task) error {
 	var payload WebhookPayload
-	if err := json.Unmarshal(task.Payload, &payload); err != nil {
-		return fmt.Errorf("failed to unmarshal webhook payload: %w", err)
+	if err := task.GetPayload(&payload); err != nil {
+		return fmt.Errorf("failed to unmarshal payload: %w", err)
 	}
 
-	// Create request
+	// If this is a VAPI call, try to update the appointment status
+	if payload.Headers != nil && payload.Headers["X-VAPI-Call-ID"] != "" {
+		callID := payload.Headers["X-VAPI-Call-ID"]
+		appointments, err := internal.GetAppointmentsByCallID(ctx, h.fs, callID)
+		if err != nil {
+			h.logger.Error("Failed to get appointment by call ID", "error", err, "call_id", callID)
+		} else if len(appointments) > 0 {
+			appointment := appointments[0]
+			appointment.Status = internal.AppointmentStatusFailed
+			appointment.UpdatedAt = time.Now()
+			if err := internal.UpdateAppointment(ctx, h.fs, appointment); err != nil {
+				h.logger.Error("Failed to update appointment status", "error", err, "appointment_id", appointment.ID)
+			}
+		}
+	}
+
+	// Make the HTTP request
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
 	req, err := http.NewRequestWithContext(ctx, payload.Method, payload.URL, bytes.NewReader(payload.Body))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
 	// Add headers
-	for key, value := range payload.Headers {
-		req.Header.Set(key, value)
+	for k, v := range payload.Headers {
+		req.Header.Set(k, v)
 	}
 
-	// Make the request
-	h.logger.Debug("making webhook request",
-		"url", payload.URL,
-		"method", payload.Method,
-		"headers", payload.Headers,
-		"body_size", len(payload.Body),
-	)
-
-	resp, err := h.client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to make request: %w", err)
+		return &internal.TaskError{
+			Err:         fmt.Errorf("webhook call failed: %w", err),
+			ShouldRetry: true,
+		}
 	}
 	defer resp.Body.Close()
 
-	// Read response body with size limit
-	limitedReader := io.LimitReader(resp.Body, MaxResponseSize)
-	respBody, err := io.ReadAll(limitedReader)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
+	// Read response body (limited to prevent memory issues)
+	body := make([]byte, MaxResponseSize)
+	n, _ := io.ReadFull(resp.Body, body)
+	body = body[:n]
 
-	h.logger.Debug("webhook response received",
-		"status", resp.StatusCode,
-		"body_size", len(respBody),
-	)
-
-	// Check if we should retry based on status code
-	for _, code := range h.retryStatusCodes {
-		if resp.StatusCode == code {
-			task.Status = internal.TaskStatusRetrying
-			task.Error = fmt.Sprintf("received retryable status code %d", resp.StatusCode)
-			return fmt.Errorf("received retryable status code %d", resp.StatusCode)
+	// Check response status
+	if resp.StatusCode >= 500 || resp.StatusCode == http.StatusTooManyRequests {
+		task.Status = internal.TaskStatusRetrying
+		task.Attempts++
+		task.RunAt = time.Now().Add(time.Second * time.Duration(task.Attempts*2)) // Simple exponential backoff
+		return &internal.TaskError{
+			Err:         fmt.Errorf("received retryable status code %d", resp.StatusCode),
+			ShouldRetry: true,
 		}
 	}
 
-	// If status code is not in 2xx range and not in retry list, mark as permanent failure
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if resp.StatusCode >= 400 {
 		task.Status = internal.TaskStatusFailed
 		task.Error = fmt.Sprintf("webhook call failed with status %d", resp.StatusCode)
 		return fmt.Errorf("webhook call failed with status %d", resp.StatusCode)
 	}
 
-	// Mark successful tasks as complete
 	task.Status = internal.TaskStatusComplete
-	task.Error = ""
 	return nil
 }

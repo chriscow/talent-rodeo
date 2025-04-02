@@ -44,7 +44,7 @@ type scheduleFormData struct {
 func (app *application) showSchedulePage(w http.ResponseWriter, r *http.Request) {
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
-		http.Redirect(w, r, "/auth/linkedin", http.StatusFound)
+		http.Redirect(w, r, "/auth/linkedin", http.StatusSeeOther)
 		return
 	}
 
@@ -61,7 +61,7 @@ func (app *application) showSchedulePage(w http.ResponseWriter, r *http.Request)
 		// Add flash message
 		app.sessionManager.Put(r.Context(), "flash", errorMsg)
 
-		http.Redirect(w, r, "/profile/resume/upload", http.StatusFound)
+		http.Redirect(w, r, "/profile/resume/upload", http.StatusSeeOther)
 		return
 	}
 
@@ -99,7 +99,7 @@ func (app *application) showSchedulePage(w http.ResponseWriter, r *http.Request)
 func (app *application) createAppointment(w http.ResponseWriter, r *http.Request) {
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
-		http.Redirect(w, r, "/auth/linkedin", http.StatusFound)
+		http.Redirect(w, r, "/auth/linkedin", http.StatusSeeOther)
 		return
 	}
 
@@ -204,7 +204,7 @@ func (app *application) createAppointment(w http.ResponseWriter, r *http.Request
 	}
 
 	// Update onboarding state
-	err = internal.UpdateUserState(r.Context(), app.fs, user, internal.UserStatusIntroCallScheduled)
+	err = internal.UpdateUserStatus(r.Context(), app.fs, user, internal.UserStatusIntroCallScheduled)
 	if err != nil {
 		app.logger.Error("Failed to update onboarding state", "error", err)
 		http.Error(w, fmt.Sprintf("Failed to update onboarding state: %v", err), http.StatusInternalServerError)
@@ -212,7 +212,7 @@ func (app *application) createAppointment(w http.ResponseWriter, r *http.Request
 	}
 
 	// Always redirect to /profile on success
-	http.Redirect(w, r, "/profile", http.StatusFound)
+	http.Redirect(w, r, "/profile", http.StatusSeeOther)
 }
 
 // rescheduleAppointment handles POST requests to reschedule an appointment.
@@ -245,7 +245,7 @@ func (app *application) rescheduleAppointment(w http.ResponseWriter, r *http.Req
 	}
 
 	// Update onboarding state back to resume uploaded
-	err := internal.UpdateUserState(r.Context(), app.fs, user, internal.UserStatusResumeUploaded)
+	err := internal.UpdateUserStatus(r.Context(), app.fs, user, internal.UserStatusResumeUploaded)
 	if err != nil {
 		app.logger.Error("Failed to update onboarding state", "error", err)
 		http.Error(w, fmt.Sprintf("Failed to update onboarding state: %v", err), http.StatusInternalServerError)
@@ -274,19 +274,20 @@ func (app *application) rescheduleAppointment(w http.ResponseWriter, r *http.Req
 func (app *application) cancelAppointment(w http.ResponseWriter, r *http.Request) {
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
-		http.Redirect(w, r, "/auth/linkedin", http.StatusFound)
+		http.Redirect(w, r, "/auth/linkedin", http.StatusSeeOther)
 		return
 	}
 
 	id := flow.Param(r.Context(), "id")
 
-	err := internal.CancelAppointment(r.Context(), app.fs, id)
+	// Update to pass both userID and appointmentID
+	err := internal.CancelAppointment(r.Context(), app.fs, user.ID, id)
 	if err != nil {
 		app.serverError(w, r, fmt.Errorf("failed to cancel appointment: %w", err))
 		return
 	}
 
-	http.Redirect(w, r, "/profile", http.StatusFound)
+	http.Redirect(w, r, "/profile", http.StatusSeeOther)
 }
 
 // callNow handles POST requests to initiate an immediate call.
@@ -311,7 +312,7 @@ func (app *application) cancelAppointment(w http.ResponseWriter, r *http.Request
 func (app *application) callNow(w http.ResponseWriter, r *http.Request) {
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
-		http.Redirect(w, r, "/auth/linkedin", http.StatusFound)
+		http.Redirect(w, r, "/auth/linkedin", http.StatusSeeOther)
 		return
 	}
 
@@ -324,7 +325,7 @@ func (app *application) callNow(w http.ResponseWriter, r *http.Request) {
 	if user.Phone == nil {
 		app.logger.Error("User has no phone number", "user_id", user.ID)
 		app.reportServerError(r, fmt.Errorf("user has no phone number"))
-		http.Redirect(w, r, "/profile", http.StatusFound)
+		http.Redirect(w, r, "/profile", http.StatusSeeOther)
 		return
 	}
 
@@ -388,7 +389,7 @@ func (app *application) callNow(w http.ResponseWriter, r *http.Request) {
 		"phone_number", *user.Phone)
 
 	// Update onboarding state
-	err = internal.UpdateUserState(r.Context(), app.fs, user, internal.UserStatusIntroCallScheduled)
+	err = internal.UpdateUserStatus(r.Context(), app.fs, user, internal.UserStatusIntroCallScheduled)
 	if err != nil {
 		app.logger.Error("Failed to update onboarding state",
 			"error", err,
@@ -401,5 +402,5 @@ func (app *application) callNow(w http.ResponseWriter, r *http.Request) {
 	app.logger.Debug("Redirecting to profile",
 		"user_id", user.ID)
 
-	http.Redirect(w, r, "/profile", http.StatusFound)
+	http.Redirect(w, r, "/profile", http.StatusSeeOther)
 }

@@ -89,7 +89,7 @@ func newTestServer(t *testing.T, name string) *testServer {
 
 	// Create a task processor
 	taskProcessor := tasks.NewProcessor(tasks.NewFirestoreTaskStorage(fs), logger)
-	taskProcessor.RegisterHandler(th.NewWebhookScheduler(logger))
+	taskProcessor.RegisterHandler(th.NewWebhookScheduler(logger, fs))
 
 	// Create NATS server with JetStream enabled
 	opts := test.DefaultTestOptions

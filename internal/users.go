@@ -247,7 +247,7 @@ func ListUsers(ctx context.Context, fs *firestore.Client, limit int, offset int)
 	return users, nil
 }
 
-func UpdateUserState(ctx context.Context, fs *firestore.Client, user *User, status UserStatus) error {
+func UpdateUserStatus(ctx context.Context, fs *firestore.Client, user *User, status UserStatus) error {
 	user.State.Status = status
 	user.State.Started = time.Now()
 	user.State.Completed = nil

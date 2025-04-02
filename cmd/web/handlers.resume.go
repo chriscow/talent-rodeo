@@ -39,7 +39,7 @@ func isValidFileType(filename string) bool {
 func (app *application) deleteResume(w http.ResponseWriter, r *http.Request) {
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
-		http.Redirect(w, r, "/auth/linkedin", http.StatusFound)
+		http.Redirect(w, r, "/auth/linkedin", http.StatusSeeOther)
 		return
 	}
 
@@ -52,12 +52,12 @@ func (app *application) deleteResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := internal.UpdateUserState(r.Context(), app.fs, user, internal.UserStatusPendingResumeUpload); err != nil {
+	if err := internal.UpdateUserStatus(r.Context(), app.fs, user, internal.UserStatusPendingResumeUpload); err != nil {
 		app.serverError(w, r, fmt.Errorf("failed to update onboarding state: %w", err))
 		return
 	}
 
-	http.Redirect(w, r, "/profile/resume/upload", http.StatusFound)
+	http.Redirect(w, r, "/profile/resume/upload", http.StatusSeeOther)
 }
 
 // showUploadPage handles GET requests to /profile/resume/upload.
