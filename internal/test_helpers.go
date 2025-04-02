@@ -158,3 +158,27 @@ func DeleteTestData(t *testing.T, client *firestore.Client, prefix string) {
 		}
 	}
 }
+
+// DeleteTestAppointments deletes all appointments for a given user.
+func DeleteTestAppointments(t *testing.T, client *firestore.Client, userID string) {
+	t.Helper()
+
+	ctx := context.Background()
+	iter := client.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).Documents(ctx)
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			t.Logf("Failed to iterate over appointments: %v", err)
+			continue
+		}
+
+		if _, err := doc.Ref.Delete(ctx); err != nil {
+			t.Logf("Failed to delete appointment %s: %v", doc.Ref.ID, err)
+		} else {
+			t.Logf("Deleted test appointment %s", doc.Ref.ID)
+		}
+	}
+}

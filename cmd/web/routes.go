@@ -19,8 +19,8 @@ func (app *application) routes() http.Handler {
 	mux.Use(app.sessionManager.LoadAndSave)
 
 	// VAPI webhook endpoint
-	mux.HandleFunc("/vapi/call", app.handleVapiCall, "POST")
-	mux.HandleFunc("/vapi/webhook", app.handleVapiWebhook, "POST")
+	mux.HandleFunc("/vapi/outbound-call", app.handleVapiCall, "POST")
+	mux.HandleFunc("/webhooks/vapi", app.handleVapiWebhook, "POST")
 
 	fileServer := http.FileServer(http.FS(assets.EmbeddedFiles))
 	mux.Handle("/static/...", fileServer, "GET")
@@ -54,6 +54,7 @@ func (app *application) routes() http.Handler {
 			mux.HandleFunc("/profile", app.showProfilePage, "GET")
 			mux.HandleFunc("/profile/onboarding/reset", app.resetOnboardingState, "POST")
 			mux.HandleFunc("/profile/resume/:resumeID", app.deleteResume, "DELETE")
+			mux.HandleFunc("/dashboard", app.showDashboard, "GET")
 
 			// Direct resume upload route - always shows the resume upload form regardless of onboarding state
 			// Used for:

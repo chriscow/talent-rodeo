@@ -10,11 +10,11 @@ func (app *application) showTasksPage(w http.ResponseWriter, r *http.Request) {
 	// Check if user is authenticated and is a super user
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
-		http.Redirect(w, r, "/auth/linkedin", http.StatusFound)
+		http.Redirect(w, r, "/auth/linkedin", http.StatusSeeOther)
 		return
 	}
 	if !user.IsSuperUser {
-		http.Redirect(w, r, "/", http.StatusFound)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
 
@@ -47,11 +47,11 @@ func (app *application) getTasksPartial(w http.ResponseWriter, r *http.Request) 
 	// Check if user is authenticated and is a super user
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
-		http.Redirect(w, r, "/auth/linkedin", http.StatusFound)
+		http.Redirect(w, r, "/auth/linkedin", http.StatusSeeOther)
 		return
 	}
 	if !user.IsSuperUser {
-		http.Redirect(w, r, "/", http.StatusFound)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
 

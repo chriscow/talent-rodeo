@@ -199,7 +199,7 @@ func TestUserStates(t *testing.T) {
 			prevStarted := user.State.Started
 			time.Sleep(time.Millisecond) // Ensure time difference
 
-			err := UpdateUserState(ctx, client, user, newStatus)
+			err := UpdateUserStatus(ctx, client, user, newStatus)
 			if err != nil {
 				t.Fatalf("UpdateUserState() to %v error = %v", newStatus, err)
 			}

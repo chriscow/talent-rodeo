@@ -136,7 +136,7 @@ Ensure your JSON output accurately represents the candidate's stated preferences
 
 	log.Printf("Making call to %s (%s)...", phoneNumber, candidateName)
 
-	result, err := vapi.CreateCall(ctx, vapi.CallConfig{
+	result, err := vapi.CreateCall(ctx, vapi.Call{
 		AssistantID:   &assistantID,
 		PhoneNumberID: &outboundPhoneID,
 		AssistantOverrides: &vapi.Assistant{

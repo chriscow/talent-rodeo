@@ -21,23 +21,27 @@ type AppointmentStatus string
 
 const (
 	AppointmentStatusScheduled AppointmentStatus = "scheduled"
+	AppointmentStatusRunning   AppointmentStatus = "running"
 	AppointmentStatusCompleted AppointmentStatus = "completed"
 	AppointmentStatusCancelled AppointmentStatus = "cancelled"
 	AppointmentStatusFailed    AppointmentStatus = "failed"
+	AppointmentStatusOther     AppointmentStatus = "other"
 )
 
 // Appointment represents a scheduled phone interview
 type Appointment struct {
-	ID                string            `firestore:"id"`
-	UserID            string            `firestore:"user_id"`
-	ScheduledTime     time.Time         `firestore:"scheduled_time"`
-	Timezone          string            `firestore:"timezone"`
-	Status            AppointmentStatus `firestore:"status"`
-	CallSID           *string           `firestore:"call_sid"`
-	CallResult        *vapi.CallResult  `firestore:"call_result"`
-	TranscriptSummary *string           `firestore:"transcript_summary"`
-	CreatedAt         time.Time         `firestore:"created_at"`
-	UpdatedAt         time.Time         `firestore:"updated_at"`
+	ID                string                `firestore:"id"`
+	UserID            string                `firestore:"user_id"`
+	ScheduledTime     time.Time             `firestore:"scheduled_time"`
+	Timezone          string                `firestore:"timezone"`
+	Status            AppointmentStatus     `firestore:"status"`
+	OtherStatus       *string               `firestore:"other_status"`
+	CallID            *string               `firestore:"call_id"`
+	CallResult        *vapi.CallResult      `firestore:"call_result"`
+	EndOfCallReport   *vapi.EndOfCallReport `firestore:"end_of_call_report"`
+	TranscriptSummary *string               `firestore:"transcript_summary"`
+	CreatedAt         time.Time             `firestore:"created_at"`
+	UpdatedAt         time.Time             `firestore:"updated_at"`
 }
 
 func CreateAppointment(ctx context.Context, fs *firestore.Client, user User, appointment *Appointment) error {
@@ -125,4 +129,83 @@ func CancelAppointment(ctx context.Context, fs *firestore.Client, userID string,
 	}
 
 	return nil
+}
+
+func GetAppointmentsByCallID(ctx context.Context, fs *firestore.Client, callID string) ([]*Appointment, error) {
+	var appointments []*Appointment
+
+	// Query all users since we don't know which user the call belongs to
+	usersIter := fs.Collection(usersCollection).Documents(ctx)
+	for {
+		userDoc, err := usersIter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to iterate users: %w", err)
+		}
+
+		// Query appointments for this user
+		query := fs.Collection(usersCollection).Doc(userDoc.Ref.ID).Collection(appointmentsCollection).Where("call_id", "==", callID)
+		apptIter := query.Documents(ctx)
+		for {
+			doc, err := apptIter.Next()
+			if err == iterator.Done {
+				break
+			}
+			if err != nil {
+				return nil, fmt.Errorf("failed to iterate appointments: %w", err)
+			}
+
+			var appointment Appointment
+			if err := doc.DataTo(&appointment); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal appointment: %w", err)
+			}
+
+			appointments = append(appointments, &appointment)
+		}
+	}
+
+	return appointments, nil
+}
+
+// MapVapiEndReasonToAppointmentStatus maps a VAPI call end reason to our appointment status
+// and returns both the status and whether the reason should be stored in OtherStatus
+func MapVapiEndReasonToAppointmentStatus(endReason string) (AppointmentStatus, bool) {
+	// Successful completions
+	switch endReason {
+	case "vonage-completed",
+		"assistant-ended-call",
+		"assistant-said-end-call-phrase",
+		"assistant-ended-call-with-hangup-task",
+		"assistant-ended-call-after-message-spoken":
+		return AppointmentStatusCompleted, false
+	}
+
+	// Customer-initiated endings that we consider completed
+	switch endReason {
+	case "customer-ended-call":
+		return AppointmentStatusCompleted, true
+	}
+
+	// Customer-initiated cancellations
+	switch endReason {
+	case "customer-busy",
+		"customer-did-not-answer",
+		"customer-did-not-give-microphone-permission",
+		"voicemail":
+		return AppointmentStatusCancelled, true
+	}
+
+	// System cancellations
+	switch endReason {
+	case "exceeded-max-duration",
+		"manually-canceled",
+		"silence-timed-out",
+		"assistant-forwarded-call":
+		return AppointmentStatusCancelled, true
+	}
+
+	// All other cases are considered failures and should store the specific reason
+	return AppointmentStatusFailed, true
 }

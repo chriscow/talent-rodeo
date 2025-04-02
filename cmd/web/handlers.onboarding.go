@@ -40,5 +40,5 @@ func (app *application) resetOnboardingState(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	http.Redirect(w, r, "/profile", http.StatusFound)
+	http.Redirect(w, r, "/profile", http.StatusSeeOther)
 }

@@ -14,6 +14,18 @@ import (
 
 const CSRFTokenKey contextKey = "csrf_token"
 
+// HTTP Status Code Notes:
+// We consistently use http.StatusSeeOther (303) for redirects after POST/PUT/DELETE operations.
+// This is the preferred approach because:
+// 1. It forces the client to use GET for the subsequent request regardless of the original method
+// 2. Prevents duplicate form submissions and unintended side effects
+// 3. Ensures browser history reflects the target page, not the form submission
+// 4. Complies with HTTP/1.1 specifications for redirecting after non-GET operations
+// 5. Provides better user experience by avoiding "resubmit form?" browser warnings
+//
+// Unlike 301 (Permanent) or 302 (Found), 303 explicitly requires the next request to be GET,
+// which is exactly what we want after form processing to show the result page.
+
 func (app *application) recoverPanic(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// app.logger.Warn("recover panic middleware", "path", r.URL.Path)
@@ -130,12 +142,12 @@ func (app *application) requireSuperUser(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user := contextGetAuthenticatedUser(r)
 		if user == nil {
-			http.Redirect(w, r, "/auth/linkedin", http.StatusFound)
+			http.Redirect(w, r, "/auth/linkedin", http.StatusSeeOther)
 			return
 		}
 		// Check both is_superuser flag and role for admin access
 		if !user.IsSuperUser {
-			http.Redirect(w, r, "/", http.StatusFound)
+			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -146,7 +158,7 @@ func (app *application) requireAuthenticatedUser(next http.Handler) http.Handler
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user := contextGetAuthenticatedUser(r)
 		if user == nil {
-			http.Redirect(w, r, "/auth/linkedin", http.StatusFound)
+			http.Redirect(w, r, "/auth/linkedin", http.StatusSeeOther)
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -157,7 +169,7 @@ func (app *application) requireAnonymousUser(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user := contextGetAuthenticatedUser(r)
 		if user != nil {
-			http.Redirect(w, r, "/", http.StatusFound)
+			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
 		}
 		next.ServeHTTP(w, r)
