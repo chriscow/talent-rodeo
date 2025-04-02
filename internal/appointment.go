@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"talent-rodeo/internal/funcs"
+	"talent-rodeo/internal/vapi"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -33,13 +34,22 @@ type Appointment struct {
 	Timezone          string            `firestore:"timezone"`
 	Status            AppointmentStatus `firestore:"status"`
 	CallSID           *string           `firestore:"call_sid"`
-	Transcript        *string           `firestore:"transcript"`
+	CallResult        *vapi.CallResult  `firestore:"call_result"`
 	TranscriptSummary *string           `firestore:"transcript_summary"`
 	CreatedAt         time.Time         `firestore:"created_at"`
 	UpdatedAt         time.Time         `firestore:"updated_at"`
 }
 
 func CreateAppointment(ctx context.Context, fs *firestore.Client, user User, appointment *Appointment) error {
+	// Validate user exists first
+	_, found, err := GetUser(ctx, fs, user.ID)
+	if err != nil {
+		return fmt.Errorf("failed to validate user: %w", err)
+	}
+	if !found {
+		return fmt.Errorf("user %s not found", user.ID)
+	}
+
 	if appointment.ID == "" {
 		appointment.ID = funcs.Slugify(fmt.Sprintf("%s %s", user.Name, uuid.New().String()))
 	}
@@ -48,13 +58,11 @@ func CreateAppointment(ctx context.Context, fs *firestore.Client, user User, app
 		return fmt.Errorf("user name is required")
 	}
 
-	appointment.ID = funcs.Slugify(fmt.Sprintf("%s %s", user.Name, uuid.New().String()))
-
 	appointment.UserID = user.ID
 	appointment.CreatedAt = time.Now()
 	appointment.UpdatedAt = appointment.CreatedAt
 
-	_, err := fs.Collection(appointmentsCollection).Doc(appointment.ID).Set(ctx, appointment)
+	_, err = fs.Collection(usersCollection).Doc(user.ID).Collection(appointmentsCollection).Doc(appointment.ID).Set(ctx, appointment)
 	if err != nil {
 		return fmt.Errorf("failed to create appointment: %w", err)
 	}
@@ -62,8 +70,8 @@ func CreateAppointment(ctx context.Context, fs *firestore.Client, user User, app
 	return nil
 }
 
-func GetAppointment(ctx context.Context, fs *firestore.Client, appointmentID string) (*Appointment, error) {
-	doc, err := fs.Collection(appointmentsCollection).Doc(appointmentID).Get(ctx)
+func GetAppointment(ctx context.Context, fs *firestore.Client, userID string, appointmentID string) (*Appointment, error) {
+	doc, err := fs.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).Doc(appointmentID).Get(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get appointment: %w", err)
 	}
@@ -77,7 +85,7 @@ func GetAppointment(ctx context.Context, fs *firestore.Client, appointmentID str
 }
 
 func GetAppointments(ctx context.Context, fs *firestore.Client, userID string) ([]*Appointment, error) {
-	iter := fs.Collection(appointmentsCollection).Where("user_id", "==", userID).Documents(ctx)
+	iter := fs.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).Documents(ctx)
 
 	var appointments []*Appointment
 	for {
@@ -101,15 +109,15 @@ func GetAppointments(ctx context.Context, fs *firestore.Client, userID string) (
 }
 
 func UpdateAppointment(ctx context.Context, fs *firestore.Client, appointment *Appointment) error {
-	_, err := fs.Collection(appointmentsCollection).Doc(appointment.ID).Set(ctx, appointment)
+	_, err := fs.Collection(usersCollection).Doc(appointment.UserID).Collection(appointmentsCollection).Doc(appointment.ID).Set(ctx, appointment)
 	if err != nil {
 		return fmt.Errorf("failed to update appointment: %w", err)
 	}
 	return nil
 }
 
-func CancelAppointment(ctx context.Context, fs *firestore.Client, appointmentID string) error {
-	_, err := fs.Collection(appointmentsCollection).Doc(appointmentID).Update(ctx, []firestore.Update{
+func CancelAppointment(ctx context.Context, fs *firestore.Client, userID string, appointmentID string) error {
+	_, err := fs.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).Doc(appointmentID).Update(ctx, []firestore.Update{
 		{Path: "status", Value: AppointmentStatusCancelled},
 	})
 	if err != nil {

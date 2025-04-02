@@ -56,9 +56,15 @@ func CreateTestResume(t *testing.T, client *firestore.Client, user *User, resume
 func CreateTestAppointment(t *testing.T, client *firestore.Client, user *User) *Appointment {
 	t.Helper()
 
-	now := time.Now()
+	now := time.Now().UTC()
 	appointment := &Appointment{
-		ID: fmt.Sprintf("test-appointment-%d", now.UnixNano()),
+		ID:            fmt.Sprintf("test-appointment-%d", now.UnixNano()),
+		UserID:        user.ID,
+		ScheduledTime: now.Add(24 * time.Hour).Round(time.Second),
+		Timezone:      "UTC",
+		Status:        AppointmentStatusScheduled,
+		CreatedAt:     now.Round(time.Second),
+		UpdatedAt:     now.Round(time.Second),
 	}
 
 	if err := CreateAppointment(context.Background(), client, *user, appointment); err != nil {
@@ -74,11 +80,67 @@ func DeleteTestData(t *testing.T, client *firestore.Client, prefix string) {
 
 	ctx := context.Background()
 
-	// Define the collections to clean up
-	collections := []string{"job_searches", "job_listings", "users", "resumes", "appointments"} // Add other collections as needed
+	// First get all test users
+	iter := client.Collection(usersCollection).Where("id", ">=", prefix).Where("id", "<", prefix+"~").Documents(ctx)
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			t.Fatalf("Failed to iterate over documents in users collection: %v", err)
+		}
 
-	for _, collection := range collections {
-		iter := client.Collection(collection).Where("ID", ">=", prefix).Where("ID", "<", prefix+"~").Documents(ctx)
+		// Delete all appointments in the user's subcollection
+		appointmentsIter := doc.Ref.Collection(appointmentsCollection).Documents(ctx)
+		for {
+			appointmentDoc, err := appointmentsIter.Next()
+			if err == iterator.Done {
+				break
+			}
+			if err != nil {
+				t.Logf("Failed to iterate over appointments in user %s: %v", doc.Ref.ID, err)
+				continue
+			}
+
+			if _, err := appointmentDoc.Ref.Delete(ctx); err != nil {
+				t.Logf("Failed to delete appointment %s for user %s: %v", appointmentDoc.Ref.ID, doc.Ref.ID, err)
+			} else {
+				t.Logf("Deleted test appointment %s for user %s", appointmentDoc.Ref.ID, doc.Ref.ID)
+			}
+		}
+
+		// Delete all resumes in the user's subcollection
+		resumesIter := doc.Ref.Collection(resumeCollection).Documents(ctx)
+		for {
+			resumeDoc, err := resumesIter.Next()
+			if err == iterator.Done {
+				break
+			}
+			if err != nil {
+				t.Logf("Failed to iterate over resumes in user %s: %v", doc.Ref.ID, err)
+				continue
+			}
+
+			if _, err := resumeDoc.Ref.Delete(ctx); err != nil {
+				t.Logf("Failed to delete resume %s for user %s: %v", resumeDoc.Ref.ID, doc.Ref.ID, err)
+			} else {
+				t.Logf("Deleted test resume %s for user %s", resumeDoc.Ref.ID, doc.Ref.ID)
+			}
+		}
+
+		// Finally delete the user document
+		if _, err := doc.Ref.Delete(ctx); err != nil {
+			t.Logf("Failed to delete user document %s: %v", doc.Ref.ID, err)
+		} else {
+			t.Logf("Deleted test user %s", doc.Ref.ID)
+		}
+	}
+
+	// Clean up any other top-level collections
+	otherCollections := []string{"job_searches", "job_listings"} // Add other top-level collections as needed
+	for _, collection := range otherCollections {
+		iter := client.Collection(collection).Where("id", ">=", prefix).Where("id", "<", prefix+"~").Documents(ctx)
 		for {
 			doc, err := iter.Next()
 			if err == iterator.Done {
@@ -88,7 +150,6 @@ func DeleteTestData(t *testing.T, client *firestore.Client, prefix string) {
 				t.Fatalf("Failed to iterate over documents in collection %s: %v", collection, err)
 			}
 
-			// Delete the document
 			if _, err := doc.Ref.Delete(ctx); err != nil {
 				t.Logf("Failed to delete document %s from collection %s: %v", doc.Ref.ID, collection, err)
 			} else {
