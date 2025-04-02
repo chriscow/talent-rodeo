@@ -147,7 +147,7 @@ func AnnotateResume(ctx context.Context, fs *firestore.Client, logger *slog.Logg
 	}
 
 	if !resume.IsValid {
-		errorMsg := "The document you uploaded doesn't appear to be a valid resume. Please upload a proper resume document."
+		errorMsg := "Uploaded document is not a valid resume"
 		err = UpdateUserStateWithError(ctx, fs, user, errorMsg)
 		if err != nil {
 			logger.Error("failed to update user state with error", "error", err)
