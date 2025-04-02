@@ -35,51 +35,23 @@ document.addEventListener('DOMContentLoaded', function() {
     if (parseInt(data.state) === 1) {
       const errorMsg = data.error || 'There was a problem with your resume. Please upload a new one.';
       
-      // Show toast notification
-      const toastElement = document.createElement('div');
-      toastElement.className = 'toast show';
-      toastElement.role = 'alert';
-      toastElement.setAttribute('aria-live', 'assertive');
-      toastElement.setAttribute('aria-atomic', 'true');
+      // Show error notification using Notyf
+      const notyf = new Notyf({
+        duration: 0,  // Don't auto-hide
+        dismissible: true,  // Allow manual dismissal
+        position: { x: 'right', y: 'bottom' }
+      });
       
-      toastElement.innerHTML = `
-        <div class="toast-header bg-danger text-white">
-          <strong class="me-auto">Resume Error</strong>
-          <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
-        </div>
-        <div class="toast-body">
-          ${errorMsg}
-          <div class="mt-2">
-            <a href="/profile/resume/upload" class="btn btn-primary btn-sm">Upload New Resume</a>
-          </div>
-        </div>
-      `;
-      
-      // Create toast container if it doesn't exist
-      let toastContainer = document.querySelector('.toast-container');
-      if (!toastContainer) {
-        toastContainer = document.createElement('div');
-        toastContainer.className = 'toast-container position-fixed bottom-0 end-0 p-3';
-        document.body.appendChild(toastContainer);
-      }
-      
-      toastContainer.appendChild(toastElement);
-      
-      // If using Bootstrap JS, initialize toast
-      if (typeof bootstrap !== 'undefined') {
-        const toast = new bootstrap.Toast(toastElement, { autohide: false });
-        toast.show();
-      }
-      
-      // Redirect after a delay unless user dismisses the toast
-      const redirectTimer = setTimeout(() => {
+      notyf.error({
+        message: errorMsg,
+        background: '#dc3545',  // Bootstrap danger color
+        dismissible: true
+      });
+
+      // Redirect after a delay
+      setTimeout(() => {
         window.location.href = '/profile/resume/upload';
       }, 5000);
-      
-      // Cancel redirect if user dismisses the toast
-      toastElement.querySelector('.btn-close').addEventListener('click', function() {
-        clearTimeout(redirectTimer);
-      });
     }
   });
 });

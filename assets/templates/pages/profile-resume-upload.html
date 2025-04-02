@@ -2,6 +2,9 @@
 
 {{define "page:main"}}
 <main class="container">
+    {{if .Error}}
+    <div id="error-data" data-error="{{.Error}}" hidden></div>
+    {{end}}
     <article>
         <header>
             <h1>Welcome to Talent Rodeo</h1>
@@ -21,4 +24,26 @@
         {{template "partial:resume-form" .}}
     </article>
 </main>
+{{end}}
+
+{{define "page:scripts"}}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const errorData = document.getElementById('error-data');
+        if (errorData) {
+            // Initialize Notyf
+            const notyf = new Notyf({
+                duration: 0,
+                dismissible: true,
+                ripple: true,
+                position: { x: 'center', y: 'top' }
+            });
+            
+            // Show error toast after a 1-second delay
+            setTimeout(() => {
+                notyf.error(errorData.dataset.error);
+            }, 500);
+        }
+    });
+</script>
 {{end}}
