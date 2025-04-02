@@ -21,14 +21,14 @@
             </label>
 
             <label for="resume">
-                Resume (PDF or DOCX)
-                <input type="file" id="resume" name="resume" required accept=".pdf,.docx"
+                Resume (PDF, DOCX, or TXT)
+                <input type="file" id="resume" name="resume" required accept=".pdf,.docx,.txt"
                     aria-describedby="resume-help{{if .Form.Validator.FieldErrors.resume}} resume-error{{end}}" {{with
                     .Form.Validator.FieldErrors.resume}} aria-invalid="true" {{end}}>
                 {{with .Form.Validator.FieldErrors.resume}}
                 <small id="resume-error" role="alert">{{.}}</small>
                 {{end}}
-                <small id="resume-help">PDF or DOCX up to 10MB</small>
+                <small id="resume-help">PDF, DOCX, or TXT up to 10MB</small>
             </label>
         </div>
 

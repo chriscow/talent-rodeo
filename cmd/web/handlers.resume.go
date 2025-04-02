@@ -25,11 +25,11 @@ type resumeUploadForm struct {
 	Validator validator.Validator
 }
 
-// isValidFileType checks if the given filename has an allowed extension (.pdf or .docx).
+// isValidFileType checks if the given filename has an allowed extension (.pdf or .docx or .txt).
 // Used for resume upload validation.
 func isValidFileType(filename string) bool {
 	ext := strings.ToLower(filepath.Ext(filename))
-	return ext == ".pdf" || ext == ".docx"
+	return ext == ".pdf" || ext == ".docx" || ext == ".txt"
 }
 
 // deleteResume handles DELETE requests to /profile/resume.
@@ -126,7 +126,7 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 	phoneRegex := regexp.MustCompile(`^\+1\d{10}$`)
 	form.Validator.CheckField(validator.Matches(form.Phone, phoneRegex), "phone", "Invalid phone number. Please use the format +1XXXXXXXXXX.")
 
-	form.Validator.CheckField(isValidFileType(header.Filename), "resume", "Invalid file type. Please upload a DOCX or PDF file.")
+	form.Validator.CheckField(isValidFileType(header.Filename), "resume", "Invalid file type. Please upload a DOCX, PDF, or TXT file.")
 
 	if form.Validator.HasErrors() {
 		if err := response.NamedTemplate(w, http.StatusUnprocessableEntity, data, "partial:resume-form", "partials/resume-form.html"); err != nil {
@@ -190,10 +190,7 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 		"phone": form.Phone,
 		"state": userState,
 	}); err != nil {
-		form.Validator.AddFieldError("phone", "Failed to save phone number. Please try again.")
-		if err := response.NamedTemplate(w, http.StatusUnprocessableEntity, data, "partial:resume-form", "partials/resume-form.html"); err != nil {
-			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
-		}
+		app.serverError(w, r, fmt.Errorf("failed to update user: %w", err))
 		return
 	}
 
@@ -205,9 +202,7 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 		app.sendUserStateUpdate(user)
 	}()
 
-	app.logger.Info("Initial resume uploaded successfully", "user", user.Name, "resume-id", resume.ID)
-
-	// Redirect to processing page
+	// Show processing page
 	data = app.newTemplateData(r)
 	if err := response.Page(w, http.StatusOK, data, "pages/profile-resume-processing.html"); err != nil {
 		app.serverError(w, r, fmt.Errorf("failed to render processing page: %w", err))
@@ -234,12 +229,14 @@ func (app *application) sendUserStateUpdate(user *internal.User) {
 // Helper functions below
 
 // extractResumeText extracts text content from a resume file.
-// Supports both PDF and DOCX formats.
+// Supports both PDF, DOCX, and TXT formats.
 func (app *application) extractResumeText(file *os.File, filename string) (string, error) {
 	if strings.HasSuffix(strings.ToLower(filename), ".docx") {
 		return extractDOCX(file)
 	} else if strings.HasSuffix(strings.ToLower(filename), ".pdf") {
 		return extractPDF(file)
+	} else if strings.HasSuffix(strings.ToLower(filename), ".txt") {
+		return extractTXT(file)
 	}
 	return "", fmt.Errorf("unsupported file type")
 }
@@ -305,4 +302,18 @@ func extractPDF(file *os.File) (string, error) {
 	}
 
 	return sb.String(), nil
+}
+
+func extractTXT(file *os.File) (string, error) {
+	// Reset file pointer to beginning
+	if _, err := file.Seek(0, 0); err != nil {
+		return "", fmt.Errorf("extractTXT: failed to reset file pointer: %w", err)
+	}
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		return "", fmt.Errorf("extractTXT: failed to read file: %w", err)
+	}
+
+	return string(content), nil
 }

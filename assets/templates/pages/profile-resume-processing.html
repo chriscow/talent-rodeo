@@ -14,6 +14,7 @@
         <div class="grid">
             <div style="text-align: center;">
                 <progress></progress>
+                <p id="status-message">{{.User.State.Status.Description}}</p>
             </div>
         </div>
     </article>
@@ -28,9 +29,7 @@
 
 {{define "page:scripts"}}
 <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
-<script src="/static/js/state-monitor.js"></script>
 <script>
-    // Additional processing-specific state handling
     document.addEventListener('DOMContentLoaded', function() {
         const userElement = document.querySelector('[data-user-id]');
         if (!userElement) return;
@@ -40,10 +39,18 @@
         });
         
         const channel = pusher.subscribe(`user-${userElement.dataset.userId}`);
+        const statusMessage = document.getElementById('status-message');
         
         channel.bind('state-update', function(data) {
-            // UserStatusResumeUploaded = 4 (from internal/users.go)
-            if (parseInt(data.state) === 4) {
+            // Update status message if available
+            if (statusMessage) {
+                statusMessage.textContent = data.description;
+            }
+
+            // Handle redirects based on state
+            if (data.error || data.status_text === 'Error') {
+                window.location.href = '/profile';
+            } else if (data.status_text === 'Resume Uploaded') {
                 window.location.href = '/profile/schedule';
             }
         });
