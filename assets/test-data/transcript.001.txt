@@ -1,0 +1,80 @@
+AI
+Hi there. I'm Shirley from Talent Rodeo. Is now a good time for a quick chat?
+User
+Sure.
+AI
+Great. Well, I'm still learning how to have good conversations with humans, so please forgive me if I interrupt you. Take an extra long pause. Or hallucinate sometimes. I'll do my best to make this conversation fun and valuable for you. Sound good?
+User
+Sounds good.
+AI
+Awesome. I reviewed your resume, and I'm impressed by your extensive experience in tech technical leadership and software development. Can you briefly tell me about yourself and how you arrived at this point in your career?
+User
+Well, I have had a long career Uh, I, you know, I started at Microsoft, as you saw on my resume. Um, and then I transitioned into start ups.
+AI
+That's a solid
+User
+Oh, I transitioned into the start up world, and did, uh, you know, a wide variety of successful startups. And I don't know. That's where I'm at today.
+AI
+Thank you for sharing that. It sounds like you have a rich and diverse experience in both large organizations and start ups. Now regarding your job preferences, are you looking for remote roles, or do you prefer a specific metro area?
+User
+Uh, no. I'm looking for strictly remote, please.
+AI
+Got it. You're looking for strictly remote positions. How flexible are you regarding this remote preference?
+User
+It as I said, strictly remote. Uh, I don't I can travel, you know, to go in office a few times a year. But, uh, primarily, it's gotta be remote.
+AI
+Thanks for clarifying that. Strictly remote with occasional travel works. What specific job titles or roles are you targeting in your next position?
+User
+Uh, I'd either like, um, something like, uh, engineering manager a small team or, uh, you know, a back end software engineer. Uh, what I'm not is a full stacker. Or front end engineer.
+AI
+Great. You're targeting roles like engineering manager for a small team or back end software engineer, and you prefer to avoid full stack or front end positions? What are the core skills or
+User
+That's right.
+AI
+got it. Now what are the core skills or technologies you wanna use or develop further in your next role?
+User
+Uh, I primarily want a program and go if I'm going to be an individual contributor. Uh, if I'm managing a team, if I'm managing a team, uh, you know, the languages don't matter so much. Um, you can see from my resume which languages I've experience with. But if I'm gonna be a programmer, I wanna be a programmer in Go.
+AI
+Under you'd like to program in Go as an individual contributor, and the languages are less important when managing a team. Are there related skills or titles you're also interested in exploring?
+User
+Uh, no. That's that's primarily it. Uh, I am recently interested in working with AI voice and, um, large language models. So if that comes up, I'd be interested in working at that, but I'm flexible. I can work in general. Any industry.
+AI
+Thanks for sharing that. So, primarily, you're focused on Go programming. With a recent interest in AI voice and large language models. Are there any skills or aspects of your job search that you'd like to avoid?
+User
+Uh, like I said, I'd like to avoid, uh, front end development.
+AI
+Avoiding front end development is clear. Now can you describe your ideal job environment? What kind of company culture or team dynamics do you thrive in?
+User
+I really prefer a startup environment, probably early stage where I can be, uh, you know, since I'm a fairly senior engineer, I want to know, be primarily responsible for the initial design and MVP development.
+AI
+Got it. Thrive in early stage startup environments where you can take on responsibility for initial design and MVP development, What job elements or responsibilities do you particularly enjoy or find most fulfilling
+User
+Uh, you know, I really just enjoy programming. I enjoy working with programmers and designing systems and solving problems for companies.
+AI
+Thanks for sharing that. You enjoy programming, working with other programmers, and designing systems to solve problems. Are there specific types of projects or challenges you're eager to take on?
+User
+Uh, no. Uh, I think with the surge of AI, in the industry, uh, there's a lot of, you know, traditional businesses that could really benefit from the integration of AI. So I I think, uh, I would have a a
+AI
+It sounds
+User
+especially big interest in that.
+AI
+That makes sense. You have a strong interest in integrating AI into traditional businesses. Now what are your primary motivations for seeking a new opportunity right now?
+User
+Uh, I think it's just time for me to, uh, know, get back to work. Uh, I've gained a lot of experience in AI, and I think there's good benefit to what I have to offer companies, uh, at this time. So I think it's time for me to get back in the market.
+AI
+Thanks for sharing that. It sounds like you're motivated to leverage your AI experience contribute to companies once again. Looking ahead, what goals or milestones are most important to you professionally? Um, just to summarize, you're looking for strictly remote roles primarily as a back end software engineer or engineering manager. You wanna work primarily with Go, have an interest in AI voice and the large language models, and prefer prefer early stage startup environments where you can design systems and develop MVPs Does that sound accurate?
+User
+Yeah. That's right.
+AI
+Is there anything important we haven't covered about your job search or preferences?
+User
+Could you repeat that?
+AI
+Sure. I asked if there's anything important we haven't covered about your job search or preference.
+User
+No. That sounds pretty accurate.
+AI
+Great. Thank you for your time today, Chris. This conversation will help us find roles that closely match your preferences. And career objectives.
+User
+Okay. Thank you.
