@@ -5,19 +5,23 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"talent-rodeo/cmd/web/simulate"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
 	"talent-rodeo/internal/utils"
 	"talent-rodeo/internal/vapi"
-	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-// handleVapiCall handles incoming webhook calls from VAPI
-func (app *application) handleVapiCall(w http.ResponseWriter, r *http.Request) {
-	app.logger.Debug("VAPI call received", "method", r.Method, "url", r.URL.String())
+// makeOutboundCall handles a scheduled webhook task to make an outbound call with VAPI.
+// When an appointment is created, we also schedule a task to make a webhook
+// call to this endpoint at the time of the appointment.  This endpoint calls
+// the VAPI API to create a call and then updates the appointment with the call
+// ID.
+func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request) {
+	app.logger.Debug("handleMakeOutboundVapiCall (handle scheduled outbound call)", "method", r.Method, "url", r.URL.String())
 
 	// Only accept POST requests
 	if r.Method != http.MethodPost {
@@ -25,12 +29,34 @@ func (app *application) handleVapiCall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var appointment internal.Appointment
+	var apptErr error
+
+	defer func() {
+		// We need to update the appointment status with the result of this function
+		/*
+			AppointmentStatusCompleted AppointmentStatus = "completed"
+			AppointmentStatusCancelled AppointmentStatus = "cancelled"
+			AppointmentStatusFailed    AppointmentStatus = "failed"
+			AppointmentStatusOther     AppointmentStatus = "other"
+		*/
+		if apptErr != nil {
+			appointment.Status = internal.AppointmentStatusFailed
+			internal.UpdateAppointment(r.Context(), app.fs, &appointment)
+		} else {
+			appointment.Status = internal.AppointmentStatusCompleted
+			internal.UpdateAppointment(r.Context(), app.fs, &appointment)
+		}
+	}()
+
 	// verify all env vars are set
 	if os.Getenv("VAPI_ASSISTANT_ID") == "" || os.Getenv("VAPI_OUTBOUND_PHONE_ID") == "" {
+		apptErr = fmt.Errorf("missing required environment variables")
 		app.logger.Error("Missing required environment variables",
 			"assistant_id", os.Getenv("VAPI_ASSISTANT_ID") == "",
 			"phone_id", os.Getenv("VAPI_OUTBOUND_PHONE_ID") == "")
-		app.reportServerError(r, fmt.Errorf("missing required environment variables"))
+
+		app.reportServerError(r, apptErr)
 		response.JSON(w, http.StatusInternalServerError, map[string]string{
 			"error": "missing required environment variables",
 		})
@@ -42,44 +68,47 @@ func (app *application) handleVapiCall(w http.ResponseWriter, r *http.Request) {
 	outboundPhoneID := os.Getenv("VAPI_OUTBOUND_PHONE_ID")
 
 	if assistantID == "" || outboundPhoneID == "" {
+		apptErr = fmt.Errorf("missing required environment variables")
+
 		app.logger.Error("Missing required environment variables",
 			"assistant_id", assistantID == "",
 			"phone_id", outboundPhoneID == "")
-		app.reportServerError(r, fmt.Errorf("missing required environment variables"))
+
+		app.reportServerError(r, apptErr)
 		response.JSON(w, http.StatusInternalServerError, map[string]string{
 			"error": "missing required environment variables",
 		})
 		return
 	}
 
-	// Parse the request body
-	var callRequest struct {
-		CustomerID string `json:"customer_id"`
-	}
+	if err := json.NewDecoder(r.Body).Decode(&appointment); err != nil {
+		apptErr = fmt.Errorf("failed to decode request body: %w", err)
+		app.logger.Error("Failed to decode request body", "error", apptErr)
+		app.reportServerError(r, apptErr)
 
-	if err := json.NewDecoder(r.Body).Decode(&callRequest); err != nil {
-		app.logger.Error("Failed to decode request body", "error", err)
-		app.reportServerError(r, fmt.Errorf("failed to decode request body: %w", err))
-		response.JSON(w, http.StatusBadRequest, map[string]string{
-			"error": "invalid request body",
-		})
+		// This is likely our problem, so we don't want to retry
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
 	// validate that none of the fields are empty
-	if callRequest.CustomerID == "" {
-		app.logger.Error("Missing required fields", "customer_id_missing", callRequest.CustomerID == "")
-		app.reportServerError(r, fmt.Errorf("missing required fields"))
-		response.JSON(w, http.StatusBadRequest, map[string]string{
-			"error": "missing required fields",
-		})
+	if appointment.UserID == "" {
+		apptErr = fmt.Errorf("missing required fields: UserID")
+		app.logger.Error("Missing required fields", "user_id_missing", appointment.UserID == "")
+		app.reportServerError(r, apptErr)
+
+		// This is likely our problem, so we don't want to retry
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	user, found, err := internal.GetUser(r.Context(), app.fs, callRequest.CustomerID)
-	if err != nil {
-		app.logger.Error("Failed to get user", "error", err)
-		app.reportServerError(r, fmt.Errorf("failed to get user: %w", err))
+	user, found, apptErr := internal.GetUser(r.Context(), app.fs, appointment.UserID)
+	if apptErr != nil {
+		apptErr = fmt.Errorf("failed to get user: %w", apptErr)
+		app.logger.Error("Failed to get user", "error", apptErr)
+		app.reportServerError(r, apptErr)
+
+		// this might just be a transient error, so we want to retry
 		response.JSON(w, http.StatusInternalServerError, map[string]string{
 			"error": "failed to get user",
 		})
@@ -87,50 +116,57 @@ func (app *application) handleVapiCall(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !found {
-		app.logger.Error("User not found", "customer_id", callRequest.CustomerID)
-		app.reportServerError(r, fmt.Errorf("user not found"))
-		response.JSON(w, http.StatusNotFound, map[string]string{
-			"error": "user not found",
-		})
+		apptErr = fmt.Errorf("user not found: %s", appointment.UserID)
+		app.logger.Error("User not found", "user_id", appointment.UserID)
+		app.reportServerError(r, apptErr)
+
+		// this is likely our problem, so we don't want to retry
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
 	if user.Phone == nil || *user.Phone == "" {
-		app.logger.Error("User has no phone number", "customer_id", callRequest.CustomerID)
-		app.reportServerError(r, fmt.Errorf("user has no phone number"))
-		response.JSON(w, http.StatusNotFound, map[string]string{
-			"error": "user has no phone number",
-		})
+		apptErr = fmt.Errorf("user has no phone number: %s", appointment.UserID)
+		app.logger.Error("User has no phone number", "user_id", appointment.UserID)
+		app.reportServerError(r, apptErr)
+
+		// this is likely our problem, so we don't want to retry
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
 	if user.State.Status == internal.UserStatusError {
-		app.logger.Error("User is in error state", "customer_id", callRequest.CustomerID)
-		app.reportServerError(r, fmt.Errorf("user is in error state"))
-		response.JSON(w, http.StatusBadRequest, map[string]string{
-			"error": "user is in error state",
-		})
+		apptErr = fmt.Errorf("user is in error state: %s", appointment.UserID)
+		app.logger.Error("User is in error state", "user_id", appointment.UserID)
+		app.reportServerError(r, apptErr)
+
+		// this is likely our problem, so we don't want to retry
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
 	if user.State.Status < internal.UserStatusIntroCallScheduled {
-		app.logger.Error("User is not ready for a call", "customer_id", callRequest.CustomerID)
-		app.reportServerError(r, fmt.Errorf("user is not ready for a call"))
-		response.JSON(w, http.StatusBadRequest, map[string]string{
-			"error": "user is not ready for a call",
-		})
+		apptErr = fmt.Errorf("user is not ready for a call: %s", appointment.UserID)
+		app.logger.Error("User is not ready for a call", "user_id", appointment.UserID)
+		app.reportServerError(r, apptErr)
+
+		// this is likely our problem, so we don't want to retry
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
 	resume, err := internal.GetLatestResume(r.Context(), app.fs, user.ID)
 	if err != nil {
+		apptErr = fmt.Errorf("failed to get resume: %w", err)
 		if status.Code(err) == codes.NotFound {
-			app.logger.Error("User has no resume", "customer_id", callRequest.CustomerID)
-			app.serverError(w, r, fmt.Errorf("user has no resume"))
+			app.logger.Error("handleVapiCall: user has no resume", "user_id", appointment.UserID)
+			w.WriteHeader(http.StatusOK)
 			return
 		}
 		app.logger.Error("Failed to get resume", "error", err)
 		app.reportServerError(r, fmt.Errorf("failed to get resume: %w", err))
+
+		// This might be a transient error, so we want to retry
 		response.JSON(w, http.StatusInternalServerError, map[string]string{
 			"error": "failed to get resume",
 		})
@@ -138,11 +174,13 @@ func (app *application) handleVapiCall(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !resume.IsValid {
-		app.logger.Error("Resume is not valid", "customer_id", callRequest.CustomerID)
-		app.reportServerError(r, fmt.Errorf("resume is not valid"))
-		response.JSON(w, http.StatusBadRequest, map[string]string{
-			"error": "resume is not valid",
-		})
+		apptErr = fmt.Errorf("resume is not valid")
+		app.logger.Error("handleVapiCall: resume is not valid", "user_id", appointment.UserID)
+		app.logger.Debug("handleVapiCall: resume", "resume-analysis", resume.Analysis)
+		app.reportServerError(r, apptErr)
+
+		// return a 200 because we don't want them to retry
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
@@ -154,11 +192,12 @@ func (app *application) handleVapiCall(w http.ResponseWriter, r *http.Request) {
 	// Create model config with system prompt
 	tmpl, err := utils.CreateTemplate("prompts/shirely.001.txt")
 	if err != nil {
-		app.logger.Error("Failed to create template", "error", err)
-		app.reportServerError(r, fmt.Errorf("failed to create template: %w", err))
-		response.JSON(w, http.StatusInternalServerError, map[string]string{
-			"error": "failed to create template",
-		})
+		apptErr = fmt.Errorf("failed to create system prompt template: %w", err)
+		app.logger.Error("Failed to create system prompt template", "error", apptErr)
+		app.reportServerError(r, apptErr)
+
+		// This is likely our problem, so we don't want to retry
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
@@ -167,11 +206,23 @@ func (app *application) handleVapiCall(w http.ResponseWriter, r *http.Request) {
 		"Resume":   resumeText,
 	})
 	if err != nil {
-		app.logger.Error("Failed to render template", "error", err)
-		app.reportServerError(r, fmt.Errorf("failed to render template: %w", err))
-		response.JSON(w, http.StatusInternalServerError, map[string]string{
-			"error": "failed to render template",
-		})
+		apptErr = fmt.Errorf("failed to render system prompt template: %w", err)
+		app.logger.Error("Failed to render system prompt template", "error", apptErr)
+		app.reportServerError(r, apptErr)
+
+		// This is likely our problem, so we don't want to retry
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	summaryTmpl, err := utils.CreateTemplate("prompts/transcript-analysis.001.txt")
+	if err != nil {
+		apptErr = fmt.Errorf("failed to create summary template: %w", err)
+		app.logger.Error("Failed to create summary template", "error", apptErr)
+		app.reportServerError(r, apptErr)
+
+		// This is likely our problem, so we don't want to retry
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
@@ -183,26 +234,31 @@ func (app *application) handleVapiCall(w http.ResponseWriter, r *http.Request) {
 
 	// Create call config
 	callConfig := vapi.Call{
+		Name:          &appointment.ID,
 		AssistantID:   &assistantID,
 		PhoneNumberID: &outboundPhoneID,
 		AssistantOverrides: &vapi.Assistant{
+			AnalysisPlan: &vapi.AnalysisPlan{
+				SummaryPrompt: &summaryTmpl.RawContent,
+			},
 			Model: &modelConfig,
 			Server: &vapi.ServerConfig{
 				URL:            os.Getenv("VAPI_WEBHOOK_URL"),
 				TimeoutSeconds: 20,
 			},
 			ServerMessages: []string{
-				"conversation-update",
+				// "conversation-update",
 				"end-of-call-report",
 				"function-call",
 				"hang",
-				"speech-update",
+				// "speech-update",
 				"status-update",
 				"tool-calls",
 				"transfer-destination-request",
 				"user-interrupted",
 			},
 		},
+		CustomerID: &user.ID,
 		Customer: &vapi.Customer{
 			Number: *user.Phone,
 			Name:   user.Name,
@@ -212,49 +268,42 @@ func (app *application) handleVapiCall(w http.ResponseWriter, r *http.Request) {
 	// Create the call
 	result, err := vapi.CreateCall(r.Context(), callConfig)
 	if err != nil {
-		app.reportServerError(r, fmt.Errorf("handleVapiCall CreateCall: %w", err))
+		apptErr = fmt.Errorf("handleVapiCall CreateCall: %w", err)
+		app.logger.Error("Failed to create call", "error", err)
+		app.reportServerError(r, apptErr)
+
+		// This is likely a transient error, but it could be we are not configuring the call correctly, so we want to retry
 		response.JSON(w, http.StatusInternalServerError, map[string]string{
 			"error": "failed to create call: " + err.Error(),
 		})
 		return
 	}
 
-	app.logger.Info("Call created successfully",
-		"call_id", result.ID,
-		"status", result.Status,
-	)
-
-	// Create an appointment record for this call
-	appointment := &internal.Appointment{
-		UserID:        user.ID,
-		ScheduledTime: time.Now(),
-		Status:        internal.AppointmentStatusScheduled,
-		CallID:        &result.ID,
-		CreatedAt:     time.Now(),
-		UpdatedAt:     time.Now(),
+	if result.ID != nil && result.Status != nil {
+		app.logger.Info(internal.Green("call created successfully"),
+			"users_id", user.ID,
+			"resume_id", resume.ID,
+			"call_id", *result.ID,
+			"status", *result.Status,
+		)
+	} else {
+		app.logger.Warn(internal.BGYellow("unexpected nil pointer result from CreateCall"), "result", result)
+		app.reportServerError(r, fmt.Errorf("unexpected nil pointer result from CreateCall"))
 	}
 
-	if err := internal.CreateAppointment(r.Context(), app.fs, *user, appointment); err != nil {
-		app.logger.Error("Failed to create appointment", "error", err)
-		app.reportServerError(r, fmt.Errorf("failed to create appointment: %w", err))
-		response.JSON(w, http.StatusInternalServerError, map[string]string{
-			"error": "failed to create appointment",
-		})
-		return
-	}
-
-	// TODO: Get the user from Firestore and update the status to UserStatusIntroCallStarted
 	user.State.Status = internal.UserStatusIntroCallStarted
-	user.State.Started = time.Now()
 	if err := internal.UpdateUserStatus(r.Context(), app.fs, user, user.State.Status); err != nil {
 		app.logger.Error("Failed to update user", "error", err)
 		app.reportServerError(r, fmt.Errorf("failed to update user: %w", err))
 	}
 
-	// Return success response
+	// In test mode, schedule a simulated end-of-call webhook
+	if os.Getenv("TESTING_MODE") == "true" {
+		if err := simulate.EndOfCall(r.Context(), app.processor, appointment.UserID, appointment.ID, app.logger); err != nil {
+			// Log error but continue with normal flow since this is just test simulation
+			app.logger.Error("Failed to simulate end-of-call", "error", err)
+		}
+	}
+
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{
-		"call_id": result.ID,
-		"status":  result.Status,
-	})
 }

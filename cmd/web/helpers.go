@@ -5,24 +5,19 @@ import (
 	"net/http"
 	"os"
 
-	"talent-rodeo/internal/version"
-
 	"github.com/justinas/nosurf"
 )
 
 func (app *application) newTemplateData(r *http.Request) map[string]any {
-	user := contextGetAuthenticatedUser(r)
-
-	sessionID := app.sessionManager.GetString(r.Context(), "SessionID")
-	token := nosurf.Token(r)
-
 	data := map[string]any{
-		"Version":       version.Get(),
-		"User":          user,
-		"SessionID":     sessionID,
-		"CSRFToken":     token,
+		"CSRFToken":     nosurf.Token(r),
+		"TestingMode":   os.Getenv("TESTING_MODE") == "true",
 		"PusherKey":     os.Getenv("PUSHER_KEY"),
 		"PusherCluster": os.Getenv("PUSHER_CLUSTER"),
+	}
+
+	if r != nil {
+		data["User"] = contextGetAuthenticatedUser(r)
 	}
 
 	return data

@@ -67,6 +67,11 @@ tasks:
       - go mod tidy -v
       - go fmt ./...
 
+  firebase:
+    desc: Start the Firebases emulators for local development
+    cmds:
+      - firebase emulators:start
+
   debug:
     cmds:
       - go run github.com/go-delve/delve/cmd/dlv@v1.23.1 exec /tmp/bin/web
@@ -107,7 +112,7 @@ tasks:
         --build.cmd "go run ./cmd/evals serve" \
         --build.bin "/tmp/bin/evals" \
         --build.delay "100" \
-        --build.exclude_dir "node_modules,data,public" \
+        --build.exclude_dir "node_modules,data,public,testfiles" \
         --build.include_ext "go, tpl, tmpl, html, css, scss, js, ts, sql, jpeg, jpg, gif, png, bmp, svg, apip, ico, txt, prompt, env" \
         --build.stop_on_error "false" \
         --misc.clean_on_exit true \
@@ -120,7 +125,7 @@ tasks:
         --build.cmd "go build -o=/tmp/bin/web ./cmd/web" \
         --build.bin "/tmp/bin/web" \
         --build.delay "100" \
-        --build.exclude_dir "node_modules,data,public" \
+        --build.exclude_dir "node_modules,data,public,testfiles" \
         --build.include_ext "go, tpl, tmpl, html, css, scss, js, ts, sql, jpeg, jpg, gif, png, bmp, svg, apip, ico, txt, prompt, env" \
         --build.stop_on_error "false" \
         --misc.clean_on_exit true \
@@ -136,6 +141,20 @@ tasks:
   #       --build.exclude_dir "" \
   #       --build.include_dir "$STATIC_DIR" \
   #       --build.include_ext "js,css"
+
+  live:test:
+    desc: Run the server in testing mode with live reload
+    cmds:
+      - |
+        go run github.com/air-verse/air@v1.52.3 \
+        --build.cmd "go build -o=/tmp/bin/web ./cmd/web" \
+        --build.bin "/tmp/bin/web" \
+        --build.delay "100" \
+        --build.exclude_dir "node_modules,data,public,testfiles" \
+        --build.include_ext "go, tpl, tmpl, html, css, scss, js, ts, sql, jpeg, jpg, gif, png, bmp, svg, apip, ico, txt, prompt, env" \
+        --build.stop_on_error "false" \
+        --misc.clean_on_exit true \
+        -- --http-port=2304 --testing
 
   live:
     deps:

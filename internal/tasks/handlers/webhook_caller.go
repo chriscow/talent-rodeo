@@ -24,6 +24,7 @@ const (
 // WebhookPayload represents the data needed to make a webhook call
 type WebhookPayload struct {
 	URL     string            `json:"url"`
+	Name    string            `json:"name"` // Human-readable name for the webhook task
 	Method  string            `json:"method"`
 	Headers map[string]string `json:"headers,omitempty"`
 	Body    []byte            `json:"body,omitempty"`
@@ -53,22 +54,6 @@ func (h *WebhookScheduler) ProcessTask(ctx context.Context, task *internal.Task)
 	var payload WebhookPayload
 	if err := task.GetPayload(&payload); err != nil {
 		return fmt.Errorf("failed to unmarshal payload: %w", err)
-	}
-
-	// If this is a VAPI call, try to update the appointment status
-	if payload.Headers != nil && payload.Headers["X-VAPI-Call-ID"] != "" {
-		callID := payload.Headers["X-VAPI-Call-ID"]
-		appointments, err := internal.GetAppointmentsByCallID(ctx, h.fs, callID)
-		if err != nil {
-			h.logger.Error("Failed to get appointment by call ID", "error", err, "call_id", callID)
-		} else if len(appointments) > 0 {
-			appointment := appointments[0]
-			appointment.Status = internal.AppointmentStatusFailed
-			appointment.UpdatedAt = time.Now()
-			if err := internal.UpdateAppointment(ctx, h.fs, appointment); err != nil {
-				h.logger.Error("Failed to update appointment status", "error", err, "appointment_id", appointment.ID)
-			}
-		}
 	}
 
 	// Make the HTTP request

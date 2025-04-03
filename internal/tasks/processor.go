@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"talent-rodeo/internal"
+	"talent-rodeo/internal/funcs"
 
 	"cloud.google.com/go/firestore"
 )
@@ -138,7 +139,7 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 				return fmt.Errorf("failed to get latest task state: %w", err)
 			}
 			if latestTask == nil {
-				return fmt.Errorf("task not found: %d", task.ID)
+				return fmt.Errorf("task not found: %s", task.ID)
 			}
 
 			p.logger.Debug("starting task processing transaction",
@@ -195,7 +196,7 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 					return fmt.Errorf("failed to get task: %w", err)
 				}
 				if t == nil {
-					return fmt.Errorf("task not found: %d", taskID)
+					return fmt.Errorf("task not found: %s", taskID)
 				}
 
 				p.logger.Debug("processing task in goroutine",
@@ -318,17 +319,18 @@ func (p *Processor) EnqueueTask(ctx context.Context, task *internal.Task) error 
 }
 
 // CreateAndEnqueueTask is a helper method that creates a new task with the given parameters and enqueues it
-func (p *Processor) CreateAndEnqueueTask(ctx context.Context, taskType string, payload []byte, runAt time.Time) (*internal.Task, error) {
+func (p *Processor) CreateAndEnqueueTask(ctx context.Context, taskType string, name string, payload []byte, runAt time.Time) (*internal.Task, error) {
 	_, exists := p.handlers[taskType]
 	if !exists {
 		p.logger.Error("no handler registered for task type", "type", taskType)
 		return nil, fmt.Errorf("no handler registered for task type: %s", taskType)
 	}
 
-	id := time.Now().UnixNano()
+	id := funcs.Slugify(fmt.Sprintf("%s-%d", name, time.Now().UnixNano()))
 
 	task := &internal.Task{
 		ID:          id,
+		Name:        name,
 		Type:        taskType,
 		Payload:     payload,
 		Status:      internal.TaskStatusPending,
@@ -386,11 +388,12 @@ func (h *Processor) ScheduleMessage(ctx context.Context, subject string, data an
 	}
 
 	// Create unique task ID
-	taskID := time.Now().UnixNano()
+	taskID := fmt.Sprintf("nats-message-scheduler-%d", time.Now().UnixNano())
 
 	// Create the task
 	task := &internal.Task{
 		ID:          taskID,
+		Name:        fmt.Sprintf("NATS Message: %s", subject),
 		Type:        "nats_message_scheduler",
 		Payload:     payloadBytes,
 		Status:      internal.TaskStatusPending,
@@ -402,6 +405,7 @@ func (h *Processor) ScheduleMessage(ctx context.Context, subject string, data an
 
 	h.logger.Debug("creating scheduler task",
 		"task_id", task.ID,
+		"name", task.Name,
 		"subject", subject,
 		"run_at", task.RunAt,
 		"max_attempts", task.MaxAttempts,
@@ -414,6 +418,7 @@ func (h *Processor) ScheduleMessage(ctx context.Context, subject string, data an
 
 	h.logger.Info("message scheduled",
 		"task_id", task.ID,
+		"name", task.Name,
 		"subject", subject,
 		"run_at", runAt.UTC(),
 	)

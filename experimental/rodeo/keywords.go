@@ -32,7 +32,7 @@ func GetResumeKeywords(resume string) ([]string, error) {
 	}
 
 	req := minds.NewRequest(
-		minds.Messages{{Role: minds.RoleUser, Content: prompt.Body() + "\n\n" + resume}},
+		minds.Messages{{Role: minds.RoleUser, Content: prompt.RawContent + "\n\n" + resume}},
 		minds.WithResponseSchema(*schema),
 	)
 

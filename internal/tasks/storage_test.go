@@ -41,6 +41,7 @@ package tasks
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"testing"
@@ -103,7 +104,8 @@ func TestFirestoreTaskStorage_CreateAndGetTask(t *testing.T) {
 	// Create a test task
 	now := time.Now()
 	task := &internal.Task{
-		ID:          now.UnixNano(),
+		ID:          fmt.Sprintf("test-task-%d", now.UnixNano()),
+		Name:        "Test Task",
 		Type:        "test_task",
 		Payload:     []byte(`{"test": "data"}`),
 		Status:      internal.TaskStatusPending,
@@ -125,7 +127,10 @@ func TestFirestoreTaskStorage_CreateAndGetTask(t *testing.T) {
 	}
 
 	if got.ID != task.ID {
-		t.Errorf("task ID = %d; want %d", got.ID, task.ID)
+		t.Errorf("task ID = %s; want %s", got.ID, task.ID)
+	}
+	if got.Name != task.Name {
+		t.Errorf("task name = %q; want %q", got.Name, task.Name)
 	}
 	if got.Type != task.Type {
 		t.Errorf("task type = %q; want %q", got.Type, task.Type)
@@ -146,7 +151,8 @@ func TestFirestoreTaskStorage_UpdateTask(t *testing.T) {
 	// Create a test task
 	now := time.Now()
 	task := &internal.Task{
-		ID:          now.UnixNano(),
+		ID:          fmt.Sprintf("test-task-%d", now.UnixNano()),
+		Name:        "Test Task",
 		Type:        "test_task",
 		Payload:     []byte(`{"test": "data"}`),
 		Status:      internal.TaskStatusPending,
@@ -194,7 +200,8 @@ func TestFirestoreTaskStorage_DeleteTask(t *testing.T) {
 	// Create a test task
 	now := time.Now()
 	task := &internal.Task{
-		ID:          now.UnixNano(),
+		ID:          fmt.Sprintf("test-task-%d", now.UnixNano()),
+		Name:        "Test Task",
 		Type:        "test_task",
 		Payload:     []byte(`{"test": "data"}`),
 		Status:      internal.TaskStatusPending,
@@ -232,7 +239,7 @@ func TestFirestoreTaskStorage_GetPendingTasks(t *testing.T) {
 	baseTime := time.Now()
 	tasks := []*internal.Task{
 		{
-			ID:          baseTime.UnixNano(),
+			ID:          fmt.Sprintf("test-task-%d", baseTime.UnixNano()),
 			Type:        "test_task",
 			Payload:     []byte(`{"test": "data1"}`),
 			Status:      internal.TaskStatusPending,
@@ -242,7 +249,7 @@ func TestFirestoreTaskStorage_GetPendingTasks(t *testing.T) {
 			UpdatedAt:   baseTime,
 		},
 		{
-			ID:          baseTime.Add(1 * time.Second).UnixNano(),
+			ID:          fmt.Sprintf("test-task-%d", baseTime.Add(1*time.Second).UnixNano()),
 			Type:        "test_task",
 			Payload:     []byte(`{"test": "data2"}`),
 			Status:      internal.TaskStatusRunning,
@@ -252,7 +259,7 @@ func TestFirestoreTaskStorage_GetPendingTasks(t *testing.T) {
 			UpdatedAt:   baseTime,
 		},
 		{
-			ID:          baseTime.Add(2 * time.Second).UnixNano(),
+			ID:          fmt.Sprintf("test-task-%d", baseTime.Add(2*time.Second).UnixNano()),
 			Type:        "test_task",
 			Payload:     []byte(`{"test": "data3"}`),
 			Status:      internal.TaskStatusPending,
@@ -297,7 +304,7 @@ func TestFirestoreTaskStorage_RunTransaction(t *testing.T) {
 	// Create a test task
 	now := time.Now()
 	task := &internal.Task{
-		ID:          now.UnixNano(),
+		ID:          fmt.Sprintf("test-task-%d", now.UnixNano()),
 		Type:        "test_task",
 		Payload:     []byte(`{"test": "data"}`),
 		Status:      internal.TaskStatusPending,
@@ -314,7 +321,7 @@ func TestFirestoreTaskStorage_RunTransaction(t *testing.T) {
 	// Run a transaction that updates the task
 	err := storage.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		// Get task in transaction
-		doc := storage.client.Collection(storage.tasksCollection()).Doc(storage.taskID(task.ID))
+		doc := storage.client.Collection(storage.tasksCollection()).Doc(task.ID)
 		docsnap, err := tx.Get(doc)
 		if err != nil {
 			return err
@@ -358,7 +365,8 @@ func TestFirestoreTaskStorage_GetTasksWithFilter(t *testing.T) {
 	baseTime := time.Now()
 	tasks := []*internal.Task{
 		{
-			ID:          baseTime.UnixNano(),
+			ID:          fmt.Sprintf("test-task-%d", baseTime.UnixNano()),
+			Name:        "Test Task 1",
 			Type:        "test_task",
 			Payload:     []byte(`{"test": "data1"}`),
 			Status:      internal.TaskStatusPending,
@@ -368,7 +376,8 @@ func TestFirestoreTaskStorage_GetTasksWithFilter(t *testing.T) {
 			UpdatedAt:   baseTime,
 		},
 		{
-			ID:          baseTime.Add(1 * time.Second).UnixNano(),
+			ID:          fmt.Sprintf("test-task-%d", baseTime.Add(1*time.Second).UnixNano()),
+			Name:        "Test Task 2",
 			Type:        "test_task",
 			Payload:     []byte(`{"test": "data2"}`),
 			Status:      internal.TaskStatusRunning,
@@ -378,7 +387,8 @@ func TestFirestoreTaskStorage_GetTasksWithFilter(t *testing.T) {
 			UpdatedAt:   baseTime,
 		},
 		{
-			ID:          baseTime.Add(2 * time.Second).UnixNano(),
+			ID:          fmt.Sprintf("test-task-%d", baseTime.Add(2*time.Second).UnixNano()),
+			Name:        "Test Task 3",
 			Type:        "test_task",
 			Payload:     []byte(`{"test": "data3"}`),
 			Status:      internal.TaskStatusPending,
@@ -441,7 +451,7 @@ func TestFirestoreTaskStorage_GetTasksCount(t *testing.T) {
 	baseTime := time.Now()
 	tasks := []*internal.Task{
 		{
-			ID:          baseTime.UnixNano(),
+			ID:          fmt.Sprintf("test-task-%d", baseTime.UnixNano()),
 			Type:        "test_task",
 			Status:      internal.TaskStatusPending,
 			MaxAttempts: 3,
@@ -450,7 +460,7 @@ func TestFirestoreTaskStorage_GetTasksCount(t *testing.T) {
 			UpdatedAt:   baseTime,
 		},
 		{
-			ID:          baseTime.Add(1 * time.Second).UnixNano(), // Ensure different ID
+			ID:          fmt.Sprintf("test-task-%d", baseTime.Add(1*time.Second).UnixNano()), // Ensure different ID
 			Type:        "test_task",
 			Status:      internal.TaskStatusRunning,
 			MaxAttempts: 3,
@@ -459,7 +469,7 @@ func TestFirestoreTaskStorage_GetTasksCount(t *testing.T) {
 			UpdatedAt:   baseTime,
 		},
 		{
-			ID:          baseTime.Add(2 * time.Second).UnixNano(), // Ensure different ID
+			ID:          fmt.Sprintf("test-task-%d", baseTime.Add(2*time.Second).UnixNano()), // Ensure different ID
 			Type:        "test_task",
 			Status:      internal.TaskStatusPending,
 			MaxAttempts: 3,
@@ -492,7 +502,7 @@ func TestFirestoreTaskStorage_GetTasksCount(t *testing.T) {
 	// Debug log: print the task details
 	t.Log("\nTest tasks created:")
 	for i, task := range tasks {
-		t.Logf("Task[%d]: ID=%d, CreatedAt=%v (%d ns), Status=%s",
+		t.Logf("Task[%d]: ID=%s, CreatedAt=%v (%d ns), Status=%s",
 			i, task.ID, task.CreatedAt, task.CreatedAt.UnixNano(), task.Status)
 	}
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,56 +13,14 @@ import (
 	"talent-rodeo/internal/response"
 	"talent-rodeo/internal/vapi"
 	"time"
+
+	"cloud.google.com/go/firestore"
 )
-
-// Message types
-const (
-	MsgTypeAssistantRequest   = "assistant-request"
-	MsgTypeToolCalls          = "tool-calls"
-	MsgTypeTransferDestReq    = "transfer-destination-request"
-	MsgTypeConversationUpdate = "conversation-update"
-	MsgTypeEndOfCallReport    = "end-of-call-report"
-	MsgTypeFunctionCall       = "function-call"
-	MsgTypeHang               = "hang"
-	MsgTypeSpeechUpdate       = "speech-update"
-	MsgTypeStatusUpdate       = "status-update"
-	MsgTypeUserInterrupted    = "user-interrupted"
-)
-
-// WebhookMessage represents the incoming message from VAPI webhooks
-type WebhookMessage struct {
-	Message WebhookMessageContent `json:"message"`
-}
-
-// WebhookMessageContent contains the actual content of the webhook message
-type WebhookMessageContent struct {
-	Type string `json:"type"`
-	// Additional fields depending on the message type
-	// We're using a map for flexibility as there are many different message formats
-	Data map[string]interface{} `json:"-"`
-}
-
-// UnmarshalJSON custom unmarshaler to capture all fields in the Data map
-func (m *WebhookMessageContent) UnmarshalJSON(data []byte) error {
-	// First, extract the type field
-	type TypeOnly struct {
-		Type string `json:"type"`
-	}
-
-	var typeInfo TypeOnly
-	if err := json.Unmarshal(data, &typeInfo); err != nil {
-		return err
-	}
-	m.Type = typeInfo.Type
-
-	// Then put all data into the map
-	return json.Unmarshal(data, &m.Data)
-}
 
 // MessageResponse represents the response to VAPI webhook messages
 type MessageResponse struct {
-	MessageResponse interface{} `json:"messageResponse,omitempty"`
-	Error           string      `json:"error,omitempty"`
+	MessageResponse any    `json:"messageResponse,omitempty"`
+	Error           string `json:"error,omitempty"`
 }
 
 // AssistantRequestResponse is returned for assistant-request message types
@@ -78,13 +37,18 @@ type ToolCallsResponse struct {
 
 // ToolCallResult represents a single tool call result
 type ToolCallResult struct {
-	ToolCallID string      `json:"toolCallId"`
-	Status     string      `json:"status"`
-	Content    interface{} `json:"content,omitempty"`
+	ToolCallID string `json:"toolCallId"`
+	Status     string `json:"status"`
+	Content    any    `json:"content,omitempty"`
 }
 
-// HandleWebhook processes webhook requests from VAPI
+// handleVapiWebhook processes webhook requests from VAPI
 func (app *application) handleVapiWebhook(w http.ResponseWriter, r *http.Request) {
+	app.logger.Debug("received webhook request",
+		"method", r.Method,
+		"url", r.URL.String(),
+		"headers", r.Header,
+		"test_mode", os.Getenv("TESTING_MODE") == "true")
 
 	// Read the raw request body
 	body, err := io.ReadAll(r.Body)
@@ -99,32 +63,38 @@ func (app *application) handleVapiWebhook(w http.ResponseWriter, r *http.Request
 	// Restore the body for later use
 	r.Body = io.NopCloser(bytes.NewBuffer(body))
 
-	if os.Getenv("SAVE_WEBHOOK_PAYLOADS") == "true" {
-		saveWebhookPayload(r.Method, body, app.logger)
-	}
+	app.logger.Debug("read request body", "size_bytes", len(body))
 
 	// Parse the request body
-	var msg WebhookMessage
+	var msg vapi.WebhookMessage
 	err = json.NewDecoder(r.Body).Decode(&msg)
 	if err != nil {
-		app.logger.Error("failed to decode webhook message", "error", err)
+		app.logger.Error("failed to decode webhook message",
+			"error", err,
+			"body", string(body)) // Log the raw body to help debug parsing issues
 		response.JSON(w, http.StatusBadRequest, MessageResponse{
 			Error: "Invalid request body",
 		})
 		return
 	}
 
-	app.logger.Info("received webhook message", "type", msg.Message.Type)
+	app.logger.Info("received webhook message",
+		"type", msg.Message.Type,
+		"data_keys", getMapKeys(msg.Message.Data))
+
+	// Always try to save the webhook payload - the save function will handle all conditions
+	saveWebhookPayload(msg.Message.Type, body, app.logger, app.fs)
 
 	// Process based on message type
 	switch msg.Message.Type {
-	case MsgTypeAssistantRequest:
+	case vapi.MsgTypeAssistantRequest:
 		app.handleAssistantRequest(w, r, msg)
-	case MsgTypeToolCalls:
+	case vapi.MsgTypeToolCalls:
 		app.handleToolCalls(w, r, msg)
-	case MsgTypeTransferDestReq:
+	case vapi.MsgTypeTransferDestReq:
 		app.handleTransferDestinationRequest(w, r, msg)
-	case MsgTypeEndOfCallReport:
+	case vapi.MsgTypeEndOfCallReport:
+		app.logger.Debug("processing end-of-call report")
 		app.handleEndOfCallReport(r, msg)
 	default:
 		// For other message types, we don't need to send a response
@@ -133,34 +103,60 @@ func (app *application) handleVapiWebhook(w http.ResponseWriter, r *http.Request
 	}
 }
 
-func saveWebhookPayload(msgType string, body []byte, logger *slog.Logger) {
-	// Save webhook payload to file for testing
+func saveWebhookPayload(msgType string, body []byte, logger *slog.Logger, fs *firestore.Client) {
+	// Skip if saving is not enabled or if in testing mode
+	if os.Getenv("SAVE_WEBHOOK_PAYLOADS") != "true" {
+		logger.Debug("skipping webhook payload save - saving not enabled")
+		return
+	}
 
-	// Ensure the webhooks directory exists
+	if os.Getenv("TESTING_MODE") == "true" {
+		logger.Debug("skipping webhook payload save - in testing mode")
+		return
+	}
+
+	// Generate a unique ID based on message type and timestamp
+	docID := fmt.Sprintf("%s_%d", msgType, time.Now().UnixNano())
+
+	// Try to save to Firestore
+	if os.Getenv("SAVE_WEBHOOK_TO_FIRESTORE") == "true" {
+		var data map[string]any
+		if err := json.Unmarshal(body, &data); err != nil {
+			logger.Error("Failed to parse webhook payload for Firestore", "error", err)
+		} else {
+			// Add metadata
+			data["_metadata"] = map[string]any{
+				"timestamp": time.Now(),
+				"type":      msgType,
+			}
+
+			// Save to Firestore
+			docRef := fs.Collection("webhook-data").Doc("vapi").Collection("webhooks").Doc(docID)
+			if _, err := docRef.Set(context.Background(), data); err != nil {
+				logger.Error("Failed to save webhook payload to Firestore", "error", err)
+			} else {
+				logger.Info("Saved webhook payload to Firestore", "doc_id", docID)
+			}
+		}
+	}
+
+	// Save to file system
 	webhooksDir := "testdata/webhooks"
 	if err := os.MkdirAll(webhooksDir, 0755); err != nil {
 		logger.Error("Failed to create webhooks directory", "error", err)
-		// Continue execution since this is just for testing purposes
+		return
 	}
 
-	// Create a filename based on message type and timestamp
-	filename := fmt.Sprintf("%s/%s_%d.json",
-		webhooksDir,
-		msgType,
-		time.Now().UnixNano(),
-	)
-
-	// Save the raw body instead of re-marshaling
+	filename := fmt.Sprintf("%s/%s.json", webhooksDir, docID)
 	if err := os.WriteFile(filename, body, 0644); err != nil {
-		logger.Error("Failed to save webhook payload", "error", err)
+		logger.Error("Failed to save webhook payload to file", "error", err)
 	} else {
-		logger.Info("Saved webhook payload", "filename", filename)
+		logger.Info("Saved webhook payload to file", "filename", filename)
 	}
-
 }
 
 // handleAssistantRequest handles assistant-request messages
-func (h *application) handleAssistantRequest(w http.ResponseWriter, r *http.Request, msg WebhookMessage) {
+func (h *application) handleAssistantRequest(w http.ResponseWriter, r *http.Request, msg vapi.WebhookMessage) {
 	resp := MessageResponse{
 		MessageResponse: AssistantRequestResponse{
 			AssistantID: "default-assistant-id", // In a real implementation, you would determine this dynamically
@@ -174,7 +170,7 @@ func (h *application) handleAssistantRequest(w http.ResponseWriter, r *http.Requ
 }
 
 // handleToolCalls handles tool-calls messages
-func (h *application) handleToolCalls(w http.ResponseWriter, r *http.Request, msg WebhookMessage) {
+func (h *application) handleToolCalls(w http.ResponseWriter, r *http.Request, msg vapi.WebhookMessage) {
 	// In a real implementation, you would extract the tool calls from the message
 	// and execute them, then return the results
 
@@ -197,13 +193,13 @@ func (h *application) handleToolCalls(w http.ResponseWriter, r *http.Request, ms
 }
 
 // handleTransferDestinationRequest handles transfer-destination-request messages
-func (h *application) handleTransferDestinationRequest(w http.ResponseWriter, r *http.Request, msg WebhookMessage) {
+func (h *application) handleTransferDestinationRequest(w http.ResponseWriter, r *http.Request, msg vapi.WebhookMessage) {
 	// In a real implementation, you would determine the transfer destination
 	// For now, we'll just return a simple response
 
 	resp := MessageResponse{
-		MessageResponse: map[string]interface{}{
-			"destination": map[string]interface{}{
+		MessageResponse: map[string]any{
+			"destination": map[string]any{
 				"type":   "number",
 				"number": "+12345678900",
 			},
@@ -216,68 +212,113 @@ func (h *application) handleTransferDestinationRequest(w http.ResponseWriter, r 
 	}
 }
 
-// handleEndOfCallReport processes the end-of-call-report message
-// handleEndOfCallReport processes the end-of-call-report message
-func (app *application) handleEndOfCallReport(r *http.Request, webhookMsg WebhookMessage) error {
-	// Parse the end of call report
+// getMapKeys returns a sorted list of keys from a map for logging
+func getMapKeys(data []byte) []string {
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// handleEndOfCallReport processes an end-of-call report webhook
+func (app *application) handleEndOfCallReport(r *http.Request, webhookMsg vapi.WebhookMessage) error {
+	// Debug log the incoming message
+	if msgBytes, err := json.Marshal(webhookMsg); err == nil {
+		app.logger.Debug("received end-of-call report", "message", string(msgBytes))
+	}
+
+	// Parse the message data into a report
 	var report vapi.EndOfCallReport
-	data, err := json.Marshal(webhookMsg.Message.Data)
+	if err := json.Unmarshal(webhookMsg.Message.Data, &report); err != nil {
+		app.logger.Error("failed to unmarshal end-of-call report", "error", err)
+		return fmt.Errorf("failed to unmarshal end-of-call report: %w", err)
+	}
+
+	// Debug log the parsed report
+	if reportBytes, err := json.Marshal(report); err == nil {
+		app.logger.Debug("parsed end-of-call report", "report", string(reportBytes))
+	}
+
+	// Validate required fields
+	if report.Call == nil {
+		app.logger.Error("missing call information in end of call report")
+		return fmt.Errorf("missing call information in end of call report")
+	}
+
+	// Debug log call information
+	if callBytes, err := json.Marshal(report.Call); err == nil {
+		app.logger.Debug("call information", "call", string(callBytes))
+	}
+
+	if report.Call.ID == nil {
+		app.logger.Error("missing call ID in end of call report")
+		return fmt.Errorf("missing call ID in end of call report")
+	}
+
+	// Debug log the call ID
+	app.logger.Debug("processing call", "id", *report.Call.ID)
+
+	// Extract call ID
+	callID := *report.Call.ID
+
+	app.logger.Debug("parsed end-of-call report",
+		"call_id", callID,
+		"ended_reason", report.EndedReason)
+
+	// The appointment ID is stored in the call name
+	if report.Call.Name == nil {
+		app.logger.Error("missing call name in end of call report")
+		return fmt.Errorf("missing call name in end of call report")
+	}
+
+	appointmentID := *report.Call.Name
+
+	// The customer ID is required for getting the appointment
+	if report.Call.CustomerID == nil {
+		app.logger.Error("missing customer ID in end of call report")
+		return fmt.Errorf("missing customer ID in end of call report")
+	}
+	customerID := *report.Call.CustomerID
+
+	summary := report.Summary
+
+	// Get the appointment
+	appointment, err := internal.GetAppointment(r.Context(), app.fs, customerID, appointmentID)
 	if err != nil {
-		return fmt.Errorf("failed to marshal message data: %w", err)
-	}
-
-	if err := json.Unmarshal(data, &report); err != nil {
-		return fmt.Errorf("failed to unmarshal end of call report: %w", err)
-	}
-
-	// Get the call result
-	callResult, err := vapi.GetCall(r.Context(), *report.Call.ID)
-	if err != nil {
-		return fmt.Errorf("failed to get call result: %w", err)
-	}
-
-	// Find the appointment by call ID
-	appointments, err := internal.GetAppointmentsByCallID(r.Context(), app.fs, *report.Call.ID)
-	if err != nil {
-		return fmt.Errorf("failed to get appointment by call ID: %w", err)
-	}
-
-	if len(appointments) == 0 {
-		return fmt.Errorf("no appointment found for call ID: %s", *report.Call.ID)
+		app.logger.Error("failed to get appointment",
+			"error", err,
+			"customer_id", customerID,
+			"appointment_id", appointmentID)
+		return fmt.Errorf("failed to get appointment: %w", err)
 	}
 
 	// Update the appointment with the call result and report
-	appointment := appointments[0]
-	appointment.EndOfCallReport = &report
-	appointment.CallResult = callResult
+	appointment.CallID = &callID
+	appointment.TranscriptSummary = summary
 	appointment.UpdatedAt = time.Now()
+	endReason := report.EndedReason
 
 	// Update appointment status based on call result
-	status, shouldStoreReason := internal.MapVapiEndReasonToAppointmentStatus(report.EndedReason)
+	status, shouldLog := internal.MapVapiEndReasonToAppointmentStatus(endReason)
 	appointment.Status = status
-	if shouldStoreReason {
-		appointment.OtherStatus = &report.EndedReason
+
+	if shouldLog {
+		app.logger.Info("appointment status updated",
+			"appointment_id", appointmentID,
+			"status", status,
+			"end_reason", endReason)
 	}
 
 	if err := internal.UpdateAppointment(r.Context(), app.fs, appointment); err != nil {
+		app.logger.Error("failed to update appointment",
+			"error", err,
+			"appointment_id", appointmentID)
 		return fmt.Errorf("failed to update appointment: %w", err)
-	}
-
-	app.logger.Info("Successfully processed end of call report",
-		"call_id", *report.Call.ID,
-		"appointment_id", appointment.ID,
-		"ended_reason", report.EndedReason,
-		"status", appointment.Status,
-	)
-
-	// Naaughty: We don't actually need a user object, we can just use the appointment user ID
-	user := &internal.User{
-		ID: appointment.UserID,
-	}
-
-	if err := internal.UpdateUserStatus(r.Context(), app.fs, user, internal.UserStatusIntroCallCompleted); err != nil {
-		app.logger.Error("Failed to update user", "error", err)
-		return fmt.Errorf("failed to update user: %w", err)
 	}
 
 	return nil

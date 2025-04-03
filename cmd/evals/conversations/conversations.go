@@ -194,7 +194,7 @@ func createProviders(ctx context.Context, cfg evalConfig, resume string) (recrui
 
 	// Create candidate provider
 	candidateName = funcs.Slugify(cfg.personaPrompt.Header.Name)
-	candidate, err = createGeminiProvider(ctx, candidateName, cfg.personaPrompt.Body())
+	candidate, err = createGeminiProvider(ctx, candidateName, cfg.personaPrompt.RawContent)
 	if err != nil {
 		return nil, nil, "", nil, "", "", "", fmt.Errorf("failed to create candidate provider: %w", err)
 	}

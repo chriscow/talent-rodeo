@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"talent-rodeo/internal/funcs"
 	"talent-rodeo/internal/utils"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"cloud.google.com/go/firestore"
 	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/providers/openai"
-	"github.com/google/uuid"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -70,7 +70,11 @@ func CreateResume(ctx context.Context, fs *firestore.Client, user User, resume *
 	}
 
 	if resume.ID == "" {
-		resume.ID = funcs.Slugify(fmt.Sprintf("%s-%s", funcs.Slugify(user.Name), uuid.New().String()))
+		if resume.JobID != nil {
+			resume.ID = funcs.Slugify(fmt.Sprintf("resume-for-jobid-%s-%d", funcs.Slugify(*resume.JobID), time.Now().UnixNano()))
+		} else {
+			resume.ID = fmt.Sprintf("%d", time.Now().UnixNano())
+		}
 	}
 
 	resume.UserID = user.ID
@@ -95,8 +99,65 @@ func CreateResume(ctx context.Context, fs *firestore.Client, user User, resume *
 	return nil
 }
 
+// annotateResumeTestMode simulates resume annotation in test mode
+func annotateResumeTestMode(logger *slog.Logger, user *User, resume *Resume) error {
+	// Simulate processing delay
+	time.Sleep(2 * time.Second)
+
+	// Load test annotation data
+	testFile := "testdata/sample-resumes/chris-cowherd.resume.annotated.json"
+	data, err := os.ReadFile(testFile)
+	if err != nil {
+		return fmt.Errorf("failed to read test annotation data: %w", err)
+	}
+
+	// Parse the test data into resumeAnalysis struct
+	var result resumeAnalysis
+	if err := json.Unmarshal(data, &result); err != nil {
+		return fmt.Errorf("failed to unmarshal test data: %w", err)
+	}
+
+	// Update resume fields
+	resume.IsValid = result.IsResume
+	resume.Annotated = result.YAMLSummary
+	resume.Analysis = &result.Analysis
+	resume.UpdatedAt = time.Now()
+
+	logger.Info("using test annotation data",
+		"file", testFile,
+		"user_id", user.ID,
+		"resume_id", resume.ID)
+
+	return nil
+}
+
 // AnnotateResume uses an LLM to annotate the resume text and output it as YAML.
 func AnnotateResume(ctx context.Context, fs *firestore.Client, logger *slog.Logger, user *User, resume *Resume) error {
+	if os.Getenv("TESTING_MODE") == "true" {
+		logger.Debug("annotateResume: using test mode")
+		if err := annotateResumeTestMode(logger, user, resume); err != nil {
+			return fmt.Errorf("test mode annotation failed: %w", err)
+		}
+
+		// Update resume in Firestore and handle user state
+		if err := UpdateResume(ctx, fs, *resume); err != nil {
+			return fmt.Errorf("failed to update resume in Firestore: %w", err)
+		}
+
+		if !resume.IsValid {
+			errorMsg := "Uploaded document is not a valid resume"
+			if err := UpdateUserStateWithError(ctx, fs, user, errorMsg); err != nil {
+				logger.Error("failed to update user state with error", "error", err)
+			}
+		} else {
+			if err := UpdateUserStatus(ctx, fs, user, UserStatusResumeUploaded); err != nil {
+				logger.Error("failed to update user state to ResumeUploaded", "error", err)
+			}
+		}
+
+		return nil
+	}
+
 	prompt, err := utils.CreateTemplate(resumeAnnotationPromptTemplate)
 	if err != nil {
 		return fmt.Errorf("convertResume: failed to create template: %w", err)
@@ -105,7 +166,7 @@ func AnnotateResume(ctx context.Context, fs *firestore.Client, logger *slog.Logg
 	messages := []minds.Message{
 		{
 			Role:    minds.RoleDeveloper,
-			Content: prompt.Body(),
+			Content: prompt.RawContent,
 		},
 		{
 			Role:    minds.RoleUser,

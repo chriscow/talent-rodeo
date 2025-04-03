@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"talent-rodeo/internal"
 	"talent-rodeo/internal/auth"
 	"talent-rodeo/internal/database"
 	"talent-rodeo/internal/smtp"
@@ -20,8 +21,8 @@ import (
 
 	"cloud.google.com/go/firestore"
 	firebase "firebase.google.com/go/v4"
+	scsfs "github.com/alexedwards/scs/firestore"
 	"github.com/alexedwards/scs/v2"
-	"github.com/gorilla/sessions"
 	"github.com/joho/godotenv"
 	"github.com/lmittmann/tint"
 	"github.com/markbates/goth"
@@ -94,20 +95,18 @@ type config struct {
 }
 
 type application struct {
-	config   config
-	db       *database.DB
-	fs       *firestore.Client
-	logger   *slog.Logger
-	mailer   *smtp.Mailer
-	wg       sync.WaitGroup
-	pusher   PusherInterface
-	handlers map[string]any
+	config config
+	db     *database.DB
+	fs     *firestore.Client
+	logger *slog.Logger
+	mailer *smtp.Mailer
+	wg     sync.WaitGroup
+	pusher PusherInterface
 
 	natsServer   *server.Server
 	natsShutdown chan struct{}
 	jetstream    jetstream.JetStream
 	processor    *tasks.Processor
-	whScheduler  *th.WebhookScheduler
 	// natsScheduler  *th.NATSMessageScheduler
 	sessionManager *scs.SessionManager
 }
@@ -156,6 +155,8 @@ func run(logger *slog.Logger) error {
 		return fmt.Errorf("LINKEDIN_AUTH_CLIENT_ID and LINKEDIN_AUTH_CLIENT_SECRET environment variables are required")
 	}
 
+	flag.BoolVar(&cfg.testing, "testing", false, "enable testing mode")
+
 	showVersion := flag.Bool("version", false, "display version and exit")
 
 	flag.Parse()
@@ -163,6 +164,12 @@ func run(logger *slog.Logger) error {
 	if *showVersion {
 		fmt.Printf("version: %s\n", version.Get())
 		return nil
+	}
+
+	// Set testing mode environment variable for components that can't access the flag
+	if cfg.testing {
+		logger.Warn(internal.BGYellow("===== running in testing mode ====="))
+		os.Setenv("TESTING_MODE", "true")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -204,7 +211,14 @@ func run(logger *slog.Logger) error {
 	}
 
 	sessionManager := scs.New()
+	sessionManager.Store = scsfs.New(firestoreClient)
 	sessionManager.Lifetime = 24 * time.Hour
+	sessionManager.Cookie.Secure = true
+	sessionManager.Cookie.HttpOnly = true
+	sessionManager.Cookie.SameSite = http.SameSiteLaxMode
+	sessionManager.Cookie.Name = "session"
+	sessionManager.Cookie.Persist = true
+	sessionManager.Cookie.Path = "/"
 
 	// Create and set our adapter as the gothic store
 	gothic.Store = auth.NewSCSAdapter(sessionManager)
@@ -329,38 +343,6 @@ func setupNATSHandler(natsURL string, logger *slog.Logger) (*th.NATSMessageSched
 }
 */
 
-func setupSessionStore(authKey, encryptKey []byte) *sessions.CookieStore {
-	// Add logging for key lengths to help diagnose issues
-	authKeyLength := len(authKey)
-	encryptKeyLength := 0
-	if encryptKey != nil {
-		encryptKeyLength = len(encryptKey)
-	}
-
-	fmt.Printf("Setting up session store with auth key length: %d, encrypt key length: %d\n",
-		authKeyLength, encryptKeyLength)
-
-	// Validate minimum key lengths
-	if authKeyLength < 32 {
-		fmt.Printf("Warning: Auth key length (%d) is less than recommended 32 bytes\n", authKeyLength)
-	}
-	if encryptKey != nil && encryptKeyLength < 32 {
-		fmt.Printf("Warning: Encrypt key length (%d) is less than recommended 32 bytes\n", encryptKeyLength)
-	}
-
-	store := sessions.NewCookieStore(authKey, encryptKey)
-
-	store.Options = &sessions.Options{
-		Path:     "/",
-		MaxAge:   86400 * 7, // 7 days
-		HttpOnly: true,
-		Secure:   true, // set to true in production
-		SameSite: http.SameSiteLaxMode,
-	}
-
-	return store
-}
-
 func checkEnv() error {
 	err := godotenv.Load()
 	if err != nil {
@@ -386,20 +368,6 @@ func checkEnv() error {
 	}
 
 	return nil
-}
-
-// setupPipelineHandlers configures all pipeline handlers with JetStream
-func setupPipelineHandlers(
-	ctx context.Context,
-	db *database.DB,
-	js jetstream.JetStream,
-	logger *slog.Logger,
-) (map[string]any, error) {
-	h := make(map[string]any)
-	logger.Debug("setting up pipeline handlers")
-
-	logger.Info("All pipeline handlers configured successfully")
-	return h, nil
 }
 
 func setupFirestoreClient(ctx context.Context, projectID, credentialsFile string) (*firestore.Client, error) {

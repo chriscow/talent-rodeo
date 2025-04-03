@@ -33,20 +33,9 @@
 <script src="https://unpkg.com/feather-icons"></script>
 <script src="/static/js/modal.js"></script>
 
-<script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
-
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js"></script>
 
-<body>
-    {{if .User}}
-    <!-- Hidden element with user data for state monitoring -->
-    <div id="user-data" 
-         data-user-id="{{.User.ID}}" 
-         data-pusher-key="{{.PusherKey}}" 
-         data-pusher-cluster="{{.PusherCluster}}"
-         style="display: none;"></div>
-    {{end}}
-    
+<body>    
     {{block "partial:nav" .}}{{end}}
 
     {{block "page:main" .}}{{end}}
