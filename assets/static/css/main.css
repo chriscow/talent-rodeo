@@ -70,3 +70,43 @@ a {
 .htmx-request.htmx-indicator {
     display: inline;
 }
+
+/* Container Narrow - For forms and dialog-like content */
+.container-narrow {
+    width: 100%;
+    margin-right: auto;
+    margin-left: auto;
+    padding-right: var(--spacing);
+    padding-left: var(--spacing);
+}
+
+/* Breakpoints for narrow container */
+@media (min-width: 576px) {
+    .container-narrow {
+        max-width: 400px;  /* Narrower than container's 510px */
+    }
+}
+
+@media (min-width: 768px) {
+    .container-narrow {
+        max-width: 500px;  /* Narrower than container's 700px */
+    }
+}
+
+@media (min-width: 1024px) {
+    .container-narrow {
+        max-width: 600px;  /* Narrower than container's 950px */
+    }
+}
+
+@media (min-width: 1280px) {
+    .container-narrow {
+        max-width: 700px;  /* Narrower than container's 1200px */
+    }
+}
+
+@media (min-width: 1536px) {
+    .container-narrow {
+        max-width: 800px;  /* Narrower than container's 1450px */
+    }
+}
