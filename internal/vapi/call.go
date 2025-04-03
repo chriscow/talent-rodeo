@@ -7,14 +7,32 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 )
+
+// loadTestData loads test data from a JSON file
+func loadTestData(filename string, v interface{}) error {
+	data, err := os.ReadFile(filepath.Join("testdata", "vapi", filename))
+	if err != nil {
+		return fmt.Errorf("failed to read test data: %w", err)
+	}
+	return json.Unmarshal(data, v)
+}
 
 const (
 	VoiceMailDetectionProviderTwilio = "twilio"
 )
 
 // CreateCall creates a new call with the given configuration
-func CreateCall(ctx context.Context, call Call) (*CallResult, error) {
+func CreateCall(ctx context.Context, call Call) (*Call, error) {
+	if os.Getenv("TESTING_MODE") == "true" {
+		var result Call
+		if err := loadTestData("create-call-response.json", &result); err != nil {
+			return nil, err
+		}
+		return &result, nil
+	}
+
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -54,7 +72,7 @@ func CreateCall(ctx context.Context, call Call) (*CallResult, error) {
 		return nil, fmt.Errorf("failed to create call. code: %d msg: %s", resp.StatusCode, body.String())
 	}
 
-	var result CallResult
+	var result Call
 	if err := json.Unmarshal(body.Bytes(), &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
@@ -63,7 +81,15 @@ func CreateCall(ctx context.Context, call Call) (*CallResult, error) {
 }
 
 // GetCall retrieves a call by its ID
-func GetCall(ctx context.Context, id string) (*CallResult, error) {
+func GetCall(ctx context.Context, id string) (*Call, error) {
+	if os.Getenv("TESTING_MODE") == "true" {
+		var result Call
+		if err := loadTestData("get-call-response.json", &result); err != nil {
+			return nil, err
+		}
+		return &result, nil
+	}
+
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -96,7 +122,7 @@ func GetCall(ctx context.Context, id string) (*CallResult, error) {
 		return nil, fmt.Errorf("failed to get call. code: %d msg: %s", resp.StatusCode, body.String())
 	}
 
-	var result CallResult
+	var result Call
 	if err := json.Unmarshal(body.Bytes(), &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
@@ -104,101 +130,32 @@ func GetCall(ctx context.Context, id string) (*CallResult, error) {
 	return &result, nil
 }
 
-// Cost represents a cost entry in the call result
-type Cost struct {
-	Type     string  `json:"type"`
-	Cost     float64 `json:"cost"`
-	Minutes  float64 `json:"minutes"`
-	Provider string  `json:"provider"`
-}
+// SimulateEndOfCallWebhook simulates an end-of-call webhook in test mode
+func SimulateEndOfCallWebhook(webhookURL string) error {
+	if os.Getenv("TESTING_MODE") != "true" {
+		return fmt.Errorf("can only simulate webhooks in test mode")
+	}
 
-// Destination represents the call destination details
-type Destination struct {
-	Type                   string       `json:"type"`
-	Number                 string       `json:"number"`
-	CallerID               string       `json:"callerId"`
-	Description            string       `json:"description"`
-	Extension              string       `json:"extension"`
-	Message                string       `json:"message"`
-	NumberE164CheckEnabled bool         `json:"numberE164CheckEnabled"`
-	TransferPlan           TransferPlan `json:"transferPlan"`
-}
+	// Create a request with the test header
+	req, err := http.NewRequest("POST", webhookURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
 
-// TransferPlan represents the transfer configuration
-type TransferPlan struct {
-	Mode    string         `json:"mode"`
-	Message string         `json:"message"`
-	SipVerb map[string]any `json:"sipVerb"`
-	Twiml   string         `json:"twiml"`
-}
+	// Add header to indicate this is a simulated end-of-call
+	req.Header.Set("X-Vapi-Simulate", "end-of-call")
 
-// CostBreakdown represents the detailed cost breakdown
-type CostBreakdown struct {
-	Transport             float64               `json:"transport"`
-	STT                   float64               `json:"stt"`
-	LLM                   float64               `json:"llm"`
-	TTS                   float64               `json:"tts"`
-	VAPI                  float64               `json:"vapi"`
-	Total                 float64               `json:"total"`
-	LLMPromptTokens       float64               `json:"llmPromptTokens"`
-	LLMCompletionTokens   float64               `json:"llmCompletionTokens"`
-	TTSCharacters         float64               `json:"ttsCharacters"`
-	AnalysisCostBreakdown AnalysisCostBreakdown `json:"analysisCostBreakdown"`
-}
+	// Send the request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
 
-// AnalysisCostBreakdown represents the cost breakdown for analysis
-type AnalysisCostBreakdown struct {
-	Summary                           float64 `json:"summary"`
-	SummaryPromptTokens               float64 `json:"summaryPromptTokens"`
-	SummaryCompletionTokens           float64 `json:"summaryCompletionTokens"`
-	StructuredData                    float64 `json:"structuredData"`
-	StructuredDataPromptTokens        float64 `json:"structuredDataPromptTokens"`
-	StructuredDataCompletionTokens    float64 `json:"structuredDataCompletionTokens"`
-	SuccessEvaluation                 float64 `json:"successEvaluation"`
-	SuccessEvaluationPromptTokens     float64 `json:"successEvaluationPromptTokens"`
-	SuccessEvaluationCompletionTokens float64 `json:"successEvaluationCompletionTokens"`
-}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
 
-// Analysis represents the call analysis results
-type Analysis struct {
-	Summary             string           `json:"summary"`
-	StructuredData      map[string]any   `json:"structuredData"`
-	StructuredDataMulti []map[string]any `json:"structuredDataMulti"`
-	SuccessEvaluation   string           `json:"successEvaluation"`
-}
-
-// Monitor represents monitoring URLs
-type Monitor struct {
-	ListenURL  string `json:"listenUrl"`
-	ControlURL string `json:"controlUrl"`
-}
-
-// Artifact represents call artifacts
-type Artifact struct {
-	Messages                        []Message `json:"messages"`
-	MessagesOpenAIFormatted         []Message `json:"messagesOpenAIFormatted"`
-	RecordingURL                    string    `json:"recordingUrl"`
-	StereoRecordingURL              string    `json:"stereoRecordingUrl"`
-	VideoRecordingURL               string    `json:"videoRecordingUrl"`
-	VideoRecordingStartDelaySeconds float64   `json:"videoRecordingStartDelaySeconds"`
-	Transcript                      string    `json:"transcript"`
-	PcapURL                         string    `json:"pcapUrl"`
-}
-
-// Transport represents transport configuration
-type Transport struct {
-	Provider              string `json:"provider"`
-	AssistantVideoEnabled bool   `json:"assistantVideoEnabled"`
-}
-
-// PhoneNumber represents phone number configuration
-type PhoneNumber struct {
-	TwilioAccountSid    string       `json:"twilioAccountSid"`
-	TwilioAuthToken     string       `json:"twilioAuthToken"`
-	TwilioPhoneNumber   string       `json:"twilioPhoneNumber"`
-	FallbackDestination Destination  `json:"fallbackDestination"`
-	Name                string       `json:"name"`
-	AssistantID         string       `json:"assistantId"`
-	SquadID             string       `json:"squadId"`
-	Server              ServerConfig `json:"server"`
+	return nil
 }

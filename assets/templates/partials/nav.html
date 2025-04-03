@@ -21,6 +21,14 @@
             </details>
         </li>
         {{if .User}}
+        {{if .TestingMode}}
+        <li>
+            <form method="POST" action="/testing/reset-user-state" style="margin: 0;">
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                <button type="submit" class="outline secondary" style="margin: 0;">Reset Test State</button>
+            </form>
+        </li>
+        {{end}}
         <li>
             <form method="POST" action="/logout" style="margin: 0;">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">

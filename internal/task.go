@@ -34,7 +34,8 @@ func (e *TaskError) Unwrap() error {
 
 // Task represents a background job to be processed
 type Task struct {
-	ID          int64           `firestore:"id" json:"id"`
+	ID          string          `firestore:"id" json:"id"`
+	Name        string          `firestore:"name" json:"name"` // Human-readable name for the task
 	Type        string          `firestore:"type" json:"type"`
 	Payload     json.RawMessage `firestore:"payload" json:"payload"`
 	Status      string          `firestore:"status" json:"status"`

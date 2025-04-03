@@ -12,7 +12,7 @@ type Transcript struct {
 }
 
 // ConvertCallResultToTranscript converts a CallResult's messages to a Transcript
-func ConvertCallResultToTranscript(callResult vapi.CallResult) *Transcript {
+func ConvertCallResultToTranscript(callResult vapi.Call) *Transcript {
 	messages := make([]openai.ChatCompletionMessage, 0, len(callResult.Messages))
 
 	for _, msg := range callResult.Messages {

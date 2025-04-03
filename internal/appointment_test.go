@@ -150,9 +150,34 @@ func TestAppointment(t *testing.T) {
 			Name: "Non Existent",
 		}
 
-		err := CreateAppointment(ctx, client, *nonExistentUser, invalidAppointment)
+		err := CreateAppointment(ctx, client, "InvalidAppointmentCreation test", *nonExistentUser, invalidAppointment)
 		if err == nil {
 			t.Error("CreateAppointment() with non-existent user should return error")
 		}
 	})
+}
+
+// TestGetSpecificAppointment is a temporary test to verify getting a specific appointment
+func TestGetSpecificAppointment(t *testing.T) {
+	ctx := context.Background()
+
+	client, err := NewFirestoreClient(ctx, os.Getenv("FIREBASE_PROJECT_ID"), os.Getenv("FIREBASE_CREDENTIALS_FILE"))
+	if err != nil {
+		t.Fatalf("NewFirestoreClient() error = %v", err)
+	}
+	defer client.Close()
+
+	userID := "Zwhbs7YdFy"
+	appointmentID := "initial-call-1743886397809642797"
+
+	got, err := GetAppointment(ctx, client, userID, appointmentID)
+	if err != nil {
+		t.Fatalf("GetAppointment() error = %v", err)
+	}
+	if got == nil {
+		t.Fatal("GetAppointment() got nil, want appointment")
+	}
+
+	t.Logf("Found appointment: ID=%s, UserID=%s, Status=%s, ScheduledTime=%v",
+		got.ID, got.UserID, got.Status, got.ScheduledTime)
 }

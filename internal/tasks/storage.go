@@ -23,13 +23,13 @@ type TaskStorage interface {
 	CreateTask(ctx context.Context, task *internal.Task) error
 
 	// GetTask retrieves a task by ID
-	GetTask(ctx context.Context, id int64) (*internal.Task, error)
+	GetTask(ctx context.Context, id string) (*internal.Task, error)
 
 	// UpdateTask updates an existing task
 	UpdateTask(ctx context.Context, task *internal.Task) error
 
 	// DeleteTask deletes a task by ID
-	DeleteTask(ctx context.Context, id int64) error
+	DeleteTask(ctx context.Context, id string) error
 
 	// GetPendingTasks retrieves all pending tasks that are due to run
 	GetPendingTasks(ctx context.Context) ([]*internal.Task, error)
@@ -55,12 +55,12 @@ func (s *FirestoreTaskStorage) tasksCollection() string {
 }
 
 func (s *FirestoreTaskStorage) CreateTask(ctx context.Context, task *internal.Task) error {
-	_, err := s.client.Collection(s.tasksCollection()).Doc(s.taskID(task.ID)).Set(ctx, task)
+	_, err := s.client.Collection(s.tasksCollection()).Doc(task.ID).Set(ctx, task)
 	return err
 }
 
-func (s *FirestoreTaskStorage) GetTask(ctx context.Context, id int64) (*internal.Task, error) {
-	doc, err := s.client.Collection(s.tasksCollection()).Doc(s.taskID(id)).Get(ctx)
+func (s *FirestoreTaskStorage) GetTask(ctx context.Context, id string) (*internal.Task, error) {
+	doc, err := s.client.Collection(s.tasksCollection()).Doc(id).Get(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -75,12 +75,12 @@ func (s *FirestoreTaskStorage) GetTask(ctx context.Context, id int64) (*internal
 
 func (s *FirestoreTaskStorage) UpdateTask(ctx context.Context, task *internal.Task) error {
 	task.UpdatedAt = time.Now()
-	_, err := s.client.Collection(s.tasksCollection()).Doc(s.taskID(task.ID)).Set(ctx, task)
+	_, err := s.client.Collection(s.tasksCollection()).Doc(task.ID).Set(ctx, task)
 	return err
 }
 
-func (s *FirestoreTaskStorage) DeleteTask(ctx context.Context, id int64) error {
-	_, err := s.client.Collection(s.tasksCollection()).Doc(s.taskID(id)).Delete(ctx)
+func (s *FirestoreTaskStorage) DeleteTask(ctx context.Context, id string) error {
+	_, err := s.client.Collection(s.tasksCollection()).Doc(id).Delete(ctx)
 	return err
 }
 
@@ -109,11 +109,6 @@ func (s *FirestoreTaskStorage) GetPendingTasks(ctx context.Context) ([]*internal
 
 func (s *FirestoreTaskStorage) RunTransaction(ctx context.Context, fn func(context.Context, *firestore.Transaction) error) error {
 	return s.client.RunTransaction(ctx, fn)
-}
-
-// taskID converts an int64 ID to a string for Firestore document IDs
-func (s *FirestoreTaskStorage) taskID(id int64) string {
-	return fmt.Sprintf("%d", id)
 }
 
 // GetTasksWithFilter retrieves tasks with optional status filtering

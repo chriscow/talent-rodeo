@@ -53,5 +53,24 @@ document.addEventListener('DOMContentLoaded', function() {
         window.location.href = '/profile/resume/upload';
       }, 5000);
     }
+    
+    // Check if resume is uploaded successfully
+    if (data.status_text === "Resume Uploaded") {
+      // Show success notification
+      const notyf = new Notyf({
+        duration: 3000,
+        position: { x: 'right', y: 'bottom' }
+      });
+      
+      notyf.success({
+        message: 'Resume uploaded successfully!',
+        background: '#28a745'  // Bootstrap success color
+      });
+
+      // Redirect to profile page
+      setTimeout(() => {
+        window.location.href = '/profile';
+      }, 3000);
+    }
   });
 });

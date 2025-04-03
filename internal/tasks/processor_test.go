@@ -94,13 +94,13 @@ func setupTestProcessor(t *testing.T) *Processor {
 
 // MemoryTaskStorage is a mock implementation of TaskStorage for testing
 type MemoryTaskStorage struct {
-	tasks map[int64]*internal.Task
+	tasks map[string]*internal.Task
 	mu    sync.RWMutex
 }
 
 func NewMemoryTaskStorage() *MemoryTaskStorage {
 	return &MemoryTaskStorage{
-		tasks: make(map[int64]*internal.Task),
+		tasks: make(map[string]*internal.Task),
 	}
 }
 
@@ -111,12 +111,12 @@ func (m *MemoryTaskStorage) CreateTask(ctx context.Context, task *internal.Task)
 	return nil
 }
 
-func (m *MemoryTaskStorage) GetTask(ctx context.Context, id int64) (*internal.Task, error) {
+func (m *MemoryTaskStorage) GetTask(ctx context.Context, id string) (*internal.Task, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	task, exists := m.tasks[id]
 	if !exists {
-		return nil, fmt.Errorf("task not found: %d", id)
+		return nil, fmt.Errorf("task not found: %s", id)
 	}
 	return task, nil
 }
@@ -128,7 +128,7 @@ func (m *MemoryTaskStorage) UpdateTask(ctx context.Context, task *internal.Task)
 	return nil
 }
 
-func (m *MemoryTaskStorage) DeleteTask(ctx context.Context, id int64) error {
+func (m *MemoryTaskStorage) DeleteTask(ctx context.Context, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.tasks, id)
@@ -168,7 +168,7 @@ func cleanupProcessorTestTasks(t *testing.T, processor *Processor) {
 	// Delete all tasks
 	for _, task := range tasks {
 		if err := processor.storage.DeleteTask(ctx, task.ID); err != nil {
-			t.Logf("failed to delete task %d during cleanup: %v", task.ID, err)
+			t.Logf("failed to delete task %s during cleanup: %v", task.ID, err)
 		}
 	}
 }
@@ -198,7 +198,8 @@ func TestProcessor_EnqueueTask(t *testing.T) {
 		ctx := context.Background()
 
 		task := &internal.Task{
-			ID:          time.Now().UnixNano(),
+			ID:          fmt.Sprintf("test-task-%d", time.Now().UnixNano()),
+			Name:        "Test Unknown Task",
 			Type:        "unknown_type",
 			Payload:     []byte("{}"),
 			Status:      internal.TaskStatusPending,
@@ -234,7 +235,8 @@ func TestProcessor_EnqueueTask(t *testing.T) {
 
 		runAt := time.Now().Add(time.Hour)
 		task := &internal.Task{
-			ID:          time.Now().UnixNano(),
+			ID:          fmt.Sprintf("test-task-%d", time.Now().UnixNano()),
+			Name:        "Test Task",
 			Type:        "test_task",
 			Payload:     payloadBytes,
 			Status:      internal.TaskStatusPending,
@@ -249,8 +251,11 @@ func TestProcessor_EnqueueTask(t *testing.T) {
 			t.Fatalf("failed to enqueue task: %v", err)
 		}
 
-		if task.ID == 0 {
-			t.Error("task ID is zero")
+		if task.ID == "" {
+			t.Error("task ID is empty")
+		}
+		if got := task.Name; got != "Test Task" {
+			t.Errorf("task name = %q; want %q", got, "Test Task")
 		}
 		if got := task.Type; got != "test_task" {
 			t.Errorf("task type = %q; want %q", got, "test_task")
@@ -280,7 +285,8 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 
 	// Create a test task
 	task := &internal.Task{
-		ID:          time.Now().UnixNano(),
+		ID:          fmt.Sprintf("test-task-%d", time.Now().UnixNano()),
+		Name:        "Test Processing Task",
 		Type:        "test_task",
 		Payload:     []byte("{}"),
 		Status:      internal.TaskStatusPending,
@@ -290,19 +296,26 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 		UpdatedAt:   time.Now(),
 	}
 
+	t.Logf("Creating test task: id=%s, name=%s, type=%s, status=%s, run_at=%v",
+		task.ID, task.Name, task.Type, task.Status, task.RunAt)
+
 	if err := processor.storage.CreateTask(ctx, task); err != nil {
 		t.Fatalf("failed to create test task: %v", err)
 	}
 
 	// Wait for the task to be ready
+	t.Log("Waiting for task to be ready for processing...")
 	time.Sleep(20 * time.Millisecond)
 
 	t.Run("process pending task successfully", func(t *testing.T) {
+		t.Logf("Starting to process task: id=%s, name=%s", task.ID, task.Name)
+
 		if err := processor.processPendingTasks(ctx); err != nil {
 			t.Fatalf("failed to process pending tasks: %v", err)
 		}
 
 		// Wait for goroutines to complete
+		t.Log("Waiting for processing goroutines to complete...")
 		processor.wg.Wait()
 
 		// Verify the task was processed
@@ -311,8 +324,14 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 			t.Fatalf("failed to get processed task: %v", err)
 		}
 
+		t.Logf("Task processing completed: id=%s, name=%s, status=%s, attempts=%d",
+			processedTask.ID, processedTask.Name, processedTask.Status, processedTask.Attempts)
+
 		if got := processedTask.Status; got != internal.TaskStatusComplete {
 			t.Errorf("task status = %v; want %v", got, internal.TaskStatusComplete)
+		}
+		if got := processedTask.Name; got != task.Name {
+			t.Errorf("task name = %q; want %q", got, task.Name)
 		}
 		if got := processedTask.Attempts; got != 1 {
 			t.Errorf("task attempts = %d; want %d", got, 1)
@@ -326,51 +345,18 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 			t.Errorf("processed tasks count = %d; want %d", got, 1)
 		}
 		if got := handler.processedTasks[0].ID; got != task.ID {
-			t.Errorf("processed task ID = %d; want %d", got, task.ID)
+			t.Errorf("processed task ID = %s; want %s", got, task.ID)
+		}
+		if got := handler.processedTasks[0].Name; got != task.Name {
+			t.Errorf("processed task name = %q; want %q", got, task.Name)
 		}
 	})
 
 	t.Run("handle task processing error", func(t *testing.T) {
-		// This test verifies the task retry and failure behavior. Here's what we learned:
-		//
-		// Initial Issue:
-		// - The test was failing because retrying tasks weren't being picked up for subsequent processing
-		// - GetPendingTasks only returned tasks with status "pending", ignoring "retrying" tasks
-		// - This prevented the task from reaching max attempts and being marked as failed
-		//
-		// Task Processing Flow:
-		// 1. First Attempt:
-		//    - Task starts with attempts=0, status="pending"
-		//    - Processor increments attempts to 1
-		//    - Task fails and is marked as "retrying" with a future run_at time
-		//
-		// 2. Second Attempt:
-		//    - Task has attempts=1, status="retrying"
-		//    - Once run_at time passes, task should be picked up again
-		//    - Processor increments attempts to 2
-		//    - Since attempts >= max_attempts (2), task is marked as "failed"
-		//
-		// Key Fixes:
-		// 1. Modified GetPendingTasks to return both "pending" AND "retrying" tasks:
-		//    if (task.Status == internal.TaskStatusPending || task.Status == internal.TaskStatusRetrying) && task.RunAt.Before(now)
-		//
-		// 2. Added detailed logging to track:
-		//    - Task state transitions
-		//    - Attempts counter changes
-		//    - Timing of processing attempts
-		//
-		// Important Timing Considerations:
-		// - Tasks must have run_at >= created_at (database constraint)
-		// - For testing, we set run_at slightly in future: now.Add(10 * time.Millisecond)
-		// - We wait 20ms before processing to ensure task is ready
-		// - For retries, we use a short backoff (10ms) to keep tests fast
-		//
-		// This pattern ensures reliable testing of the retry mechanism while
-		// maintaining realistic task processing behavior.
-
 		// Create a failing task
 		failingTask := &internal.Task{
-			ID:          time.Now().UnixNano(),
+			ID:          fmt.Sprintf("test-task-%d", time.Now().UnixNano()),
+			Name:        "Test Failing Task",
 			Type:        "test_task",
 			Payload:     []byte("{}"),
 			Status:      internal.TaskStatusPending,
@@ -381,16 +367,21 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 			Attempts:    0,
 		}
 
+		t.Logf("Creating failing task: id=%s, name=%s, type=%s, status=%s",
+			failingTask.ID, failingTask.Name, failingTask.Type, failingTask.Status)
+
 		if err := storage.CreateTask(ctx, failingTask); err != nil {
 			t.Fatalf("failed to create failing task: %v", err)
 		}
 
 		// Wait for the task to be ready
+		t.Log("Waiting for failing task to be ready...")
 		time.Sleep(20 * time.Millisecond)
 
 		// Make the handler return an error
 		handler.shouldError = true
 
+		t.Log("Processing failing task with error-generating handler...")
 		if err := processor.processPendingTasks(ctx); err != nil {
 			t.Fatalf("failed to process pending tasks: %v", err)
 		}
@@ -404,8 +395,14 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 			t.Fatalf("failed to get processed task: %v", err)
 		}
 
+		t.Logf("First attempt completed: status=%s, attempts=%d, error=%s",
+			processedTask.Status, processedTask.Attempts, processedTask.Error)
+
 		if got := processedTask.Status; got != internal.TaskStatusRetrying {
 			t.Errorf("task status = %v; want %v", got, internal.TaskStatusRetrying)
+		}
+		if got := processedTask.Name; got != failingTask.Name {
+			t.Errorf("task name = %q; want %q", got, failingTask.Name)
 		}
 		if got := processedTask.Attempts; got != 1 {
 			t.Errorf("task attempts = %d; want %d", got, 1)
@@ -415,9 +412,10 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 		}
 
 		// Process again to exceed max attempts
-		// Wait for the retry time to pass
+		t.Log("Waiting for retry backoff period...")
 		time.Sleep(20 * time.Millisecond)
 
+		t.Log("Processing failing task second time...")
 		if err := processor.processPendingTasks(ctx); err != nil {
 			t.Fatalf("failed to process pending tasks: %v", err)
 		}
@@ -431,8 +429,14 @@ func TestProcessor_ProcessPendingTasks(t *testing.T) {
 			t.Fatalf("failed to get processed task: %v", err)
 		}
 
+		t.Logf("Second attempt completed: status=%s, attempts=%d, error=%s",
+			processedTask.Status, processedTask.Attempts, processedTask.Error)
+
 		if got := processedTask.Status; got != internal.TaskStatusFailed {
 			t.Errorf("task status = %v; want %v", got, internal.TaskStatusFailed)
+		}
+		if got := processedTask.Name; got != failingTask.Name {
+			t.Errorf("task name = %q; want %q", got, failingTask.Name)
 		}
 		if got := processedTask.Attempts; got != 2 {
 			t.Errorf("task attempts = %d; want %d", got, 2)
@@ -473,7 +477,7 @@ func TestProcessor_CreateAndEnqueueTask(t *testing.T) {
 		defer cleanupProcessorTestTasks(t, processor)
 		ctx := context.Background()
 
-		_, err := processor.CreateAndEnqueueTask(ctx, "unknown_type", []byte("{}"), time.Now())
+		_, err := processor.CreateAndEnqueueTask(ctx, "unknown_type", "Test Unknown Task", []byte("{}"), time.Now())
 		if err == nil {
 			t.Error("expected error for unregistered handler, got nil")
 		}
@@ -498,13 +502,16 @@ func TestProcessor_CreateAndEnqueueTask(t *testing.T) {
 		}
 
 		runAt := time.Now().Add(time.Hour)
-		task, err := processor.CreateAndEnqueueTask(ctx, "test_task", payloadBytes, runAt)
+		task, err := processor.CreateAndEnqueueTask(ctx, "test_task", "Test Task", payloadBytes, runAt)
 		if err != nil {
 			t.Fatalf("failed to create and enqueue task: %v", err)
 		}
 
-		if task.ID == 0 {
-			t.Error("task ID is zero")
+		if task.ID == "" {
+			t.Error("task ID is empty")
+		}
+		if got := task.Name; got != "Test Task" {
+			t.Errorf("task name = %q; want %q", got, "Test Task")
 		}
 		if got := task.Type; got != "test_task" {
 			t.Errorf("task type = %q; want %q", got, "test_task")
@@ -530,7 +537,7 @@ func TestTaskProcessorInterface(t *testing.T) {
 		// Test the interface method
 		ctx := context.Background()
 		task := &internal.Task{
-			ID:          time.Now().UnixNano(),
+			ID:          fmt.Sprintf("test-task-%d", time.Now().UnixNano()),
 			Type:        "test_task",
 			Payload:     []byte("{}"),
 			Status:      internal.TaskStatusPending,
@@ -565,7 +572,7 @@ func TestProcessor_ConcurrentTaskProcessing(t *testing.T) {
 	for i := 0; i < numTasks; i++ {
 		now := time.Now()
 		tasks[i] = &internal.Task{
-			ID:          time.Now().UnixNano() + int64(i),
+			ID:          fmt.Sprintf("test-task-%d", time.Now().UnixNano()+int64(i)),
 			Type:        "test_task",
 			Payload:     []byte(fmt.Sprintf(`{"index": %d}`, i)),
 			Status:      internal.TaskStatusPending,
@@ -630,7 +637,7 @@ func TestProcessor_TaskRetryBackoff(t *testing.T) {
 	// Create a task
 	now := time.Now()
 	task := &internal.Task{
-		ID:          time.Now().UnixNano(),
+		ID:          fmt.Sprintf("test-task-%d", time.Now().UnixNano()),
 		Type:        "test_task",
 		Payload:     []byte("{}"),
 		Status:      internal.TaskStatusPending,

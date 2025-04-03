@@ -8,7 +8,7 @@ import (
 	"github.com/chriscow/minds"
 )
 
-func callCandidate(ctx context.Context, sessionID, systemPrompt string, status StatusSender) (*vapi.CallResult, error) {
+func callCandidate(ctx context.Context, sessionID, systemPrompt string, status StatusSender) (*vapi.Call, error) {
 	status.SendStatus(sessionID, "info", "Calling candidate ...")
 
 	assistantID := "30709dea-4c26-457a-96a0-4ee7488f6b72"

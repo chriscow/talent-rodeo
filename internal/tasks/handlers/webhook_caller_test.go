@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -29,6 +30,8 @@ func TestWebhookHandler_ProcessTask(t *testing.T) {
 		{
 			name: "successful_request",
 			payload: WebhookPayload{
+				URL:    "", // Will be set by test
+				Name:   "Test Successful Webhook",
 				Method: http.MethodPost,
 				Headers: map[string]string{
 					"Content-Type": "application/json",
@@ -45,6 +48,8 @@ func TestWebhookHandler_ProcessTask(t *testing.T) {
 		{
 			name: "retry_on_429",
 			payload: WebhookPayload{
+				URL:    "", // Will be set by test
+				Name:   "Test Rate Limited Webhook",
 				Method: http.MethodPost,
 				Headers: map[string]string{
 					"Content-Type": "application/json",
@@ -63,6 +68,8 @@ func TestWebhookHandler_ProcessTask(t *testing.T) {
 		{
 			name: "permanent_failure_on_400",
 			payload: WebhookPayload{
+				URL:    "", // Will be set by test
+				Name:   "Test Bad Request Webhook",
 				Method: http.MethodPost,
 				Headers: map[string]string{
 					"Content-Type": "application/json",
@@ -81,6 +88,8 @@ func TestWebhookHandler_ProcessTask(t *testing.T) {
 		{
 			name: "respects_custom_headers",
 			payload: WebhookPayload{
+				URL:    "", // Will be set by test
+				Name:   "Test Custom Headers Webhook",
 				Method: http.MethodPost,
 				Headers: map[string]string{
 					"X-Custom-Header": "test-value",
@@ -104,6 +113,8 @@ func TestWebhookHandler_ProcessTask(t *testing.T) {
 		{
 			name: "handles_large_response",
 			payload: WebhookPayload{
+				URL:    "", // Will be set by test
+				Name:   "Test Large Response Webhook",
 				Method: http.MethodGet,
 			},
 			setupMock: func() *httptest.Server {
@@ -118,12 +129,15 @@ func TestWebhookHandler_ProcessTask(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Logf("Starting test case: %s", tt.name)
+
 			// Setup mock server
 			server := tt.setupMock()
 			defer server.Close()
 
 			// Update payload URL to point to mock server
 			tt.payload.URL = server.URL
+			t.Logf("Using mock server URL: %s", server.URL)
 
 			// Create handler
 			handler := NewWebhookScheduler(logger, nil)
@@ -135,13 +149,17 @@ func TestWebhookHandler_ProcessTask(t *testing.T) {
 			}
 
 			task := &internal.Task{
-				ID:          time.Now().UnixNano(),
+				ID:          fmt.Sprintf("test-task-%d", time.Now().UnixNano()),
+				Name:        tt.payload.Name, // Use the webhook name as the task name
 				Type:        TaskTypeWebhookCall,
 				Payload:     payloadBytes,
 				Status:      internal.TaskStatusPending,
 				MaxAttempts: 3,
 				RunAt:       time.Now(),
 			}
+
+			t.Logf("Created task: id=%s, name=%s, type=%s, status=%s",
+				task.ID, task.Name, task.Type, task.Status)
 
 			// Process task
 			err = handler.ProcessTask(context.Background(), task)
@@ -161,7 +179,11 @@ func TestWebhookHandler_ProcessTask(t *testing.T) {
 				if task.Status != internal.TaskStatusRetrying {
 					t.Errorf("Task status = %v, want %v", task.Status, internal.TaskStatusRetrying)
 				}
+				t.Logf("Task marked for retry: attempts=%d, next_run=%v",
+					task.Attempts, task.RunAt)
 			}
+
+			t.Logf("Test case completed: status=%s, error=%v", task.Status, err)
 		})
 	}
 }

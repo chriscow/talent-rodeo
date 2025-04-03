@@ -12,13 +12,13 @@ import (
 
 func TestConvertCallResultToTranscript(t *testing.T) {
 	// Read the test data file
-	data, err := os.ReadFile("testdata/call_response.json")
+	data, err := os.ReadFile("../testdata/vapi/create-call-response.json")
 	if err != nil {
 		t.Fatalf("Failed to read test data: %v", err)
 	}
 
 	// Parse the JSON into a struct that has the messages field
-	var callResult vapi.CallResult
+	var callResult vapi.Call
 	if err := json.Unmarshal(data, &callResult); err != nil {
 		t.Fatalf("Failed to unmarshal test data: %v", err)
 	}

@@ -15,6 +15,7 @@
             <div style="text-align: center;">
                 <progress></progress>
                 <p id="status-message">{{.User.State.Status.Description}}</p>
+                <p id="fun-message" style="font-style: italic; color: #666; margin-top: 10px;"></p>
             </div>
         </div>
     </article>
@@ -31,6 +32,42 @@
 <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        const funMessages = [
+            "Reticulating splines...",
+            "Analyzing career aspirations...",
+            "Counting words per minute...",
+            "Polishing your professional achievements...",
+            "Measuring leadership potential...",
+            "Calculating experience points...",
+            "Buffing soft skills to a shine...",
+            "Evaluating coffee consumption levels...",
+            "Quantifying synergy metrics...",
+            "Optimizing resume buzzwords...",
+            "Calibrating career trajectory...",
+            "Validating meeting survival skills...",
+            "Assessing keyboard warrior level...",
+            "Measuring deadline-dodging abilities...",
+            "Calculating work-life balance quotient...",
+            "Analyzing emoji proficiency...",
+            "Evaluating water cooler chat skills...",
+            "Measuring inbox zero potential...",
+            "Calculating productivity-to-cat-video ratio...",
+            "Optimizing lunch break efficiency..."
+        ];
+
+        const funMessageElement = document.getElementById('fun-message');
+        let currentMessageIndex = 0;
+
+        // Function to update fun message
+        function updateFunMessage() {
+            funMessageElement.textContent = funMessages[currentMessageIndex];
+            currentMessageIndex = (currentMessageIndex + 1) % funMessages.length;
+        }
+
+        // Update message every second
+        updateFunMessage(); // Show first message immediately
+        const messageInterval = setInterval(updateFunMessage, 1750);
+
         const userElement = document.querySelector('[data-user-id]');
         if (!userElement) return;
         
@@ -43,14 +80,16 @@
         
         channel.bind('state-update', function(data) {
             // Update status message if available
-            if (statusMessage) {
+            if (statusMessage && data.description) {
                 statusMessage.textContent = data.description;
             }
 
             // Handle redirects based on state
-            if (data.error || data.status_text === 'Error') {
+            if (data.error || data.state === 1) { // UserStatusError = 1
+                clearInterval(messageInterval); // Stop fun messages
                 window.location.href = '/profile';
-            } else if (data.status_text === 'Resume Uploaded') {
+            } else if (data.state === 4) { // UserStatusResumeUploaded = 4
+                clearInterval(messageInterval); // Stop fun messages
                 window.location.href = '/profile/schedule';
             }
         });

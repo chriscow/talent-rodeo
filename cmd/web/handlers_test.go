@@ -234,7 +234,7 @@ func (ts *testServer) authenticatedRequest(t *testing.T, method, urlPath string,
 	return r
 }
 
-func (ts *testServer) postForm(t *testing.T, urlPath string, form url.Values) (int, http.Header, string) {
+func (ts *testServer) postForm(_ *testing.T, urlPath string, form url.Values) (int, http.Header, string) {
 	req := httptest.NewRequest("POST", urlPath, strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 

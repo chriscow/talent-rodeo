@@ -20,13 +20,9 @@ type PromptHeader struct {
 }
 
 type Prompt struct {
-	Header   PromptHeader
-	Template *template.Template
-	body     string
-}
-
-func (p Prompt) Body() string {
-	return p.body
+	Header     PromptHeader
+	Template   *template.Template
+	RawContent string
 }
 
 func (p Prompt) Execute(data any) (string, error) {
@@ -61,7 +57,7 @@ func CreateTemplate(filepath string) (Prompt, error) {
 		// }
 	}
 	prompt.Header = header
-	prompt.body = body
+	prompt.RawContent = body
 
 	tmpl, err := template.New(header.Name).Parse(body)
 	if err != nil {

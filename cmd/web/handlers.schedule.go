@@ -8,19 +8,10 @@ import (
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
 	"talent-rodeo/internal/tasks/handlers"
-	"talent-rodeo/internal/validator"
 	"time"
 
 	"github.com/alexedwards/flow"
 )
-
-type scheduleFormData struct {
-	Timezone           string   `form:"timezone"`
-	PreferredDays      []string `form:"preferred_days"`
-	PreferredTimeStart string   `form:"preferred_time_start"`
-	PreferredTimeEnd   string   `form:"preferred_time_end"`
-	validator.Validator
-}
 
 // showSchedulePage displays the scheduling interface where users can set their
 // availability preferences and view/manage their appointments.
@@ -161,7 +152,7 @@ func (app *application) createAppointment(w http.ResponseWriter, r *http.Request
 		Status:        internal.AppointmentStatusScheduled,
 	}
 
-	err = internal.CreateAppointment(r.Context(), app.fs, *user, appointment)
+	err = internal.CreateAppointment(r.Context(), app.fs, "initial-call", *user, appointment)
 	if err != nil {
 		app.logger.Error("Failed to create appointment", "error", err)
 		http.Error(w, fmt.Sprintf("Failed to create appointment: %v", err), http.StatusInternalServerError)
@@ -196,7 +187,7 @@ func (app *application) createAppointment(w http.ResponseWriter, r *http.Request
 	}
 	payloadBytes, _ := json.Marshal(payload)
 
-	_, err = app.processor.CreateAndEnqueueTask(r.Context(), handlers.TaskTypeWebhookCall, payloadBytes, scheduledTime.UTC())
+	_, err = app.processor.CreateAndEnqueueTask(r.Context(), handlers.TaskTypeWebhookCall, "initial-call", payloadBytes, scheduledTime.UTC())
 	if err != nil {
 		app.logger.Error("Failed to create and enqueue task", "error", err)
 		http.Error(w, fmt.Sprintf("Failed to create and enqueue task: %v", err), http.StatusInternalServerError)
@@ -340,23 +331,16 @@ func (app *application) callNow(w http.ResponseWriter, r *http.Request) {
 		Status:        internal.AppointmentStatusScheduled,
 	}
 
-	err := internal.CreateAppointment(r.Context(), app.fs, *user, appointment)
+	err := internal.CreateAppointment(r.Context(), app.fs, "initial-call", *user, appointment)
 	if err != nil {
 		app.logger.Error("Failed to create appointment", "error", err)
 		app.serverError(w, r, fmt.Errorf("failed to create appointment: %w", err))
 		return
 	}
 
-	// Create simple call request for webhook
-	callRequest := struct {
-		CustomerID string `json:"customer_id"`
-	}{
-		CustomerID: user.ID,
-	}
+	app.logger.Debug("Call request", "appointment", appointment)
 
-	app.logger.Debug("Call request", "call_request", callRequest)
-
-	body, err := json.Marshal(callRequest)
+	body, err := json.Marshal(appointment)
 	if err != nil {
 		app.logger.Error("Failed to marshal call request", "error", err)
 		app.serverError(w, r, fmt.Errorf("failed to marshal call request: %w", err))
@@ -377,7 +361,7 @@ func (app *application) callNow(w http.ResponseWriter, r *http.Request) {
 	}
 	payloadBytes, _ := json.Marshal(payload)
 
-	_, err = app.processor.CreateAndEnqueueTask(r.Context(), handlers.TaskTypeWebhookCall, payloadBytes, scheduledTime)
+	_, err = app.processor.CreateAndEnqueueTask(r.Context(), handlers.TaskTypeWebhookCall, "initial-call", payloadBytes, scheduledTime)
 	if err != nil {
 		app.logger.Error("Failed to create and enqueue task", "error", err)
 		app.serverError(w, r, fmt.Errorf("failed to create and enqueue task: %w", err))
