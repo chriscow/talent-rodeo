@@ -4,11 +4,9 @@ import (
 	"context"
 	"fmt"
 	"talent-rodeo/internal/funcs"
-	"talent-rodeo/internal/vapi"
 	"time"
 
 	"cloud.google.com/go/firestore"
-	"github.com/google/uuid"
 	"google.golang.org/api/iterator"
 )
 
@@ -30,21 +28,20 @@ const (
 
 // Appointment represents a scheduled phone interview
 type Appointment struct {
-	ID                string                `firestore:"id"`
-	UserID            string                `firestore:"user_id"`
-	ScheduledTime     time.Time             `firestore:"scheduled_time"`
-	Timezone          string                `firestore:"timezone"`
-	Status            AppointmentStatus     `firestore:"status"`
-	OtherStatus       *string               `firestore:"other_status"`
-	CallID            *string               `firestore:"call_id"`
-	CallResult        *vapi.CallResult      `firestore:"call_result"`
-	EndOfCallReport   *vapi.EndOfCallReport `firestore:"end_of_call_report"`
-	TranscriptSummary *string               `firestore:"transcript_summary"`
-	CreatedAt         time.Time             `firestore:"created_at"`
-	UpdatedAt         time.Time             `firestore:"updated_at"`
+	ID                string            `firestore:"id"`
+	Name              string            `firestore:"name"`
+	UserID            string            `firestore:"user_id"`
+	ScheduledTime     time.Time         `firestore:"scheduled_time"`
+	Timezone          string            `firestore:"timezone"`
+	Status            AppointmentStatus `firestore:"status"`
+	OtherStatus       *string           `firestore:"other_status"`
+	CallID            *string           `firestore:"call_id"`
+	TranscriptSummary *string           `firestore:"transcript_summary"`
+	CreatedAt         time.Time         `firestore:"created_at"`
+	UpdatedAt         time.Time         `firestore:"updated_at"`
 }
 
-func CreateAppointment(ctx context.Context, fs *firestore.Client, user User, appointment *Appointment) error {
+func CreateAppointment(ctx context.Context, fs *firestore.Client, name string, user User, appointment *Appointment) error {
 	// Validate user exists first
 	_, found, err := GetUser(ctx, fs, user.ID)
 	if err != nil {
@@ -54,8 +51,12 @@ func CreateAppointment(ctx context.Context, fs *firestore.Client, user User, app
 		return fmt.Errorf("user %s not found", user.ID)
 	}
 
+	if appointment.Name == "" {
+		appointment.Name = name
+	}
+
 	if appointment.ID == "" {
-		appointment.ID = funcs.Slugify(fmt.Sprintf("%s %s", user.Name, uuid.New().String()))
+		appointment.ID = funcs.Slugify(fmt.Sprintf("%s-%d", appointment.Name, time.Now().UnixNano()))
 	}
 
 	if user.Name == "" {
@@ -129,44 +130,6 @@ func CancelAppointment(ctx context.Context, fs *firestore.Client, userID string,
 	}
 
 	return nil
-}
-
-func GetAppointmentsByCallID(ctx context.Context, fs *firestore.Client, callID string) ([]*Appointment, error) {
-	var appointments []*Appointment
-
-	// Query all users since we don't know which user the call belongs to
-	usersIter := fs.Collection(usersCollection).Documents(ctx)
-	for {
-		userDoc, err := usersIter.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("failed to iterate users: %w", err)
-		}
-
-		// Query appointments for this user
-		query := fs.Collection(usersCollection).Doc(userDoc.Ref.ID).Collection(appointmentsCollection).Where("call_id", "==", callID)
-		apptIter := query.Documents(ctx)
-		for {
-			doc, err := apptIter.Next()
-			if err == iterator.Done {
-				break
-			}
-			if err != nil {
-				return nil, fmt.Errorf("failed to iterate appointments: %w", err)
-			}
-
-			var appointment Appointment
-			if err := doc.DataTo(&appointment); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal appointment: %w", err)
-			}
-
-			appointments = append(appointments, &appointment)
-		}
-	}
-
-	return appointments, nil
 }
 
 // MapVapiEndReasonToAppointmentStatus maps a VAPI call end reason to our appointment status

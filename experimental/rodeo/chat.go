@@ -85,7 +85,7 @@ func autoChatOld(tc minds.ThreadContext, maxTurns int) error {
 		return fmt.Errorf("chat: failed to create template: %w", err)
 	}
 
-	candidate, err := gemini.NewProvider(tc.Context(), gemini.WithSystemPrompt(candidatePrompt.Body()))
+	candidate, err := gemini.NewProvider(tc.Context(), gemini.WithSystemPrompt(candidatePrompt.RawContent))
 	if err != nil {
 		return fmt.Errorf("chat: failed to create Gemini provider: %w", err)
 	}

@@ -25,6 +25,7 @@ func init() {
 
 func TestScheduling(t *testing.T) {
 	ts := newTestServer(t, "test scheduling")
+	defer ts.Cleanup()
 
 	// Save original webhook URL and restore after tests
 	originalURL := os.Getenv("VAPI_START_CALL_URL")

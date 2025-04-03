@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"talent-rodeo/assets"
 	"testing"
 
 	"github.com/joho/godotenv"
@@ -27,7 +26,12 @@ func TestResumeValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewFirestoreClient() error = %v", err)
 	}
-	defer fs.Close()
+	defer func() {
+		DeleteTestData(t, fs, "test-user")
+		if err := fs.Close(); err != nil {
+			t.Fatalf("Failed to close firestore client: %v", err)
+		}
+	}()
 
 	// Create a test logger
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
@@ -37,7 +41,7 @@ func TestResumeValidation(t *testing.T) {
 		user := CreateTestUser(t, fs, "test-user", "test@example.com", "+1234567890", false)
 
 		// Read test file content
-		content, err := assets.EmbeddedFiles.ReadFile(filepath.Join("test-data", "chris-cowherd.resume.txt"))
+		content, err := os.ReadFile(filepath.Join("../testdata/sample-resumes", "chris-cowherd.resume.txt"))
 		if err != nil {
 			t.Fatalf("Failed to read test file: %v", err)
 		}
@@ -94,7 +98,7 @@ func TestResumeValidation(t *testing.T) {
 		user := CreateTestUser(t, fs, "test-user", "test@example.com", "+1234567890", false)
 
 		// Read test file content
-		content, err := assets.EmbeddedFiles.ReadFile(filepath.Join("test-data", "01-not-a-resume.easy.txt"))
+		content, err := os.ReadFile(filepath.Join("../testdata/sample-resumes", "01-not-a-resume.easy.txt"))
 		if err != nil {
 			t.Fatalf("Failed to read test file: %v", err)
 		}
@@ -152,7 +156,7 @@ func TestResumeValidation(t *testing.T) {
 		user := CreateTestUser(t, fs, "test-user", "test@example.com", "+1234567890", false)
 
 		// Read test file content
-		content, err := assets.EmbeddedFiles.ReadFile(filepath.Join("test-data", "02-not-a-resume.medium.txt"))
+		content, err := os.ReadFile(filepath.Join("../testdata/sample-resumes", "02-not-a-resume.medium.txt"))
 		if err != nil {
 			t.Fatalf("Failed to read test file: %v", err)
 		}
@@ -210,7 +214,7 @@ func TestResumeValidation(t *testing.T) {
 		user := CreateTestUser(t, fs, "test-user", "test@example.com", "+1234567890", false)
 
 		// Read test file content
-		content, err := assets.EmbeddedFiles.ReadFile(filepath.Join("test-data", "06-jailbreak.hard.txt"))
+		content, err := os.ReadFile(filepath.Join("../testdata/sample-resumes", "06-jailbreak.hard.txt"))
 		if err != nil {
 			t.Fatalf("Failed to read test file: %v", err)
 		}

@@ -67,7 +67,7 @@ func CreateTestAppointment(t *testing.T, client *firestore.Client, user *User) *
 		UpdatedAt:     now.Round(time.Second),
 	}
 
-	if err := CreateAppointment(context.Background(), client, *user, appointment); err != nil {
+	if err := CreateAppointment(context.Background(), client, "test-appointment", *user, appointment); err != nil {
 		t.Fatalf("Failed to create test appointment: %v", err)
 	}
 

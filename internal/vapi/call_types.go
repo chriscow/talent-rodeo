@@ -1,6 +1,9 @@
 package vapi
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // ServerConfig defines the configuration for a server endpoint
 type ServerConfig struct {
@@ -8,52 +11,52 @@ type ServerConfig struct {
 	TimeoutSeconds int    `json:"timeoutSeconds"`
 }
 
-// Voice defines voice settings for the assistant
+// Voice represents voice configuration
 type Voice struct {
 	Provider string `json:"provider"`
 	VoiceID  string `json:"voiceId"`
 }
 
-// Model defines the LLM model settings
+// Model represents model configuration
 type Model struct {
 	Provider string `json:"provider"`
 	Model    string `json:"model"`
 }
 
-// Transcriber defines the speech-to-text settings
+// Transcriber represents transcriber configuration
 type Transcriber struct {
 	Provider string `json:"provider"`
 }
 
-// VoicemailDetection defines voicemail detection settings
+// VoicemailDetection represents voicemail detection configuration
 type VoicemailDetection struct {
 	Provider                         string  `json:"provider"`
 	VoicemailExpectedDurationSeconds float64 `json:"voicemailExpectedDurationSeconds"`
 }
 
-// KnowledgeBase represents the knowledge base configuration
+// KnowledgeBase represents knowledge base configuration
 type KnowledgeBase struct {
 	Server ServerConfig `json:"server"`
 }
 
-// Tool represents a tool configuration
+// Tool represents tool configuration
 type Tool struct {
 	Type  string `json:"type"`
 	Async bool   `json:"async"`
 }
 
-// ChunkPlan represents the chunk configuration
+// ChunkPlan represents chunk configuration
 type ChunkPlan struct {
 	Enabled       bool `json:"enabled"`
 	MinCharacters int  `json:"minCharacters"`
 }
 
-// FallbackPlan represents the fallback configuration
+// FallbackPlan represents fallback configuration
 type FallbackPlan struct {
 	Voices []FallbackVoice `json:"voices"`
 }
 
-// FallbackVoice represents a fallback voice configuration
+// FallbackVoice represents fallback voice configuration
 type FallbackVoice struct {
 	Provider string `json:"provider"`
 	VoiceID  string `json:"voiceId"`
@@ -87,21 +90,122 @@ type MonitorPlan struct {
 	ControlEnabled bool `json:"controlEnabled"`
 }
 
+// Cost represents a cost entry in the call
+type Cost struct {
+	Type     string  `json:"type"`
+	Cost     float64 `json:"cost"`
+	Minutes  float64 `json:"minutes"`
+	Provider string  `json:"provider"`
+}
+
+// CostBreakdown represents the detailed cost breakdown of a call
+type CostBreakdown struct {
+	Transport float64 `json:"transport"`
+	Stt       float64 `json:"stt"`
+	Llm       float64 `json:"llm"`
+	Tts       float64 `json:"tts"`
+	Vapi      float64 `json:"vapi"`
+	Total     float64 `json:"total"`
+
+	LlmPromptTokens     int `json:"llmPromptTokens"`
+	LlmCompletionTokens int `json:"llmCompletionTokens"`
+	TtsCharacters       int `json:"ttsCharacters"`
+
+	AnalysisCostBreakdown struct {
+		Summary                           float64 `json:"summary"`
+		SummaryPromptTokens               int     `json:"summaryPromptTokens"`
+		SummaryCompletionTokens           int     `json:"summaryCompletionTokens"`
+		StructuredData                    float64 `json:"structuredData"`
+		StructuredDataPromptTokens        int     `json:"structuredDataPromptTokens"`
+		StructuredDataCompletionTokens    int     `json:"structuredDataCompletionTokens"`
+		SuccessEvaluation                 float64 `json:"successEvaluation"`
+		SuccessEvaluationPromptTokens     int     `json:"successEvaluationPromptTokens"`
+		SuccessEvaluationCompletionTokens int     `json:"successEvaluationCompletionTokens"`
+	} `json:"analysisCostBreakdown"`
+}
+
+// Analysis represents the analysis results of a call
+type Analysis struct {
+	Summary             *string         `json:"summary,omitempty"`
+	StructuredData      json.RawMessage `json:"structuredData,omitempty"`
+	StructuredDataMulti any             `json:"structuredDataMulti,omitempty"`
+	SuccessEvaluation   *string         `json:"successEvaluation,omitempty"`
+}
+
+// AnalysisCostBreakdown represents the cost breakdown for analysis
+type AnalysisCostBreakdown struct {
+	Summary                           float64 `json:"summary"`
+	SummaryPromptTokens               float64 `json:"summaryPromptTokens"`
+	SummaryCompletionTokens           float64 `json:"summaryCompletionTokens"`
+	StructuredData                    float64 `json:"structuredData"`
+	StructuredDataPromptTokens        float64 `json:"structuredDataPromptTokens"`
+	StructuredDataCompletionTokens    float64 `json:"structuredDataCompletionTokens"`
+	SuccessEvaluation                 float64 `json:"successEvaluation"`
+	SuccessEvaluationPromptTokens     float64 `json:"successEvaluationPromptTokens"`
+	SuccessEvaluationCompletionTokens float64 `json:"successEvaluationCompletionTokens"`
+}
+
+// Monitor represents monitoring URLs for a call
+type Monitor struct {
+	ListenUrl  string `json:"listenUrl"`
+	ControlUrl string `json:"controlUrl"`
+}
+
+// Artifact represents call artifacts like recordings and transcripts
+type Artifact struct {
+	Messages                        []Message `json:"messages"`
+	MessagesOpenAIFormatted         []Message `json:"messagesOpenAIFormatted"`
+	RecordingUrl                    string    `json:"recordingUrl"`
+	StereoRecordingUrl              string    `json:"stereoRecordingUrl"`
+	VideoRecordingUrl               string    `json:"videoRecordingUrl"`
+	VideoRecordingStartDelaySeconds int       `json:"videoRecordingStartDelaySeconds"`
+	Transcript                      string    `json:"transcript"`
+	PcapUrl                         string    `json:"pcapUrl"`
+}
+
+// Transport represents transport configuration for a call
+type Transport struct {
+	Provider              string `json:"provider"`
+	AssistantVideoEnabled bool   `json:"assistantVideoEnabled"`
+}
+
+// PhoneNumber represents phone number configuration
+type PhoneNumber struct {
+	TwilioAccountSid    string       `json:"twilioAccountSid"`
+	TwilioAuthToken     string       `json:"twilioAuthToken"`
+	TwilioPhoneNumber   string       `json:"twilioPhoneNumber"`
+	FallbackDestination Destination  `json:"fallbackDestination"`
+	Name                string       `json:"name"`
+	AssistantID         string       `json:"assistantId"`
+	SquadID             string       `json:"squadId"`
+	Server              ServerConfig `json:"server"`
+}
+
+// Destination represents call destination configuration
+type Destination struct {
+	Type                   string       `json:"type"`
+	Number                 string       `json:"number"`
+	CallerId               string       `json:"callerId"`
+	Description            string       `json:"description"`
+	Extension              string       `json:"extension"`
+	Message                string       `json:"message"`
+	NumberE164CheckEnabled bool         `json:"numberE164CheckEnabled"`
+	TransferPlan           TransferPlan `json:"transferPlan"`
+}
+
+// TransferPlan represents call transfer configuration
+type TransferPlan struct {
+	Mode    string  `json:"mode"`
+	Message string  `json:"message"`
+	SipVerb *string `json:"sipVerb"`
+	Twiml   string  `json:"twiml"`
+}
+
 // Squad represents a squad configuration
 type Squad struct {
-	Members          []any            `json:"members"`
-	Name             string           `json:"name"`
-	MembersOverrides MembersOverrides `json:"membersOverrides"`
-}
-
-// AssistantOverrides represents assistant override configuration
-type AssistantOverrides struct {
-	Assistant
-}
-
-// MembersOverrides represents member override configuration
-type MembersOverrides struct {
-	Assistant
+	Members          []any     `json:"members"`
+	Name             string    `json:"name"`
+	MembersOverrides Assistant `json:"membersOverrides"`
 }
 
 // ArtifactPlan represents the configuration for call artifacts
@@ -141,76 +245,68 @@ type Customer struct {
 	Name                   string  `json:"name"`
 }
 
-type VoiceMailDetection struct {
-	Provider string `json:"provider"`
-}
-
-// Call represents the top-level request structure
+// Call represents a call request
 type Call struct {
-	ID                 *string    `json:"id,omitempty"`
-	OrgID              *string    `json:"orgId,omitempty"`
-	AssistantID        *string    `json:"assistantId,omitempty"`
-	Assistant          *Assistant `json:"assistant,omitempty"`
-	AssistantOverrides *Assistant `json:"assistantOverrides,omitempty"`
-	SquadID            *string    `json:"squadId,omitempty"`
-	Squad              *Squad     `json:"squad,omitempty"`
-	PhoneNumberID      *string    `json:"phoneNumberId,omitempty"`
-	CustomerID         *string    `json:"customerId,omitempty"`
-	Customer           *Customer  `json:"customer,omitempty"`
-	Name               *string    `json:"name,omitempty"`
+	// Required fields
+	ID        *string    `json:"id,omitempty"`
+	OrgID     *string    `json:"orgId,omitempty"`
+	CreatedAt *time.Time `json:"createdAt,omitempty"`
+	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
 
-	VoiceMailDetection *VoiceMailDetection `json:"voiceMailDetection,omitempty"`
+	// Optional fields
+	Type     *string   `json:"type,omitempty"`
+	Analysis *Analysis `json:"analysis,omitempty"`
+	Artifact *Artifact `json:"artifact,omitempty"`
+
+	Costs              []Cost         `json:"costs,omitempty"`
+	Messages           []Message      `json:"messages,omitempty"`
+	PhoneCallProvider  *string        `json:"phoneCallProvider,omitempty"`
+	PhoneCallTransport *string        `json:"phoneCallTransport,omitempty"`
+	Status             *string        `json:"status,omitempty"`
+	EndedReason        *string        `json:"endedReason,omitempty"`
+	Destination        *Destination   `json:"destination,omitempty"`
+	StartedAt          *time.Time     `json:"startedAt,omitempty"`
+	EndedAt            *time.Time     `json:"endedAt,omitempty"`
+	Cost               *float64       `json:"cost,omitempty"`
+	CostBreakdown      *CostBreakdown `json:"costBreakdown,omitempty"`
+	ArtifactPlan       *ArtifactPlan  `json:"artifactPlan,omitempty"`
+	Monitor            *Monitor       `json:"monitor,omitempty"`
+	Transport          *Transport     `json:"transport,omitempty"`
+	AssistantID        *string        `json:"assistantId,omitempty"`
+	Assistant          *Assistant     `json:"assistant,omitempty"`
+	AssistantOverrides *Assistant     `json:"assistantOverrides,omitempty"`
+	SquadID            *string        `json:"squadId,omitempty"`
+	Squad              *Squad         `json:"squad,omitempty"`
+	PhoneNumberID      *string        `json:"phoneNumberId,omitempty"`
+	PhoneNumber        *PhoneNumber   `json:"phoneNumber,omitempty"`
+	CustomerID         *string        `json:"customerId,omitempty"`
+	Customer           *Customer      `json:"customer,omitempty"`
+	Name               *string        `json:"name,omitempty"`
 }
 
-// CallResult represents the response from creating a call
-type CallResult struct {
-	ID                  string        `json:"id"`
-	OrgID               string        `json:"orgId"`
-	CreatedAt           string        `json:"createdAt"`
-	UpdatedAt           string        `json:"updatedAt"`
-	Type                string        `json:"type"`
-	Costs               []Cost        `json:"costs"`
-	Messages            []Message     `json:"messages"`
-	PhoneCallProvider   string        `json:"phoneCallProvider"`
-	PhoneCallTransport  string        `json:"phoneCallTransport"`
-	Status              string        `json:"status"`
-	EndedReason         string        `json:"endedReason"`
-	Destination         Destination   `json:"destination"`
-	StartedAt           string        `json:"startedAt"`
-	EndedAt             string        `json:"endedAt"`
-	Cost                float64       `json:"cost"`
-	CostBreakdown       CostBreakdown `json:"costBreakdown"`
-	ArtifactPlan        ArtifactPlan  `json:"artifactPlan"`
-	Analysis            Analysis      `json:"analysis"`
-	Monitor             Monitor       `json:"monitor"`
-	Artifact            Artifact      `json:"artifact"`
-	Transport           Transport     `json:"transport"`
-	PhoneCallProviderID string        `json:"phoneCallProviderId"`
-	AssistantID         string        `json:"assistantId"`
-	Assistant           Assistant     `json:"assistant"`
-	AssistantOverrides  Assistant     `json:"assistantOverrides"`
-	SquadID             string        `json:"squadId"`
-	Squad               Squad         `json:"squad"`
-	PhoneNumberID       string        `json:"phoneNumberId"`
-	PhoneNumber         PhoneNumber   `json:"phoneNumber"`
-	CustomerID          string        `json:"customerId"`
-	Customer            Customer      `json:"customer"`
-	Name                string        `json:"name"`
-}
-
-// EndOfCallReport represents the end-of-call-report message type
+// EndOfCallReport represents the report generated at the end of a call
 type EndOfCallReport struct {
-	// The following are required fields
-	Type        string   `json:"type"`
-	EndedReason string   `json:"endedReason"`
-	Artifact    Artifact `json:"artifact"`
-	Analysis    Analysis `json:"analysis"`
+	Timestamp *float64 `json:"timestamp,omitempty"`
+	Type      string   `json:"type"`
+	Artifact  Artifact `json:"artifact"`
+	Analysis  Analysis `json:"analysis"`
 
-	// The following are optional fields
-	Call      *Call     `json:"call,omitempty"`
-	StartedAt time.Time `json:"startedAt"`
-	EndedAt   time.Time `json:"endedAt"`
-	Customer  *Customer `json:"customer,omitempty"`
+	// Optional fields
+	StartedAt   *time.Time `json:"startedAt,omitempty"`
+	EndedAt     *time.Time `json:"endedAt,omitempty"`
+	EndedReason string     `json:"endedReason"`
+	Cost        *float64   `json:"cost,omitempty"`
+	Costs       []Cost     `json:"costs,omitempty"`
 
-	// There are more but we are ignoring them for now
+	Summary    *string `json:"summary,omitempty"`
+	Transcript *string `json:"transcript,omitempty"`
+
+	Messages           []Message    `json:"messages,omitempty"`
+	RecordingUrl       *string      `json:"recordingUrl,omitempty"`
+	StereoRecordingUrl *string      `json:"stereoRecordingUrl,omitempty"`
+	Call               *Call        `json:"call,omitempty"`
+	PhoneNumber        *PhoneNumber `json:"phoneNumber,omitempty"`
+	Customer           *Customer    `json:"customer,omitempty"`
+
+	Assistant *Assistant `json:"assistant,omitempty"`
 }

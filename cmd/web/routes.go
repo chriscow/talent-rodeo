@@ -19,7 +19,7 @@ func (app *application) routes() http.Handler {
 	mux.Use(app.sessionManager.LoadAndSave)
 
 	// VAPI webhook endpoint
-	mux.HandleFunc("/vapi/outbound-call", app.handleVapiCall, "POST")
+	mux.HandleFunc("/vapi/outbound-call", app.makeOutboundCall, "POST")
 	mux.HandleFunc("/webhooks/vapi", app.handleVapiWebhook, "POST")
 
 	fileServer := http.FileServer(http.FS(assets.EmbeddedFiles))
@@ -70,6 +70,8 @@ func (app *application) routes() http.Handler {
 			mux.HandleFunc("/profile/schedule/appointment/:id", app.cancelAppointment, "DELETE")
 			mux.HandleFunc("/profile/schedule/reschedule", app.rescheduleAppointment, "POST")
 			mux.HandleFunc("/profile/schedule/call-now", app.callNow, "POST")
+
+			mux.HandleFunc("/testing/reset-user-state", app.handleTestingResetUserState, "POST")
 
 			mux.HandleFunc("/logout", app.logoutUser, "POST")
 		})

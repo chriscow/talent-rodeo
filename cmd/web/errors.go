@@ -84,13 +84,3 @@ func (app *application) clientError(w http.ResponseWriter, status int) {
 		app.serverError(w, nil, err)
 	}
 }
-
-func (app *application) failedValidation(w http.ResponseWriter, r *http.Request, errors map[string]string) {
-	data := app.newTemplateData(r)
-	data["FieldErrors"] = errors
-
-	err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/errors/422.html")
-	if err != nil {
-		app.serverError(w, r, err)
-	}
-}

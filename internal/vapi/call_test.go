@@ -21,7 +21,7 @@ func TestGetCall_Integration(t *testing.T) {
 
 	ctx := context.Background()
 	callID := "2709318a-1b74-44da-9ba9-e1973804b6b9"
-	fixtureFile := filepath.Join("testdata", "call_response.json")
+	fixtureFile := filepath.Join("../../testdata", "vapi", "create-call-response.json")
 
 	// Load fixture data
 	fixtureData, err := os.ReadFile(fixtureFile)
@@ -29,7 +29,7 @@ func TestGetCall_Integration(t *testing.T) {
 		t.Fatalf("Failed to read fixture file: %v", err)
 	}
 
-	var want CallResult
+	var want Call
 	if err := json.Unmarshal(fixtureData, &want); err != nil {
 		t.Fatalf("Failed to unmarshal fixture data: %v", err)
 	}
@@ -46,23 +46,75 @@ func TestGetCall_Integration(t *testing.T) {
 	}
 
 	// Compare specific fields that should match exactly
-	if got.ID != want.ID {
+	if *got.ID != *want.ID {
 		t.Errorf("ID = %v, want %v", got.ID, want.ID)
 	}
-	if got.OrgID != want.OrgID {
+	if *got.OrgID != *want.OrgID {
 		t.Errorf("OrgID = %v, want %v", got.OrgID, want.OrgID)
 	}
-	if got.Type != want.Type {
+	if *got.Type != *want.Type {
 		t.Errorf("Type = %v, want %v", got.Type, want.Type)
 	}
-	if got.Status != want.Status {
+	if *got.Status != *want.Status {
 		t.Errorf("Status = %v, want %v", got.Status, want.Status)
 	}
 
 	// Print useful information for debugging
-	t.Logf("Call Status: %s", got.Status)
-	t.Logf("Call Type: %s", got.Type)
-	if got.Cost > 0 {
-		t.Logf("Call Cost: $%.2f", got.Cost)
+	if got.Status != nil {
+		t.Logf("Call Status: %s", *got.Status)
+	}
+	if got.Type != nil {
+		t.Logf("Call Type: %s", *got.Type)
+	}
+	if got.Cost != nil && *got.Cost > 0 {
+		t.Logf("Call Cost: $%.2f", *got.Cost)
+	}
+}
+
+func TestEndOfCallReport_Unmarshal(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get working directory: %v", err)
+	}
+	t.Logf("cwd: %s", wd)
+
+	fixtureFile := "/workspaces/talent-rodeo/testdata/vapi/webhooks/end-of-call-report/end-of-call-report_1743786911443605712.json"
+
+	// Load fixture data
+	fixtureData, err := os.ReadFile(fixtureFile)
+	if err != nil {
+		t.Fatalf("Failed to read fixture file: %v", err)
+	}
+
+	var report EndOfCallReport
+	if err := json.Unmarshal(fixtureData, &report); err != nil {
+		t.Fatalf("Failed to unmarshal EndOfCallReport: %v", err)
+	}
+
+	// Validate required fields are present
+	if report.Type == "" {
+		t.Error("Type is required but was empty")
+	}
+	if report.EndedReason == "" {
+		t.Error("EndedReason is required but was empty")
+	}
+	if report.Artifact.Messages == nil {
+		t.Error("Artifact.Messages is required but was nil")
+	}
+	if report.Analysis.Summary == nil {
+		t.Error("Analysis.Summary is required but was empty")
+	}
+
+	summary := *report.Analysis.Summary
+	if len(summary) > 40 {
+		summary = summary[:40] + "..."
+	}
+	// Log useful information for debugging
+	t.Logf("Report Type: %s", report.Type)
+	t.Logf("Ended Reason: %s", report.EndedReason)
+	t.Logf("Number of Messages: %d", len(report.Artifact.Messages))
+	t.Logf("Analysis Summary: %s", summary)
+	if report.Cost != nil {
+		t.Logf("Call Cost: $%.2f", *report.Cost)
 	}
 }
