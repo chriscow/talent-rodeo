@@ -151,7 +151,16 @@ func (app *application) handleAuthError(w http.ResponseWriter, r *http.Request, 
 //
 // Requires: Authenticated user (handled by middleware)
 func (app *application) logoutUser(w http.ResponseWriter, r *http.Request) {
-	app.logger.Info("Processing logout request", "method", r.Method, "url", r.URL.String())
+	app.logger.Debug("Starting logout process",
+		"method", r.Method,
+		"url", r.URL.String(),
+		"headers", fmt.Sprintf("%+v", r.Header))
+
+	// Get user before destroying session
+	user := contextGetAuthenticatedUser(r)
+	if user != nil {
+		app.logger.Debug("Logging out user", "user_id", user.ID, "email", user.Email)
+	}
 
 	// Destroy the session
 	err := app.sessionManager.Destroy(r.Context())
@@ -161,8 +170,12 @@ func (app *application) logoutUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.logger.Info("Session cleared successfully, redirecting to home")
+	app.logger.Debug("Session destroyed successfully, redirecting to home")
 
-	// Redirect to home page instead of directly to LinkedIn auth
+	// Redirect to home page
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+
+	app.logger.Debug("Logout redirect sent",
+		"location", "/",
+		"status", http.StatusSeeOther)
 }
