@@ -70,8 +70,7 @@ type config struct {
 		automigrate bool
 	}
 	firebase struct {
-		projectID       string
-		credentialsFile string
+		projectID string
 	}
 	notifications struct {
 		email string
@@ -132,7 +131,6 @@ func run(logger *slog.Logger) error {
 	flag.StringVar(&cfg.cookie.secretKey, "cookie-secret-key", os.Getenv("SESSION_SECRET"), "secret key for cookie authentication/encryption")
 
 	flag.StringVar(&cfg.firebase.projectID, "firebase-project-id", os.Getenv("FIREBASE_PROJECT_ID"), "Firebase project ID")
-	flag.StringVar(&cfg.firebase.credentialsFile, "firebase-credentials-file", os.Getenv("FIREBASE_CREDENTIALS_FILE"), "Firebase credentials file")
 
 	flag.StringVar(&cfg.db.dsn, "db-dsn", os.Getenv("DB_DSN"), "PostgreSQL DSN")
 	flag.BoolVar(&cfg.db.automigrate, "db-automigrate", false, "run migrations on startup")
@@ -175,7 +173,7 @@ func run(logger *slog.Logger) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	firestoreClient, err := setupFirestoreClient(ctx, cfg.firebase.projectID, cfg.firebase.credentialsFile)
+	firestoreClient, err := setupFirestoreClient(ctx, cfg.firebase.projectID, "")
 	if err != nil {
 		return err
 	}
@@ -349,11 +347,17 @@ func checkEnv() error {
 		fmt.Printf("Error loading .env file: %s\n", err.Error())
 	}
 
+	// Log critical Firebase configuration
+	slog.Info("Firebase configuration",
+		"project_id", os.Getenv("FIREBASE_PROJECT_ID"),
+		"has_credentials", os.Getenv("FIREBASE_CREDENTIALS") != "",
+	)
+
 	requiredKeys := []string{"BASE_URL", "SESSION_SECRET", "SMTP_USERNAME",
 		"SMTP_PASSWORD", "LINKEDIN_AUTH_CLIENT_ID", "LINKEDIN_AUTH_CLIENT_SECRET",
 		"OPENAI_API_KEY", "GEMINI_API_KEY", "PUSHER_APP_ID", "PUSHER_KEY", "PUSHER_SECRET", "PUSHER_CLUSTER",
 		"TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER", "APP_DOMAIN",
-		"FIREBASE_PROJECT_ID", "FIREBASE_CREDENTIALS_FILE",
+		"FIREBASE_PROJECT_ID", "FIREBASE_CREDENTIALS",
 		"CLOUDFLARE_API_EMAIL", "CLOUDFLARE_API_TOKEN",
 		"CLOUDFLARE_GLOBAL_API_KEY", "CLOUDFLARE_KV_NAMESPACE_ID", "SCRAPINGDOG_API_KEY",
 		"VAPI_API_KEY", "VAPI_ASSISTANT_ID", "VAPI_OUTBOUND_PHONE_ID",
@@ -361,28 +365,56 @@ func checkEnv() error {
 		"VAPI_START_CALL_URL", // URL that we will use to start a call (we will POST to this URL to start a call)
 	}
 
+	missingKeys := []string{}
 	for _, key := range requiredKeys {
 		if os.Getenv(key) == "" {
-			return fmt.Errorf("%s environment variable is required", key)
+			missingKeys = append(missingKeys, key)
 		}
 	}
 
+	if len(missingKeys) > 0 {
+		slog.Error("Missing required environment variables", "missing_keys", missingKeys)
+		return fmt.Errorf("missing required environment variables: %v", missingKeys)
+	}
+
+	slog.Info("All required environment variables are present")
 	return nil
 }
 
 func setupFirestoreClient(ctx context.Context, projectID, credentialsFile string) (*firestore.Client, error) {
-	opt := option.WithCredentialsFile(credentialsFile)
+	// Use credentials from environment variable instead of file
+	credentials := os.Getenv("FIREBASE_CREDENTIALS")
+	if credentials == "" {
+		return nil, fmt.Errorf("FIREBASE_CREDENTIALS environment variable is required")
+	}
+
+	// Log configuration details
+	slog.Info("Setting up Firestore client",
+		"project_id", projectID,
+		"credentials_length", len(credentials),
+		"credentials_preview", credentials[:100]+"...", // Show first 100 chars
+	)
+
+	opt := option.WithCredentialsJSON([]byte(credentials))
 	fbConfig := &firebase.Config{ProjectID: projectID}
+
+	slog.Info("Initializing Firebase app",
+		"config", fmt.Sprintf("%+v", fbConfig),
+	)
 
 	fbApp, err := firebase.NewApp(ctx, fbConfig, opt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize firebase app: %w", err)
 	}
 
+	slog.Info("Firebase app initialized, creating Firestore client")
+
 	fs, err := fbApp.Firestore(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create firestore client: %w", err)
 	}
+
+	slog.Info("Firestore client created successfully")
 
 	return fs, nil
 }

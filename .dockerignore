@@ -3,6 +3,7 @@
 **/.devcontainer
 **/.local
 **/.project
+!.secrets/talent-rodeo-prod-firebase-adminsdk-fbsvc-916e43968d.json
 **/.secrets*
 **/.unused*
 **/.cursor

@@ -12,9 +12,16 @@ FROM debian:bookworm
 RUN apt-get update -y && apt-get install -y ca-certificates
 COPY --from=builder /tr-web /usr/local/bin/
 
-# Create directory for secrets and copy Firebase credentials
+# Create directory for secrets
 RUN mkdir -p /app/.secrets
-COPY .secrets/talent-rodeo-prod-firebase-adminsdk-fbsvc-916e43968d.json /app/.secrets/
-ENV FIREBASE_CREDENTIALS_FILE=/app/.secrets/talent-rodeo-prod-firebase-adminsdk-fbsvc-916e43968d.json
+ENV FIREBASE_CREDENTIALS_FILE=/app/.secrets/firebase-credentials.json
 
-ENTRYPOINT ["/usr/local/bin/tr-web"]
+# Add a script to write credentials at startup
+COPY <<EOF /usr/local/bin/docker-entrypoint.sh
+#!/bin/sh
+echo "$FIREBASE_CREDENTIALS" > $FIREBASE_CREDENTIALS_FILE
+exec /usr/local/bin/tr-web
+EOF
+
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

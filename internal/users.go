@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"github.com/google/uuid"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -91,7 +92,7 @@ func CreateUser(ctx context.Context, fs *firestore.Client, u *User) error {
 	}
 
 	if u.ID == "" {
-		u.ID = funcs.Slugify(fmt.Sprintf("%s-%d", u.Name, time.Now().UnixNano()))
+		u.ID = funcs.Slugify(fmt.Sprintf("%s %s", u.Name, uuid.New().String()))
 	}
 
 	if u.State.Status == UserStatusError || u.State.Status == UserStatusUnknown {
