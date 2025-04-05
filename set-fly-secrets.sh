@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Check if an environment file was provided as an argument
-ENV_FILE="${1:-.env}"
+ENV_FILE="${1:-.prod.env}"
 
 # Check if the env file exists
 if [ ! -f "$ENV_FILE" ]; then
@@ -9,25 +9,36 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
-# Initialize an array to store secrets
-declare -a secret_args=()
+# Create a temporary file for secrets
+SECRETS_FILE=$(mktemp)
 
-# Read the env file line by line
+# Read the env file line by line and build the secrets file
 while IFS= read -r line; do
     # Skip empty lines and comments
     if [[ -n "$line" && ! "$line" =~ ^[[:space:]]*# ]]; then
-        # Add the line to secrets array
-        secret_args+=("$line")
+        # Extract key and value
+        if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+            key="${BASH_REMATCH[1]}"
+            value="${BASH_REMATCH[2]}"
+            
+            # Skip FIREBASE_CREDENTIALS as we'll handle it separately
+            if [ "$key" != "FIREBASE_CREDENTIALS" ]; then
+                echo "$key=$value" >> "$SECRETS_FILE"
+            fi
+        fi
     fi
 done < "$ENV_FILE"
 
-# Check if we found any secrets
-if [ ${#secret_args[@]} -eq 0 ]; then
-    echo "No valid environment variables found in $ENV_FILE"
-    exit 1
-fi
+# Add Firebase credentials
+echo "Setting up Firebase credentials"
+credentials=$(cat .secrets/talent-rodeo-prod-firebase-adminsdk-fbsvc-916e43968d.json | jq -c .)
+echo "FIREBASE_CREDENTIALS=$credentials" >> "$SECRETS_FILE"
 
-# Convert array to space-separated string and pass to fly secrets set
-fly secrets set "${secret_args[@]}"
+# Import all secrets at once
+echo "Importing all secrets from $ENV_FILE..."
+fly secrets import < "$SECRETS_FILE"
+
+# Clean up
+rm "$SECRETS_FILE"
 
 echo "Successfully set Fly.io secrets from $ENV_FILE" 
