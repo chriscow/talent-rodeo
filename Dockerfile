@@ -9,7 +9,6 @@ RUN go build -v -o /tr-web ./cmd/web
 
 
 FROM debian:bookworm
-RUN apt-get update -y && apt-get install -y ca-certificates fuse3 sqlite3
-COPY --from=flyio/litefs:0.5 /usr/local/bin/litefs /usr/local/bin/litefs
+RUN apt-get update -y && apt-get install -y ca-certificates
 COPY --from=builder /tr-web /usr/local/bin/
-ENTRYPOINT litefs mount
+ENTRYPOINT ["/usr/local/bin/tr-web"]
