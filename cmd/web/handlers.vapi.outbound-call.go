@@ -201,24 +201,13 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	systemPrompt, err := tmpl.Execute(map[string]interface{}{
+	systemPrompt, err := tmpl.Execute(map[string]any{
 		"FullName": user.Name,
 		"Resume":   resumeText,
 	})
 	if err != nil {
 		apptErr = fmt.Errorf("failed to render system prompt template: %w", err)
 		app.logger.Error("Failed to render system prompt template", "error", apptErr)
-		app.reportServerError(r, apptErr)
-
-		// This is likely our problem, so we don't want to retry
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	summaryTmpl, err := utils.CreateTemplate("prompts/transcript-analysis.001.txt")
-	if err != nil {
-		apptErr = fmt.Errorf("failed to create summary template: %w", err)
-		app.logger.Error("Failed to create summary template", "error", apptErr)
 		app.reportServerError(r, apptErr)
 
 		// This is likely our problem, so we don't want to retry
@@ -238,9 +227,6 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 		AssistantID:   &assistantID,
 		PhoneNumberID: &outboundPhoneID,
 		AssistantOverrides: &vapi.Assistant{
-			AnalysisPlan: &vapi.AnalysisPlan{
-				SummaryPrompt: &summaryTmpl.RawContent,
-			},
 			Model: &modelConfig,
 			Server: &vapi.ServerConfig{
 				URL:            os.Getenv("VAPI_WEBHOOK_URL"),

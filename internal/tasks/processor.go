@@ -55,7 +55,7 @@ func NewProcessor(storage TaskStorage, logger *slog.Logger) *Processor {
 func (p *Processor) RegisterHandler(handler TaskHandler) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.logger.Debug("registering task handler", "type", handler.TaskType())
+	p.logger.Debug("tasks: registering task handler", "type", handler.TaskType())
 	p.handlers[handler.TaskType()] = handler
 }
 
@@ -68,7 +68,6 @@ func (p *Processor) SetRetryBackoff(d time.Duration) {
 
 // Start begins processing tasks
 func (p *Processor) Start(ctx context.Context) error {
-	p.logger.Debug("starting task processor")
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 

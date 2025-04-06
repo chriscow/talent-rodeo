@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"talent-rodeo/internal"
@@ -61,6 +62,12 @@ func (h *WebhookScheduler) ProcessTask(ctx context.Context, task *internal.Task)
 		Timeout: 30 * time.Second,
 	}
 
+	// validate the url
+	if _, err := url.Parse(payload.URL); err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+
+	h.logger.Debug("Preparing webhook call", "url", payload.URL, "method", payload.Method)
 	req, err := http.NewRequestWithContext(ctx, payload.Method, payload.URL, bytes.NewReader(payload.Body))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -71,6 +78,7 @@ func (h *WebhookScheduler) ProcessTask(ctx context.Context, task *internal.Task)
 		req.Header.Set(k, v)
 	}
 
+	h.logger.Debug("Sending webhook call", "url", payload.URL, "method", payload.Method)
 	resp, err := client.Do(req)
 	if err != nil {
 		return &internal.TaskError{

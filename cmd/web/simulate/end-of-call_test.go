@@ -641,7 +641,7 @@ func TestWebhookMessageUnmarshal(t *testing.T) {
 	}
 
 	// Unmarshal both the original and marshaled JSON into generic maps for comparison
-	var original, remarshaled map[string]interface{}
+	var original, remarshaled map[string]any
 	if err := json.Unmarshal(testData, &original); err != nil {
 		t.Fatalf("Failed to unmarshal original data: %v", err)
 	}

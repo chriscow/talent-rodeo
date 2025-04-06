@@ -27,12 +27,18 @@ The initial release will include essential features necessary to validate the co
 - **Structured Conversation**: Follow a predefined conversation framework to gather information
 - **Information Extraction**: Identify key skills, experiences, and preferences
 - **Call Recording Management**: Store and process conversation recordings with proper consent
+- **Error Handling**: Store and track errors during transcript processing for admin review
+- **Transcript Analysis**: Process and analyze call transcripts to refine search criteria
+- **Search Criteria Generation**: Convert conversation insights into structured search parameters
 
 ### 3. Job Search
 
 - **LinkedIn Job Data Integration**: Utilize ScrapingDog to access LinkedIn job listings
 - **Skill-Based Search**: Leverage extracted skills to perform targeted job searches
 - **Search Result Storage**: Save job search results in database for efficient retrieval and matching
+- **Background Processing**: Automated background service to perform periodic job searches
+- **Error Recovery**: Track and handle search errors with admin notifications
+- **Search Frequency Management**: Control search timing based on user tier level
 
 ### 4. Job Matching
 
@@ -89,12 +95,16 @@ The initial release will include essential features necessary to validate the co
 - **Flow Router**: Request routing with nested middleware groups
 - **PostgreSQL Database**: Structured data storage for user profiles and job information
 - **NATS Messaging**: Asynchronous task processing, distributed processing, load balancing, and key-value store
+- **Error Management**: Simple MVP error tracking and admin notification system
+- **Background Services**: Automated job search processing based on user tiers
 
 ### AI Integration
 
 - **LLM Provider**: Integration with selected LLM API for conversational and document tasks
 - **Voice Processing**: Integration with voice-to-text and text-to-voice services
 - **Minds Library**: Utilization of existing Minds framework for LLM handling
+- **Transcript Analysis**: Processing of conversation transcripts for search criteria generation
+- **Error Recovery**: Graceful handling of AI processing failures with error tracking
 
 ### Integration Points
 
@@ -126,6 +136,8 @@ The initial release will include essential features necessary to validate the co
 - **Incremental Delivery**: Phased implementation prioritizing core functionality
 - **User Testing**: Early access program for feedback collection
 - **Working Code**: Maintain shippable, working code at all times
+- **Error Handling**: Simple but effective error tracking and recovery mechanisms
+- **Admin Tools**: Basic admin notification system for error monitoring
 
 ## Deployment Timeline
 

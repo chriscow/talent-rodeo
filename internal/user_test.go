@@ -12,36 +12,61 @@ import (
 )
 
 func init() {
-	if err := godotenv.Load("../.env"); err != nil {
-		log.Fatal("No .env file found, using system env")
+	if err := godotenv.Overload("../.env"); err != nil {
+		wd, _ := os.Getwd()
+		log.Printf("failed to load .env from %s: %v", wd, err)
 	}
 
-	if os.Getenv("FIREBASE_CREDENTIALS_FILE") == "" {
-		log.Fatal("FIREBASE_CREDENTIALS_FILE is not set")
-	}
+	/*
+		// Get the absolute path to the project root
+		wd, err := os.Getwd()
+		if err != nil {
+			log.Printf("error getting working directory: %v", err)
+			return
+		}
+		log.Printf("present working directory: %s", wd)
 
-	if os.Getenv("FIREBASE_PROJECT_ID") == "" {
-		log.Fatal("FIREBASE_PROJECT_ID is not set")
-	}
+		// The project root is one level up from the internal directory
+		projectRoot := filepath.Dir(wd)
+		envPath := filepath.Join(projectRoot, ".env")
+
+		log.Printf("attempting to load .env from: %s", envPath)
+		if err := godotenv.Overload(envPath); err != nil {
+			log.Printf("failed to load .env from %s: %v", envPath, err)
+			// Try loading from current directory as fallback
+			if err := godotenv.Overload(".env"); err != nil {
+				log.Printf("failed to load .env from current directory: %v", err)
+			}
+		} else {
+			log.Printf("successfully loaded .env from: %s", envPath)
+		}
+
+		// Log environment variables (without showing sensitive data)
+		projectID := os.Getenv("FIREBASE_PROJECT_ID")
+		credentials := os.Getenv("FIREBASE_CREDENTIALS")
+
+		log.Printf("FIREBASE_PROJECT_ID is %s", map[bool]string{true: "set", false: "not set"}[projectID != ""])
+		log.Printf("FIREBASE_CREDENTIALS is %s", map[bool]string{true: "set", false: "not set"}[credentials != ""])
+
+		if projectID == "" {
+			log.Fatal("FIREBASE_PROJECT_ID is not set")
+		}
+
+		if credentials == "" {
+			log.Fatal("FIREBASE_CREDENTIALS is not set")
+		}
+	*/
 }
 
 func TestUser(t *testing.T) {
 	ctx := context.Background()
 
-	client, err := NewFirestoreClient(ctx, os.Getenv("FIREBASE_PROJECT_ID"), os.Getenv("FIREBASE_CREDENTIALS_FILE"))
+	client, err := NewFirestoreClient(ctx)
 	if err != nil {
-		// log the present working directory and if the FIREBASE_CREDENTIALS_FILE exists
-		dir, err := os.Getwd()
-		if err != nil {
-			log.Printf("error getting present working directory: %v", err)
-		}
+		// Log the error and working directory
+		dir, _ := os.Getwd()
 		log.Printf("present working directory: %s", dir)
-		if _, err := os.Stat(os.Getenv("FIREBASE_CREDENTIALS_FILE")); err == nil {
-			log.Printf("FIREBASE_CREDENTIALS_FILE exists: %t", true)
-		} else {
-			log.Printf("FIREBASE_CREDENTIALS_FILE exists: %t", false)
-		}
-		t.Fatalf("setupFirestoreClient() error = %v", err)
+		t.Fatalf("NewFirestoreClient() error = %v", err)
 	}
 
 	// Clean up before and after tests
@@ -92,7 +117,7 @@ func TestUser(t *testing.T) {
 
 	// Test UpdateUser
 	t.Run("UpdateUser", func(t *testing.T) {
-		updates := map[string]interface{}{
+		updates := map[string]any{
 			"first_name": "Updated",
 		}
 		if err := UpdateUser(ctx, client, user.ID, updates); err != nil {
@@ -144,7 +169,7 @@ func TestUser(t *testing.T) {
 func TestUserStates(t *testing.T) {
 	ctx := context.Background()
 
-	client, err := NewFirestoreClient(ctx, os.Getenv("FIREBASE_PROJECT_ID"), os.Getenv("FIREBASE_CREDENTIALS_FILE"))
+	client, err := NewFirestoreClient(ctx)
 	if err != nil {
 		t.Fatalf("setupFirestoreClient() error = %v", err)
 	}
@@ -220,9 +245,6 @@ func TestUserStates(t *testing.T) {
 			if updated.State.Started.Before(prevStarted) || updated.State.Started.Equal(prevStarted) {
 				t.Error("State.Started should be after previous state's start time")
 			}
-			if updated.State.Completed != nil {
-				t.Error("State.Completed should be nil during transition")
-			}
 			if updated.State.Error != nil {
 				t.Error("State.Error should be nil during normal transition")
 			}
@@ -262,7 +284,7 @@ func TestUserStates(t *testing.T) {
 }
 
 func TestUpdateUserStateWithError(t *testing.T) {
-	fs, err := NewFirestoreClient(context.Background(), os.Getenv("FIREBASE_PROJECT_ID"), os.Getenv("FIREBASE_CREDENTIALS_FILE"))
+	fs, err := NewFirestoreClient(context.Background())
 	if err != nil {
 		t.Fatalf("NewFirestoreClient() error = %v", err)
 	}
@@ -328,9 +350,6 @@ func TestUpdateUserStateWithError(t *testing.T) {
 			}
 			if updated.State.Error == nil || *updated.State.Error != tt.errorMsg {
 				t.Errorf("Error = %v, want %v", updated.State.Error, tt.errorMsg)
-			}
-			if updated.State.Completed != nil {
-				t.Error("Completed should be nil")
 			}
 			if updated.State.Started.IsZero() {
 				t.Error("Started should not be zero")

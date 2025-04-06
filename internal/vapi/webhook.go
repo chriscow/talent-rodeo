@@ -26,19 +26,3 @@ type WebhookMessageContent struct {
 	Type string          `json:"type"`
 	Data json.RawMessage `json:"data"`
 }
-
-// UnmarshalJSON custom unmarshaler to capture type and raw data
-// func (m *WebhookMessageContent) UnmarshalJSON(data []byte) error {
-// 	// Use a temporary struct to avoid recursion
-// 	type Temp struct {
-// 		Type string          `json:"type"`
-// 		Data json.RawMessage `json:"data"`
-// 	}
-// 	var temp Temp
-// 	if err := json.Unmarshal(data, &temp); err != nil {
-// 		return err
-// 	}
-// 	m.Type = temp.Type
-// 	m.Data = temp.Data
-// 	return nil
-// }

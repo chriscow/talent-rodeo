@@ -180,10 +180,31 @@ func updateEndOfCallReport(reportData []byte, userID, appointmentID string) (*va
 		return nil, fmt.Errorf("invalid message structure")
 	}
 
-	call := messageData["call"].(map[string]any)
+	// Check if there's nested data structure
+	if nestedData, ok := messageData["data"].(map[string]any); ok {
+		messageData = nestedData
+	}
+
+	// Initialize or update call information
+	var call map[string]any
+	if existingCall, ok := messageData["call"].(map[string]any); ok {
+		call = existingCall
+	} else {
+		call = make(map[string]any)
+	}
+
+	// Update call fields
+	call["id"] = appointmentID
 	call["name"] = appointmentID
 	call["customerId"] = userID
 	messageData["call"] = call
+
+	// Ensure required fields are present
+	messageData["type"] = "end-of-call-report"
+	if _, ok := messageData["endedReason"]; !ok {
+		messageData["endedReason"] = "completed"
+	}
+
 	// Convert report to bytes
 	reportBytes, err := json.Marshal(messageData)
 	if err != nil {

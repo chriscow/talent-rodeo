@@ -7,6 +7,7 @@ import (
 	"talent-rodeo/internal/vapi"
 	"testing"
 
+	"github.com/chriscow/minds"
 	"github.com/sashabaranov/go-openai"
 )
 
@@ -32,13 +33,13 @@ func TestConvertCallResultToTranscript(t *testing.T) {
 	}
 
 	// Define valid OpenAI roles
-	validRoles := map[string]bool{
-		openai.ChatMessageRoleSystem:    true,
-		openai.ChatMessageRoleUser:      true,
-		openai.ChatMessageRoleAssistant: true,
-		openai.ChatMessageRoleFunction:  true,
-		openai.ChatMessageRoleTool:      true,
-		"developer":                     true,
+	validRoles := map[minds.Role]bool{
+		minds.RoleSystem:    true,
+		minds.RoleUser:      true,
+		minds.RoleAssistant: true,
+		minds.RoleFunction:  true,
+		minds.RoleTool:      true,
+		"developer":         true,
 	}
 
 	// Check role mapping and content
@@ -95,7 +96,7 @@ func TestConvertCallResultToTranscript(t *testing.T) {
 	for _, mapping := range expectedMappings {
 		found := false
 		for _, msg := range transcript.Messages {
-			if msg.Role == mapping.openAIRole {
+			if msg.Role == minds.Role(mapping.openAIRole) {
 				if mapping.hasContent && mapping.sampleText != "" {
 					if mapping.sampleText != "" && msg.Content != "" && strings.Contains(msg.Content, mapping.sampleText) {
 						found = true

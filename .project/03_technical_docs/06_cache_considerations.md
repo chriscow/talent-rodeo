@@ -45,8 +45,8 @@ Each entity has different access patterns and consistency requirements that infl
 #### Proposed Cache Interface
 ```go
 type Cache interface {
-    Get(key string) (interface{}, bool)
-    Set(key string, value interface{}, expiration time.Duration)
+    Get(key string) (any, bool)
+    Set(key string, value any, expiration time.Duration)
     Delete(key string)
     Clear()
 }

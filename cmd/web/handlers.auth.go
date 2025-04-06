@@ -9,6 +9,7 @@ import (
 	"talent-rodeo/internal"
 
 	"github.com/alexedwards/flow"
+	"github.com/google/uuid"
 	"github.com/markbates/goth/gothic"
 )
 
@@ -90,7 +91,7 @@ func (app *application) completeSocialAuth(w http.ResponseWriter, r *http.Reques
 		app.logger.Info("User not found, creating new user", "email", gothUser.Email)
 
 		u = &internal.User{
-			ID:          gothUser.UserID,
+			ID:          uuid.New().String(),
 			Email:       gothUser.Email,
 			Provider:    gothUser.Provider,
 			Name:        gothUser.Name,

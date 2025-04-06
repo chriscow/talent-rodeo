@@ -22,7 +22,7 @@ func DecodeForm(r *http.Request, dst any) error {
 
 // DecodePostForm decodes the request body into the destination struct.
 // It expects the request to have a Content-Type of application/x-www-form-urlencoded.
-func DecodePostForm(r *http.Request, dst interface{}) error {
+func DecodePostForm(r *http.Request, dst any) error {
 	// Parse the form data
 	err := r.ParseForm()
 	if err != nil {

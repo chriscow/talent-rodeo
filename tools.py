@@ -235,6 +235,118 @@ def feature_analyzer(project_dir=".project"):
     return analyze_feature_deps(project_dir)
 
 
+def check_user_jobs(user_id):
+    """
+    Check if a user has jobs in their user_jobs subcollection.
+    
+    Args:
+        user_id (str): The user ID to check
+        
+    Returns:
+        Prints the user's jobs subcollection contents
+    """
+    import firebase_admin
+    from firebase_admin import firestore
+    import json
+    
+    # Initialize Firebase Admin if not already initialized
+    try:
+        app = firebase_admin.get_app()
+    except ValueError:
+        cred = firebase_admin.credentials.ApplicationDefault()
+        app = firebase_admin.initialize_app(cred)
+    
+    # Get Firestore client
+    db = firestore.client(app)
+    
+    # Get user jobs
+    user_jobs_ref = db.collection('users').document(user_id).collection('user_jobs')
+    user_jobs = user_jobs_ref.stream()
+    
+    job_data = []
+    for job in user_jobs:
+        job_dict = job.to_dict()
+        # Convert JobRef to string representation
+        if 'job_ref' in job_dict:
+            job_dict['job_ref'] = str(job_dict['job_ref'])
+        # Convert timestamps to strings
+        for field in ['created_at', 'updated_at', 'viewed_at', 'saved_at', 'applied_at', 'rejected_at']:
+            if field in job_dict and job_dict[field] is not None:
+                job_dict[field] = job_dict[field].isoformat()
+        job_data.append(job_dict)
+    
+    if not job_data:
+        print(f"User {user_id} has no jobs in user_jobs subcollection")
+    else:
+        print(f"Found {len(job_data)} jobs for user {user_id}:")
+        print(json.dumps(job_data, indent=2))
+
+
+def trigger_search_for_user(user_id, keywords, location="United States"):
+    """
+    Manually trigger a job search for a specific user.
+    
+    Args:
+        user_id (str): The user ID to search for
+        keywords (list): List of keywords to search for
+        location (str): Location to search in
+        
+    Returns:
+        Prints the status of the search trigger
+    """
+    import firebase_admin
+    from firebase_admin import firestore
+    import time
+    
+    # Initialize Firebase Admin if not already initialized
+    try:
+        app = firebase_admin.get_app()
+    except ValueError:
+        cred = firebase_admin.credentials.ApplicationDefault()
+        app = firebase_admin.initialize_app(cred)
+    
+    # Get Firestore client
+    db = firestore.client(app)
+    
+    # Get user document
+    user_ref = db.collection('users').document(user_id)
+    user_doc = user_ref.get()
+    
+    if not user_doc.exists:
+        print(f"User {user_id} does not exist")
+        return
+    
+    # Update user's search criteria
+    if isinstance(keywords, str):
+        keywords = [keywords]
+        
+    search_data = {
+        'search': {
+            'criteria': {
+                'keywords': keywords,
+                'location': location
+            },
+            'status': 'pending',
+            'queued_at': firestore.SERVER_TIMESTAMP
+        }
+    }
+    
+    user_ref.update(search_data)
+    print(f"Updated search criteria for user {user_id}")
+    print(f"Keywords: {keywords}")
+    print(f"Location: {location}")
+    print("Search status set to 'pending'")
+    
+    # Wait a bit and check search status
+    time.sleep(5)
+    user_doc = user_ref.get()
+    search_data = user_doc.to_dict().get('search', {})
+    print(f"Current search status: {search_data.get('status', 'unknown')}")
+    
+    # Check if there are jobs in the user's subcollection
+    check_user_jobs(user_id)
+
+
 # Main entry point
 if __name__ == "__main__":
     # Parse command line arguments

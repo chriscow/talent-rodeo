@@ -84,6 +84,81 @@ type Criteria struct {
 
 The `PageRange` utility provides pagination functionality with different strategies based on user tiers.
 
+### Search Service (`internal/search/service.go`)
+
+The `Service` manages background job searches:
+
+```go
+type Service struct {
+    fs *firestore.Client
+    ticker *time.Ticker
+}
+```
+
+Key features:
+- Background processing using a ticker
+- Tier-based search frequency (free: 3 days, pro: daily)
+- Error handling with admin notifications via SMTP
+- Integration with ScrapingDog provider
+
+### User Search Data (`internal/user_search.go`)
+
+The `UserSearch` struct tracks search state and preferences:
+
+```go
+type UserSearch struct {
+    CompletedAt *time.Time
+    Frequency    time.Duration
+    Criteria     search.Criteria
+    Error        string
+}
+```
+
+### Job Storage Model
+
+Jobs are stored as subcollections under each user:
+
+```
+users/
+  {user_id}/
+    job_details/  # Subcollection of detailed job information
+      {job_id}/   # Individual job documents
+        - title
+        - description
+        - company
+        - search_phrase  # Search criteria that found this job
+        - ...
+```
+
+## Search Flow
+
+1. **Background Processing**:
+   - Service runs on a ticker
+   - Checks for users due for search based on tier frequency
+   - Free tier: every 3 days
+   - Pro tier: daily
+
+2. **User Search State**:
+   - Tracks CompletedAt timestamp
+   - Manages search frequency by tier
+   - Stores error state for admin review
+   - Maintains search criteria
+
+3. **Error Handling**:
+   - Errors stored in UserSearch.Error
+   - Admin notifications via SMTP include:
+     - User information
+     - Search criteria
+     - Error details
+     - Timestamp
+   - Error recovery through background service
+
+4. **Result Storage**:
+   - Job details stored in user-specific subcollection
+   - Each job detail includes search phrase
+   - Efficient retrieval for user interface
+   - Maintains search context
+
 ## Provider Implementations
 
 ### ScrapingDog Provider (`internal/services/search/providers/scrapingdog`)
@@ -94,24 +169,6 @@ This provider implements LinkedIn job search through the ScrapingDog API:
 - Error handling
 - Result parsing
 - Comprehensive test coverage
-
-## Search Flow
-
-1. **Provider Selection**:
-   - The application selects an appropriate provider from the registry
-   - Provider configuration is loaded
-
-2. **Search Execution**:
-   - Search criteria are validated
-   - Provider executes the search
-   - Results are parsed and validated
-   - Errors are handled
-
-3. **Result Processing**:
-   - Results are normalized
-   - Job data is enriched
-   - Results are filtered by relevance
-   - Pagination information is applied
 
 ## Provider Development
 
@@ -148,6 +205,18 @@ To implement a new provider:
    - Limit result set sizes based on user tier
    - Monitor response times
 
+5. **Background Processing**:
+   - Use ticker for consistent scheduling
+   - Respect tier-based frequencies
+   - Handle process shutdown gracefully
+   - Monitor search completion rates
+
+6. **Error Management**:
+   - Store errors in UserSearch
+   - Send admin notifications via SMTP
+   - Include comprehensive error context
+   - Track error resolution time
+
 ## Files
 
 - Provider interface: `internal/services/search/provider.go`
@@ -155,4 +224,7 @@ To implement a new provider:
 - Job data structures: `internal/services/search/job.go`
 - Core data types: `internal/services/search/types.go`
 - Pagination utilities: `internal/services/search/page_range.go`
-- ScrapingDog provider: `internal/services/search/providers/scrapingdog/` 
+- ScrapingDog provider: `internal/services/search/providers/scrapingdog/`
+- Search service: `internal/search/service.go`
+- User search types: `internal/user_search.go`
+- Admin mailer: `internal/smtp/mailer.go` 

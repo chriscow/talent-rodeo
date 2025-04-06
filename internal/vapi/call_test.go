@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -21,7 +20,7 @@ func TestGetCall_Integration(t *testing.T) {
 
 	ctx := context.Background()
 	callID := "2709318a-1b74-44da-9ba9-e1973804b6b9"
-	fixtureFile := filepath.Join("../../testdata", "vapi", "create-call-response.json")
+	fixtureFile := "/workspaces/talent-rodeo/testdata/vapi/create-call-response.json"
 
 	// Load fixture data
 	fixtureData, err := os.ReadFile(fixtureFile)
@@ -86,10 +85,15 @@ func TestEndOfCallReport_Unmarshal(t *testing.T) {
 		t.Fatalf("Failed to read fixture file: %v", err)
 	}
 
-	var report EndOfCallReport
-	if err := json.Unmarshal(fixtureData, &report); err != nil {
-		t.Fatalf("Failed to unmarshal EndOfCallReport: %v", err)
+	// First unmarshal into a wrapper struct
+	var wrapper struct {
+		Message EndOfCallReport `json:"message"`
 	}
+	if err := json.Unmarshal(fixtureData, &wrapper); err != nil {
+		t.Fatalf("Failed to unmarshal EndOfCallReport wrapper: %v", err)
+	}
+
+	report := wrapper.Message
 
 	// Validate required fields are present
 	if report.Type == "" {
