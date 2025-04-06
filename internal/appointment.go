@@ -10,14 +10,12 @@ import (
 	"google.golang.org/api/iterator"
 )
 
-const (
-	appointmentsCollection = "appointments"
-)
-
 // AppointmentStatus represents the possible states of an appointment
 type AppointmentStatus string
 
 const (
+	appointmentsCollection = "appointments"
+
 	AppointmentStatusScheduled AppointmentStatus = "scheduled"
 	AppointmentStatusRunning   AppointmentStatus = "running"
 	AppointmentStatusCompleted AppointmentStatus = "completed"
@@ -78,7 +76,7 @@ func CreateAppointment(ctx context.Context, fs *firestore.Client, name string, u
 func GetAppointment(ctx context.Context, fs *firestore.Client, userID string, appointmentID string) (*Appointment, error) {
 	doc, err := fs.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).Doc(appointmentID).Get(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get appointment: %w", err)
+		return nil, fmt.Errorf("failed to get appointment for user %s: %w", userID, err)
 	}
 
 	var appointment Appointment
@@ -89,7 +87,7 @@ func GetAppointment(ctx context.Context, fs *firestore.Client, userID string, ap
 	return &appointment, nil
 }
 
-func GetAppointments(ctx context.Context, fs *firestore.Client, userID string) ([]*Appointment, error) {
+func ListAppointments(ctx context.Context, fs *firestore.Client, userID string) ([]*Appointment, error) {
 	iter := fs.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).Documents(ctx)
 
 	var appointments []*Appointment

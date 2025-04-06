@@ -26,11 +26,16 @@ func CreateTestUser(t *testing.T, client *firestore.Client, name, email, phone s
 			Status:  UserStatusPendingResumeUpload,
 			Started: now,
 		},
+		Search: &UserSearch{}, // Initialize empty search
 	}
+
+	t.Logf("Creating user with ID: %s, Email: %s", user.ID, user.Email)
 
 	if err := CreateUser(context.Background(), client, user); err != nil {
 		t.Fatalf("Failed to create test user: %v", err)
 	}
+
+	t.Logf("Successfully created user with ID: %s", user.ID)
 
 	return user
 }
@@ -138,7 +143,7 @@ func DeleteTestData(t *testing.T, client *firestore.Client, prefix string) {
 	}
 
 	// Clean up any other top-level collections
-	otherCollections := []string{"job_searches", "job_listings"} // Add other top-level collections as needed
+	otherCollections := []string{"job_searches", "job_listings", "job_details"} // Add other top-level collections as needed
 	for _, collection := range otherCollections {
 		iter := client.Collection(collection).Where("id", ">=", prefix).Where("id", "<", prefix+"~").Documents(ctx)
 		for {

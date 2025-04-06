@@ -69,9 +69,9 @@ func (app *application) showWaitingCallPage(w http.ResponseWriter, r *http.Reque
 	data := app.newTemplateData(r)
 
 	// Get the user's appointments
-	appointments, err := internal.GetAppointments(r.Context(), app.fs, user.ID)
+	appointments, err := internal.ListAppointments(r.Context(), app.fs, user.ID)
 	if err != nil {
-		app.serverError(w, r, fmt.Errorf("failed to get appointments: %w", err))
+		app.serverError(w, r, fmt.Errorf("failed to get appointments for user %s: %w", user.ID, err))
 		return
 	}
 

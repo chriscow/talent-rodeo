@@ -13,13 +13,13 @@ import (
 )
 
 func init() {
-	if err := godotenv.Load("../../.env"); err != nil {
+	if err := godotenv.Overload("../../.env"); err != nil {
 		log.Fatal("Error loading .env file")
 	}
 
 	// Set default VAPI webhook URL for tests if not already set
-	if os.Getenv("VAPI_START_CALL_URL") == "" {
-		os.Setenv("VAPI_START_CALL_URL", "https://api.vapi.ai/v1/call")
+	if os.Getenv("VAPI_START_CALL_PATH") == "" {
+		os.Setenv("VAPI_START_CALL_PATH", "https://api.vapi.ai/v1/call")
 	}
 }
 
@@ -28,14 +28,14 @@ func TestScheduling(t *testing.T) {
 	defer ts.Cleanup()
 
 	// Save original webhook URL and restore after tests
-	originalURL := os.Getenv("VAPI_START_CALL_URL")
-	defer os.Setenv("VAPI_START_CALL_URL", originalURL)
+	originalURL := os.Getenv("VAPI_START_CALL_PATH")
+	defer os.Setenv("VAPI_START_CALL_PATH", originalURL)
 
 	t.Run("Missing VAPI webhook URL fails appointment creation", func(t *testing.T) {
 		// Save and clear webhook URL
-		originalURL := os.Getenv("VAPI_START_CALL_URL")
-		os.Setenv("VAPI_START_CALL_URL", "")
-		defer os.Setenv("VAPI_START_CALL_URL", originalURL)
+		originalURL := os.Getenv("VAPI_START_CALL_PATH")
+		os.Setenv("VAPI_START_CALL_PATH", "")
+		defer os.Setenv("VAPI_START_CALL_PATH", originalURL)
 
 		// Ensure user has required fields
 		phone := "+1234567890"
@@ -185,4 +185,64 @@ func TestScheduling(t *testing.T) {
 			t.Errorf("want %s; got %s", "/profile", headers.Get("Location"))
 		}
 	})
+}
+
+func TestBuildWebhookURL(t *testing.T) {
+	// Save original BASE_URL and restore after tests
+	originalURL := os.Getenv("BASE_URL")
+	defer os.Setenv("BASE_URL", originalURL)
+
+	tests := []struct {
+		name     string
+		baseURL  string
+		callPath string
+		want     string
+	}{
+		{
+			name:     "base URL with trailing slash, call path with leading slash",
+			baseURL:  "https://example.com/",
+			callPath: "/api/call",
+			want:     "https://example.com/api/call",
+		},
+		{
+			name:     "base URL without trailing slash, call path with leading slash",
+			baseURL:  "https://example.com",
+			callPath: "/api/call",
+			want:     "https://example.com/api/call",
+		},
+		{
+			name:     "base URL with trailing slash, call path without leading slash",
+			baseURL:  "https://example.com/",
+			callPath: "api/call",
+			want:     "https://example.com/api/call",
+		},
+		{
+			name:     "base URL without trailing slash, call path without leading slash",
+			baseURL:  "https://example.com",
+			callPath: "api/call",
+			want:     "https://example.com/api/call",
+		},
+		{
+			name:     "base URL with path and trailing slash",
+			baseURL:  "https://example.com/base/",
+			callPath: "/api/call",
+			want:     "https://example.com/base/api/call",
+		},
+		{
+			name:     "base URL with path without trailing slash",
+			baseURL:  "https://example.com/base",
+			callPath: "/api/call",
+			want:     "https://example.com/base/api/call",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			os.Setenv("BASE_URL", tt.baseURL)
+			got := buildWebhookURL(tt.callPath)
+			if got != tt.want {
+				t.Errorf("buildWebhookURL() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }

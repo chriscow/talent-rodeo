@@ -227,65 +227,23 @@ func getMapKeys(data []byte) []string {
 
 // handleEndOfCallReport processes an end-of-call report webhook
 func (app *application) handleEndOfCallReport(r *http.Request, webhookMsg vapi.WebhookMessage) error {
-	// Debug log the incoming message
-	if msgBytes, err := json.Marshal(webhookMsg); err == nil {
-		app.logger.Debug("received end-of-call report", "message", string(msgBytes))
-	}
-
-	// Parse the message data into a report
-	var report vapi.EndOfCallReport
-	if err := json.Unmarshal(webhookMsg.Message.Data, &report); err != nil {
-		app.logger.Error("failed to unmarshal end-of-call report", "error", err)
-		return fmt.Errorf("failed to unmarshal end-of-call report: %w", err)
-	}
-
-	// Debug log the parsed report
-	if reportBytes, err := json.Marshal(report); err == nil {
-		app.logger.Debug("parsed end-of-call report", "report", string(reportBytes))
-	}
-
-	// Validate required fields
-	if report.Call == nil {
-		app.logger.Error("missing call information in end of call report")
-		return fmt.Errorf("missing call information in end of call report")
-	}
-
-	// Debug log call information
-	if callBytes, err := json.Marshal(report.Call); err == nil {
-		app.logger.Debug("call information", "call", string(callBytes))
-	}
-
-	if report.Call.ID == nil {
-		app.logger.Error("missing call ID in end of call report")
-		return fmt.Errorf("missing call ID in end of call report")
-	}
-
-	// Debug log the call ID
-	app.logger.Debug("processing call", "id", *report.Call.ID)
-
-	// Extract call ID
-	callID := *report.Call.ID
-
-	app.logger.Debug("parsed end-of-call report",
-		"call_id", callID,
-		"ended_reason", report.EndedReason)
-
-	// The appointment ID is stored in the call name
-	if report.Call.Name == nil {
-		app.logger.Error("missing call name in end of call report")
-		return fmt.Errorf("missing call name in end of call report")
+	report, err := app.validateEndOfCallReport(webhookMsg)
+	if err != nil {
+		app.logger.Error("failed to validate end-of-call report", "error", err)
+		return fmt.Errorf("failed to validate end-of-call report: %w", err)
 	}
 
 	appointmentID := *report.Call.Name
-
-	// The customer ID is required for getting the appointment
-	if report.Call.CustomerID == nil {
-		app.logger.Error("missing customer ID in end of call report")
-		return fmt.Errorf("missing customer ID in end of call report")
+	customerID := ""
+	if report.Call.Customer != nil && report.Call.CustomerID != nil {
+		customerID = *report.Call.CustomerID
+		if customerID == "" {
+			app.logger.Error("missing customer ID in end of call report", "report", report)
+			return nil
+		}
 	}
-	customerID := *report.Call.CustomerID
 
-	summary := report.Summary
+	app.logger.Debug("received end of call report", "user_id", customerID, "appointmentID", appointmentID)
 
 	// Get the appointment
 	appointment, err := internal.GetAppointment(r.Context(), app.fs, customerID, appointmentID)
@@ -294,12 +252,12 @@ func (app *application) handleEndOfCallReport(r *http.Request, webhookMsg vapi.W
 			"error", err,
 			"customer_id", customerID,
 			"appointment_id", appointmentID)
-		return fmt.Errorf("failed to get appointment: %w", err)
+		return fmt.Errorf("failed to get appointment for user %s: %w", customerID, err)
 	}
 
 	// Update the appointment with the call result and report
-	appointment.CallID = &callID
-	appointment.TranscriptSummary = summary
+	appointment.CallID = report.Call.ID
+	appointment.TranscriptSummary = report.Summary
 	appointment.UpdatedAt = time.Now()
 	endReason := report.EndedReason
 
@@ -314,12 +272,45 @@ func (app *application) handleEndOfCallReport(r *http.Request, webhookMsg vapi.W
 			"end_reason", endReason)
 	}
 
-	if err := internal.UpdateAppointment(r.Context(), app.fs, appointment); err != nil {
-		app.logger.Error("failed to update appointment",
-			"error", err,
-			"appointment_id", appointmentID)
-		return fmt.Errorf("failed to update appointment: %w", err)
+	app.backgroundTask(r, func() error {
+		return internal.ProcessCompletedAppointment(app.fs, app.logger, appointment)
+	})
+	return nil
+}
+
+func (app *application) validateEndOfCallReport(webhookMsg vapi.WebhookMessage) (*vapi.EndOfCallReport, error) {
+	// Parse the message data into a report
+	var report vapi.EndOfCallReport
+	if err := json.Unmarshal(webhookMsg.Message.Data, &report); err != nil {
+		app.logger.Error("failed to unmarshal end-of-call report", "error", err)
+		return nil, fmt.Errorf("failed to unmarshal end-of-call report: %w", err)
 	}
 
-	return nil
+	// Validate required fields
+	if report.Call == nil {
+		app.logger.Error("missing call information in end of call report")
+		return nil, fmt.Errorf("missing call information in end of call report")
+	}
+
+	if report.Call.ID == nil {
+		app.logger.Error("missing call ID in end of call report")
+		return nil, fmt.Errorf("missing call ID in end of call report")
+	}
+
+	// Debug log the call ID
+	app.logger.Debug("processing call", "id", *report.Call.ID)
+
+	// The appointment ID is stored in the call name
+	if report.Call.Name == nil {
+		app.logger.Error("missing call name in end of call report")
+		return nil, fmt.Errorf("missing call name in end of call report")
+	}
+
+	// The customer ID is required for getting the appointment
+	if report.Call.CustomerID == nil {
+		app.logger.Error("missing customer ID in end of call report")
+		return nil, fmt.Errorf("missing customer ID in end of call report")
+	}
+
+	return &report, nil
 }

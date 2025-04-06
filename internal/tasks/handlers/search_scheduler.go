@@ -195,8 +195,8 @@ func (h *SearchScheduler) ProcessTask(ctx context.Context, task *internal.Task) 
 
 	// Calculate next search time
 	var lastSearchTime time.Time
-	if user.LastSearchAt != nil {
-		lastSearchTime = *user.LastSearchAt
+	if user.CompletedAt != nil {
+		lastSearchTime = *user.CompletedAt
 	}
 
 	// TODO: If tier has changed, force an immediate search
@@ -211,7 +211,7 @@ func (h *SearchScheduler) ProcessTask(ctx context.Context, task *internal.Task) 
 		"next_scheduler_time", nextSchedulerTime)
 
 	// Update candidate with new search time
-	err = internal.UpdateUser(ctx, h.fs, user.ID, map[string]interface{}{
+	err = internal.UpdateUser(ctx, h.fs, user.ID, map[string]any{
 		"last_search_at": nextSearchTime,
 	})
 	if err != nil {

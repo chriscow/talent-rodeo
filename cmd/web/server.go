@@ -133,7 +133,7 @@ func (app *application) serve(srv *http.Server) error {
 	serverErrorChan := make(chan error, 1)
 
 	go func() {
-		app.logger.Info("starting server", slog.Group("server", "addr", srv.Addr))
+		app.logger.Info("app: starting app server", slog.Group("server", "addr", srv.Addr))
 		if srv.TLSConfig != nil {
 			serverErrorChan <- srv.ListenAndServeTLS("", "")
 		} else {
@@ -145,18 +145,23 @@ func (app *application) serve(srv *http.Server) error {
 		quitChan := make(chan os.Signal, 1)
 		signal.Notify(quitChan, syscall.SIGINT, syscall.SIGTERM)
 		sig := <-quitChan
-		app.logger.Info("received shutdown signal", "signal", sig.String())
+		app.logger.Info("app: received shutdown signal", "signal", sig.String())
 
 		// First, initiate server shutdown
 		ctx, cancel := context.WithTimeout(context.Background(), defaultShutdownPeriod)
 		defer cancel()
 
-		app.logger.Info("attempting graceful shutdown")
+		app.logger.Info("app: attempting graceful shutdown")
+
+		// Stop the search service first
+		app.logger.Info("app: stopping search service")
+		app.search.Stop()
+		app.logger.Info("app: search service stopped")
 
 		// Stop the task processor first
-		app.logger.Info("stopping task processor")
+		app.logger.Info("app: stopping task processor")
 		app.processor.Stop()
-		app.logger.Info("task processor stopped")
+		app.logger.Info("app: task processor stopped")
 
 		err := srv.Shutdown(ctx)
 		if err != nil {
@@ -165,10 +170,10 @@ func (app *application) serve(srv *http.Server) error {
 
 		// Wait for NATS to shut down
 		if app.natsShutdown != nil {
-			app.logger.Info("waiting for NATS shutdown")
+			app.logger.Info("app: waiting for NATS shutdown")
 			select {
 			case <-app.natsShutdown:
-				app.logger.Info("NATS shutdown complete")
+				app.logger.Info("app: NATS shutdown complete")
 			case <-time.After(5 * time.Second):
 				app.logger.Error("timeout waiting for NATS shutdown")
 			}
@@ -191,7 +196,7 @@ func (app *application) serve(srv *http.Server) error {
 		}
 	}
 
-	app.logger.Info("stopped server", slog.Group("server", "addr", srv.Addr))
+	app.logger.Info("app: stopped server", slog.Group("server", "addr", srv.Addr))
 	return nil
 }
 
@@ -205,7 +210,7 @@ func (app *application) getKV(config jetstream.KeyValueConfig) (jetstream.KeyVal
 		MaxBytes:    16 * 1024 * 1024,
 	}
 	*/
-	kv, err := app.jetstream.CreateOrUpdateKeyValue(context.Background(), config)
+	kv, err := app.js.CreateOrUpdateKeyValue(context.Background(), config)
 
 	if err != nil {
 		return nil, fmt.Errorf("error creating key value: %w", err)

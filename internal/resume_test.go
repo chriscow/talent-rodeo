@@ -12,7 +12,7 @@ import (
 )
 
 func init() {
-	if err := godotenv.Load("../.env"); err != nil {
+	if err := godotenv.Overload("../.env"); err != nil {
 		log.Fatal("No .env file found, using system env")
 	}
 }
@@ -22,7 +22,7 @@ func TestResumeValidation(t *testing.T) {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	fs, err := NewFirestoreClient(context.Background(), os.Getenv("FIREBASE_PROJECT_ID"), os.Getenv("FIREBASE_CREDENTIALS_FILE"))
+	fs, err := NewFirestoreClient(context.Background())
 	if err != nil {
 		t.Fatalf("NewFirestoreClient() error = %v", err)
 	}

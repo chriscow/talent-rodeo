@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
 	"talent-rodeo/internal/tasks/handlers"
@@ -94,8 +95,8 @@ func (app *application) createAppointment(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if os.Getenv("VAPI_START_CALL_URL") == "" {
-		app.serverError(w, r, fmt.Errorf("VAPI_START_CALL_URL is not set"))
+	if os.Getenv("VAPI_START_CALL_PATH") == "" {
+		app.serverError(w, r, fmt.Errorf("VAPI_START_CALL_PATH is not set"))
 		return
 	}
 
@@ -181,7 +182,7 @@ func (app *application) createAppointment(w http.ResponseWriter, r *http.Request
 
 	// Create webhook payload
 	payload := handlers.WebhookPayload{
-		URL:    os.Getenv("VAPI_START_CALL_URL"),
+		URL:    buildWebhookURL(os.Getenv("VAPI_START_CALL_PATH")),
 		Method: "POST",
 		Body:   body,
 	}
@@ -204,6 +205,20 @@ func (app *application) createAppointment(w http.ResponseWriter, r *http.Request
 
 	// Always redirect to /profile on success
 	http.Redirect(w, r, "/profile", http.StatusSeeOther)
+}
+
+func buildWebhookURL(callPath string) string {
+	baseURL := os.Getenv("BASE_URL")
+
+	// Ensure base URL doesn't end with slash
+	baseURL = strings.TrimSuffix(baseURL, "/")
+
+	// Ensure call path starts with slash
+	if !strings.HasPrefix(callPath, "/") {
+		callPath = "/" + callPath
+	}
+
+	return baseURL + callPath
 }
 
 // rescheduleAppointment handles POST requests to reschedule an appointment.
@@ -355,7 +370,7 @@ func (app *application) callNow(w http.ResponseWriter, r *http.Request) {
 
 	// Create webhook payload
 	payload := handlers.WebhookPayload{
-		URL:    os.Getenv("VAPI_START_CALL_URL"),
+		URL:    buildWebhookURL(os.Getenv("VAPI_START_CALL_PATH")),
 		Method: "POST",
 		Body:   body,
 	}

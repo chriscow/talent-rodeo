@@ -8,13 +8,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"talent-rodeo/internal"
-	"talent-rodeo/internal/database"
 	"talent-rodeo/internal/funcs"
 	"talent-rodeo/internal/tasks"
 	th "talent-rodeo/internal/tasks/handlers"
@@ -28,7 +26,7 @@ import (
 )
 
 func init() {
-	if err := godotenv.Load("../../.env"); err != nil {
+	if err := godotenv.Overload("../../.env"); err != nil {
 		log.Fatal("Error loading .env file")
 	}
 }
@@ -68,8 +66,8 @@ func newTestServer(t *testing.T, name string) *testServer {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	// Initialize test database using the Postgres setup
-	db := database.SetupTestDB(t)
-	fs, err := internal.NewFirestoreClient(context.Background(), os.Getenv("FIREBASE_PROJECT_ID"), os.Getenv("FIREBASE_CREDENTIALS_FILE"))
+	// db := database.SetupTestDB(t)
+	fs, err := internal.NewFirestoreClient(context.Background())
 	if err != nil {
 		t.Fatalf("Failed to create firestore client: %v", err)
 	}
@@ -148,13 +146,13 @@ func newTestServer(t *testing.T, name string) *testServer {
 		},
 		logger:         logger,
 		sessionManager: sessionManager,
-		db:             db,
-		fs:             fs,
-		pusher:         &pusherClient,
-		processor:      taskProcessor,
-		natsShutdown:   make(chan struct{}),
-		jetstream:      js,
-		natsServer:     srv,
+		// db:             db,
+		fs:           fs,
+		pusher:       &pusherClient,
+		processor:    taskProcessor,
+		natsShutdown: make(chan struct{}),
+		js:           js,
+		// natsServer:     srv,
 	}
 
 	// Create default test users

@@ -178,15 +178,14 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userState := internal.UserState{
-		Status:    internal.UserStatusProcessingResume,
-		Started:   time.Now(),
-		Completed: nil,
+		Status:  internal.UserStatusProcessingResume,
+		Started: time.Now(),
 	}
 
 	user.Phone = &form.Phone
 
 	// Save the phone number and update state
-	if err := internal.UpdateUser(context.Background(), app.fs, user.ID, map[string]interface{}{
+	if err := internal.UpdateUser(context.Background(), app.fs, user.ID, map[string]any{
 		"phone": form.Phone,
 		"state": userState,
 	}); err != nil {
@@ -211,7 +210,7 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 
 // sendUserStateUpdate sends a real-time notification about user state changes via Pusher
 func (app *application) sendUserStateUpdate(user *internal.User) {
-	data := map[string]interface{}{
+	data := map[string]any{
 		"state":       user.State.Status,
 		"status_text": user.State.Status.String(),
 		"description": user.State.Status.Description(),

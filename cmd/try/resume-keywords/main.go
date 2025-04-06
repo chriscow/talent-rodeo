@@ -15,7 +15,7 @@ import (
 const dsn = "db.sqlite"
 
 func main() {
-	if err := godotenv.Load(); err != nil {
+	if err := godotenv.Overload(); err != nil {
 		log.Fatalf("failed to load .env file: %v", err)
 	}
 

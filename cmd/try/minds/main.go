@@ -26,7 +26,7 @@ const (
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil {
+	if err := godotenv.Overload(); err != nil {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
 

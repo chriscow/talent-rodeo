@@ -33,7 +33,7 @@ func (app *application) resetOnboardingState(w http.ResponseWriter, r *http.Requ
 
 	user.State.Status = internal.UserStatusPendingResumeUpload
 
-	if err := internal.UpdateUser(context.Background(), app.fs, user.ID, map[string]interface{}{
+	if err := internal.UpdateUser(context.Background(), app.fs, user.ID, map[string]any{
 		"state": user.State,
 	}); err != nil {
 		app.serverError(w, r, fmt.Errorf("resetOnboardingState: failed to update onboarding: %w", err))
