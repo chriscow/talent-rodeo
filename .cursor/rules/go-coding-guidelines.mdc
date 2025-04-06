@@ -15,7 +15,7 @@ globs: **/*.go
 5. Error Handling: Implement proper error handling throughout your code. Always check for errors and handle them gracefully, providing meaningful messages or adding context with `fmt.Errorf(...). Be sure to use %w to wrap errors.
 6. Code Reviews: Encourage regular code reviews with me. This helps catch potential issues early.
 7. Use the "accept interfaces, return structs" guideline or principle in Go. The idea is that interfaces should be defined where they are used (by the consumer), not where they are implemented (by the provider).
-8. Don't use `interface{}`.  Modern go uses `any` which is a type alias for `interface{}` and is more meaningful.
+8. Don't use `any`.  Modern go uses `any` which is a type alias for `any` and is more meaningful.
 
 ## Testing
 

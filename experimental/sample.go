@@ -42,7 +42,7 @@ var (
 )
 
 func loadConfig() error {
-	if err := godotenv.Load(); err != nil {
+	if err := godotenv.Overload(); err != nil {
 		return err
 	}
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -11,26 +12,26 @@ import (
 	"sync"
 	"time"
 
+	"talent-rodeo/cmd/web/search"
+
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/auth"
-	"talent-rodeo/internal/database"
+	"talent-rodeo/internal/search/providers/scrapingdog"
 	"talent-rodeo/internal/smtp"
 	"talent-rodeo/internal/tasks"
 	th "talent-rodeo/internal/tasks/handlers"
 	"talent-rodeo/internal/version"
 
 	"cloud.google.com/go/firestore"
-	firebase "firebase.google.com/go/v4"
 	scsfs "github.com/alexedwards/scs/firestore"
 	"github.com/alexedwards/scs/v2"
 	"github.com/joho/godotenv"
 	"github.com/lmittmann/tint"
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
-	"github.com/nats-io/nats-server/v2/server"
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/pusher/pusher-http-go/v5"
-	"google.golang.org/api/option"
 )
 
 // PusherInterface defines the interface for Pusher client
@@ -94,19 +95,16 @@ type config struct {
 }
 
 type application struct {
-	config config
-	db     *database.DB
-	fs     *firestore.Client
-	logger *slog.Logger
-	mailer *smtp.Mailer
-	wg     sync.WaitGroup
-	pusher PusherInterface
-
-	natsServer   *server.Server
-	natsShutdown chan struct{}
-	jetstream    jetstream.JetStream
-	processor    *tasks.Processor
-	// natsScheduler  *th.NATSMessageScheduler
+	config         config
+	logger         *slog.Logger
+	fs             *firestore.Client
+	js             jetstream.JetStream
+	processor      *tasks.Processor
+	search         *search.Service
+	wg             sync.WaitGroup
+	natsShutdown   chan struct{}
+	mailer         *smtp.Mailer
+	pusher         PusherInterface
 	sessionManager *scs.SessionManager
 }
 
@@ -173,7 +171,7 @@ func run(logger *slog.Logger) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	firestoreClient, err := setupFirestoreClient(ctx, cfg.firebase.projectID, "")
+	firestoreClient, err := internal.NewFirestoreClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -188,9 +186,9 @@ func run(logger *slog.Logger) error {
 		}
 		defer db.Close()
 		defer func() {
-			logger.Debug("closing database connection")
+			logger.Debug("app:closing database connection")
 			db.Close()
-			logger.Info("database connection closed")
+			logger.Info("app: database connection closed")
 		}()
 	*/
 
@@ -277,6 +275,16 @@ func run(logger *slog.Logger) error {
 	// taskProcessor.RegisterHandler(scheduler)
 	taskProcessor.RegisterHandler(wh)
 
+	scrapingDog := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), scrapingdog.WithFirestore(firestoreClient, logger))
+	// Start search workers for ScrapingDog provider
+	scrapingDog.StartSearchWorkers(ctx, 5) // Start 5 workers to process the search queue
+	searchService := search.NewService(firestoreClient, logger, scrapingDog, mailer, cfg.notifications.email)
+
+	// Start the search service
+	if err := searchService.Start(); err != nil {
+		return fmt.Errorf("failed to start search service: %w", err)
+	}
+
 	app := &application{
 		config: cfg,
 		fs:     firestoreClient,
@@ -290,11 +298,12 @@ func run(logger *slog.Logger) error {
 		// natsScheduler: scheduler,
 		// handlers:       handlers,
 		sessionManager: sessionManager,
+		search:         searchService,
 	}
 
 	// Start the task processor
 	go func() {
-		app.logger.Info("starting task processor")
+		app.logger.Info("app: starting task processor")
 		if err := taskProcessor.Start(ctx); err != nil {
 			app.logger.Error("task processor error", "error", err)
 		}
@@ -308,7 +317,7 @@ func run(logger *slog.Logger) error {
 }
 
 func setupPusher(logger *slog.Logger) pusher.Client {
-	logger.Debug("pusher config", "app_id", os.Getenv("PUSHER_APP_ID"), "key",
+	logger.Debug("app:pusher config", "app_id", os.Getenv("PUSHER_APP_ID"), "key",
 		os.Getenv("PUSHER_KEY"), "secret", os.Getenv("PUSHER_SECRET"), "cluster", os.Getenv("PUSHER_CLUSTER"))
 
 	pusherClient := pusher.Client{
@@ -322,7 +331,6 @@ func setupPusher(logger *slog.Logger) pusher.Client {
 	return pusherClient
 }
 
-/*
 // setupNATSHandler sets up the NATS client and returns the handler.
 func setupNATSHandler(natsURL string, logger *slog.Logger) (*th.NATSMessageScheduler, error) {
 	// Connect to NATS
@@ -339,30 +347,29 @@ func setupNATSHandler(natsURL string, logger *slog.Logger) (*th.NATSMessageSched
 
 	return th.NewNATSMessageScheduler(js, logger), nil
 }
-*/
 
 func checkEnv() error {
-	err := godotenv.Load()
+	wd, err := os.Getwd()
 	if err != nil {
-		fmt.Printf("Error loading .env file: %s\n", err.Error())
+		return fmt.Errorf("failed to get working directory: %w", err)
 	}
 
-	// Log critical Firebase configuration
-	slog.Info("Firebase configuration",
-		"project_id", os.Getenv("FIREBASE_PROJECT_ID"),
-		"has_credentials", os.Getenv("FIREBASE_CREDENTIALS") != "",
-	)
+	fmt.Println("checkEnv: working directory", internal.BGYellow(wd))
+
+	if err = godotenv.Overload(); err != nil {
+		fmt.Printf("checkEnv: Error loading .env file: %s\n", err.Error())
+	}
 
 	requiredKeys := []string{"BASE_URL", "SESSION_SECRET", "SMTP_USERNAME",
 		"SMTP_PASSWORD", "LINKEDIN_AUTH_CLIENT_ID", "LINKEDIN_AUTH_CLIENT_SECRET",
 		"OPENAI_API_KEY", "GEMINI_API_KEY", "PUSHER_APP_ID", "PUSHER_KEY", "PUSHER_SECRET", "PUSHER_CLUSTER",
 		"TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER", "APP_DOMAIN",
 		"FIREBASE_PROJECT_ID", "FIREBASE_CREDENTIALS",
-		"CLOUDFLARE_API_EMAIL", "CLOUDFLARE_API_TOKEN",
-		"CLOUDFLARE_GLOBAL_API_KEY", "CLOUDFLARE_KV_NAMESPACE_ID", "SCRAPINGDOG_API_KEY",
+		// "CLOUDFLARE_API_EMAIL", "CLOUDFLARE_API_TOKEN",
+		// "CLOUDFLARE_GLOBAL_API_KEY", "CLOUDFLARE_KV_NAMESPACE_ID", "SCRAPINGDOG_API_KEY",
 		"VAPI_API_KEY", "VAPI_ASSISTANT_ID", "VAPI_OUTBOUND_PHONE_ID",
-		"VAPI_WEBHOOK_URL",    // URL that will receive webhooks from VAPI
-		"VAPI_START_CALL_URL", // URL that we will use to start a call (we will POST to this URL to start a call)
+		"VAPI_WEBHOOK_URL",     // URL that will receive webhooks from VAPI
+		"VAPI_START_CALL_PATH", // URL that we will use to start a call (we will POST to this URL to start a call)
 	}
 
 	missingKeys := []string{}
@@ -377,44 +384,16 @@ func checkEnv() error {
 		return fmt.Errorf("missing required environment variables: %v", missingKeys)
 	}
 
+	firebaseCredentials := os.Getenv("FIREBASE_CREDENTIALS")
+	if firebaseCredentials == "" {
+		return fmt.Errorf("FIREBASE_CREDENTIALS environment variable is required")
+	}
+
+	var creds map[string]any
+	if err := json.Unmarshal([]byte(firebaseCredentials), &creds); err != nil {
+		return fmt.Errorf("failed to unmarshal FIREBASE_CREDENTIALS: %w", err)
+	}
+
 	slog.Info("All required environment variables are present")
 	return nil
-}
-
-func setupFirestoreClient(ctx context.Context, projectID, credentialsFile string) (*firestore.Client, error) {
-	// Use credentials from environment variable instead of file
-	credentials := os.Getenv("FIREBASE_CREDENTIALS")
-	if credentials == "" {
-		return nil, fmt.Errorf("FIREBASE_CREDENTIALS environment variable is required")
-	}
-
-	// Log configuration details
-	slog.Info("Setting up Firestore client",
-		"project_id", projectID,
-		"credentials_length", len(credentials),
-		"credentials_preview", credentials[:100]+"...", // Show first 100 chars
-	)
-
-	opt := option.WithCredentialsJSON([]byte(credentials))
-	fbConfig := &firebase.Config{ProjectID: projectID}
-
-	slog.Info("Initializing Firebase app",
-		"config", fmt.Sprintf("%+v", fbConfig),
-	)
-
-	fbApp, err := firebase.NewApp(ctx, fbConfig, opt)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize firebase app: %w", err)
-	}
-
-	slog.Info("Firebase app initialized, creating Firestore client")
-
-	fs, err := fbApp.Firestore(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create firestore client: %w", err)
-	}
-
-	slog.Info("Firestore client created successfully")
-
-	return fs, nil
 }

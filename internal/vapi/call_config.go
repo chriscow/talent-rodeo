@@ -24,7 +24,7 @@ func GetDefaultVapiCallConfig(customerNumber, customerName, resume string) (*Cal
 		return nil, fmt.Errorf("createCall: failed to create template: %w", err)
 	}
 
-	systemPrompt, err := tmpl.Execute(map[string]interface{}{
+	systemPrompt, err := tmpl.Execute(map[string]any{
 		"FullName": customerName,
 		"Resume":   resume,
 	})

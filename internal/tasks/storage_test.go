@@ -43,7 +43,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"testing"
 	"time"
 
@@ -54,7 +53,7 @@ import (
 )
 
 func init() {
-	if err := godotenv.Load("../../.env"); err != nil {
+	if err := godotenv.Overload("../../.env"); err != nil {
 		log.Fatalf("Failed to load .env file: %v", err)
 	}
 }
@@ -63,7 +62,7 @@ func setupTestStorage(t *testing.T) *FirestoreTaskStorage {
 	t.Helper()
 
 	ctx := context.Background()
-	client, err := internal.NewFirestoreClient(ctx, os.Getenv("FIRESTORE_FIREBASE_PROJECT_ID"), os.Getenv("FIREBASE_CREDENTIALS_FILE"))
+	client, err := internal.NewFirestoreClient(ctx)
 	if err != nil {
 		t.Fatalf("Failed to create test client: %v", err)
 	}
@@ -493,7 +492,7 @@ func TestFirestoreTaskStorage_GetTasksCount(t *testing.T) {
 	} else {
 		t.Logf("\nRaw Firestore content: %d documents", len(docs))
 		for _, doc := range docs {
-			var data map[string]interface{}
+			var data map[string]any
 			doc.DataTo(&data)
 			t.Logf("Document ID: %s\nData: %+v\n", doc.Ref.ID, data)
 		}

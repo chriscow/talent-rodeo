@@ -1,6 +1,8 @@
 package vapi
 
-import "github.com/chriscow/minds"
+import (
+	"github.com/chriscow/minds"
+)
 
 // Assistant represents the top-level configuration for a voice interaction
 type Assistant struct {
@@ -67,11 +69,63 @@ type SchemaProperty struct {
 
 // AnalysisPlan contains settings for call analysis
 type AnalysisPlan struct {
-	SummaryPrompt           *string           `json:"summaryPrompt,omitempty"`
-	StructuredDataPrompt    *string           `json:"structuredDataPrompt,omitempty"`
-	StructuredDataSchema    *minds.Definition `json:"structuredDataSchema,omitempty"`
-	SuccessEvaluationPrompt *string           `json:"successEvaluationPrompt,omitempty"`
-	SuccessEvaluationRubric *string           `json:"successEvaluationRubric,omitempty"`
+	SummaryPlan         *SummaryPlan          `json:"summaryPlan,omitempty"`
+	StructuredDataPlan  *StructuredDataPlan   `json:"structuredDataPlan,omitempty"`
+	StructuredDataMulti []StructuredDataMulti `json:"structuredDataMulti,omitempty"`
+}
+
+type SummaryPlan struct {
+	Messages       []minds.Message `json:"messages"`
+	TimeoutSeconds *int            `json:"timeoutSeconds,omitempty"` // defaults to 5 seconds
+}
+
+type StructuredDataPlan struct {
+	Messages       []minds.Message   `json:"messages"`
+	Enabled        bool              `json:"enabled"` // defaults to false
+	Schema         *minds.Definition `json:"schema,omitempty"`
+	TimeoutSeconds *int              `json:"timeoutSeconds,omitempty"` // defaults to 5 seconds
+}
+
+type StructuredDataMulti struct {
+	Key  string              `json:"key"`
+	Plan *StructuredDataPlan `json:"plan,omitempty"`
+}
+
+type SuccessEvaluationPlan struct {
+	// 	Rubric (enum) options include:
+	// 		‘NumericScale’: A scale of 1 to 10.
+	// 		‘DescriptiveScale’: A scale of Excellent, Good, Fair, Poor.
+	// 		‘Checklist’: A checklist of criteria and their status.
+	// 		‘Matrix’: A grid that evaluates multiple criteria across different performance levels.
+	// 		‘PercentageScale’: A scale of 0% to 100%.
+	// 		‘LikertScale’: A scale of Strongly Agree, Agree, Neutral, Disagree, Strongly Disagree.
+	// 		‘AutomaticRubric’: Automatically break down evaluation into several criteria, each with its own score.
+	// 		‘PassFail’: A simple ‘true’ if call passed, ‘false’ if not.
+	//
+	// Default is ‘PassFail’.
+	Rubric *string `json:"rubric,omitempty" enum:"NumericScale,DescriptiveScale,Checklist,Matrix,PercentageScale,LikertScale,AutomaticRubric,PassFail"`
+	// 	These are the messages used to generate the success evaluation.
+	//
+	// @default: [ \{ "role": "system", "content": "You are an expert call
+	// evaluator. You will be given a transcript of a call and the system prompt of
+	// the AI participant. Determine if the call was successful based on the
+	// objectives inferred from the system prompt. DO NOT return anything except the
+	// result.\n\nRubric:\\n\{\{rubric}}\n\nOnly respond with the result." }, \{
+	// "role": "user", "content": "Here is the transcript:\n\n\{\{transcript}}\n\n"
+	// }, \{ "role": "user", "content": "Here was the system prompt of the
+	// call:\n\n\{\{systemPrompt}}\n\n" } ]
+	//
+	// You can customize by providing any messages you want.
+	//
+	// Here are the template variables available:
+	//
+	// {{transcript}}: the transcript of the call from call.artifact.transcript-
+	// {{systemPrompt}}: the system prompt of the call from
+	// assistant.model.messages[type=system].content- {{rubric}}: the rubric of the
+	// success evaluation from successEvaluationPlan.rubric
+	Messages       []minds.Message `json:"messages,omitempty"`
+	Enabled        *bool           `json:"enabled,omitempty"`        // defaults to true
+	TimeoutSeconds *int            `json:"timeoutSeconds,omitempty"` // defaults to 5 seconds
 }
 
 var DefaultElevenLabsVoiceConfig = ElevenLabsVoiceConfig{

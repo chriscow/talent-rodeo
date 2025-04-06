@@ -20,7 +20,7 @@ import (
 
 // Utility function to ensure environment variables are set
 func checkEnv() error {
-	if err := godotenv.Load(); err != nil {
+	if err := godotenv.Overload(); err != nil {
 		log.Println("No .env file found; continuing...")
 	}
 	required := []string{

@@ -208,7 +208,7 @@ func createOpenAIProvider(name string, systemPrompt string, tools ...minds.Tool)
 		registry.Register(tool)
 	}
 	provider, err := openai.NewProvider(
-		openai.WithName(name),
+		// openai.WithName(name),
 		openai.WithSystemPrompt(systemPrompt),
 		openai.WithToolRegistry(registry),
 	)

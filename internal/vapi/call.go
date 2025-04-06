@@ -11,8 +11,8 @@ import (
 )
 
 // loadTestData loads test data from a JSON file
-func loadTestData(filename string, v interface{}) error {
-	data, err := os.ReadFile(filepath.Join("testdata", "vapi", filename))
+func loadTestData(filename string, v any) error {
+	data, err := os.ReadFile(filepath.Join("/workspaces/talent-rodeo/testdata", "vapi", filename))
 	if err != nil {
 		return fmt.Errorf("failed to read test data: %w", err)
 	}

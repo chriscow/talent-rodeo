@@ -68,7 +68,7 @@ require (
 require (
 	github.com/WqyJh/go-openai-realtime v0.5.0
 	github.com/chriscow/minds/providers/gemini v0.0.5-0.20250303171538-dc7c074db869
-	github.com/chriscow/minds/providers/openai v0.0.5-0.20250303171538-dc7c074db869
+	github.com/chriscow/minds/providers/openai v0.0.5
 	github.com/cloudflare/cloudflare-go v0.115.0
 	github.com/ledongthuc/pdf v0.0.0-20240201131950-da5b75280b06
 )
@@ -94,6 +94,8 @@ require (
 	github.com/cncf/xds/go v0.0.0-20241223141626-cff3c89139a3 // indirect
 	github.com/coder/websocket v1.8.12 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/dgraph-io/ristretto/v2 v2.2.0 // indirect
+	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/envoyproxy/go-control-plane/envoy v1.32.4 // indirect
 	github.com/envoyproxy/protoc-gen-validate v1.2.1 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
@@ -123,7 +125,7 @@ require (
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/sashabaranov/go-openai v1.36.1 // indirect
+	github.com/sashabaranov/go-openai v1.38.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/contrib/detectors/gcp v1.34.0 // indirect
