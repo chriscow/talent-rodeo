@@ -58,7 +58,7 @@ func TestShowProfilePage(t *testing.T) {
 			name:            "Call Scheduled Shows Waiting Page",
 			isAuthenticated: true,
 			setupUser: func(u *internal.User) {
-				internal.UpdateUserStatus(context.Background(), ts.app.fs, u, internal.UserStatusIntroCallScheduled)
+				internal.UpdateUserStatus(context.Background(), ts.app.fs, u, internal.UserStatusCallScheduled)
 				// Create a test appointment
 				internal.CreateTestAppointment(t, ts.app.fs, u)
 			},
@@ -125,7 +125,7 @@ func TestShowWaitingCallPage(t *testing.T) {
 			name:            "Shows Waiting Page with Active Appointment",
 			isAuthenticated: true,
 			setupUser: func(u *internal.User) {
-				internal.UpdateUserStatus(context.Background(), ts.app.fs, u, internal.UserStatusIntroCallScheduled)
+				internal.UpdateUserStatus(context.Background(), ts.app.fs, u, internal.UserStatusCallScheduled)
 				internal.CreateTestAppointment(t, ts.app.fs, u)
 			},
 			wantCode: http.StatusOK,
@@ -137,7 +137,7 @@ func TestShowWaitingCallPage(t *testing.T) {
 			setupUser: func(u *internal.User) {
 				// Clean up any existing appointments first
 				internal.DeleteTestAppointments(t, ts.app.fs, ts.user1.ID)
-				internal.UpdateUserStatus(context.Background(), ts.app.fs, u, internal.UserStatusIntroCallScheduled)
+				internal.UpdateUserStatus(context.Background(), ts.app.fs, u, internal.UserStatusCallScheduled)
 				// Don't create an appointment
 			},
 			wantCode: http.StatusOK,  // We expect 200 since we show the error page

@@ -170,3 +170,11 @@ func MapVapiEndReasonToAppointmentStatus(endReason string) (AppointmentStatus, b
 	// All other cases are considered failures and should store the specific reason
 	return AppointmentStatusFailed, true
 }
+
+func DeleteAppointment(ctx context.Context, fs *firestore.Client, userID, appointmentID string) error {
+	_, err := fs.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).Doc(appointmentID).Delete(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to delete appointment: %w", err)
+	}
+	return nil
+}

@@ -30,6 +30,37 @@ func (app *application) handleTestingResetUserState(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// Delete all appointments for the user
+	appointments, err := internal.ListAppointments(r.Context(), app.fs, user.ID)
+	if err != nil {
+		app.logger.Error("failed to list appointments", "error", err)
+		app.reportServerError(r, fmt.Errorf("failed to list appointments: %w", err))
+		return
+	}
+
+	for _, appointment := range appointments {
+		if err := internal.DeleteAppointment(r.Context(), app.fs, user.ID, appointment.ID); err != nil {
+			app.logger.Error("failed to delete appointment", "error", err)
+			app.reportServerError(r, fmt.Errorf("failed to delete appointment: %w", err))
+			return
+		}
+	}
+
+	resumes, err := internal.ListResumes(r.Context(), app.fs, user.ID)
+	if err != nil {
+		app.logger.Error("failed to list resumes", "error", err)
+		app.reportServerError(r, fmt.Errorf("failed to list resumes: %w", err))
+		return
+	}
+
+	for _, resume := range resumes {
+		if err := internal.DeleteResume(r.Context(), app.fs, user.ID, resume.ID); err != nil {
+			app.logger.Error("failed to delete resume", "error", err)
+			app.reportServerError(r, fmt.Errorf("failed to delete resume: %w", err))
+			return
+		}
+	}
+
 	app.logger.Info("reset user state for testing",
 		"user_id", user.ID,
 		"new_status", internal.UserStatusPendingResumeUpload)

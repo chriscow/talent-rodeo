@@ -67,16 +67,23 @@
             // Handle different states
             if (data.error || data.status_text === 'Error') {
                 window.location.href = '/profile';
-            } else if (data.status_text === 'Call Started') {
+                return;
+            }
+            if (data.status_text === 'Call Started') {
                 pageTitle.textContent = 'Your Call is Starting';
                 statusContent.innerHTML = `
                     <p>
                         We are currently calling you! Please answer your phone when it rings.
                     </p>
                 `;
-            } else if (data.status_text === 'Call Completed') {
-                window.location.href = '/dashboard';
+                return;
             }
+            if (data.status_text === 'Call Completed') {
+                window.location.href = '/dashboard';
+                return;
+            }
+            // For any other state update (e.g., Intro Call Scheduled, Call Analysis Started, Job Search states), redirect to /profile
+            window.location.href = '/profile';
         });
     });
 </script>

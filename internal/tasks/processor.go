@@ -124,12 +124,6 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 			continue
 		}
 
-		p.logger.Info("found handler for task",
-			"task_id", task.ID,
-			"type", task.Type,
-			"handler", fmt.Sprintf("%T", handler),
-		)
-
 		// Process the task within a transaction
 		err := p.storage.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 			// Get the latest task state to ensure we have the current attempts count
@@ -141,7 +135,7 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 				return fmt.Errorf("task not found: %s", task.ID)
 			}
 
-			p.logger.Debug("starting task processing transaction",
+			p.logger.Debug("starting task processing",
 				"task_id", latestTask.ID,
 				"current_status", latestTask.Status,
 				"current_attempts", latestTask.Attempts,
@@ -150,18 +144,8 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 			)
 
 			// Update task status to running within transaction
-			oldStatus := latestTask.Status
 			latestTask.Status = internal.TaskStatusRunning
 			latestTask.Attempts++ // Always increment attempts when processing starts
-			p.logger.Debug("updating task status in transaction",
-				"task_id", latestTask.ID,
-				"type", latestTask.Type,
-				"old_status", oldStatus,
-				"new_status", latestTask.Status,
-				"old_attempts", latestTask.Attempts-1,
-				"new_attempts", latestTask.Attempts,
-				"max_attempts", latestTask.MaxAttempts,
-			)
 
 			if err := p.storage.UpdateTask(ctx, latestTask); err != nil {
 				return fmt.Errorf("failed to update task status: %w", err)
@@ -198,16 +182,6 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 					return fmt.Errorf("task not found: %s", taskID)
 				}
 
-				p.logger.Debug("processing task in goroutine",
-					"task_id", t.ID,
-					"type", t.Type,
-					"status", t.Status,
-					"current_attempts", t.Attempts,
-					"captured_attempts", taskAttempts,
-					"max_attempts", t.MaxAttempts,
-					"run_at", t.RunAt,
-				)
-
 				err = handler.ProcessTask(ctx, t)
 				if err != nil {
 					p.logger.Error("task processing failed",
@@ -223,7 +197,7 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 					t.Error = err.Error()
 					oldStatus := t.Status
 					if taskAttempts >= t.MaxAttempts {
-						p.logger.Warn("task exceeded max attempts, marking as failed",
+						p.logger.Warn(internal.BGYellow("task exceeded max attempts, marking as failed"),
 							"task_id", t.ID,
 							"current_attempts", t.Attempts,
 							"captured_attempts", taskAttempts,
@@ -259,15 +233,6 @@ func (p *Processor) processPendingTasks(ctx context.Context) error {
 						"new_status", t.Status,
 					)
 				}
-
-				p.logger.Debug("updating task after processing",
-					"task_id", t.ID,
-					"old_status", t.Status,
-					"new_status", t.Status,
-					"current_attempts", t.Attempts,
-					"captured_attempts", taskAttempts,
-					"error", t.Error != "",
-				)
 
 				return p.storage.UpdateTask(ctx, t)
 			})

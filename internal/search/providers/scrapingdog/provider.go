@@ -117,10 +117,11 @@ type Provider struct {
 	fs              *firestore.Client
 	store           *JobStore
 	logger          *slog.Logger
-	searchSemaphore chan struct{}     // Limits concurrent searches
-	searchQueue     chan QueuedSearch // Queue of searches to be performed
-	shutdownCtx     context.Context   // Context used for shutdown signal
-	shutdown        int32             // Atomic flag: 0 = running, 1 = shutdown
+	searchSemaphore chan struct{}          // Limits concurrent searches
+	searchQueue     chan QueuedSearch      // Queue of searches to be performed
+	shutdownCtx     context.Context        // Context used for shutdown signal
+	shutdown        int32                  // Atomic flag: 0 = running, 1 = shutdown
+	eventHandler    search.JobEventHandler // Handler for job-related events
 }
 
 // Option is a function that configures the Provider
@@ -155,6 +156,13 @@ func WithJobStore(store *JobStore) Option {
 	}
 }
 
+// WithEventHandler sets the job event handler for the provider
+func WithEventHandler(handler search.JobEventHandler) Option {
+	return func(p *Provider) {
+		p.eventHandler = handler
+	}
+}
+
 // NewProvider creates a new ScrapingDog provider
 func NewProvider(apiKey string, opts ...Option) *Provider {
 	p := &Provider{
@@ -171,6 +179,10 @@ func NewProvider(apiKey string, opts ...Option) *Provider {
 	}
 
 	return p
+}
+
+func (p *Provider) SetEventHandler(handler search.JobEventHandler) {
+	p.eventHandler = handler
 }
 
 // QueueSearch adds a search to the queue
@@ -398,42 +410,42 @@ func (p *Provider) StartSearchWorkers(ctx context.Context, numWorkers int) {
 
 // Update processJobListings to return context.Canceled directly
 func (p *Provider) processJobListings(ctx context.Context, criteria search.Criteria) ([]search.JobListing, error) {
-	var jobs []search.JobListing
+	var listings []search.JobListing
 	var err error
 
 	// First check cache
 	if p.store != nil {
-		p.logger.Debug("checking cache for jobs")
-		jobs, err = p.store.GetCachedJobs(ctx, criteria)
+		p.logger.Debug("scrapingdog: checking cache for jobs")
+		listings, err = p.store.GetCachedJobs(ctx, criteria)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				return nil, context.Canceled
 			}
 			return nil, fmt.Errorf("failed to get cached jobs: %w", err)
 		}
-		if len(jobs) > 0 {
-			p.logger.Debug("found cached jobs", "num_jobs", len(jobs))
-			return jobs, nil
+		if len(listings) > 0 {
+			p.logger.Debug("scrapingdog: found cached jobs", "num_jobs", len(listings))
+			return listings, nil
 		}
-		p.logger.Debug("no cached jobs found")
+		p.logger.Debug("scrapingdog: no cached jobs found")
 	}
 
-	// If no cached jobs, perform the search
-	if len(jobs) == 0 {
+	// If no cached job listings, perform the search
+	if len(listings) == 0 {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
 
-		p.logger.Debug("performing job search", "keywords", criteria.Keywords)
-		jobs, err = p.SearchJobListings(ctx, criteria)
+		p.logger.Debug("scrapingdog: performing job search", "keywords", criteria.Keywords)
+		listings, err = p.SearchJobListings(ctx, criteria)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				return nil, context.Canceled
 			}
 			return nil, fmt.Errorf("failed to search jobs: %w", err)
 		}
-		p.logger.Debug("job search completed", "num_jobs", len(jobs))
+		p.logger.Debug("scrapingdog: job search completed", "num_jobs", len(listings))
 	}
 
-	return jobs, nil
+	return listings, nil
 }

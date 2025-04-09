@@ -94,7 +94,7 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 	// validate that none of the fields are empty
 	if appointment.UserID == "" {
 		apptErr = fmt.Errorf("missing required fields: UserID")
-		app.logger.Error("Missing required fields", "user_id_missing", appointment.UserID == "")
+		app.logger.Error("outbound call: missing required fields", "user_id_missing", appointment.UserID == "")
 		app.reportServerError(r, apptErr)
 
 		// This is likely our problem, so we don't want to retry
@@ -145,7 +145,7 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if user.State.Status < internal.UserStatusIntroCallScheduled {
+	if user.State.Status < internal.UserStatusCallScheduled {
 		apptErr = fmt.Errorf("user is not ready for a call: %s", appointment.UserID)
 		app.logger.Error("User is not ready for a call", "user_id", appointment.UserID)
 		app.reportServerError(r, apptErr)
@@ -221,11 +221,17 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 		Content: systemPrompt,
 	}}
 
+	phone := vapi.PhoneNumber{
+		TwilioAccountSid:  os.Getenv("TWILIO_ACCOUNT_SID"),
+		TwilioAuthToken:   os.Getenv("TWILIO_AUTH_TOKEN"),
+		TwilioPhoneNumber: os.Getenv("TWILIO_PHONE_NUMBER"),
+	}
+
 	// Create call config
 	callConfig := vapi.Call{
-		Name:          &appointment.ID,
-		AssistantID:   &assistantID,
-		PhoneNumberID: &outboundPhoneID,
+		Name:        &appointment.ID,
+		AssistantID: &assistantID,
+		PhoneNumber: &phone,
 		AssistantOverrides: &vapi.Assistant{
 			Model: &modelConfig,
 			Server: &vapi.ServerConfig{
@@ -277,7 +283,7 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 		app.reportServerError(r, fmt.Errorf("unexpected nil pointer result from CreateCall"))
 	}
 
-	user.State.Status = internal.UserStatusIntroCallStarted
+	user.State.Status = internal.UserStatusCallStarted
 	if err := internal.UpdateUserStatus(r.Context(), app.fs, user, user.State.Status); err != nil {
 		app.logger.Error("Failed to update user", "error", err)
 		app.reportServerError(r, fmt.Errorf("failed to update user: %w", err))

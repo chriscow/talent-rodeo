@@ -104,7 +104,7 @@ func TestNewService(t *testing.T) {
 	queue := &mockProvider{}
 	mailer := &mockMailer{}
 
-	svc := NewService(fs, logger, queue, mailer, "test@example.com")
+	svc := NewService(fs, logger, queue, mailer, "test@example.com", nil)
 
 	if svc == nil {
 		t.Fatal("NewService returned nil")
@@ -240,7 +240,7 @@ func TestShouldSearch(t *testing.T) {
 		},
 	}
 
-	svc := NewService(nil, slog.Default(), nil, nil, "test@example.com")
+	svc := NewService(nil, slog.Default(), nil, nil, "test@example.com", nil)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -291,7 +291,7 @@ func TestPerformSearch(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			provider := &mockProvider{shouldError: tt.providerErr}
 			mailer := &mockMailer{}
-			svc := NewService(nil, slog.Default(), provider, mailer, "test@example.com")
+			svc := NewService(nil, slog.Default(), provider, mailer, "test@example.com", nil)
 
 			err := svc.enqueueSearch(context.Background(), &tt.user)
 			if (err != nil) != tt.wantErr {
@@ -332,7 +332,7 @@ func TestNotifyAdmin(t *testing.T) {
 	testErr := fmt.Errorf("test error")
 
 	mailer := &mockMailer{}
-	svc := NewService(nil, slog.Default(), nil, mailer, "test@example.com")
+	svc := NewService(nil, slog.Default(), nil, mailer, "test@example.com", nil)
 
 	svc.notifyAdmin(context.Background(), user, testErr)
 
@@ -498,7 +498,7 @@ func TestServiceLifecycle(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("Starting test case: %s", tt.name)
 			provider := getProvider(t, fs)
-			svc := NewService(fs, slog.Default(), provider, nil, "test@example.com")
+			svc := NewService(fs, slog.Default(), provider, nil, "test@example.com", nil)
 
 			if tt.startService {
 				t.Log("Starting service...")
@@ -572,7 +572,7 @@ func TestConcurrentProcessing(t *testing.T) {
 	}
 
 	provider := &mockProvider{}
-	svc := NewService(fs, slog.Default(), provider, nil, "test@example.com")
+	svc := NewService(fs, slog.Default(), provider, nil, "test@example.com", nil)
 
 	// Use a short tick interval
 	svc.ticker = time.NewTicker(50 * time.Millisecond)
@@ -635,7 +635,7 @@ func TestErrorRecovery(t *testing.T) {
 	} else {
 		t.Skip("Skipping error test for real provider")
 	}
-	svc := NewService(fs, slog.Default(), provider, mailer, "admin@example.com")
+	svc := NewService(fs, slog.Default(), provider, mailer, "admin@example.com", nil)
 
 	// Test that service continues processing after error
 	err := svc.enqueueSearch(ctx, user)
@@ -703,7 +703,7 @@ func TestSearchFrequencyEdgeCases(t *testing.T) {
 		},
 	}
 
-	svc := NewService(nil, slog.Default(), nil, nil, "test@example.com")
+	svc := NewService(nil, slog.Default(), nil, nil, "test@example.com", nil)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -804,7 +804,7 @@ func TestEnqueueSearch(t *testing.T) {
 			mailer := &mockMailer{}
 
 			// Create service
-			svc := NewService(nil, logger, mockQueue, mailer, "admin@example.com")
+			svc := NewService(nil, logger, mockQueue, mailer, "admin@example.com", nil)
 
 			// Call enqueueSearch
 			err := svc.enqueueSearch(context.Background(), tt.user)

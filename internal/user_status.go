@@ -15,12 +15,12 @@ const (
 	UserStatusPendingResumeUpload
 	UserStatusProcessingResume
 	UserStatusResumeUploaded
-	UserStatusIntroCallScheduled
-	UserStatusIntroCallStarted
-	UserStatusIntroCallCompleted
-	UserStatusPreferencesExtracted
-	UserStatusJobSearchStarted
-	UserStatusJobSearchComplete
+	UserStatusCallScheduled       // 5
+	UserStatusCallStarted         // 6
+	UserStatusCallAnalysisStarted // 7
+	UserStatusJobSearchScheduled  // 8
+	UserStatusJobSearchStarted    // 9
+	UserStatusJobSearchComplete   // 10
 
 	usersCollection = "users"
 )
@@ -65,14 +65,14 @@ func (s UserStatus) String() string {
 		return "Processing Resume"
 	case UserStatusResumeUploaded:
 		return "Resume Uploaded"
-	case UserStatusIntroCallScheduled:
+	case UserStatusCallScheduled:
 		return "Call Scheduled"
-	case UserStatusIntroCallStarted:
+	case UserStatusCallStarted:
 		return "Call Started"
-	case UserStatusIntroCallCompleted:
-		return "Call Completed"
-	case UserStatusPreferencesExtracted:
-		return "Preferences Extracted"
+	case UserStatusCallAnalysisStarted:
+		return "Call Analysis Started"
+	case UserStatusJobSearchScheduled:
+		return "Job Search Scheduled"
 	case UserStatusJobSearchStarted:
 		return "Job Search Started"
 	case UserStatusJobSearchComplete:
@@ -94,14 +94,14 @@ func (s UserStatus) Description() string {
 		return "The resume is being processed."
 	case UserStatusResumeUploaded:
 		return "The resume has been successfully uploaded but a call has not been scheduled yet."
-	case UserStatusIntroCallScheduled:
+	case UserStatusCallScheduled:
 		return "We have your resume and a call has been scheduled."
-	case UserStatusIntroCallStarted:
-		return "Your introductory call has started."
-	case UserStatusIntroCallCompleted:
-		return "Your introductory call has been completed."
-	case UserStatusPreferencesExtracted:
-		return "The user's preferences have been extracted."
+	case UserStatusCallStarted:
+		return "Your call has started."
+	case UserStatusCallAnalysisStarted:
+		return "Your call has been completed and we are analyzing the call."
+	case UserStatusJobSearchScheduled:
+		return "The job search has been scheduled."
 	case UserStatusJobSearchStarted:
 		return "The job search has started."
 	case UserStatusJobSearchComplete:

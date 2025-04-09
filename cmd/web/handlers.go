@@ -6,6 +6,8 @@ import (
 
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
+
+	"github.com/getsentry/sentry-go"
 )
 
 func (app *application) home(w http.ResponseWriter, r *http.Request) {
@@ -25,7 +27,7 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 		state := user.State
 
 		// Redirect to profile if onboarding is not complete
-		if state.Status < internal.UserStatusIntroCallCompleted {
+		if state.Status < internal.UserStatusCallAnalysisStarted {
 			app.logger.Debug("Home: redirecting incomplete onboarding to profile")
 			http.Redirect(w, r, "/profile", http.StatusSeeOther)
 			return
@@ -36,6 +38,10 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 
 	if err := response.Page(w, http.StatusOK, data, "pages/home.html"); err != nil {
 		app.serverError(w, r, err)
+		app.reportToSentry(r, err, sentry.LevelError, map[string]string{
+			"error_type":  "template_rendering",
+			"entity_type": "home_page",
+		})
 	}
 
 	app.logger.Debug("Home: rendered successfully")

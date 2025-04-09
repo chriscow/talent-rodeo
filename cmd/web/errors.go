@@ -6,6 +6,8 @@ import (
 	"runtime/debug"
 	"strings"
 	"talent-rodeo/internal/response"
+
+	"github.com/getsentry/sentry-go"
 )
 
 func (app *application) reportServerError(r *http.Request, err error) {
@@ -15,6 +17,8 @@ func (app *application) reportServerError(r *http.Request, err error) {
 		url     = r.URL.String()
 		trace   = string(debug.Stack())
 	)
+
+	sentry.CaptureException(err)
 
 	requestAttrs := slog.Group("request", "method", method, "url", url)
 	app.logger.Error(message, requestAttrs)
