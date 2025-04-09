@@ -215,9 +215,9 @@ func TestUserStates(t *testing.T) {
 		// Test state transition sequence
 		states := []UserStatus{
 			UserStatusResumeUploaded,
-			UserStatusIntroCallScheduled,
-			UserStatusIntroCallStarted,
-			UserStatusIntroCallCompleted,
+			UserStatusCallScheduled,
+			UserStatusCallStarted,
+			UserStatusCallAnalysisStarted,
 		}
 
 		for _, newStatus := range states {
@@ -265,9 +265,9 @@ func TestUserStates(t *testing.T) {
 			{UserStatusError, "Error", "The user is in an error state. Check the error field for more information."},
 			{UserStatusPendingResumeUpload, "Pending Resume Upload", "We are waiting for your resume to be uploaded."},
 			{UserStatusResumeUploaded, "Resume Uploaded", "The resume has been successfully uploaded but a call has not been scheduled yet."},
-			{UserStatusIntroCallScheduled, "Call Scheduled", "We have your resume and a call has been scheduled."},
-			{UserStatusIntroCallStarted, "Call Started", "Your introductory call has started."},
-			{UserStatusIntroCallCompleted, "Call Completed", "Your introductory call has been completed."},
+			{UserStatusCallScheduled, "Call Scheduled", "We have your resume and a call has been scheduled."},
+			{UserStatusCallStarted, "Call Started", "Your introductory call has started."},
+			{UserStatusCallAnalysisStarted, "Call Analysis Started", "Your introductory call has been completed and we are analyzing the call."},
 		}
 
 		for _, tt := range tests {

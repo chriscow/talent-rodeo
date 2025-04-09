@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/search"
@@ -32,27 +33,42 @@ type Mailer interface {
 	Send(recipient string, data any, patterns ...string) error
 }
 
+// JobEventHandler defines the interface for handling job-related events
+type JobEventHandler interface {
+	OnNewJob(userID string, count int) error
+	OnSearchCompleted(userID string, totalJobs int, errors []error) error
+}
+
 // Service manages background job searches for users
 type Service struct {
-	fs           *firestore.Client
-	logger       *slog.Logger
-	ticker       *time.Ticker
-	queue        search.JobQueue
-	mailer       Mailer
-	done         chan struct{}
-	processingWG sync.WaitGroup
-	recipient    string
+	fs                *firestore.Client
+	logger            *slog.Logger
+	ticker            *time.Ticker
+	queue             search.JobQueue
+	mailer            Mailer
+	done              chan struct{}
+	processingWG      sync.WaitGroup
+	recipient         string
+	pusher            PusherInterface
+	jobQueue          chan QueuedJob // Queue for job processing
+	jobSemaphore      chan struct{}  // Semaphore for job processing
+	maxConcurrentJobs int
 }
 
 // NewService creates a new search service
-func NewService(fs *firestore.Client, logger *slog.Logger, queue search.JobQueue, mailer Mailer, recipient string) *Service {
+func NewService(fs *firestore.Client, logger *slog.Logger, queue search.JobQueue, mailer Mailer, recipient string, pusher PusherInterface) *Service {
+	maxConcurrentJobs := 5 // Can be made configurable
 	return &Service{
-		fs:        fs,
-		logger:    logger,
-		queue:     queue,
-		mailer:    mailer,
-		done:      make(chan struct{}),
-		recipient: recipient,
+		fs:                fs,
+		logger:            logger,
+		queue:             queue,
+		mailer:            mailer,
+		done:              make(chan struct{}),
+		recipient:         recipient,
+		pusher:            pusher,
+		jobQueue:          make(chan QueuedJob, 100), // Buffer size can be adjusted
+		jobSemaphore:      make(chan struct{}, maxConcurrentJobs),
+		maxConcurrentJobs: maxConcurrentJobs,
 	}
 }
 
@@ -62,6 +78,8 @@ func (s *Service) Start() error {
 	if s.ticker == nil {
 		s.ticker = time.NewTicker(defaultTickInterval)
 	}
+
+	s.StartJobWorkers(context.Background(), 5)
 
 	// First requeue any users that were previously queued but not completed
 	if err := s.requeueIncompleteSearches(); err != nil {
@@ -162,22 +180,42 @@ func (s *Service) processSearches() {
 
 // shouldSearch determines if a user is due for a search based on their tier
 func (s *Service) shouldSearch(user *internal.User) bool {
+	shouldLog := os.Getenv("TESTING_MODE") == "true"
+	if strings.HasPrefix(user.ID, "test-") {
+		if shouldLog {
+			s.logger.Debug("search: shouldSearch: user is a test user", "user_id", user.ID)
+		}
+		return false
+	}
+
 	if user.Search == nil {
+		if shouldLog {
+			s.logger.Debug("search: shouldSearch: user has no search criteria", "user_id", user.ID)
+		}
 		return false
 	}
 
 	// if the user has never been searched, and never queued, then we should search them
 	if user.Search.CompletedAt == nil && user.Search.QueuedAt == nil {
+		if shouldLog {
+			s.logger.Debug("search: shouldSearch: user has never been searched or queued", "user_id", user.ID)
+		}
 		return true
 	}
 
 	// if the user has been queued, then we should not search them
 	if user.Search.QueuedAt != nil {
+		if shouldLog {
+			s.logger.Debug("search: shouldSearch: user has been queued", "user_id", user.ID)
+		}
 		return false
 	}
 
 	// if they've never completed a search, we should search them
 	if user.Search.CompletedAt == nil {
+		if shouldLog {
+			s.logger.Debug("search: shouldSearch: user has never completed a search", "user_id", user.ID)
+		}
 		return true
 	}
 
@@ -191,7 +229,11 @@ func (s *Service) shouldSearch(user *internal.User) bool {
 	}
 
 	// Check if enough time has passed since last search
-	return time.Since(*user.Search.CompletedAt) >= frequency
+	since := time.Since(*user.Search.CompletedAt)
+	// if shouldLog {
+	// 	s.logger.Debug("search: shouldSearch: time since last search", "user_id", user.ID, "since", since, "frequency", frequency)
+	// }
+	return since >= frequency
 }
 
 // enqueueSearch queues a job search for a user
@@ -219,11 +261,15 @@ func (s *Service) enqueueSearch(ctx context.Context, user *internal.User) error 
 		criteria := user.Search.Criteria
 		criteria.PageNumber = page
 
-		// Queue the search with the provider
-		if err := s.queue.QueueSearch(ctx, user.ID, criteria); err != nil {
-			// Notify admin of the error before returning
-			s.notifyAdmin(ctx, user, err)
-			return fmt.Errorf("failed to queue search: %w", err)
+		// ScrapingDog requires a single keyword, so we need to queue a search for each keyword
+		for _, keyword := range criteria.Keywords {
+			criteria.Keywords = []string{keyword}
+			// Queue the search with the provider
+			if err := s.queue.QueueSearch(ctx, user.ID, criteria); err != nil {
+				// Notify admin of the error before returning
+				s.notifyAdmin(ctx, user, err)
+				return fmt.Errorf("failed to queue search: %w", err)
+			}
 		}
 	}
 

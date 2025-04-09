@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"log/slog"
@@ -274,4 +275,46 @@ func (ts *testServer) Cleanup() {
 	internal.DeleteTestData(ts.T, ts.app.fs, "test-user-")
 	internal.DeleteTestData(ts.T, ts.app.fs, "test-resume-")
 	ts.app.fs.Close()
+}
+
+// CreateTestJob creates a test job for the given user
+func (ts *testServer) CreateTestJob(t *testing.T, user *internal.User, status internal.JobStatus) *internal.UserJob {
+	t.Helper()
+
+	now := time.Now()
+	job := &internal.UserJob{
+		ID:        fmt.Sprintf("test-job-%d", time.Now().UnixNano()),
+		Status:    status,
+		JobRef:    ts.app.fs.Collection("jobs").Doc("test-job"),
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	_, err := ts.app.fs.Collection("users").Doc(user.ID).Collection("jobs").Doc(job.ID).Set(context.Background(), job)
+	if err != nil {
+		t.Fatalf("Failed to create test job: %v", err)
+	}
+
+	return job
+}
+
+// CreateTestAppointment creates a test appointment for the given user
+func (ts *testServer) CreateTestAppointment(t *testing.T, user *internal.User, status internal.AppointmentStatus) *internal.Appointment {
+	t.Helper()
+
+	appt := &internal.Appointment{
+		ID:            fmt.Sprintf("test-appt-%d", time.Now().UnixNano()),
+		UserID:        user.ID,
+		ScheduledTime: time.Now().Add(24 * time.Hour),
+		Status:        status,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+
+	_, err := ts.app.fs.Collection("appointments").Doc(appt.ID).Set(context.Background(), appt)
+	if err != nil {
+		t.Fatalf("Failed to create test appointment: %v", err)
+	}
+
+	return appt
 }

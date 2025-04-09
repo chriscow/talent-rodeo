@@ -1,5 +1,437 @@
 {{define "page:main"}}
 <main class="container">
-    <h1>Dashboard</h1>
+    <header>
+        <div class="grid">
+            <div>
+            </div>
+            <div>
+                <div id="new-jobs-indicator" class="notice" style="display: none;">
+                    <span id="new-jobs-count"></span> new jobs are available. 
+                    <a href="/dashboard">Refresh</a>
+                </div>
+                <div id="search-completion-indicator" class="notice" style="display: none;">
+                    Search complete! Found <span id="search-completion-count"></span> jobs. 
+                    <a href="/dashboard">Refresh</a>
+                </div>
+            </div>
+        </div>
+    </header>
+    
+    <!-- Status updates during job search -->
+    <div id="search-status" class="notice secondary" {{if not .IsSearching}}style="display: none;"{{end}}>
+        <span id="search-status-message">
+        </span>
+    </div>
+
+    <!-- Job Status Tabs -->
+    <nav class="job-status-tabs">
+        <ul>
+            {{range $index, $status := .JobStatuses}}
+                <li {{if eq $.ActiveStatus (lowercase $status)}}class="active"{{end}}>
+                    <a href="/dashboard?status={{lowercase $status}}">
+                        {{$status}} Jobs
+                    </a>
+                </li>
+            {{end}}
+        </ul>
+    </nav>
+
+    <!-- Job listings for selected status -->
+    <section id="jobs-container">
+        <header>
+            <h2>{{index .StatusDisplayNames .ActiveStatus}}</h2>
+        </header>
+        
+        {{if .Jobs}}
+            <div class="jobs-grid">
+                {{range .Jobs}}
+                    {{template "job-card" .}}
+                {{end}}
+            </div>
+            
+            <!-- Pagination controls -->
+            <nav class="pagination">
+                
+                    <a href="/dashboard?status={{.ActiveStatus}}" role="button" class="outline" {{if eq .CurrentPageToken ""}}disabled{{end}}>
+                        First Page
+                    </a>
+                
+                {{if .HasNextPage}}
+                    <a href="/dashboard?status={{.ActiveStatus}}&page={{.NextPageToken}}" 
+                       role="button" class="outline">
+                        Next Page
+                    </a>
+                {{end}}
+            </nav>
+        {{else}}
+            <article class="notice">
+                <p>No {{.ActiveStatus}} jobs found.</p>
+            </article>
+        {{end}}
+    </section>
 </main>
-{{ end }}
+
+<!-- Add user data for state monitoring -->
+<div data-user-id="{{.User.ID}}" 
+     data-pusher-key="{{.PusherKey}}" 
+     data-pusher-cluster="{{.PusherCluster}}"
+     hidden></div>
+{{end}}
+
+
+{{define "job-card"}}
+<article class="job-card">
+    <hgroup>
+        <h3>{{.Title}}</h3>
+        <p class="company">{{.CompanyName}}</p>
+    </hgroup>
+    <a href="{{.JobDetail.URL}}" target="_blank">View Job</a>
+    <details>
+        <summary>Rating: {{.Analysis.FinalJudgment.Rating}}</summary>
+        <p>{{.Analysis.FinalJudgment.Explanation}}</p>
+    </details>
+    <div class="job-content">
+        {{with .Summary}}
+        <div class="summary">
+            <p>{{.}}</p>
+        </div>
+        {{end}}
+        {{with .Qualifications}}
+        {{if .}}
+        <div class="qualifications">
+            <h4>Qualifications</h4>
+            <ul>
+                {{range .}}
+                <li>
+                    <label>
+                        <input type="checkbox"> {{.}}
+                    </label>
+                </li>
+                {{end}}
+            </ul>
+        </div>
+        {{end}}
+        {{end}}
+    </div>
+    <footer>
+        <small>Added {{.CreatedAt | humanDate}}</small>
+    </footer>
+</article>
+{{end}}
+
+{{define "page:scripts"}}
+<script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Dashboard: Initializing...');
+        
+        // Initialize Notyf
+        const notyf = new Notyf({
+            types: [
+            {
+                type: 'status',
+                background: 'blue',
+                icon: false,
+                position: { x: 'center', y: 'top' },
+                dismissible: true,
+                duration: 4000
+            },
+            {
+                type: 'success',
+                position: { x: 'right', y: 'bottom' },
+                dismissible: true,
+                duration: 4000
+            }, {
+                type: 'error',
+                position: { x: 'right', y: 'bottom' },
+                dismissible: true,
+                duration: 0 // Error messages stay until dismissed
+            }]
+        });
+
+        // Function to simulate a new job being found
+        window.simulateNewJob = function(count) {
+            const data = { count: count || 1 };
+            handleNewJob(data);
+            console.log('Dashboard: Simulated new job event:', data);
+        };
+
+        // Function to simulate search completed event
+        window.simulateSearchCompleted = function(totalJobs, errors = []) {
+            const data = {
+                total_jobs: totalJobs,
+                status_text: "Job Search Complete",
+                description: `Search completed with ${totalJobs} jobs found`,
+            };
+            
+            // Add errors if provided
+            if (errors.length > 0) {
+                data.errors = errors;
+            }
+            
+            // Directly call the state update handler
+            handleStateUpdate(data);
+            console.log('Dashboard: Simulated search completed event:', data);
+        };
+
+        const userElement = document.querySelector('[data-user-id]');
+        if (!userElement) {
+            console.error('Dashboard: No user element found');
+            return;
+        }
+        
+        console.log('Dashboard: Connecting to Pusher...', {
+            key: userElement.dataset.pusherKey,
+            cluster: userElement.dataset.pusherCluster,
+            userId: userElement.dataset.userId
+        });
+        
+        const pusher = new Pusher(userElement.dataset.pusherKey, {
+            cluster: userElement.dataset.pusherCluster
+        });
+        
+        const channelName = `user-${userElement.dataset.userId}`;
+        console.log('Dashboard: Subscribing to channel:', channelName);
+        
+        const channel = pusher.subscribe(channelName);
+        const searchStatus = document.getElementById('search-status');
+        const searchStatusMessage = document.getElementById('search-status-message');
+        const newJobsIndicator = document.getElementById('new-jobs-indicator');
+        const newJobsCount = document.getElementById('new-jobs-count');
+        
+        // Move the new job handler to a named function
+        let totalNewJobs = 0;  // Keep track of total new jobs
+        function handleNewJob(data) {
+            console.log('Dashboard: Received new-job event:', data);
+            
+            if (!data.count) {
+                console.warn('Dashboard: New job event missing count');
+                return;
+            }
+            
+            // Increment the total count
+            totalNewJobs += data.count;
+            
+            // Update the count in the header indicator
+            newJobsCount.textContent = totalNewJobs;
+            newJobsIndicator.style.display = 'block';
+            console.log('Dashboard: Updated new jobs count:', totalNewJobs);
+
+            // Show a success toast notification
+            notyf.success({
+                message: `Found ${data.count} new jobs matching your criteria!`,
+                dismissible: true
+            });
+        }
+
+        // Extract the state update handler to a named function
+        function handleStateUpdate(data) {
+            console.log('Dashboard: Received state-update event:', data);
+            
+            if (!data.description && !data.status_text) {
+                console.warn('Dashboard: State update missing description or status');
+                return;
+            }
+            
+            // Show/hide search status based on job search states
+            if (data.status_text === 'Job Search Started' || 
+                data.status_text === 'Job Search Scheduled' ||
+                data.status_text === 'Call Analysis Started') {
+                console.log('Dashboard: Showing search status:', data.description);
+                searchStatus.style.display = 'block';
+                searchStatusMessage.textContent = data.description;
+            } else if (data.status_text === 'Job Search Complete') {
+                console.log('Dashboard: Search completed');
+                
+                // Update the search completion indicator
+                const searchCompletionCount = document.getElementById('search-completion-count');
+                const searchCompletionIndicator = document.getElementById('search-completion-indicator');
+                
+                if (searchCompletionCount && searchCompletionIndicator) {
+                    searchCompletionCount.textContent = data.total_jobs;
+                    searchCompletionIndicator.style.display = 'block';
+                }
+                
+                // Show success toast notification
+                if (data.total_jobs !== undefined) {
+                    console.log('Dashboard: Showing completion notification:', data.total_jobs, 'jobs');
+                    notyf.success({
+                        message: `Job search completed! Found ${data.total_jobs} jobs matching your criteria.`,
+                        dismissible: true
+                    });
+                }
+                
+                // Show any errors that occurred during search
+                if (data.errors && data.errors.length > 0) {
+                    console.log('Dashboard: Showing error notifications:', data.errors);
+                    data.errors.forEach(error => {
+                        notyf.error({
+                            message: error,
+                            dismissible: true,
+                            duration: 0
+                        });
+                    });
+                }
+            }
+
+            // Show error notifications if there's an error
+            if (data.error) {
+                console.log('Dashboard: Showing error notification:', data.error);
+                notyf.error({
+                    message: data.error,
+                    dismissible: true,
+                    duration: 0
+                });
+            }
+        }
+
+        // Bind the handler to the channel
+        channel.bind('state-update', handleStateUpdate);
+        channel.bind('new-job', handleNewJob);
+
+        // Add connection state logging
+        pusher.connection.bind('state_change', function(states) {
+            console.log('Dashboard: Pusher connection state changed:', {
+                previousState: states.previous,
+                currentState: states.current
+            });
+        });
+
+        pusher.connection.bind('connected', function() {
+            console.log('Dashboard: Successfully connected to Pusher');
+        });
+
+        pusher.connection.bind('error', function(err) {
+            console.error('Dashboard: Pusher connection error:', err);
+        });
+    });
+</script>
+{{end}}
+
+{{define "page:styles"}}
+<style>
+    /* Status tabs navigation */
+    .job-status-tabs ul {
+        display: flex;
+        list-style: none;
+        padding: 0;
+        margin: 1rem 0;
+        border-bottom: 1px solid var(--muted-border-color);
+    }
+    
+    .job-status-tabs li {
+        margin-right: 1rem;
+        padding: 0.5rem 1rem;
+    }
+    
+    .job-status-tabs li.active {
+        font-weight: bold;
+        border-bottom: 3px solid var(--primary);
+    }
+    
+    .job-status-tabs a {
+        text-decoration: none;
+        color: var(--primary);
+    }
+    
+    /* Jobs grid */
+    .jobs-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    @media (max-width: 768px) {
+        .jobs-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+    
+    /* Job cards */
+    .job-card {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        border: 1px solid var(--muted-border-color);
+        border-radius: var(--border-radius);
+        padding: 1rem;
+    }
+    
+    .job-card header {
+        margin-bottom: 1rem;
+    }
+    
+    .job-card h3 {
+        margin: 0;
+        font-size: 1.2rem;
+    }
+    
+    .job-card .company {
+        margin: 0.25rem 0 0;
+        color: var(--primary);
+        font-weight: 500;
+    }
+    
+    .job-content {
+        flex-grow: 1;
+        overflow: hidden;
+    }
+    
+    .job-card .summary {
+        margin-bottom: 1rem;
+        max-height: 150px;
+        overflow-y: auto;
+    }
+    
+    .job-card .qualifications h4 {
+        font-size: 1rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .job-card .qualifications ul {
+        list-style: none;
+        padding-left: 0;
+        margin: 0;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+    
+    .job-card .qualifications li {
+        margin-bottom: 0.25rem;
+    }
+    
+    .job-card footer {
+        margin-top: 1rem;
+        font-size: 0.875rem;
+        color: var(--muted-color);
+    }
+    
+    /* Pagination */
+    .pagination {
+        display: flex;
+        justify-content: center;
+        gap: 1rem;
+        margin: 2rem 0;
+    }
+    
+    /* Notices */
+    .notice {
+        padding: 0.75rem 1rem;
+        border-radius: var(--border-radius);
+        background-color: var(--primary-focus);
+        color: var(--primary-inverse);
+        margin-bottom: 1rem;
+    }
+    
+    .notice.secondary {
+        background-color: var(--secondary-focus);
+        color: var(--secondary-inverse);
+    }
+    
+    .notice a {
+        color: inherit;
+        text-decoration: underline;
+    }
+</style>
+{{end}}

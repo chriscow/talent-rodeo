@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"talent-rodeo/internal"
+	"talent-rodeo/internal/funcs"
 	"talent-rodeo/internal/search"
 	"testing"
 	"time"
@@ -673,19 +674,33 @@ func TestProcessJobDetailsAndSave(t *testing.T) {
 	// Test cases
 	tests := []struct {
 		name       string
-		jobID      string
+		listing    search.JobListing
 		searchHash string
 		wantErr    bool
 	}{
 		{
-			name:       "valid job details",
-			jobID:      "test-job-1",
+			name: "valid job details",
+			listing: search.JobListing{
+				ProviderJobID: "test-job-1",
+				Title:         "Test Job",
+				Company:       "Test Co",
+				Location:      "Remote",
+				URL:           "https://example.com/job/test-job-1",
+				Provider:      providerName,
+			},
 			searchHash: "test-search-hash",
 			wantErr:    false,
 		},
 		{
-			name:       "empty job ID",
-			jobID:      "",
+			name: "empty job ID",
+			listing: search.JobListing{
+				ProviderJobID: "",
+				Title:         "Test Job",
+				Company:       "Test Co",
+				Location:      "Remote",
+				URL:           "https://example.com/job/test-job-1",
+				Provider:      providerName,
+			},
 			searchHash: "test-search-hash",
 			wantErr:    true,
 		},
@@ -693,7 +708,7 @@ func TestProcessJobDetailsAndSave(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := p.processJobDetailsAndSave(ctx, tt.jobID, tt.searchHash, user.ID)
+			err := p.processJobDetailsAndSave(ctx, tt.listing, tt.searchHash, user.ID)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("processJobDetailsAndSave() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -722,9 +737,159 @@ func TestProcessJobDetailsAndSave(t *testing.T) {
 		cancelCtx, cancel := context.WithCancel(ctx)
 		cancel()
 
-		err := p.processJobDetailsAndSave(cancelCtx, "test-job-1", "test-hash", user.ID)
+		listing := search.JobListing{
+			ProviderJobID: "test-job-1",
+			Title:         "Test Job",
+			URL:           "https://example.com/job/test-job-1",
+		}
+		err := p.processJobDetailsAndSave(cancelCtx, listing, "test-hash", user.ID)
 		if err != context.Canceled {
 			t.Errorf("processJobDetailsAndSave() error = %v, want %v", err, context.Canceled)
 		}
 	})
+}
+
+// TestJobIDFormat tests that job IDs are correctly formatted
+func TestJobIDFormat(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	fs, err := internal.NewFirestoreClient(ctx)
+	if err != nil {
+		t.Fatalf("failed to create firestore client: %v", err)
+	}
+	defer fs.Close()
+
+	// Create a mock server that returns job details
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		details := []jobDetail{{
+			Position:          "Test Job",
+			Status:            "active",
+			Location:          "Remote",
+			CompanyName:       "Test Co",
+			CompanyLinkedInID: "test-company-1",
+			PostingTime:       "2024-03-14",
+		}}
+		json.NewEncoder(w).Encode(details)
+	}))
+	defer server.Close()
+
+	// Initialize JobStore
+	store, err := NewJobStore(ctx, slog.Default())
+	if err != nil {
+		t.Fatalf("failed to create job store: %v", err)
+	}
+
+	p := NewProvider("test-key",
+		WithBaseURL(server.URL),
+		WithFirestore(fs, slog.Default()),
+		WithJobStore(store),
+	)
+
+	tests := []struct {
+		name          string
+		linkedInJobID string
+		expectedJobID string
+	}{
+		{
+			name:          "simple job id",
+			linkedInJobID: "123456",
+			expectedJobID: "scrapingdog-123456",
+		},
+		{
+			name:          "complex job id",
+			linkedInJobID: "job-posting-789",
+			expectedJobID: "scrapingdog-job-posting-789",
+		},
+		{
+			name:          "job id with special characters",
+			linkedInJobID: "job/posting#789",
+			expectedJobID: "scrapingdog-jobposting789",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			details, err := p.GetJobDetails(ctx, tt.linkedInJobID)
+			if err != nil {
+				t.Fatalf("GetJobDetails() error = %v", err)
+			}
+
+			if details.ID != tt.expectedJobID {
+				t.Errorf("Job ID format incorrect, got %q, want %q", details.ID, tt.expectedJobID)
+			}
+
+			if details.ProviderJobID != tt.linkedInJobID {
+				t.Errorf("ProviderJobID not preserved, got %q, want %q", details.ProviderJobID, tt.linkedInJobID)
+			}
+
+			if details.Provider != providerName {
+				t.Errorf("Provider name incorrect, got %q, want %q", details.Provider, providerName)
+			}
+		})
+	}
+}
+
+// TestURLCapture tests that the URL from a job listing is correctly captured in job details
+func TestURLCapture(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	fs, err := internal.NewFirestoreClient(ctx)
+	if err != nil {
+		t.Fatalf("failed to create firestore client: %v", err)
+	}
+	defer fs.Close()
+
+	// Create a mock server that returns job details
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		details := []jobDetail{{
+			Position:          "Test Job",
+			Status:            "active",
+			Location:          "Remote",
+			CompanyName:       "Test Co",
+			CompanyLinkedInID: "test-company-1",
+			PostingTime:       "2024-03-14",
+		}}
+		json.NewEncoder(w).Encode(details)
+	}))
+	defer server.Close()
+
+	// Initialize JobStore
+	store, err := NewJobStore(ctx, slog.Default())
+	if err != nil {
+		t.Fatalf("failed to create job store: %v", err)
+	}
+
+	p := NewProvider("test-key",
+		WithBaseURL(server.URL),
+		WithFirestore(fs, slog.Default()),
+		WithJobStore(store),
+	)
+
+	// Define test job with URL
+	jobID := "test-job-with-url"
+	expectedURL := "https://example.com/jobs/test-job-with-url"
+
+	// Process the job and save details
+	err = p.processJobDetails(ctx, jobID, expectedURL)
+	if err != nil {
+		t.Fatalf("processJobDetails() error = %v", err)
+	}
+
+	// Retrieve the job details from store to verify URL was set
+	fullJobID := funcs.Slugify(fmt.Sprintf("%s %s", providerName, jobID))
+	details, err := p.store.GetCachedJobDetails(ctx, fullJobID)
+	if err != nil {
+		t.Fatalf("GetCachedJobDetails() error = %v", err)
+	}
+
+	if details == nil {
+		t.Fatal("job details not found in cache")
+	}
+
+	// Verify URL was set correctly
+	if details.URL != expectedURL {
+		t.Errorf("Job URL was not captured correctly. Got %q, want %q", details.URL, expectedURL)
+	}
 }

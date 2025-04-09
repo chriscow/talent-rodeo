@@ -65,7 +65,7 @@ func (app *application) deleteResume(w http.ResponseWriter, r *http.Request) {
 // Template: pages/profile-resume-upload.html
 // Requires: Authenticated user
 func (app *application) showUploadPage(w http.ResponseWriter, r *http.Request) {
-	app.logger.Info("Showing resume upload page", "method", r.Method, "url", r.URL.String())
+	app.logger.Info("showUploadPage", "method", r.Method, "url", r.URL.String())
 
 	data := app.newTemplateData(r)
 	if err := response.Page(w, http.StatusOK, data, "pages/profile-resume-upload.html"); err != nil {
@@ -89,7 +89,7 @@ func (app *application) showUploadPage(w http.ResponseWriter, r *http.Request) {
 //
 // Requires: Authenticated user
 func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
-	app.logger.Info("Processing resume upload", "method", r.Method, "url", r.URL.String())
+	app.logger.Info("createResume", "method", r.Method, "url", r.URL.String())
 
 	data := app.newTemplateData(r)
 	form := &resumeUploadForm{
@@ -198,30 +198,13 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 		if err := internal.AnnotateResume(context.Background(), app.fs, app.logger, user, &resume); err != nil {
 			app.logger.Error("Failed to annotate resume", "error", err)
 		}
-		app.sendUserStateUpdate(user)
+		app.SendUserStateUpdate(user)
 	}()
 
 	// Show processing page
 	data = app.newTemplateData(r)
 	if err := response.Page(w, http.StatusOK, data, "pages/profile-resume-processing.html"); err != nil {
 		app.serverError(w, r, fmt.Errorf("failed to render processing page: %w", err))
-	}
-}
-
-// sendUserStateUpdate sends a real-time notification about user state changes via Pusher
-func (app *application) sendUserStateUpdate(user *internal.User) {
-	data := map[string]any{
-		"state":       user.State.Status,
-		"status_text": user.State.Status.String(),
-		"description": user.State.Status.Description(),
-		"error":       user.State.Error,
-	}
-
-	err := app.pusher.Trigger(fmt.Sprintf("user-%s", user.ID), "state-update", data)
-	if err != nil {
-		app.logger.Error("Failed to send Pusher notification", "error", err, "user_id", user.ID)
-	} else {
-		app.logger.Info("Sent user state update notification", "user_id", user.ID, "state", user.State.Status)
 	}
 }
 

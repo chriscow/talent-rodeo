@@ -36,7 +36,8 @@ func init() {
 
 func main() {
 	// Command line flags
-	userID := flag.String("user", "", "User ID to check")
+	userID := flag.String("user", "", "User ID to check (required for job operations, get from --list-users)")
+	listUsers := flag.Bool("list-users", false, "List all users with their IDs, names and phone numbers")
 	listJobs := flag.Bool("list", false, "List jobs for user")
 	updateStatus := flag.String("status", "", "Update job status (viewed, saved, applied, rejected)")
 	jobID := flag.String("job", "", "Job ID for updates")
@@ -51,6 +52,53 @@ func main() {
 
 	// Create context
 	ctx := context.Background()
+
+	// Create Firestore client
+	fs, err := internal.NewFirestoreClient(ctx)
+	if err != nil {
+		logger.Error("Failed to create Firestore client", "error", err)
+		os.Exit(1)
+	}
+	defer fs.Close()
+
+	// List users
+	if *listUsers {
+		users, err := internal.ListUsers(ctx, fs, 0, 0)
+		if err != nil {
+			logger.Error("Failed to list users", "error", err)
+			os.Exit(1)
+		}
+
+		type UserInfo struct {
+			ID    string  `json:"id"`
+			Name  string  `json:"name"`
+			Phone *string `json:"phone,omitempty"`
+		}
+
+		userInfos := make([]UserInfo, len(users))
+		for i, user := range users {
+			userInfos[i] = UserInfo{
+				ID:    user.ID,
+				Name:  user.Name,
+				Phone: user.Phone,
+			}
+		}
+
+		var output []byte
+		if *pretty {
+			output, err = json.MarshalIndent(userInfos, "", "  ")
+		} else {
+			output, err = json.Marshal(userInfos)
+		}
+
+		if err != nil {
+			logger.Error("Failed to marshal user info", "error", err)
+			os.Exit(1)
+		}
+
+		fmt.Println(string(output))
+		return
+	}
 
 	// Create test data
 	if *createTest {
@@ -67,19 +115,12 @@ func main() {
 		return
 	}
 
-	if *userID == "" {
-		fmt.Println("User ID is required (or use --create-test to create test data)")
+	// Check if user ID is required for the operation
+	if (*listJobs || *checkSearch || *updateStatus != "" || *updateNotes != "") && *userID == "" {
+		fmt.Println("User ID is required for this operation. Use --list-users to see available users, or --create-test to create test data")
 		flag.Usage()
 		os.Exit(1)
 	}
-
-	// Create Firestore client
-	fs, err := internal.NewFirestoreClient(ctx)
-	if err != nil {
-		logger.Error("Failed to create Firestore client", "error", err)
-		os.Exit(1)
-	}
-	defer fs.Close()
 
 	// Check user's search status
 	if *checkSearch {
@@ -112,7 +153,7 @@ func main() {
 				searchData["error"] = user.Search.Error
 			}
 
-			if user.Search.Criteria.Keywords != nil && len(user.Search.Criteria.Keywords) > 0 {
+			if len(user.Search.Criteria.Keywords) > 0 {
 				searchData["keywords"] = user.Search.Criteria.Keywords
 			}
 
@@ -157,17 +198,17 @@ func main() {
 
 		// Convert to a serializable format
 		type SerializableJob struct {
-			ID         string     `json:"id"`
-			Status     string     `json:"status"`
-			ViewedAt   *time.Time `json:"viewed_at,omitempty"`
-			SavedAt    *time.Time `json:"saved_at,omitempty"`
-			AppliedAt  *time.Time `json:"applied_at,omitempty"`
-			RejectedAt *time.Time `json:"rejected_at,omitempty"`
-			Notes      string     `json:"notes,omitempty"`
-			SearchHash string     `json:"search_hash"`
-			CreatedAt  time.Time  `json:"created_at"`
-			UpdatedAt  time.Time  `json:"updated_at"`
-			JobRef     string     `json:"job_ref"`
+			ID         string             `json:"id"`
+			Status     internal.JobStatus `json:"status"`
+			ViewedAt   *time.Time         `json:"viewed_at,omitempty"`
+			SavedAt    *time.Time         `json:"saved_at,omitempty"`
+			AppliedAt  *time.Time         `json:"applied_at,omitempty"`
+			RejectedAt *time.Time         `json:"rejected_at,omitempty"`
+			Notes      string             `json:"notes,omitempty"`
+			SearchHash string             `json:"search_hash"`
+			CreatedAt  time.Time          `json:"created_at"`
+			UpdatedAt  time.Time          `json:"updated_at"`
+			JobRef     string             `json:"job_ref"`
 		}
 
 		serJobs := make([]SerializableJob, len(jobs))

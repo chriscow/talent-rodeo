@@ -25,6 +25,7 @@ import (
 	"cloud.google.com/go/firestore"
 	scsfs "github.com/alexedwards/scs/firestore"
 	"github.com/alexedwards/scs/v2"
+	"github.com/getsentry/sentry-go"
 	"github.com/joho/godotenv"
 	"github.com/lmittmann/tint"
 	"github.com/markbates/goth"
@@ -33,11 +34,6 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/pusher/pusher-http-go/v5"
 )
-
-// PusherInterface defines the interface for Pusher client
-type PusherInterface interface {
-	Trigger(channel string, eventName string, data interface{}) error
-}
 
 func main() {
 	logger := slog.New(tint.NewHandler(os.Stdout, &tint.Options{Level: slog.LevelDebug}))
@@ -104,7 +100,7 @@ type application struct {
 	wg             sync.WaitGroup
 	natsShutdown   chan struct{}
 	mailer         *smtp.Mailer
-	pusher         PusherInterface
+	pusher         *pusher.Client
 	sessionManager *scs.SessionManager
 }
 
@@ -112,6 +108,26 @@ func run(logger *slog.Logger) error {
 	if err := checkEnv(); err != nil {
 		return err
 	}
+
+	// To initialize Sentry's handler, you need to initialize Sentry itself beforehand
+	// https://chris-cowherd.sentry.io/projects/talent-rodeo-dev/getting-started/
+	if err := sentry.Init(sentry.ClientOptions{
+		Dsn: "https://17ea83f451376a7be4907f9020704128@o4508059028946944.ingest.us.sentry.io/4509140632010752",
+	}); err != nil {
+		fmt.Printf("Sentry initialization failed: %v\n", err)
+		return err
+	}
+
+	defer sentry.Flush(time.Second * 5)
+	// Capture panics and send them to Sentry
+	defer func() {
+		if err := recover(); err != nil {
+			sentry.CurrentHub().Recover(err)
+			sentry.Flush(time.Second * 5)
+			fmt.Printf("Panic: %v\n", err)
+			fmt.Printf("Stack trace: %s\n", string(debug.Stack()))
+		}
+	}()
 
 	var cfg config
 
@@ -275,22 +291,25 @@ func run(logger *slog.Logger) error {
 	// taskProcessor.RegisterHandler(scheduler)
 	taskProcessor.RegisterHandler(wh)
 
-	scrapingDog := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), scrapingdog.WithFirestore(firestoreClient, logger))
-	// Start search workers for ScrapingDog provider
-	scrapingDog.StartSearchWorkers(ctx, 5) // Start 5 workers to process the search queue
-	searchService := search.NewService(firestoreClient, logger, scrapingDog, mailer, cfg.notifications.email)
+	searchProvider := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"),
+		scrapingdog.WithFirestore(firestoreClient, logger))
 
-	// Start the search service
+	// Start search workers for ScrapingDog provider
+	searchProvider.StartSearchWorkers(ctx, 5) // Start 5 workers to process the search queue
+
+	searchService := search.NewService(firestoreClient, logger, searchProvider, mailer, cfg.notifications.email, pusherClient)
 	if err := searchService.Start(); err != nil {
 		return fmt.Errorf("failed to start search service: %w", err)
 	}
+
+	searchProvider.SetEventHandler(searchService)
 
 	app := &application{
 		config: cfg,
 		fs:     firestoreClient,
 		logger: logger,
 		mailer: mailer,
-		pusher: &pusherClient,
+		pusher: pusherClient,
 		// natsServer:     natsServer,
 		// jetstream:      js,
 		// natsShutdown:   make(chan struct{}),
@@ -316,7 +335,7 @@ func run(logger *slog.Logger) error {
 	return app.serveHTTP()
 }
 
-func setupPusher(logger *slog.Logger) pusher.Client {
+func setupPusher(logger *slog.Logger) *pusher.Client {
 	logger.Debug("app:pusher config", "app_id", os.Getenv("PUSHER_APP_ID"), "key",
 		os.Getenv("PUSHER_KEY"), "secret", os.Getenv("PUSHER_SECRET"), "cluster", os.Getenv("PUSHER_CLUSTER"))
 
@@ -328,7 +347,7 @@ func setupPusher(logger *slog.Logger) pusher.Client {
 		Secure:  true,
 	}
 
-	return pusherClient
+	return &pusherClient
 }
 
 // setupNATSHandler sets up the NATS client and returns the handler.
@@ -363,7 +382,9 @@ func checkEnv() error {
 	requiredKeys := []string{"BASE_URL", "SESSION_SECRET", "SMTP_USERNAME",
 		"SMTP_PASSWORD", "LINKEDIN_AUTH_CLIENT_ID", "LINKEDIN_AUTH_CLIENT_SECRET",
 		"OPENAI_API_KEY", "GEMINI_API_KEY", "PUSHER_APP_ID", "PUSHER_KEY", "PUSHER_SECRET", "PUSHER_CLUSTER",
-		"TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER", "APP_DOMAIN",
+
+		"TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER",
+
 		"FIREBASE_PROJECT_ID", "FIREBASE_CREDENTIALS",
 		// "CLOUDFLARE_API_EMAIL", "CLOUDFLARE_API_TOKEN",
 		// "CLOUDFLARE_GLOBAL_API_KEY", "CLOUDFLARE_KV_NAMESPACE_ID", "SCRAPINGDOG_API_KEY",

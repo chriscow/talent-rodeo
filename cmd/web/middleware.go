@@ -8,6 +8,7 @@ import (
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/justinas/nosurf"
 	"github.com/tomasen/realip"
 )
@@ -113,14 +114,14 @@ func (app *application) clearSession(w http.ResponseWriter, r *http.Request) {
 
 func (app *application) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		app.logger.Debug("Running authenticate middleware",
+		app.logger.Debug("authenticate: middleware",
 			"path", r.URL.Path,
 			"method", r.Method)
 
 		// Check if user is authenticated
 		userID := app.sessionManager.GetString(r.Context(), "UserID")
 		if userID == "" {
-			app.logger.Debug("No UserID in session", "path", r.URL.Path)
+			app.logger.Debug("authenticate: no UserID in session", "path", r.URL.Path)
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -128,7 +129,7 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 		// Get user from database
 		user, found, err := internal.GetUser(r.Context(), app.fs, userID)
 		if err != nil {
-			app.logger.Error("Error getting user from database",
+			app.logger.Error("authenticate: error getting user from database",
 				"error", err,
 				"user_id", userID)
 			app.serverError(w, r, err)
@@ -136,20 +137,49 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 		}
 
 		if !found {
-			app.logger.Debug("User not found in database",
+			app.logger.Debug("authenticate: user not found in database",
 				"user_id", userID,
 				"path", r.URL.Path)
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		app.logger.Debug("User authenticated",
+		app.logger.Debug("user authenticated",
 			"user_id", user.ID,
 			"email", user.Email,
 			"path", r.URL.Path)
 
 		// Add user to request context
 		r = contextSetAuthenticatedUser(r, user)
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (app *application) setSentryUser(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Get the user from your context
+		user := contextGetAuthenticatedUser(r)
+
+		if user != nil {
+			// Get the hub from the request context (created by the Sentry middleware)
+			if hub := sentry.GetHubFromContext(r.Context()); hub != nil {
+				// Configure the hub's scope with the user info
+				hub.ConfigureScope(func(scope *sentry.Scope) {
+					scope.SetUser(sentry.User{
+						ID:        user.ID,
+						Email:     user.Email,
+						Name:      user.Name,
+						IPAddress: r.Header.Get("X-Forwarded-For"),
+						// Add other user fields as needed
+					})
+				})
+
+				app.logger.Debug("sentry: added user to scope",
+					"user_id", user.ID,
+					"path", r.URL.Path)
+			}
+		}
+
 		next.ServeHTTP(w, r)
 	})
 }

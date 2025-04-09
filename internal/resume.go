@@ -99,6 +99,33 @@ func CreateResume(ctx context.Context, fs *firestore.Client, user User, resume *
 	return nil
 }
 
+func ListResumes(ctx context.Context, fs *firestore.Client, userID string) ([]*Resume, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID for Firestore is required")
+	}
+
+	iter := fs.Collection(usersCollection).Doc(userID).Collection(resumeCollection).Documents(ctx)
+
+	var resumes []*Resume
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to iterate resumes: %w", err)
+		}
+
+		var resume Resume
+		if err := doc.DataTo(&resume); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal resume data: %w", err)
+		}
+		resumes = append(resumes, &resume)
+	}
+
+	return resumes, nil
+}
+
 // annotateResumeTestMode simulates resume annotation in test mode
 func annotateResumeTestMode(logger *slog.Logger, user *User, resume *Resume) error {
 	// Simulate processing delay

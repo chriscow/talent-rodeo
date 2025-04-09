@@ -107,7 +107,7 @@ func TestTranscriptProcessor(t *testing.T) {
 			"test-call-2": "Looking for senior engineering role with focus on distributed systems",
 		}
 
-		analysis, err := processor.analyzeTranscripts(ctx, user.ID, transcripts)
+		analysis, err := processor.analyzeTranscripts(ctx, user, transcripts)
 		if err != nil {
 			t.Fatalf("analyzeTranscripts() error = %v", err)
 		}
@@ -125,7 +125,9 @@ func TestTranscriptProcessor(t *testing.T) {
 		analysis := `The candidate has demonstrated strong backend development experience with 5 years of Go programming. 
 		They are interested in senior engineering positions focusing on distributed systems architecture.`
 
-		search, err := processor.generateSearchCriteria(ctx, user.ID, analysis)
+		user.Search.Statement = analysis
+
+		search, err := processor.generateSearchCriteria(ctx, user)
 		if err != nil {
 			t.Fatalf("generateSearchCriteria() error = %v", err)
 		}

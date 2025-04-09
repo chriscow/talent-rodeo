@@ -40,6 +40,26 @@ func CreateTestUser(t *testing.T, client *firestore.Client, name, email, phone s
 	return user
 }
 
+// CreateTestJob creates a test job for a given user.
+func CreateTestJob(t *testing.T, client *firestore.Client, userID string, jobID string, status JobStatus, createdAt time.Time) *UserJob {
+	t.Helper()
+
+	job := &UserJob{
+		ID:         jobID,
+		SearchHash: fmt.Sprintf("test-search-hash-%s", jobID),
+		JobRef:     client.Collection("job_details").Doc(jobID),
+		Status:     status,
+		CreatedAt:  createdAt,
+		UpdatedAt:  createdAt,
+	}
+
+	if err := SaveUserJob(context.Background(), client, userID, job); err != nil {
+		t.Fatalf("Failed to create test job: %v", err)
+	}
+
+	return job
+}
+
 // CreateTestResume creates a test resume for a given user.
 func CreateTestResume(t *testing.T, client *firestore.Client, user *User, resumeText, annotatedText string) *Resume {
 	t.Helper()
