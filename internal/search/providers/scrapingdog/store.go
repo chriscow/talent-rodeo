@@ -18,25 +18,27 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+const cacheDurationJobListing = 24 * time.Hour
+
 // JobStore is responsible for managing job listings and caching them.
 type JobStore struct {
 	fs     *firestore.Client
 	logger *slog.Logger
-	cache  *ristretto.Cache[string, *search.JobDetail]
+	cache  *ristretto.Cache[string, any]
 }
 
 // NewJobStore creates a new JobStore instance.
 func NewJobStore(ctx context.Context, logger *slog.Logger) (*JobStore, error) {
-	logger.Debug("creating new job store")
+	logger.Debug("scrapingdog: creating new job store")
 
-	logger.Debug("creating firestore client")
+	logger.Debug("scrapingdog: creating firestore client")
 	fs, err := internal.NewFirestoreClient(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create firestore client: %w", err)
 	}
 
-	logger.Debug("creating ristretto cache")
-	cache, err := ristretto.NewCache(&ristretto.Config[string, *search.JobDetail]{
+	logger.Debug("scrapingdog: creating ristretto cache")
+	cache, err := ristretto.NewCache(&ristretto.Config[string, any]{
 		NumCounters: 1e7,     // number of keys to track frequency of (10M)
 		MaxCost:     1 << 30, // maximum cost of cache (1GB)
 		BufferItems: 64,      // number of keys per Get buffer
@@ -51,7 +53,7 @@ func NewJobStore(ctx context.Context, logger *slog.Logger) (*JobStore, error) {
 		cache:  cache,
 	}
 
-	logger.Debug("job store created successfully")
+	logger.Debug("scrapingdog: job store created successfully")
 	return store, nil
 }
 
@@ -64,26 +66,26 @@ func (js *JobStore) GetSearchHash(keywords []string, location string) string {
 
 // GetCachedJobs retrieves cached job listings based on the search criteria.
 func (js *JobStore) GetCachedJobs(ctx context.Context, criteria search.Criteria) ([]search.JobListing, error) {
-	js.logger.Debug("getting cached jobs",
+	js.logger.Debug("scrapingdog: getting cached jobs",
 		"keywords", criteria.Keywords,
 		"location", criteria.Location)
 
 	// Create a unique search hash for caching
 	searchHash := js.GetSearchHash(criteria.Keywords, criteria.Location)
-	js.logger.Debug("generated search hash", "hash", searchHash)
+	js.logger.Debug("scrapingdog: generated search hash", "hash", searchHash)
 
-	// Get the search record first to check if we have cached results
-	js.logger.Debug("checking search record", "hash", searchHash)
+	// First check search record to see if cache is still valid
+	js.logger.Debug("scrapingdog: checking search record in Firestore", "hash", searchHash)
 	searchDoc, err := js.fs.Collection("job_searches").Doc(searchHash).Get(context.Background())
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
-			js.logger.Debug("no cache entry found", "hash", searchHash)
+			js.logger.Debug("scrapingdog: no cache entry found in Firestore", "hash", searchHash)
 			return nil, nil // No cache entry found
 		}
 		return nil, fmt.Errorf("failed to get search record: %w", err)
 	}
 
-	// Check if the search is still fresh (within 4 hours)
+	// Check if the search is still fresh (within cacheDurationJobListing)
 	var searchData struct {
 		LastSearchedAt time.Time `firestore:"last_searched_at"`
 	}
@@ -91,15 +93,35 @@ func (js *JobStore) GetCachedJobs(ctx context.Context, criteria search.Criteria)
 		return nil, fmt.Errorf("failed to parse search data: %w", err)
 	}
 
-	if time.Since(searchData.LastSearchedAt) > 4*time.Hour {
-		js.logger.Debug("cache is stale",
+	if time.Since(searchData.LastSearchedAt) > cacheDurationJobListing {
+		js.logger.Debug("scrapingdog: cache is stale",
 			"hash", searchHash,
 			"last_searched_at", searchData.LastSearchedAt)
-		return nil, nil // Cache is stale, return empty to trigger new search
+		// Clear Ristretto cache for this search
+		key := fmt.Sprintf("search:%s", searchHash)
+		js.cache.Del(key)
+		// Return empty to trigger new search since the cache is stale
+		return nil, nil
 	}
 
-	// Get the job listings for this search
-	js.logger.Debug("retrieving cached job listings", "hash", searchHash)
+	// Check Ristretto cache since search is still valid
+	key := fmt.Sprintf("search:%s", searchHash)
+	if cachedValue, found := js.cache.Get(key); found {
+		if cachedJobs, ok := cachedValue.([]search.JobListing); ok {
+			// Ensure SearchHash is set on all jobs
+			for i := range cachedJobs {
+				cachedJobs[i].SearchHash = searchHash
+			}
+			js.logger.Debug("scrapingdog: found jobs in Ristretto cache",
+				"hash", searchHash,
+				"num_jobs", len(cachedJobs))
+			return cachedJobs, nil
+		}
+		js.logger.Warn("scrapingdog: invalid type in cache", "hash", searchHash)
+	}
+
+	// Get the job listings from Firestore
+	js.logger.Debug("scrapingdog: retrieving cached job listings from Firestore", "hash", searchHash)
 	iter := js.fs.Collection("job_listings").Where("search_hash", "==", searchHash).Documents(ctx)
 
 	var jobs []search.JobListing
@@ -115,27 +137,103 @@ func (js *JobStore) GetCachedJobs(ctx context.Context, criteria search.Criteria)
 		if err := doc.DataTo(&job); err != nil {
 			return nil, fmt.Errorf("failed to parse job data: %w", err)
 		}
+		// Ensure SearchHash is set
+		job.SearchHash = searchHash
 		jobs = append(jobs, job)
 	}
 
-	js.logger.Debug("found cached jobs",
+	// Store in Ristretto cache for future use if we found jobs
+	if len(jobs) > 0 {
+		js.logger.Debug("scrapingdog: storing jobs in Ristretto cache",
+			"hash", searchHash,
+			"num_jobs", len(jobs))
+		js.cache.Set(key, jobs, int64(len(jobs)))
+		js.cache.Wait()
+	}
+
+	js.logger.Debug("scrapingdog: found cached jobs in Firestore",
 		"hash", searchHash,
 		"num_jobs", len(jobs))
 	return jobs, nil
 }
 
-// SaveJobListings saves job listings to Firestore.
-func (js *JobStore) SaveJobListings(ctx context.Context, criteria search.Criteria, jobs []search.JobListing) error {
-	js.logger.Debug("saving job listings",
-		"keywords", criteria.Keywords,
-		"location", criteria.Location,
-		"num_jobs", len(jobs))
+// GetCachedJobDetails retrieves cached job details from Ristretto or Firestore
+func (js *JobStore) GetCachedJobDetails(ctx context.Context, jobID string) (*search.JobDetail, error) {
+	// Try Ristretto cache first
+	key := fmt.Sprintf("job_details:%s", jobID)
+	if value, found := js.cache.Get(key); found {
+		if details, ok := value.(*search.JobDetail); ok {
+			js.logger.Debug("scrapingdog: found job details in Ristretto cache", "job_id", jobID)
+			return details, nil
+		}
+	}
 
+	// Try Firestore if not in Ristretto
+	js.logger.Debug("scrapingdog: checking job details in Firestore", "job_id", jobID)
+	doc, err := js.fs.Collection("job_details").Doc(jobID).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			js.logger.Debug("scrapingdog: no job details found in Firestore", "job_id", jobID)
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get job details from firestore: %w", err)
+	}
+
+	// Parse the document to a JobDetail
+	var details search.JobDetail
+	if err := doc.DataTo(&details); err != nil {
+		return nil, fmt.Errorf("failed to parse job details: %w", err)
+	}
+
+	// Cache in Ristretto for future use
+	js.logger.Debug("scrapingdog: caching job details in Ristretto", "job_id", jobID)
+	js.cache.Set(key, &details, 1)
+	js.cache.Wait()
+
+	return &details, nil
+}
+
+// SaveJobDetails saves job details to both Firestore and Ristretto cache
+func (js *JobStore) SaveJobDetails(ctx context.Context, details *search.JobDetail) error {
+	js.logger.Debug("scrapingdog: saving job details",
+		"job_id", details.ID,
+		"provider_job_id", details.ProviderJobID)
+
+	// Ensure we have a proper ID for the job details
+	if details.ID == "" {
+		details.ID = funcs.Slugify(fmt.Sprintf("%s %s", details.Provider, details.ProviderJobID))
+	}
+
+	// Save to Firestore
+	js.logger.Debug("scrapingdog: saving job details to firestore",
+		"job_id", details.ID,
+		"provider_job_id", details.ProviderJobID)
+	_, err := js.fs.Collection("job_details").Doc(details.ID).Set(ctx, details)
+	if err != nil {
+		return fmt.Errorf("failed to save job details to firestore: %w", err)
+	}
+
+	// Save to Ristretto cache with cost of 1
+	js.logger.Debug("scrapingdog: saving job details to ristretto cache",
+		"job_id", details.ID,
+		"provider_job_id", details.ProviderJobID)
+	key := fmt.Sprintf("job_details:%s", details.ID)
+	js.cache.Set(key, details, 1)
+	js.cache.Wait() // ensure the write is complete
+
+	js.logger.Debug("scrapingdog: successfully saved job details",
+		"job_id", details.ID,
+		"provider_job_id", details.ProviderJobID)
+	return nil
+}
+
+// SaveJobListings saves job listings to Firestore and updates the Ristretto cache.
+func (js *JobStore) SaveJobListings(ctx context.Context, criteria search.Criteria, jobs []search.JobListing) error {
 	searchHash := js.GetSearchHash(criteria.Keywords, criteria.Location)
-	js.logger.Debug("generated search hash", "hash", searchHash)
+	js.logger.Debug("scrapingdog: generated search hash", "hash", searchHash)
 
 	// Delete existing job listings for this search hash
-	js.logger.Debug("cleaning up old job listings", "hash", searchHash)
+	js.logger.Debug("scrapingdog: cleaning up old job listings", "hash", searchHash)
 	oldJobs, err := js.fs.Collection("job_listings").Where("search_hash", "==", searchHash).Documents(ctx).GetAll()
 	if err != nil {
 		return fmt.Errorf("failed to get old job listings: %w", err)
@@ -147,7 +245,7 @@ func (js *JobStore) SaveJobListings(ctx context.Context, criteria search.Criteri
 	}
 
 	// Update the search record
-	js.logger.Debug("updating search record", "hash", searchHash)
+	js.logger.Debug("scrapingdog: updating search record", "hash", searchHash)
 	_, err = js.fs.Collection("job_searches").Doc(searchHash).Set(ctx, map[string]any{
 		"keywords":         criteria.Keywords,
 		"location":         criteria.Location,
@@ -174,7 +272,7 @@ func (js *JobStore) SaveJobListings(ctx context.Context, criteria search.Criteri
 		job.SearchHash = searchHash
 		job.FirstSeenAt = time.Now()
 
-		js.logger.Debug("saving job listing",
+		js.logger.Debug("scrapingdog: saving job listing",
 			"job_id", job.ID,
 			"provider_job_id", job.ProviderJobID)
 		_, err := js.fs.Collection("job_listings").Doc(job.ID).Set(ctx, job)
@@ -183,49 +281,16 @@ func (js *JobStore) SaveJobListings(ctx context.Context, criteria search.Criteri
 		}
 	}
 
-	js.logger.Debug("successfully saved all job listings",
+	// Update Ristretto cache with the new job listings
+	key := fmt.Sprintf("search:%s", searchHash)
+	js.logger.Debug("scrapingdog: updating jobs in Ristretto cache",
 		"hash", searchHash,
 		"num_jobs", len(jobs))
-	return nil
-}
+	js.cache.Set(key, jobs, int64(len(jobs)))
+	js.cache.Wait()
 
-// GetCachedJobDetails retrieves cached job details from Ristretto cache
-func (js *JobStore) GetCachedJobDetails(ctx context.Context, jobID string) (*search.JobDetail, error) {
-	js.logger.Debug("getting cached job details", "job_id", jobID)
-	key := fmt.Sprintf("job_details:%s", jobID)
-
-	details, found := js.cache.Get(key)
-	if !found {
-		js.logger.Debug("no cached job details found", "job_id", jobID)
-		return nil, nil
-	}
-
-	js.logger.Debug("found cached job details", "job_id", jobID)
-	return details, nil
-}
-
-// SaveJobDetails saves job details to both Firestore and Ristretto cache
-func (js *JobStore) SaveJobDetails(ctx context.Context, details *search.JobDetail) error {
-	js.logger.Debug("saving job details",
-		"job_id", details.ID,
-		"provider_job_id", details.ProviderJobID)
-
-	// Save to Firestore
-	js.logger.Debug("saving job details to firestore",
-		"provider_job_id", details.ProviderJobID)
-	_, err := js.fs.Collection("job_details").Doc(details.ProviderJobID).Set(ctx, details)
-	if err != nil {
-		return fmt.Errorf("failed to save job details to firestore: %w", err)
-	}
-
-	// Save to Ristretto cache with cost of 1
-	js.logger.Debug("saving job details to ristretto cache",
-		"provider_job_id", details.ProviderJobID)
-	key := fmt.Sprintf("job_details:%s", details.ProviderJobID)
-	js.cache.Set(key, details, 1)
-	js.cache.Wait() // ensure the write is complete
-
-	js.logger.Debug("successfully saved job details",
-		"provider_job_id", details.ProviderJobID)
+	js.logger.Debug("scrapingdog: successfully saved all job listings",
+		"hash", searchHash,
+		"num_jobs", len(jobs))
 	return nil
 }

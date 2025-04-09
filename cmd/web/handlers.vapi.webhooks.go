@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
 	"talent-rodeo/internal/vapi"
 	"time"
@@ -25,9 +24,9 @@ type MessageResponse struct {
 
 // AssistantRequestResponse is returned for assistant-request message types
 type AssistantRequestResponse struct {
-	// This could contain destination, assistant config, etc.
-	// For simplicity, we'll just include the basic required fields
-	AssistantID string `json:"assistantId"`
+	// This is the error if the call shouldn’t be accepted. This is spoken to the customer.
+	// If this is sent, assistantId, assistant, squadId, squad, and destination are ignored.
+	Error string `json:"error,omitempty"`
 }
 
 // ToolCallsResponse is returned for tool-calls message types
@@ -157,9 +156,19 @@ func saveWebhookPayload(msgType string, body []byte, logger *slog.Logger, fs *fi
 
 // handleAssistantRequest handles assistant-request messages
 func (h *application) handleAssistantRequest(w http.ResponseWriter, r *http.Request, msg vapi.WebhookMessage) {
+
+	// user, ok, err := internal.GetUserByPhone(r.Context(), h.fs, msg.Message.Data["phoneNumber"].(string))
+	// if err != nil {
+	// 	h.logger.Error("failed to get user by phone number", "error", err)
+	// 	response.JSON(w, http.StatusInternalServerError, MessageResponse{
+	// 		Error: "failed to get user by phone number",
+	// 	})
+	// 	return
+	// }
+
 	resp := MessageResponse{
 		MessageResponse: AssistantRequestResponse{
-			AssistantID: "default-assistant-id", // In a real implementation, you would determine this dynamically
+			Error: "This is the error if the call shouldn’t be accepted. This is spoken to the customer.",
 		},
 	}
 
@@ -229,6 +238,7 @@ func getMapKeys(data []byte) []string {
 func (app *application) handleEndOfCallReport(r *http.Request, webhookMsg vapi.WebhookMessage) error {
 	report, err := app.validateEndOfCallReport(webhookMsg)
 	if err != nil {
+		app.reportServerError(r, fmt.Errorf("failed to validate end-of-call report: %w", err))
 		app.logger.Error("failed to validate end-of-call report", "error", err)
 		return fmt.Errorf("failed to validate end-of-call report: %w", err)
 	}
@@ -243,38 +253,14 @@ func (app *application) handleEndOfCallReport(r *http.Request, webhookMsg vapi.W
 		}
 	}
 
-	app.logger.Debug("received end of call report", "user_id", customerID, "appointmentID", appointmentID)
-
-	// Get the appointment
-	appointment, err := internal.GetAppointment(r.Context(), app.fs, customerID, appointmentID)
-	if err != nil {
-		app.logger.Error("failed to get appointment",
-			"error", err,
-			"customer_id", customerID,
-			"appointment_id", appointmentID)
-		return fmt.Errorf("failed to get appointment for user %s: %w", customerID, err)
+	if err := app.processCompletedAppointment(r, customerID, appointmentID, *report); err != nil {
+		app.logger.Error("failed to process completed appointment", "error", err)
+		app.reportServerError(r, fmt.Errorf("failed to process completed appointment: %w", err))
+		return fmt.Errorf("failed to process completed appointment: %w", err)
 	}
 
-	// Update the appointment with the call result and report
-	appointment.CallID = report.Call.ID
-	appointment.TranscriptSummary = report.Summary
-	appointment.UpdatedAt = time.Now()
-	endReason := report.EndedReason
+	app.logger.Debug("processed end-of-call report", "appointment_id", appointmentID, "customer_id", customerID)
 
-	// Update appointment status based on call result
-	status, shouldLog := internal.MapVapiEndReasonToAppointmentStatus(endReason)
-	appointment.Status = status
-
-	if shouldLog {
-		app.logger.Info("appointment status updated",
-			"appointment_id", appointmentID,
-			"status", status,
-			"end_reason", endReason)
-	}
-
-	app.backgroundTask(r, func() error {
-		return internal.ProcessCompletedAppointment(app.fs, app.logger, appointment)
-	})
 	return nil
 }
 

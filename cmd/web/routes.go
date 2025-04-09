@@ -6,14 +6,23 @@ import (
 	"talent-rodeo/assets"
 
 	"github.com/alexedwards/flow"
+	sentryhttp "github.com/getsentry/sentry-go/http"
 )
 
 func (app *application) routes() http.Handler {
 	mux := flow.New()
 	mux.NotFound = http.HandlerFunc(app.notFound)
 
+	// Create an instance of sentryhttp
+	sentryHandler := sentryhttp.New(sentryhttp.Options{
+		Repanic:         true,
+		WaitForDelivery: true,
+	})
+
 	// mux.Use(app.debugHeaders)
 	mux.Use(app.recoverPanic)
+	mux.Use(sentryHandler.Handle)
+
 	mux.Use(app.securityHeaders)
 	mux.Use(app.logAccess)
 	mux.Use(app.sessionManager.LoadAndSave)
@@ -33,6 +42,7 @@ func (app *application) routes() http.Handler {
 			mux.Use(app.preventCSRF)
 		}
 		mux.Use(app.authenticate)
+		mux.Use(app.setSentryUser)
 
 		mux.HandleFunc("/", app.home, "GET", "POST") // we need post because of the logout form
 
@@ -54,7 +64,6 @@ func (app *application) routes() http.Handler {
 			mux.HandleFunc("/profile", app.showProfilePage, "GET")
 			mux.HandleFunc("/profile/onboarding/reset", app.resetOnboardingState, "POST")
 			mux.HandleFunc("/profile/resume/:resumeID", app.deleteResume, "DELETE")
-			mux.HandleFunc("/dashboard", app.showDashboard, "GET")
 
 			// Direct resume upload route - always shows the resume upload form regardless of onboarding state
 			// Used for:
@@ -70,6 +79,8 @@ func (app *application) routes() http.Handler {
 			mux.HandleFunc("/profile/schedule/appointment/:id", app.cancelAppointment, "DELETE")
 			mux.HandleFunc("/profile/schedule/reschedule", app.rescheduleAppointment, "POST")
 			mux.HandleFunc("/profile/schedule/call-now", app.callNow, "POST")
+
+			mux.HandleFunc("/dashboard", app.showDashboard, "GET")
 
 			mux.HandleFunc("/testing/reset-user-state", app.handleTestingResetUserState, "POST")
 

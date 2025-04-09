@@ -196,7 +196,7 @@ func (app *application) createAppointment(w http.ResponseWriter, r *http.Request
 	}
 
 	// Update onboarding state
-	err = internal.UpdateUserStatus(r.Context(), app.fs, user, internal.UserStatusIntroCallScheduled)
+	err = internal.UpdateUserStatus(r.Context(), app.fs, user, internal.UserStatusCallScheduled)
 	if err != nil {
 		app.logger.Error("Failed to update onboarding state", "error", err)
 		http.Error(w, fmt.Sprintf("Failed to update onboarding state: %v", err), http.StatusInternalServerError)
@@ -388,7 +388,7 @@ func (app *application) callNow(w http.ResponseWriter, r *http.Request) {
 		"phone_number", *user.Phone)
 
 	// Update onboarding state
-	err = internal.UpdateUserStatus(r.Context(), app.fs, user, internal.UserStatusIntroCallScheduled)
+	err = internal.UpdateUserStatus(r.Context(), app.fs, user, internal.UserStatusCallScheduled)
 	if err != nil {
 		app.logger.Error("Failed to update onboarding state",
 			"error", err,

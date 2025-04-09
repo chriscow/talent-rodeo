@@ -21,6 +21,13 @@ import (
 func (app *application) showProfilePage(w http.ResponseWriter, r *http.Request) {
 	user := contextGetAuthenticatedUser(r)
 
+	app.logger.Debug("showProfilePage", "user_id", user.ID, "status", user.State.Status)
+
+	if user.State.Status >= internal.UserStatusCallScheduled {
+		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+		return
+	}
+
 	// Show appropriate view based on onboarding state
 	switch user.State.Status {
 	case internal.UserStatusPendingResumeUpload:
@@ -32,8 +39,7 @@ func (app *application) showProfilePage(w http.ResponseWriter, r *http.Request) 
 		}
 	case internal.UserStatusResumeUploaded:
 		app.showSchedulePage(w, r)
-	case internal.UserStatusIntroCallScheduled:
-		app.showWaitingCallPage(w, r)
+
 	case internal.UserStatusError:
 		// Get error message before resetting state
 		data := app.newTemplateData(r)

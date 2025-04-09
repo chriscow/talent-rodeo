@@ -26,3 +26,8 @@ type WebhookMessageContent struct {
 	Type string          `json:"type"`
 	Data json.RawMessage `json:"data"`
 }
+
+type AssistantRequest struct {
+	Type string `json:"type"` // "assistant-request"
+
+}

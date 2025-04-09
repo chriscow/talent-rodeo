@@ -31,7 +31,6 @@ import (
 //
 // Saving a new search criteria triggers a new search.
 func ProcessCompletedAppointment(fs *firestore.Client, logger *slog.Logger, appointment *Appointment) error {
-	logger.Info(Green("processing completed appointment"), "user_id", appointment.UserID, "appointment_id", appointment.ID)
 	processor, err := NewTranscriptProcessor(fs, logger)
 	if err != nil {
 		logger.Error("failed to create transcript processor", "error", err)
@@ -47,6 +46,11 @@ func ProcessCompletedAppointment(fs *firestore.Client, logger *slog.Logger, appo
 		if !found {
 			logger.Error("user not found", "user_id", appointment.UserID)
 			return
+		}
+
+		// Initialize user.Search if it is nil
+		if user.Search == nil {
+			user.Search = &UserSearch{}
 		}
 
 		if err := processor.ProcessCompletedAppointment(context.Background(), user, appointment); err != nil {
@@ -87,21 +91,16 @@ func (p *TranscriptProcessor) ProcessCompletedAppointment(ctx context.Context, u
 	p.logger.Info(BGGreen("processing completed appointment"), "user_id", user.ID, "appointment_id", appointment.ID)
 	defer p.logger.Info(BGGreen("processed completed appointment"), "user_id", user.ID, "appointment_id", appointment.ID)
 
-	if err := UpdateAppointment(ctx, p.fs, appointment); err != nil {
-		return fmt.Errorf("failed to update appointment: %w", err)
-	}
-
 	transcripts, err := p.collectTranscripts(ctx, appointment.UserID)
 	if err != nil {
 		return fmt.Errorf("failed to collect transcripts: %w", err)
 	}
 
-	analysis, err := p.analyzeTranscripts(ctx, appointment.UserID, transcripts)
-	if err != nil {
+	if _, err := p.analyzeTranscripts(ctx, user, transcripts); err != nil {
 		return fmt.Errorf("failed to analyze transcripts: %w", err)
 	}
 
-	criteria, err := p.generateSearchCriteria(ctx, appointment.UserID, analysis)
+	criteria, err := p.generateSearchCriteria(ctx, user)
 	if err != nil {
 		return fmt.Errorf("failed to generate search criteria: %w", err)
 	}
@@ -160,9 +159,9 @@ func (p *TranscriptProcessor) collectTranscripts(ctx context.Context, userID str
 }
 
 // analyzeTranscripts generates an analysis of the transcripts using OpenAI
-func (p *TranscriptProcessor) analyzeTranscripts(ctx context.Context, userID string, transcripts map[string]string) (string, error) {
-	p.logger.Debug("analyzing transcripts", "user_id", userID)
-	defer p.logger.Debug("analyzed transcripts", "user_id", userID)
+func (p *TranscriptProcessor) analyzeTranscripts(ctx context.Context, user *User, transcripts map[string]string) (string, error) {
+	p.logger.Debug("analyzing transcripts", "user_id", user.ID)
+	defer p.logger.Debug("analyzed transcripts", "user_id", user.ID)
 
 	const analysisFile = "prompts/transcript-analysis-cot.001.txt"
 
@@ -210,13 +209,35 @@ func (p *TranscriptProcessor) analyzeTranscripts(ctx context.Context, userID str
 		return "", fmt.Errorf("failed to ask openai: %w", err)
 	}
 
+	// Initialize user.Search if it is nil
+	if user.Search == nil {
+		user.Search = &UserSearch{}
+	}
+
+	user.Search.Statement = analysis.String()
+
+	if err := UpdateUserSearch(ctx, p.fs, user.ID, user.Search); err != nil {
+		return "", fmt.Errorf("failed to update user search: %w", err)
+	}
+
 	return analysis.String(), nil
 }
 
 // generateSearchCriteria converts the analysis into structured search criteria
-func (p *TranscriptProcessor) generateSearchCriteria(ctx context.Context, userID string, analysis string) (*search.Criteria, error) {
-	p.logger.Debug("generating search criteria", "user_id", userID)
-	defer p.logger.Debug("generated search criteria", "user_id", userID)
+func (p *TranscriptProcessor) generateSearchCriteria(ctx context.Context, user *User) (*search.Criteria, error) {
+	p.logger.Debug("generating search criteria", "user_id", user.ID)
+	defer p.logger.Debug("generated search criteria", "user_id", user.ID)
+
+	// Check if user.Search is nil
+	if user.Search == nil {
+		return nil, fmt.Errorf("user search is not initialized")
+	}
+
+	if user.Search.Statement == "" {
+		return nil, fmt.Errorf("no search statement found")
+	}
+
+	analysis := user.Search.Statement
 
 	schema, err := minds.NewResponseSchema("analysis", "Structured analysis of the transcript", search.Criteria{})
 	if err != nil {
@@ -225,8 +246,10 @@ func (p *TranscriptProcessor) generateSearchCriteria(ctx context.Context, userID
 
 	messages := []minds.Message{
 		{
-			Role:    minds.RoleUser,
-			Content: `Given the following transcript analysis, generate a JSON response with search criteria. Include only keywords and relevant job preferences: ` + analysis,
+			Role: minds.RoleUser,
+			Content: `Given the following statement of job search preferences, 
+			generate a JSON response with search criteria. 
+			Include only keywords, desireable locations (including remote) and relevant job preferences: ` + analysis,
 		},
 	}
 

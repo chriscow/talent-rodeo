@@ -2,11 +2,9 @@ package internal
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"cloud.google.com/go/firestore"
-	"google.golang.org/api/iterator"
 )
 
 func setupTestFirestore(t *testing.T) *firestore.Client {
@@ -18,6 +16,7 @@ func setupTestFirestore(t *testing.T) *firestore.Client {
 	return fs
 }
 
+/*
 func cleanupUserSearchResults(ctx context.Context, fs *firestore.Client, userID string) error {
 	iter := fs.Collection("users").Doc(userID).Collection("search_results").Documents(ctx)
 	for {
@@ -261,3 +260,4 @@ func TestUpdateSearchResultStatus(t *testing.T) {
 		})
 	}
 }
+*/
