@@ -14,6 +14,23 @@ import (
 	"talent-rodeo/internal/tasks"
 )
 
+// Publisher defines the minimal interface needed for publishing messages.
+// Implementations must be able to publish messages to a specific subject
+// with arbitrary byte data.
+type Publisher interface {
+	// Publish sends a message with the given data to the specified subject.
+	// The context can be used to cancel the publish operation.
+	Publish(ctx context.Context, subject string, data []byte) error
+}
+
+// SearchInput represents the input message for job searches
+type SearchInput struct {
+	CandidateID     string   `json:"candidate_id"`
+	MustHaveSkills  []string `json:"must_have_skills"`
+	PreferredSkills []string `json:"preferred_skills"`
+	Page            int      `json:"page"`
+}
+
 // MockTaskProcessor implements TaskProcessor for testing
 type MockTaskProcessor struct {
 	enqueuedTasks []*internal.Task
@@ -44,7 +61,7 @@ func (m *MockTaskProcessor) EnqueueTask(ctx context.Context, task *internal.Task
 
 		// If this is a search message, we need to handle it specially by publishing multiple messages
 		if payload.Subject == search.TopicSearchInput {
-			var searchInput search.SearchInput
+			var searchInput SearchInput
 			if err := json.Unmarshal(payload.Data, &searchInput); err != nil {
 				return fmt.Errorf("failed to unmarshal search input: %w", err)
 			}
