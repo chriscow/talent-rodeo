@@ -2,9 +2,19 @@ package search
 
 import (
 	"time"
-
-	"github.com/google/uuid"
 )
+
+// SortByPeriod defines the possible values for the SortBy field
+type SortByPeriod string
+
+// WorkType defines the possible values for the WorkType field
+type WorkType string
+
+// JobType defines the possible values for the JobType field
+type JobType string
+
+// ExperienceLevel defines the possible values for the Experience field
+type ExperienceLevel string
 
 // Constants for message routing
 const (
@@ -32,87 +42,67 @@ const (
 	ExperienceDirector   ExperienceLevel = "director"
 )
 
-// SearchInput represents the input message for job searches
-type SearchInput struct {
-	CandidateID     string   `json:"candidate_id"`
-	MustHaveSkills  []string `json:"must_have_skills"`
-	PreferredSkills []string `json:"preferred_skills"`
-	Page            int      `json:"page"`
-}
-
 // Result represents a job search result with metadata
-type Result struct {
-	Job       JobListing `json:"job"`
-	Score     float64    `json:"score"`
-	Keywords  []string   `json:"matched_keywords,omitempty"`
-	CreatedAt time.Time  `json:"created_at"`
-}
+// type Result struct {
+// 	Job       JobListing `json:"job"`
+// 	Score     float64    `json:"score"`
+// 	Keywords  []string   `json:"matched_keywords,omitempty"`
+// 	CreatedAt time.Time  `json:"created_at"`
+// }
 
 // CacheEntry represents a cached search result
-type CacheEntry struct {
-	ID        uuid.UUID `json:"id"`
-	QueryHash string    `json:"query_hash"`
-	Provider  uuid.UUID `json:"provider_id"`
-	Results   []Result  `json:"results"`
-	CreatedAt time.Time `json:"created_at"`
-	ExpiresAt time.Time `json:"expires_at"`
-}
+// type CacheEntry struct {
+// 	ID        uuid.UUID `json:"id"`
+// 	QueryHash string    `json:"query_hash"`
+// 	Provider  uuid.UUID `json:"provider_id"`
+// 	Results   []Result  `json:"results"`
+// 	CreatedAt time.Time `json:"created_at"`
+// 	ExpiresAt time.Time `json:"expires_at"`
+// }
 
 // Keyword represents an extracted and categorized keyword
-type Keyword struct {
-	ID         uuid.UUID `json:"id"`
-	JobID      uuid.UUID `json:"job_id"`
-	Text       string    `json:"text"`
-	Category   string    `json:"category"` // skill, title, culture, etc.
-	Confidence float64   `json:"confidence"`
-	CreatedAt  time.Time `json:"created_at"`
-}
+// type Keyword struct {
+// 	ID         uuid.UUID `json:"id"`
+// 	JobID      uuid.UUID `json:"job_id"`
+// 	Text       string    `json:"text"`
+// 	Category   string    `json:"category"` // skill, title, culture, etc.
+// 	Confidence float64   `json:"confidence"`
+// 	CreatedAt  time.Time `json:"created_at"`
+// }
 
 // Criteria defines the parameters used to search for jobs.
 // This struct is designed to be provider-agnostic, allowing each provider
 // to map these fields to their specific API parameters.
 type Criteria struct {
-	Keywords   []string `json:"keywords" firestore:"keywords" description:"Search phrases and keywords to find in job titles, descriptions, and requirements"` // Required search terms
-	Location   string   `json:"location" firestore:"location" description:"General geographic location (can be remote)"`                                       // Geographic location (can be remote)
-	PageNumber int      `json:"-" firestore:"-" jsonschema:"-"`                                                                                                // Page number for pagination
-	SortBy     string   `json:"-" firestore:"-" jsonschema:"-"`                                                                                                // day, week, month - for filtering by posting date
-	JobType    []string `json:"-" firestore:"-" jsonschema:"-"`                                                                                                // Full-time, part-time, contract, etc.
-	Experience []string `json:"-" firestore:"-" jsonschema:"-"`                                                                                                // Experience levels
-	WorkType   string   `json:"-" firestore:"-" jsonschema:"-"`                                                                                                // at_work, remote, hybrid
-	CompanyID  string   `json:"-" firestore:"-" jsonschema:"-"`                                                                                                // LinkedIn company ID for filtering by company
+	Keywords   []string `json:"keywords" firestore:"keywords" description:"Search phrases and keywords to find in job titles, descriptions, and requirements"`                                                                                    // Required search terms
+	Location   string   `json:"location" firestore:"location" description:"Nearest major metropolitan area in the United States (can be 'Remote')"`                                                                                               // Geographic location (can be remote)
+	PageNumber int      `json:"-" firestore:"-" jsonschema:"-"`                                                                                                                                                                                   // Page number for pagination
+	SortBy     string   `json:"-" firestore:"-" jsonschema:"-"`                                                                                                                                                                                   // day, week, month - for filtering by posting date
+	JobType    []string `json:"-" firestore:"job-type" jsonschema:"job-type" enum:"temporary,contract,volunteer,full_time,part_time" description:"A value here will filter on job type.  Leave blank if you ant all jobs."`                       // temporary, contract, volunteer, full_time & part_time                                                                                                                                                                    // Full-time, part-time, contract, etc.
+	Experience []string `json:"-" firestore:"experience" jsonschema:"experience" enum:"internship,entry_level,associate,mid_senior_level,director" description:"A value here will filter on experience level.  Leave blank if you ant all jobs."` // internship, entry_level, associate, mid_senior_level & director                                                                                                                                                                         // Experience levels
+	WorkType   string   `json:"-" firestore:"work-type" jsonschema:"work-type" enum:"at_work,remote,hybrid" description:"This will FILTER OUT jobs. If the user was explicit about the work type, include a value here otherwise leave it blank"` // at_work, remote, hybrid
+	CompanyID  string   `json:"-" firestore:"-" jsonschema:"-"`                                                                                                                                                                                   // LinkedIn company ID for filtering by company
 }
 
 // ProgressUpdate represents a search progress update message
-type ProgressUpdate struct {
-	TotalJobs       int         `json:"totalJobs"`
-	AnalyzedJobs    int         `json:"analyzedJobs"`
-	GoodFitJobs     int         `json:"goodFitJobs"`
-	Status          string      `json:"status"`
-	IsComplete      bool        `json:"isComplete"`
-	PercentComplete float64     `json:"percentComplete"`
-	Results         []JobResult `json:"results,omitempty"`
-}
+// type ProgressUpdate struct {
+// 	TotalJobs       int         `json:"totalJobs"`
+// 	AnalyzedJobs    int         `json:"analyzedJobs"`
+// 	GoodFitJobs     int         `json:"goodFitJobs"`
+// 	Status          string      `json:"status"`
+// 	IsComplete      bool        `json:"isComplete"`
+// 	PercentComplete float64     `json:"percentComplete"`
+// 	Results         []JobResult `json:"results,omitempty"`
+// }
 
 // JobResult represents a job search result
-type JobResult struct {
-	Title      string          `json:"title"`
-	Company    string          `json:"company"`
-	Location   string          `json:"location"`
-	MatchScore int             `json:"matchScore"`
-	SkillMatch map[string]bool `json:"skillMatch"`
-}
-
-// SortByPeriod defines the possible values for the SortBy field
-type SortByPeriod string
-
-// WorkType defines the possible values for the WorkType field
-type WorkType string
-
-// JobType defines the possible values for the JobType field
-type JobType string
-
-// ExperienceLevel defines the possible values for the Experience field
-type ExperienceLevel string
+// type JobResult struct {
+// 	Title      string          `json:"title"`
+// 	Company    string          `json:"company"`
+// 	Location   string          `json:"location"`
+// 	MatchScore int             `json:"matchScore"`
+// 	SkillMatch map[string]bool `json:"skillMatch"`
+// }
 
 // JobListing represents a basic job listing.
 // This is the minimal set of fields returned from a search operation.
@@ -173,9 +163,9 @@ type JobDetail struct {
 }
 
 // SearchResults represents the results of a job search
-type SearchResults struct {
-	Jobs []JobListing `json:"jobs"`
-}
+// type SearchResults struct {
+// 	Jobs []JobListing `json:"jobs"`
+// }
 
 // SalaryRange represents a salary range for job listings.
 // Some providers may not support all fields, so implementations

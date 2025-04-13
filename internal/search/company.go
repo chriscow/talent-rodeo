@@ -9,6 +9,7 @@ type Company struct {
 	Size        string // Company size range
 	Description string
 	LogoURL     string
+	ProfileURL  string
 	// Future considerations:
 	// - Company culture
 	// - Tech stack
