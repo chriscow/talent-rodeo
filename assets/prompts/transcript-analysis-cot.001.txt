@@ -9,7 +9,8 @@ descriptions. Follow these steps carefully:
 
 1. Work Location Analysis:
 Wrap your analysis in <work_location_analysis> tags:
-- List all quotes from the transcript that mention location preferences.
+- List all quotes from the transcript that mention geographic location preferences.
+- List all quotes that mention work type preferences (remote, hybrid, on-site).
 - For each quote:
   - Categorize it as remote, specific location, or unclear.
   - If it mentions remote work, note this explicitly.
