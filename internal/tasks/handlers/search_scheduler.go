@@ -2,28 +2,9 @@
 // It includes implementations for search scheduling, message handling, and task processing.
 package handlers
 
-import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"log/slog"
-	"time"
+/*
 
-	"talent-rodeo/internal"
-	"talent-rodeo/internal/search"
-	"talent-rodeo/internal/tasks"
 
-	"cloud.google.com/go/firestore"
-)
-
-// Publisher defines the minimal interface needed for publishing messages.
-// Implementations must be able to publish messages to a specific subject
-// with arbitrary byte data.
-type Publisher interface {
-	// Publish sends a message with the given data to the specified subject.
-	// The context can be used to cancel the publish operation.
-	Publish(ctx context.Context, subject string, data []byte) error
-}
 
 // SearchSchedulerPayload represents the data needed for scheduling a search.
 // It contains the unique identifier of the candidate for whom the search
@@ -323,3 +304,4 @@ func (h *SearchScheduler) ScheduleInitialSearch(ctx context.Context, userID stri
 
 	return nil
 }
+*/
