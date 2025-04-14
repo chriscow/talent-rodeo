@@ -24,7 +24,8 @@ type UserSearch struct {
 	// The criteria for the search
 	Criteria search.Criteria `json:"criteria" firestore:"criteria"`
 
-	// The statement of the user's search
+	// A concise first-person statement of the user's preferences. This is
+	// used to further generate the search.Criteria above.
 	Statement string `json:"statement" firestore:"statement"`
 
 	// Holds error messages from transcript processing.

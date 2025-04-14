@@ -33,6 +33,44 @@ func (p Prompt) Execute(data any) (string, error) {
 	return result.String(), nil
 }
 
+func validateTemplateContent(content string) error {
+	// Skip validation for code blocks that might contain valid single braces
+	// Extract content outside of code blocks (indicated by ```...```)
+	contentToCheck := content
+	codeBlocks := strings.Split(content, "```")
+
+	// If there are code blocks, we only want to check the non-code parts
+	if len(codeBlocks) > 1 {
+		// Rebuild the content without code blocks
+		contentToCheck = ""
+		for i, block := range codeBlocks {
+			// Even indices are non-code blocks
+			if i%2 == 0 {
+				contentToCheck += block
+			}
+		}
+	}
+
+	// Check for unmatched single curly braces in non-code content
+	doubleBraceCount := strings.Count(contentToCheck, "{{")
+	doubleCloseBraceCount := strings.Count(contentToCheck, "}}")
+
+	// Count total occurrences of { and }
+	totalLeftBrace := strings.Count(contentToCheck, "{")
+	totalRightBrace := strings.Count(contentToCheck, "}")
+
+	// If there are more single braces than double braces, there must be a single brace
+	if totalLeftBrace > doubleBraceCount*2 {
+		return fmt.Errorf("template contains single left curly brace '{', use '{{' instead")
+	}
+
+	if totalRightBrace > doubleCloseBraceCount*2 {
+		return fmt.Errorf("template contains single right curly brace '}', use '}}' instead")
+	}
+
+	return nil
+}
+
 func CreateTemplate(filepath string) (Prompt, error) {
 	var prompt Prompt
 	content, err := assets.EmbeddedFiles.ReadFile(filepath)
@@ -44,6 +82,12 @@ func CreateTemplate(filepath string) (Prompt, error) {
 	if err != nil {
 		return prompt, err
 	}
+
+	// Validate template content for single curly braces
+	if err := validateTemplateContent(body); err != nil {
+		return prompt, err
+	}
+
 	sha, err := SHA256Hash([]byte(body))
 	if err != nil {
 		return prompt, err

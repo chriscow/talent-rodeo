@@ -29,13 +29,9 @@ func CreateTestUser(t *testing.T, client *firestore.Client, name, email, phone s
 		Search: &UserSearch{}, // Initialize empty search
 	}
 
-	t.Logf("Creating user with ID: %s, Email: %s", user.ID, user.Email)
-
 	if err := CreateUser(context.Background(), client, user); err != nil {
 		t.Fatalf("Failed to create test user: %v", err)
 	}
-
-	t.Logf("Successfully created user with ID: %s", user.ID)
 
 	return user
 }
@@ -151,6 +147,25 @@ func DeleteTestData(t *testing.T, client *firestore.Client, prefix string) {
 				t.Logf("Failed to delete resume %s for user %s: %v", resumeDoc.Ref.ID, doc.Ref.ID, err)
 			} else {
 				t.Logf("Deleted test resume %s for user %s", resumeDoc.Ref.ID, doc.Ref.ID)
+			}
+		}
+
+		// Delete all jobs in the user's subcollection
+		jobsIter := doc.Ref.Collection(userJobsCollection).Documents(ctx)
+		for {
+			jobDoc, err := jobsIter.Next()
+			if err == iterator.Done {
+				break
+			}
+			if err != nil {
+				t.Logf("Failed to iterate over jobs in user %s: %v", doc.Ref.ID, err)
+				continue
+			}
+
+			if _, err := jobDoc.Ref.Delete(ctx); err != nil {
+				t.Logf("Failed to delete job %s for user %s: %v", jobDoc.Ref.ID, doc.Ref.ID, err)
+			} else {
+				t.Logf("Deleted test job %s for user %s", jobDoc.Ref.ID, doc.Ref.ID)
 			}
 		}
 

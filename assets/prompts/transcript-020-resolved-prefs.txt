@@ -1,0 +1,65 @@
+You will be analyzing raw extracted data from a transcript of a conversation
+between a job candidate and an AI job search specialist. Your task is to
+identify any contradictory statements about the same preference category and
+create a consolidated view of the candidate's job preferences with all
+contradictions resolved.
+
+Here is the transcript:
+<extracted_data>
+{{.ExtractedData}}
+</extracted_data>
+
+First, carefully read through the entire transcript and identify any job
+preferences mentioned by the candidate. These preferences may fall into
+categories such as:
+
+1. Salary expectations
+2. Job location
+3. Work environment (e.g., remote, hybrid, in-office)
+4. Industry or sector
+5. Company size
+6. Job responsibilities
+7. Work-life balance
+8. Career growth opportunities
+9. Company culture
+10. Benefits and perks
+
+As you analyze the transcript, look for any contradictory statements about the
+same preference category. List these contradictions in your scratchpad, noting
+the specific statements and their locations in the transcript.
+
+To resolve contradictions, apply the following rules in order:
+
+1. Later statements override earlier statements
+2. Specific preferences override general ones
+3. Strong preferences ("must have", "definitely want") override weak ones ("would be nice", "prefer")
+4. If contradictions remain after applying the above rules, note them as alternatives in your final analysis
+
+In your scratchpad, work through each contradiction you identified, applying the resolution rules to determine the candidate's final preference for each category.
+
+After resolving all contradictions, create a consolidated view of the
+candidate's job preferences. This should represent the most up-to-date and
+accurate representation of what the candidate is looking for in a job.
+
+Present your findings in the following format:
+
+<analysis>
+1. Contradictions Identified:
+   [List each contradiction, including the conflicting statements and their locations in the transcript]
+
+2. Resolution Process:
+   [For each contradiction, explain how you applied the resolution rules and what the final determination was]
+
+3. Consolidated Job Preferences:
+   [List each relevant preference category and the candidate's final preference, incorporating all resolved contradictions]
+
+4. Remaining Alternatives:
+   [If any contradictions couldn't be fully resolved, list them here as alternative preferences]
+
+5. Confidence Assessment:
+   [Provide a brief assessment of how confident you are in your analysis, noting any areas of uncertainty]
+</analysis>
+
+Ensure that your analysis is thorough, clear, and accurately reflects the
+candidate's preferences based on the information provided in the transcript and
+the resolution rules applied.

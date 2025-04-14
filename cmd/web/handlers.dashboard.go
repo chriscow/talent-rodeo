@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
 	"talent-rodeo/internal/search"
@@ -48,12 +49,35 @@ func (j *JobWithDetails) CompanyName() string {
 
 // Summary returns the job summary
 func (j *JobWithDetails) Summary() string {
-	return j.UserJob.Summary
+	if j.JobDetail != nil && j.JobDetail.ExtractedData != nil {
+		return j.JobDetail.ExtractedData.Summary
+	}
+	// Fallback to full description if summary is not available
+	if j.JobDetail != nil {
+		return j.JobDetail.FullDescription
+	}
+	return ""
 }
 
 // Qualifications returns the job qualifications
 func (j *JobWithDetails) Qualifications() []string {
-	return j.UserJob.Qualifications
+	if j.JobDetail != nil && j.JobDetail.ExtractedData != nil {
+		if len(j.JobDetail.ExtractedData.Qualifications) > 0 {
+			return j.JobDetail.ExtractedData.Qualifications
+		}
+		// Fallback to regular qualifications if summary qualifications not available
+		if len(j.JobDetail.Qualifications) > 0 {
+			return j.JobDetail.Qualifications
+		}
+	}
+	return []string{}
+}
+
+func (j *JobWithDetails) Requirements() []string {
+	if j.JobDetail != nil && j.JobDetail.ExtractedData != nil {
+		return j.JobDetail.ExtractedData.Requirements
+	}
+	return []string{}
 }
 
 // showDashboard handles GET requests to /dashboard.
@@ -69,7 +93,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 
 	if user.ID == "" {
 		app.logger.Warn("showDashboard: user ID is empty")
-		app.reportToSentry(r, fmt.Errorf("user ID is empty"), sentry.LevelError, map[string]string{
+		internal.SentryReportError(r.Context(), fmt.Errorf("user ID is empty"), sentry.LevelError, map[string]string{
 			"error_type":  "user_id_empty",
 			"entity_type": "user",
 		})
@@ -79,7 +103,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 
 	if user.State.Status < internal.UserStatusCallScheduled {
 		app.logger.Warn("showDashboard: user has not onboarded", "user_id", user.ID, "status", user.State.Status.String())
-		app.reportToSentry(r, fmt.Errorf("user has not onboarded"), sentry.LevelError, map[string]string{
+		internal.SentryReportError(r.Context(), fmt.Errorf("user has not onboarded"), sentry.LevelError, map[string]string{
 			"user_status": user.State.Status.String(),
 			"error_type":  "user_not_onboarded",
 			"entity_type": "user",
@@ -88,7 +112,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setSentryContext(r, map[string]any{
+	internal.SentrySetScope(r.Context(), map[string]any{
 		"user_status": user.State.Status.String(),
 	})
 
@@ -102,7 +126,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			wrappedErr := fmt.Errorf("showDashboard: failed to check if user has jobs: %w", err)
 			app.logger.Error("showDashboard: failed to check if user has jobs", "error", err)
-			app.reportToSentry(r, wrappedErr, sentry.LevelError, map[string]string{
+			internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
 				"error_type":  "database_retrieval",
 				"entity_type": "user_jobs_check",
 			})
@@ -118,50 +142,103 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Get search status information
+	nextSearchTime, isSearching := app.search.GetNextSearchTime(user)
+
+	// TEMPORARY: For testing search states
+	testMode := r.URL.Query().Get("test_mode")
+	if testMode != "" {
+		switch testMode {
+		case "searching":
+			isSearching = true
+			app.logger.Info("TEST MODE: Setting isSearching to true")
+		case "scheduled_soon":
+			isSearching = false
+			nextSearchTime = time.Now().Add(2 * time.Minute)
+			app.logger.Info("TEST MODE: Setting nextSearchTime to 2 minutes from now", "time", nextSearchTime)
+		case "scheduled_future":
+			isSearching = false
+			nextSearchTime = time.Now().Add(24 * time.Hour)
+			app.logger.Info("TEST MODE: Setting nextSearchTime to 24 hours from now", "time", nextSearchTime)
+		case "no_schedule":
+			isSearching = false
+			nextSearchTime = time.Time{} // Zero time
+			app.logger.Info("TEST MODE: Setting nextSearchTime to zero time")
+		}
+
+		// Add test mode to template data for links
+		data["TestMode"] = testMode
+	}
+
 	// Use our helper function to parse and validate the status
 	status, isValid := internal.ParseJobStatus(r.URL.Query().Get("status"))
 	if !isValid {
 		status = internal.JobStatusNew
 	}
 
+	// Get the showAllRatings parameter from the query string
+	showAllRatings := r.URL.Query().Get("show_all") == "true"
+
 	pageToken := r.URL.Query().Get("page")
 	pageSize := 5 // Fixed page size
 
 	// Get the total count for the current status for pagination calculations
 	start := time.Now()
-	statusJobCount, err := internal.GetJobsCount(r.Context(), app.fs, user.ID, status)
+	statusJobCount, err := internal.GetJobsCount(r.Context(), app.fs, user.ID, status, showAllRatings)
 	if err != nil {
 		wrappedErr := fmt.Errorf("showDashboard: failed to get job count for status %s: %w", status, err)
 		app.logger.Error("showDashboard: failed to get job count", "error", err, "status", status)
 
-		app.reportToSentry(r, wrappedErr, sentry.LevelError, map[string]string{
+		internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
 			"error_type":  "database_retrieval",
 			"entity_type": "user_jobs_count",
 			"job_status":  string(status),
 		})
 
-		app.serverError(w, r, wrappedErr)
-		return
+		// Check if this is the missing collection/index error for new users
+		if strings.Contains(err.Error(), "failed to iterate jobs") ||
+			strings.Contains(err.Error(), "failed to get job count") {
+			// For new users without any jobs collection yet, set count to 0
+			statusJobCount = 0
+			data["FirestoreError"] = true
+		} else {
+			// For other errors, return server error
+			app.serverError(w, r, wrappedErr)
+			return
+		}
+	} else {
+		app.logger.Debug("showDashboard: GetJobsCount took", "duration", time.Since(start).String())
 	}
-	app.logger.Debug("showDashboard: GetJobsCount took", "duration", time.Since(start).String())
 
 	// Get paginated jobs by status
 	start = time.Now()
-	jobs, nextPageToken, err := internal.GetUserJobsSorted(r.Context(), app.fs, user.ID, internal.JobStatus(status), pageSize, pageToken)
+	jobs, nextPageToken, err := internal.GetUserJobsSorted(r.Context(), app.fs, user.ID, internal.JobStatus(status), pageSize, pageToken, showAllRatings)
 	if err != nil {
 		wrappedErr := fmt.Errorf("showDashboard: failed to get sorted user jobs: %w", err)
 		app.logger.Error("showDashboard: failed to get sorted user jobs", "error", err)
 
-		app.reportToSentry(r, wrappedErr, sentry.LevelError, map[string]string{
+		internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
 			"error_type":  "database_retrieval",
 			"entity_type": "user_jobs",
 			"job_status":  string(status),
 		})
 
-		app.serverError(w, r, wrappedErr)
-		return
+		// Check if this is the missing collection/index error for new users
+		if strings.Contains(err.Error(), "failed to iterate user jobs") &&
+			(strings.Contains(err.Error(), "The query requires an index") ||
+				strings.Contains(err.Error(), "FailedPrecondition")) {
+			// For new users without any jobs collection yet, show a welcome message
+			data["FirestoreError"] = true
+			data["HasJobs"] = false
+			data["Jobs"] = nil
+		} else {
+			// For other errors, return server error
+			app.serverError(w, r, wrappedErr)
+			return
+		}
+	} else {
+		app.logger.Debug("showDashboard: GetUserJobsSorted took", "duration", time.Since(start).String())
 	}
-	app.logger.Debug("showDashboard: GetUserJobsSorted took", "duration", time.Since(start).String())
 
 	// Fetch job details for the filtered jobs
 	var jobsWithDetails []*JobWithDetails
@@ -175,7 +252,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 			wrappedErr := fmt.Errorf("showDashboard: failed to get job details: %w", err)
 			app.logger.Error("showDashboard: failed to get job details", "error", err)
 
-			app.reportToSentry(r, wrappedErr, sentry.LevelError, map[string]string{
+			internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
 				"error_type":  "database_retrieval",
 				"entity_type": "job_details",
 			})
@@ -189,7 +266,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 			wrappedErr := fmt.Errorf("showDashboard: failed to unmarshal job details: %w", err)
 			app.logger.Error("showDashboard: failed to unmarshal job details", "error", err)
 
-			app.reportToSentry(r, wrappedErr, sentry.LevelError, map[string]string{
+			internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
 				"error_type":  "data_processing",
 				"entity_type": "job_details",
 			})
@@ -198,15 +275,6 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		details.JobDetail = &jobDetail
-
-		// If UserJob doesn't have summary or qualifications, use data from JobDetail
-		if details.UserJob.Summary == "" && details.JobDetail != nil {
-			details.UserJob.Summary = details.JobDetail.FullDescription
-		}
-
-		if len(details.UserJob.Qualifications) == 0 && details.JobDetail != nil {
-			details.UserJob.Qualifications = details.JobDetail.Qualifications
-		}
 
 		jobsWithDetails = append(jobsWithDetails, &details)
 	}
@@ -223,7 +291,10 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 
 	// Add data to template
 	data["CurrentStatus"] = user.State.Status.Description()
-	data["IsSearching"] = true
+	data["IsSearching"] = isSearching
+	data["NextSearchTime"] = nextSearchTime
+	data["CurrentTime"] = time.Now()
+	data["HasJobs"] = len(jobsWithDetails) > 0 || statusJobCount > 0
 	data["ActiveStatus"] = string(status)
 	data["Jobs"] = jobsWithDetails
 	data["NextPageToken"] = nextPageToken
@@ -245,9 +316,12 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 		"rejected": "Rejected Jobs",
 	}
 
+	// Add showAllRatings to template data
+	data["ShowAllRatings"] = showAllRatings
+
 	if err := response.Page(w, http.StatusOK, data, "pages/dashboard.html"); err != nil {
 		app.serverError(w, r, fmt.Errorf("failed to render dashboard page: %w", err))
-		app.reportToSentry(r, fmt.Errorf("failed to render dashboard page: %w", err), sentry.LevelError, map[string]string{
+		internal.SentryReportError(r.Context(), fmt.Errorf("failed to render dashboard page: %w", err), sentry.LevelError, map[string]string{
 			"error_type":  "page_rendering",
 			"entity_type": "dashboard_page",
 		})
@@ -260,7 +334,7 @@ func (app *application) showWaitingForCall(w http.ResponseWriter, r *http.Reques
 		wrappedErr := fmt.Errorf("showDashboard: failed to get appointments: %w", err)
 		app.logger.Error("showDashboard: failed to get appointments", "error", err)
 
-		app.reportToSentry(r, wrappedErr, sentry.LevelError, map[string]string{
+		internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
 			"error_type":  "database_retrieval",
 			"entity_type": "appointments",
 		})
@@ -285,7 +359,7 @@ func (app *application) showWaitingForCall(w http.ResponseWriter, r *http.Reques
 			wrappedErr := fmt.Errorf("showDashboard: failed to update user status: %w", err)
 			app.logger.Error("showDashboard: failed to update user status", "error", err)
 
-			app.reportToSentry(r, wrappedErr, sentry.LevelError, map[string]string{
+			internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
 				"error_type":  "database_update",
 				"entity_type": "user_status",
 			})
@@ -297,7 +371,7 @@ func (app *application) showWaitingForCall(w http.ResponseWriter, r *http.Reques
 		// we expected the user to have an appointment, but they don't
 		// so we redirect to the profile page
 		app.logger.Error(internal.Red("showDashboard: no active appointment found when showing dashboard"), "user_id", user.ID)
-		app.reportToSentry(r, fmt.Errorf("no active appointment found when showing dashboard"), sentry.LevelError, map[string]string{
+		internal.SentryReportError(r.Context(), fmt.Errorf("no active appointment found when showing dashboard"), sentry.LevelError, map[string]string{
 			"error_type":  "no_active_appointment",
 			"entity_type": "appointments",
 		})
@@ -311,7 +385,7 @@ func (app *application) showWaitingForCall(w http.ResponseWriter, r *http.Reques
 
 	if err := response.Page(w, http.StatusOK, data, "pages/dashboard-waiting-call.html"); err != nil {
 		app.serverError(w, r, fmt.Errorf("failed to render dashboard page: %w", err))
-		app.reportToSentry(r, fmt.Errorf("failed to render dashboard page: %w", err), sentry.LevelError, map[string]string{
+		internal.SentryReportError(r.Context(), fmt.Errorf("failed to render dashboard page: %w", err), sentry.LevelError, map[string]string{
 			"error_type":  "page_rendering",
 			"entity_type": "dashboard_page",
 		})

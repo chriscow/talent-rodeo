@@ -11,9 +11,12 @@ import (
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/funcs"
 	"talent-rodeo/internal/search"
+	"talent-rodeo/internal/utils"
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"github.com/chriscow/minds"
+	"github.com/chriscow/minds/providers/openai"
 )
 
 // initializeWorker starts a single worker goroutine and returns its ID
@@ -70,13 +73,28 @@ func (p *Provider) processJobDetailsAndSave(ctx context.Context, listing search.
 	// this is the full job ID with provider prefix that is in Fires
 	fullJobID := funcs.Slugify(fmt.Sprintf("%s %s", providerName, listing.ProviderJobID))
 
+	// Get the job details to get company info
+	jobDetails, err := p.store.GetCachedJobDetails(ctx, fullJobID)
+	if err != nil {
+		return fmt.Errorf("failed to get cached job details for %s: %w", listing.ProviderJobID, err)
+	}
+
 	// Create user job entry
 	userJob := &internal.UserJob{
 		ID:         fullJobID,
 		SearchHash: searchHash,
-		Status:     "new",
+		Status:     "unprocessed", // Set to unprocessed initially, will be set to "new" after analysis
 		JobRef:     p.fs.Collection("job_details").Doc(fullJobID),
 	}
+
+	// Set company info from job details
+	if jobDetails != nil {
+		userJob.CompanyName = jobDetails.Company
+		if jobDetails.CompanyInfo != nil {
+			userJob.CompanyLogo = jobDetails.CompanyInfo.LogoURL
+		}
+	}
+
 	if err := internal.SaveUserJob(ctx, p.fs, userID, userJob); err != nil {
 		return fmt.Errorf("failed to save user job %s: %w", listing.ProviderJobID, err)
 	}
@@ -235,6 +253,21 @@ func (p *Provider) processJobDetails(ctx context.Context, jobID string, url stri
 		// If we have a URL and the cached details don't, update it
 		if url != "" && details.URL == "" {
 			details.URL = url
+		}
+	}
+
+	// Check if the job details already have a summary
+	if details.ExtractedData == nil {
+		p.logger.Debug("scrapingdog: generating summary for job details",
+			"provider_job_id", jobID,
+			"full_job_id", fullJobID)
+
+		// Generate summary
+		if err := p.summarizeJobDetails(ctx, details); err != nil {
+			p.logger.Warn("failed to summarize job details",
+				"job_id", fullJobID,
+				"error", err)
+			// Continue without summary rather than failing the whole operation
 		}
 	}
 
@@ -402,25 +435,29 @@ func (p *Provider) getJobListings(ctx context.Context, criteria search.Criteria)
 	url := fmt.Sprintf("%s?%s", p.baseURL, params.Encode())
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("failed to create request with keywords=%v location=%s: %w",
+			criteria.Keywords, criteria.Location, err)
 	}
 
 	p.logger.Info(internal.BGMagenta("scrapingdog: getJobListings: request"), "keywords", criteria.Keywords, "location", criteria.Location, "url", url)
 	resp, err := p.doRequestWithRetry(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %w", err)
+		return nil, fmt.Errorf("failed to execute request with keywords=%v location=%s: %w",
+			criteria.Keywords, criteria.Location, err)
 	}
 	defer resp.Body.Close()
 
 	p.logger.Debug("scrapingdog: getJobListings: response received", "status_code", resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, handleAPIError(resp.StatusCode)
+		return nil, fmt.Errorf("API error with keywords=%v location=%s status_code=%d: %w",
+			criteria.Keywords, criteria.Location, resp.StatusCode, handleAPIError(resp.StatusCode))
 	}
 
 	var listings jobListings
 	if err := json.NewDecoder(resp.Body).Decode(&listings); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+		return nil, fmt.Errorf("failed to decode response with keywords=%v location=%s: %w",
+			criteria.Keywords, criteria.Location, err)
 	}
 
 	if len(listings) == 0 {
@@ -432,7 +469,8 @@ func (p *Provider) getJobListings(ctx context.Context, criteria search.Criteria)
 	// Convert to provider jobListings
 	jobListings, err := convertJobListings(listings)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert job listings: %w", err)
+		return nil, fmt.Errorf("failed to convert job listings with keywords=%v location=%s: %w",
+			criteria.Keywords, criteria.Location, err)
 	}
 
 	return jobListings, nil
@@ -451,27 +489,27 @@ func (p *Provider) GetJobDetails(ctx context.Context, jobID string) (*search.Job
 	url := fmt.Sprintf("%s?%s", p.baseURL, params.Encode())
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("failed to create request for job_id=%s: %w", jobID, err)
 	}
 
 	p.logger.Info(internal.BGMagenta("scrapingdog: GetJobDetails: request"), "job_id", jobID, "url", url)
 	resp, err := p.doRequestWithRetry(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %w", err)
+		return nil, fmt.Errorf("failed to execute request for job_id=%s: %w", jobID, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, handleAPIError(resp.StatusCode)
+		return nil, fmt.Errorf("API error for job_id=%s with status_code=%d: %w", jobID, resp.StatusCode, handleAPIError(resp.StatusCode))
 	}
 
 	var details []jobDetail
 	if err := json.NewDecoder(resp.Body).Decode(&details); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+		return nil, fmt.Errorf("failed to decode response for job_id=%s: %w", jobID, err)
 	}
 
 	if len(details) == 0 {
-		return nil, fmt.Errorf("job not found: %s", jobID)
+		return nil, fmt.Errorf("job not found with job_id=%s", jobID)
 	}
 
 	detail := details[0]
@@ -552,7 +590,12 @@ func (p *Provider) GetJobDetails(ctx context.Context, jobID string) (*search.Job
 		PeopleAlsoViewed: peopleAlsoViewed,
 	}
 
-	// p.logger.Debug("scrapingdog: GetJobDetails retrieved job details", "job_id", jobID, "details", jobDetail)
+	// Generate job summary
+	if err := p.summarizeJobDetails(ctx, jobDetail); err != nil {
+		p.logger.Warn("failed to summarize job details", "job_id", jobID, "error", err)
+		// Continue without summary rather than failing the whole operation
+	}
+
 	return jobDetail, nil
 }
 
@@ -564,4 +607,59 @@ func (p *Provider) updateUserSearchError(ctx context.Context, userID string, err
 		{Path: "search.status", Value: "error"},
 	})
 	return err
+}
+
+// summarizeJobDetails uses LLM to create a job summary directly on the JobDetail
+func (p *Provider) summarizeJobDetails(ctx context.Context, jobDetail *search.JobDetail) error {
+	p.logger.Debug("scrapingdog: summarizing job details", "job_id", jobDetail.ID)
+
+	// Create OpenAI provider with GPT-4o model
+	llm, err := openai.NewProvider()
+	if err != nil {
+		return fmt.Errorf("failed to create openai provider: %w", err)
+	}
+
+	// Create system prompt from template
+	const summaryFile = "prompts/job-summary.001.txt"
+	systemPrompt, err := utils.CreateTemplate(summaryFile)
+	if err != nil {
+		return fmt.Errorf("failed to create template: %w", err)
+	}
+
+	// Execute template with job details
+	jobJSON, err := json.MarshalIndent(jobDetail, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal job details: %w", err)
+	}
+
+	messages := []minds.Message{
+		{
+			Role:    minds.RoleSystem,
+			Content: systemPrompt.RawContent,
+		},
+		{
+			Role:    minds.RoleUser,
+			Content: fmt.Sprintf("Please summarize this job listing:\n\n%s", string(jobJSON)),
+		},
+	}
+
+	schema, err := minds.NewResponseSchema("job_summary", "job_summary.001.txt", search.JobSummary{})
+	if err != nil {
+		return fmt.Errorf("failed to create response schema: %w", err)
+	}
+
+	response, err := llm.GenerateContent(ctx, minds.NewRequest(messages, minds.WithResponseSchema(*schema)))
+	if err != nil {
+		return fmt.Errorf("failed to generate content: %w", err)
+	}
+
+	var summary search.JobSummary
+	if err := json.Unmarshal([]byte(response.String()), &summary); err != nil {
+		return fmt.Errorf("failed to unmarshal summary: %w", err)
+	}
+
+	// Store the summary directly on the JobDetail
+	jobDetail.ExtractedData = &summary
+
+	return nil
 }

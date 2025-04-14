@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"sync"
 	"time"
 
@@ -292,13 +293,18 @@ func (p *Processor) CreateAndEnqueueTask(ctx context.Context, taskType string, n
 
 	id := funcs.Slugify(fmt.Sprintf("%s-%d", name, time.Now().UnixNano()))
 
+	retries := 3
+	if os.Getenv("TESTING_MODE") == "true" {
+		retries = 1
+	}
+
 	task := &internal.Task{
 		ID:          id,
 		Name:        name,
 		Type:        taskType,
 		Payload:     payload,
 		Status:      internal.TaskStatusPending,
-		MaxAttempts: 1, // Default to 3 attempts
+		MaxAttempts: retries,
 		RunAt:       runAt,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),

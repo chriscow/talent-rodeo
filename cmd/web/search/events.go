@@ -1,6 +1,7 @@
 package search
 
 import (
+	"context"
 	"fmt"
 	"talent-rodeo/internal"
 )
@@ -21,6 +22,21 @@ func (s *Service) OnNewJob(userID, jobID string) error {
 		"user_id", userID,
 		"job_id", jobID,
 		"channel", fmt.Sprintf("user-%s", userID))
+
+	// Create a bare-bones record first
+	job := &internal.UserJob{
+		ID:     jobID,
+		Status: internal.JobStatusUnprocessed,
+		JobRef: s.fs.Collection("job_details").Doc(jobID),
+	}
+
+	if err := internal.SaveUserJob(context.Background(), s.fs, userID, job); err != nil {
+		s.logger.Error("failed to create bare-bones job record",
+			"error", err,
+			"user_id", userID,
+			"job_id", jobID)
+		return fmt.Errorf("failed to create bare-bones job record: %w", err)
+	}
 
 	// Queue the job for processing
 	s.jobQueue <- QueuedJob{

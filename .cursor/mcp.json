@@ -1,5 +1,14 @@
 {
     "mcpServers": {
-
+        "talent-rodeo-firestore": {
+            "command": "/Users/chris/dev/talent-rodeo/cmd/mcp/bin/talent-rodeo-mcp",
+            "args": [],
+            "env": {
+                "GOPATH": "/usr/local/go/bin/go",
+                "GOMODCACHE": "/Users/chris/go/pkg/mod",
+                "FIREBASE_PROJECT_ID": "talent-rodeo-dev",
+                "FIREBASE_CREDENTIALS": "/Users/chris/dev/talent-rodeo/.secrets/talent-rodeo-dev-firebase-adminsdk-fbsvc-847b5213c4.json"
+            }
+        }
     }
-  }
+}

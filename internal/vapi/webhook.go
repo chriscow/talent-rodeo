@@ -1,7 +1,5 @@
 package vapi
 
-import "encoding/json"
-
 // Message types
 const (
 	MsgTypeAssistantRequest   = "assistant-request"
@@ -18,13 +16,9 @@ const (
 
 // Message represents the incoming message from VAPI webhooks
 type WebhookMessage struct {
-	Message WebhookMessageContent `json:"message"`
-}
-
-// MessageContent contains the actual content of the webhook message
-type WebhookMessageContent struct {
-	Type string          `json:"type"`
-	Data json.RawMessage `json:"data"`
+	Message struct {
+		Type string `json:"type"`
+	} `json:"message"`
 }
 
 type AssistantRequest struct {

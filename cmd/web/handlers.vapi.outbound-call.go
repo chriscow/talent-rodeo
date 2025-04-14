@@ -216,6 +216,7 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 	}
 
 	modelConfig := vapi.DefaultModelConfig
+	modelConfig.Model = "gpt-4o"
 	modelConfig.Messages = []vapi.ModelMessage{{
 		Role:    "system",
 		Content: systemPrompt,
@@ -224,7 +225,7 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 	phone := vapi.PhoneNumber{
 		TwilioAccountSid:  os.Getenv("TWILIO_ACCOUNT_SID"),
 		TwilioAuthToken:   os.Getenv("TWILIO_AUTH_TOKEN"),
-		TwilioPhoneNumber: os.Getenv("TWILIO_PHONE_NUMBER"),
+		TwilioPhoneNumber: os.Getenv("TWILIO_FROM_NUMBER"),
 	}
 
 	// Create call config
@@ -250,12 +251,22 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 				"user-interrupted",
 			},
 		},
-		CustomerID: &user.ID,
 		Customer: &vapi.Customer{
 			Number: *user.Phone,
-			Name:   user.Name,
+			Name:   user.ID,
 		},
 	}
+
+	configJSON, err := json.MarshalIndent(callConfig, "", "  ")
+	if err != nil {
+		apptErr = fmt.Errorf("failed to marshal call config: %w", err)
+		app.logger.Error("Failed to marshal call config", "error", apptErr)
+		app.reportServerError(r, apptErr)
+		// This is likely our problem, so we don't want to retry
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	app.logger.Debug("handleVapiCall: call config", "call_config", string(configJSON))
 
 	// Create the call
 	result, err := vapi.CreateCall(r.Context(), callConfig)

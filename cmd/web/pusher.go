@@ -14,6 +14,7 @@ func (app *application) SendUserStateUpdate(user *internal.User) {
 		"error":       user.State.Error,
 	}
 
+	app.logger.Debug("Sending user state update notification", "user_id", user.ID, "state", user.State.Status)
 	err := app.pusher.Trigger(fmt.Sprintf("user-%s", user.ID), "state-update", data)
 	if err != nil {
 		app.logger.Error("Failed to send Pusher notification", "error", err, "user_id", user.ID)

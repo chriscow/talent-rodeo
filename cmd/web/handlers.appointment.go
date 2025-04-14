@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"talent-rodeo/cmd/web/transcript"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/vapi"
 	"time"
@@ -11,19 +12,20 @@ import (
 )
 
 // Then use it with different severity levels
-// app.reportToSentry(r, err, sentry.LevelError, tags)   // Most errors
-// app.reportToSentry(r, err, sentry.LevelWarning, tags) // Less critical errors
-// app.reportToSentry(r, err, sentry.LevelFatal, tags)   // Application-crashing errors
+// internal.reportToSentry(r.Context(), err, sentry.LevelError, tags)   // Most errors
+// internal.reportToSentry(r.Context(), err, sentry.LevelWarning, tags) // Less critical errors
+// internal.reportToSentry(r.Context(), err, sentry.LevelFatal, tags)   // Application-crashing errors
 
 func (app *application) processCompletedAppointment(r *http.Request, userID, appointmentID string, report vapi.EndOfCallReport) error {
 	app.logger.Debug("received end of call report", "user_id", userID, "appointmentID", appointmentID)
 
-	setSentryUserContext(r, userID, map[string]interface{}{
+	ipaddr := r.Header.Get("X-Forwarded-For")
+	internal.SentrySetUserContext(r.Context(), userID, ipaddr, map[string]interface{}{
 		"appointment_id": appointmentID,
 	})
 
-	// Get the appointment
-	appointment, err := internal.GetAppointment(r.Context(), app.fs, userID, appointmentID)
+	// Get the appt
+	appt, err := internal.GetAppointment(r.Context(), app.fs, userID, appointmentID)
 	if err != nil {
 		wrappedErr := fmt.Errorf("failed to get appointment for user %s: %w", userID, err)
 		app.logger.Error("failed to get appointment",
@@ -31,7 +33,7 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 			"customer_id", userID,
 			"appointment_id", appointmentID)
 
-		app.reportToSentry(r, wrappedErr, sentry.LevelError, map[string]string{
+		internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
 			"error_type":  "database_retrieval",
 			"entity_type": "appointment",
 		})
@@ -40,20 +42,20 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 	}
 
 	// Update the appointment with the call result and report
-	appointment.CallID = report.Call.ID
-	appointment.TranscriptSummary = report.Summary
-	appointment.UpdatedAt = time.Now()
+	appt.CallID = report.Call.ID
+	appt.TranscriptSummary = report.Summary
+	appt.UpdatedAt = time.Now()
 	endReason := report.EndedReason
 
 	// Update appointment status based on call result
 	status, shouldLog := internal.MapVapiEndReasonToAppointmentStatus(endReason)
-	appointment.Status = status
+	appt.Status = status
 
-	if err := internal.UpdateAppointment(r.Context(), app.fs, appointment); err != nil {
+	if err := internal.UpdateAppointment(r.Context(), app.fs, appt); err != nil {
 		wrappedErr := fmt.Errorf("failed to update appointment: %w", err)
 		app.logger.Error("failed to update appointment", "error", err)
 
-		app.reportToSentry(r, wrappedErr, sentry.LevelError, map[string]string{
+		internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
 			"error_type":  "database_update",
 			"entity_type": "appointment",
 		})
@@ -66,7 +68,7 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 		wrappedErr := fmt.Errorf("failed to get user: %w", err)
 		app.logger.Error("failed to get user", "error", err)
 
-		app.reportToSentry(r, wrappedErr, sentry.LevelError, map[string]string{
+		internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
 			"error_type":  "database_retrieval",
 			"entity_type": "user",
 		})
@@ -83,7 +85,7 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 			wrappedErr := fmt.Errorf("failed to update user status: %w", err)
 			app.logger.Error("failed to update user status", "error", err)
 
-			app.reportToSentry(r, wrappedErr, sentry.LevelError, map[string]string{
+			internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
 				"error_type":  "database_update",
 				"entity_type": "user_status",
 			})
@@ -97,7 +99,7 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 			wrappedErr := fmt.Errorf("failed to update user state with error: %w", err)
 			app.logger.Error("failed to update user state with error", "error", err)
 
-			app.reportToSentry(r, wrappedErr, sentry.LevelError, map[string]string{
+			internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
 				"error_type":  "database_update",
 				"entity_type": "user_state",
 			})
@@ -114,7 +116,8 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 	}
 
 	app.backgroundTask(r, func() error {
-		return internal.ProcessCompletedAppointment(app.fs, app.logger, appointment)
+		hub := sentry.GetHubFromContext(r.Context())
+		return transcript.ProcessCompletedAppointment(hub, app.fs, app.logger, appt)
 	})
 
 	app.SendUserStateUpdate(user)

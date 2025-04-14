@@ -174,7 +174,7 @@ func (app *application) createAppointment(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	app.logger.Debug("Scheduling voice call",
+	app.logger.Debug("scheduling voice call",
 		"phone_number", *user.Phone,
 		"scheduled_time", scheduledTime.UTC(),
 		"timezone", timezone,

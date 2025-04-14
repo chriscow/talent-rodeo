@@ -81,7 +81,12 @@ func (s *Service) Start() error {
 
 	s.StartJobWorkers(context.Background(), 5)
 
-	// First requeue any users that were previously queued but not completed
+	// First recover any unprocessed jobs
+	if err := s.recoverUnprocessedJobs(); err != nil {
+		return fmt.Errorf("failed to recover unprocessed jobs: %w", err)
+	}
+
+	// Then requeue any users that were previously queued but not completed
 	if err := s.requeueIncompleteSearches(); err != nil {
 		return fmt.Errorf("failed to requeue incomplete searches: %w", err)
 	}
@@ -180,16 +185,16 @@ func (s *Service) processSearches() {
 
 // shouldSearch determines if a user is due for a search based on their tier
 func (s *Service) shouldSearch(user *internal.User) bool {
-	shouldLog := os.Getenv("TESTING_MODE") == "true"
-	if strings.HasPrefix(user.ID, "test-") {
-		if shouldLog {
+	testingMode := os.Getenv("TESTING_MODE") == "true"
+	if strings.HasPrefix(user.ID, "test-") && !testingMode {
+		if testingMode {
 			s.logger.Debug("search: shouldSearch: user is a test user", "user_id", user.ID)
 		}
 		return false
 	}
 
 	if user.Search == nil {
-		if shouldLog {
+		if testingMode {
 			s.logger.Debug("search: shouldSearch: user has no search criteria", "user_id", user.ID)
 		}
 		return false
@@ -197,7 +202,7 @@ func (s *Service) shouldSearch(user *internal.User) bool {
 
 	// if the user has never been searched, and never queued, then we should search them
 	if user.Search.CompletedAt == nil && user.Search.QueuedAt == nil {
-		if shouldLog {
+		if testingMode {
 			s.logger.Debug("search: shouldSearch: user has never been searched or queued", "user_id", user.ID)
 		}
 		return true
@@ -205,7 +210,7 @@ func (s *Service) shouldSearch(user *internal.User) bool {
 
 	// if the user has been queued, then we should not search them
 	if user.Search.QueuedAt != nil {
-		if shouldLog {
+		if testingMode {
 			s.logger.Debug("search: shouldSearch: user has been queued", "user_id", user.ID)
 		}
 		return false
@@ -213,7 +218,7 @@ func (s *Service) shouldSearch(user *internal.User) bool {
 
 	// if they've never completed a search, we should search them
 	if user.Search.CompletedAt == nil {
-		if shouldLog {
+		if testingMode {
 			s.logger.Debug("search: shouldSearch: user has never completed a search", "user_id", user.ID)
 		}
 		return true
@@ -234,6 +239,46 @@ func (s *Service) shouldSearch(user *internal.User) bool {
 	// 	s.logger.Debug("search: shouldSearch: time since last search", "user_id", user.ID, "since", since, "frequency", frequency)
 	// }
 	return since >= frequency
+}
+
+// GetNextSearchTime calculates when the next search is scheduled for a user
+// based on their tier and last completed search time.
+// Returns (time.Time, bool) where the bool indicates if a search is currently in progress
+func (s *Service) GetNextSearchTime(user *internal.User) (time.Time, bool) {
+	// If user has no search criteria, there's no next search
+	if user.Search == nil {
+		return time.Time{}, false
+	}
+
+	// If a search is in progress (QueuedAt is set), return current time
+	// and true to indicate search in progress
+	if user.Search.QueuedAt != nil {
+		return time.Now(), true
+	}
+
+	// If user has never completed a search, they're due for immediate search
+	if user.Search.CompletedAt == nil {
+		return time.Now(), false
+	}
+
+	// Determine frequency based on tier
+	frequency := FreeTierFrequency
+	switch user.Tier {
+	case internal.UserTierPro:
+		frequency = ProTierFrequency
+	case internal.UserTierEnterprise:
+		frequency = EnterpriseTierFrequency
+	}
+
+	// Calculate next search time based on last completed search + frequency
+	nextSearchTime := user.Search.CompletedAt.Add(frequency)
+
+	// If next search time is in the past, they're due for a search now
+	if time.Now().After(nextSearchTime) {
+		return time.Now(), false
+	}
+
+	return nextSearchTime, false
 }
 
 // enqueueSearch queues a job search for a user
@@ -324,6 +369,52 @@ func (s *Service) requeueIncompleteSearches() error {
 
 	if requeueCount > 0 {
 		s.logger.Info("search: requeued incomplete searches", "count", requeueCount)
+	}
+
+	return nil
+}
+
+// recoverUnprocessedJobs finds and requeues any jobs that were in an unprocessed state
+func (s *Service) recoverUnprocessedJobs() error {
+	ctx := context.Background()
+	s.logger.Info("search: recovering unprocessed jobs")
+
+	// Get all users
+	allUsers, err := internal.ListUsers(ctx, s.fs, 0, 0)
+	if err != nil {
+		return fmt.Errorf("failed to list users: %w", err)
+	}
+
+	recoveredCount := 0
+	for _, user := range allUsers {
+		// Get all jobs for this user
+		jobs, err := internal.GetUserJobs(ctx, s.fs, user.ID)
+		if err != nil {
+			s.logger.Error("failed to get jobs for user",
+				"error", err,
+				"user_id", user.ID)
+			continue
+		}
+
+		// Look for unprocessed jobs
+		for _, job := range jobs {
+			if job.Status == internal.JobStatusUnprocessed {
+				s.logger.Debug("search: requeueing unprocessed job",
+					"user_id", user.ID,
+					"job_id", job.ID)
+
+				// Requeue the job
+				s.jobQueue <- QueuedJob{
+					UserID: user.ID,
+					JobID:  job.ID,
+				}
+				recoveredCount++
+			}
+		}
+	}
+
+	if recoveredCount > 0 {
+		s.logger.Info("search: recovered unprocessed jobs", "count", recoveredCount)
 	}
 
 	return nil
