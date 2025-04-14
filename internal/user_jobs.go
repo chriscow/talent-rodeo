@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -16,26 +17,16 @@ const (
 	userJobsCollection = "user_jobs"
 )
 
-/*
-You are a helpful assistant that summarizes job listings into concise, easy-to-read summaries.
-Create a summary that highlights the most important aspects of the job, including key responsibilities,
-required qualifications, and any notable benefits or company information.
-Keep the summary brief but informative, focusing on what would matter most to job seekers.
-*/
-type UserJobSummary struct {
-	Summary        string   `json:"summary"`
-	Qualifications []string `json:"qualifications"`
-}
-
 // Define JobStatus as a string type and add constants for each status
 type JobStatus string
 
 const (
-	JobStatusNew      JobStatus = "new"
-	JobStatusViewed   JobStatus = "viewed"
-	JobStatusSaved    JobStatus = "saved"
-	JobStatusApplied  JobStatus = "applied"
-	JobStatusRejected JobStatus = "rejected"
+	JobStatusUnprocessed JobStatus = "unprocessed"
+	JobStatusNew         JobStatus = "new"
+	JobStatusViewed      JobStatus = "viewed"
+	JobStatusSaved       JobStatus = "saved"
+	JobStatusApplied     JobStatus = "applied"
+	JobStatusRejected    JobStatus = "rejected"
 )
 
 // ParseJobStatus converts a string to a JobStatus with validation.
@@ -69,11 +60,9 @@ type UserJob struct {
 	// Analysis of the job match
 	Analysis *JobAnalysis `firestore:"analysis"`
 
-	// Summary of the job
-	CompanyName    string   `firestore:"company_name"`
-	CompanyLogo    string   `firestore:"company_logo"`
-	Summary        string   `firestore:"summary"`
-	Qualifications []string `firestore:"qualifications"`
+	// Job metadata
+	CompanyName string `firestore:"company_name"`
+	CompanyLogo string `firestore:"company_logo"`
 
 	// User interaction metadata
 	Status     JobStatus  `firestore:"status"` // "new", "viewed", "saved", "applied", "rejected"
@@ -109,7 +98,7 @@ type Summary struct {
 
 type FinalJudgment struct {
 	Explanation string `json:"explanation"`
-	Rating      string `json:"rating"` // One of: "Definitely Yes", "Strong Yes", "Yes", "Maybe", "No"
+	Rating      string `json:"rating" enum:"Definitely Yes,Strong Yes,Yes,Maybe,No"` // One of: "Definitely Yes", "Strong Yes", "Yes", "Maybe", "No"
 }
 
 // SaveUserJob saves a job reference for a user
@@ -128,7 +117,7 @@ func SaveUserJob(ctx context.Context, fs *firestore.Client, userID string, job *
 
 	// Set default status if not provided
 	if job.Status == "" {
-		job.Status = JobStatusNew
+		job.Status = JobStatusUnprocessed
 	}
 
 	// Create reference to job_details document if not set
@@ -230,8 +219,14 @@ func UpdateUserJobNotes(ctx context.Context, fs *firestore.Client, userID, jobID
 	return nil
 }
 
+// isYesRating checks if a rating contains "yes" (case insensitive)
+func isYesRating(rating string) bool {
+	rating = strings.ToLower(rating)
+	return strings.Contains(rating, "yes")
+}
+
 // GetUserJobsSorted retrieves user jobs with a specific status and supports paging
-func GetUserJobsSorted(ctx context.Context, fs *firestore.Client, userID string, status JobStatus, pageSize int, pageToken string) ([]*UserJob, string, error) {
+func GetUserJobsSorted(ctx context.Context, fs *firestore.Client, userID string, status JobStatus, pageSize int, pageToken string, showAllRatings bool) ([]*UserJob, string, error) {
 	// Create base query for jobs with the specified status and ordered by creation time
 	baseQuery := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).
 		Where("status", "==", string(status)).
@@ -274,6 +269,13 @@ func GetUserJobsSorted(ctx context.Context, fs *firestore.Client, userID string,
 			return nil, "", fmt.Errorf("failed to unmarshal user job: %w", err)
 		}
 
+		// Filter by rating if not showing all ratings
+		if !showAllRatings {
+			if job.Analysis == nil || job.Analysis.FinalJudgment.Rating == "" || !isYesRating(job.Analysis.FinalJudgment.Rating) {
+				continue
+			}
+		}
+
 		jobs = append(jobs, &job)
 	}
 
@@ -281,9 +283,6 @@ func GetUserJobsSorted(ctx context.Context, fs *firestore.Client, userID string,
 	// Only set nextPageToken if we actually got the maximum number of results,
 	// suggesting there are more results to be fetched
 	if len(jobs) == pageSize {
-		// There is a side effect that if the page size is evenly divisible by
-		// the total number of jobs, we will be returning a value for `nextPageToke`
-		// when in fact there are no more jobs to fetch.
 		nextPageToken = jobs[len(jobs)-1].ID
 	} else {
 		nextPageToken = ""
@@ -293,7 +292,7 @@ func GetUserJobsSorted(ctx context.Context, fs *firestore.Client, userID string,
 }
 
 // GetJobsCount returns the count of jobs with the specified status for a user
-func GetJobsCount(ctx context.Context, fs *firestore.Client, userID string, status JobStatus) (int64, error) {
+func GetJobsCount(ctx context.Context, fs *firestore.Client, userID string, status JobStatus, showAllRatings bool) (int64, error) {
 	if userID == "" {
 		return 0, fmt.Errorf("user ID is required")
 	}
@@ -301,7 +300,34 @@ func GetJobsCount(ctx context.Context, fs *firestore.Client, userID string, stat
 	query := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).
 		Where("status", "==", string(status))
 
-	// Create an aggregation query with a count using "count" as the alias
+	// If we're not showing all ratings, we need to manually count since we can't filter by rating in Firestore
+	if !showAllRatings {
+		iter := query.Documents(ctx)
+		var count int64
+
+		for {
+			doc, err := iter.Next()
+			if err == iterator.Done {
+				break
+			}
+			if err != nil {
+				return 0, fmt.Errorf("failed to iterate jobs: %w", err)
+			}
+
+			var job UserJob
+			if err := doc.DataTo(&job); err != nil {
+				return 0, fmt.Errorf("failed to unmarshal job: %w", err)
+			}
+
+			if job.Analysis != nil && job.Analysis.FinalJudgment.Rating != "" && isYesRating(job.Analysis.FinalJudgment.Rating) {
+				count++
+			}
+		}
+
+		return count, nil
+	}
+
+	// If showing all ratings, use the more efficient aggregation query
 	aggregationQuery := query.NewAggregationQuery().WithCount("count")
 	results, err := aggregationQuery.Get(ctx)
 	if err != nil {
@@ -320,7 +346,7 @@ func GetJobsCount(ctx context.Context, fs *firestore.Client, userID string, stat
 }
 
 // GetAllJobStatusCounts returns a map with counts for all job statuses for a user
-func GetAllJobStatusCounts(ctx context.Context, fs *firestore.Client, userID string) (map[string]int64, error) {
+func GetAllJobStatusCounts(ctx context.Context, fs *firestore.Client, userID string, showAllRatings bool) (map[string]int64, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID is required")
 	}
@@ -336,7 +362,7 @@ func GetAllJobStatusCounts(ctx context.Context, fs *firestore.Client, userID str
 
 	// Get counts for each status
 	for status := range result {
-		count, err := GetJobsCount(ctx, fs, userID, JobStatus(status))
+		count, err := GetJobsCount(ctx, fs, userID, JobStatus(status), showAllRatings)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get count for status %s: %w", status, err)
 		}
@@ -399,4 +425,184 @@ func StatusToDisplayName(status string) string {
 	default:
 		return status
 	}
+}
+
+// DeleteUserJob deletes a job for a user
+func DeleteUserJob(ctx context.Context, fs *firestore.Client, userID, jobID string) error {
+	if userID == "" {
+		return fmt.Errorf("user ID is required")
+	}
+	if jobID == "" {
+		return fmt.Errorf("job ID is required")
+	}
+
+	_, err := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Doc(jobID).Delete(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to delete user job: %w", err)
+	}
+
+	return nil
+}
+
+// ListJobListings retrieves all job listings with optional limit and offset
+func ListJobListings(ctx context.Context, fs *firestore.Client, limit int, offset int) ([]map[string]interface{}, error) {
+	query := fs.Collection("job_listings").OrderBy("created_at", firestore.Desc)
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	if offset > 0 {
+		query = query.Offset(offset)
+	}
+
+	iter := query.Documents(ctx)
+	var listings []map[string]interface{}
+
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to iterate job listings: %w", err)
+		}
+
+		listings = append(listings, doc.Data())
+	}
+
+	return listings, nil
+}
+
+// ListJobDetails retrieves all job details with optional limit and offset
+func ListJobDetails(ctx context.Context, fs *firestore.Client, limit int, offset int) ([]map[string]interface{}, error) {
+	query := fs.Collection("job_details").OrderBy("created_at", firestore.Desc)
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	if offset > 0 {
+		query = query.Offset(offset)
+	}
+
+	iter := query.Documents(ctx)
+	var details []map[string]interface{}
+
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to iterate job details: %w", err)
+		}
+
+		details = append(details, doc.Data())
+	}
+
+	return details, nil
+}
+
+// DeleteJobListingsByPrefix deletes all job listings with IDs starting with the given prefix
+func DeleteJobListingsByPrefix(ctx context.Context, fs *firestore.Client, prefix string) (int, error) {
+	if prefix == "" {
+		return 0, fmt.Errorf("prefix is required")
+	}
+
+	// Query for documents with IDs starting with the prefix
+	// We can't directly query by document ID prefix, so we'll need to fetch and filter
+	iter := fs.Collection("job_listings").Documents(ctx)
+	deleted := 0
+
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return deleted, fmt.Errorf("failed to iterate job listings: %w", err)
+		}
+
+		// Check if document ID starts with prefix
+		if len(doc.Ref.ID) >= len(prefix) && doc.Ref.ID[:len(prefix)] == prefix {
+			if _, err := doc.Ref.Delete(ctx); err != nil {
+				return deleted, fmt.Errorf("failed to delete job listing %s: %w", doc.Ref.ID, err)
+			}
+			deleted++
+		}
+	}
+
+	return deleted, nil
+}
+
+// DeleteJobDetailsByPrefix deletes all job details with IDs starting with the given prefix
+func DeleteJobDetailsByPrefix(ctx context.Context, fs *firestore.Client, prefix string) (int, error) {
+	if prefix == "" {
+		return 0, fmt.Errorf("prefix is required")
+	}
+
+	// Query for documents with IDs starting with the prefix
+	iter := fs.Collection("job_details").Documents(ctx)
+	deleted := 0
+
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return deleted, fmt.Errorf("failed to iterate job details: %w", err)
+		}
+
+		// Check if document ID starts with prefix
+		if len(doc.Ref.ID) >= len(prefix) && doc.Ref.ID[:len(prefix)] == prefix {
+			if _, err := doc.Ref.Delete(ctx); err != nil {
+				return deleted, fmt.Errorf("failed to delete job detail %s: %w", doc.Ref.ID, err)
+			}
+			deleted++
+		}
+	}
+
+	return deleted, nil
+}
+
+// DeleteAllUserJobsByPrefix deletes all user jobs with IDs starting with the given prefix across all users
+func DeleteAllUserJobsByPrefix(ctx context.Context, fs *firestore.Client, prefix string) (int, error) {
+	if prefix == "" {
+		return 0, fmt.Errorf("prefix is required")
+	}
+
+	// Get all users
+	usersIter := fs.Collection(usersCollection).Documents(ctx)
+	deleted := 0
+
+	for {
+		userDoc, err := usersIter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return deleted, fmt.Errorf("failed to iterate users: %w", err)
+		}
+
+		// For each user, get their jobs collection
+		jobsIter := userDoc.Ref.Collection(userJobsCollection).Documents(ctx)
+
+		for {
+			jobDoc, err := jobsIter.Next()
+			if err == iterator.Done {
+				break
+			}
+			if err != nil {
+				return deleted, fmt.Errorf("failed to iterate jobs for user %s: %w", userDoc.Ref.ID, err)
+			}
+
+			// Check if job ID starts with prefix
+			if len(jobDoc.Ref.ID) >= len(prefix) && jobDoc.Ref.ID[:len(prefix)] == prefix {
+				if _, err := jobDoc.Ref.Delete(ctx); err != nil {
+					return deleted, fmt.Errorf("failed to delete job %s for user %s: %w", jobDoc.Ref.ID, userDoc.Ref.ID, err)
+				}
+				deleted++
+			}
+		}
+	}
+
+	return deleted, nil
 }

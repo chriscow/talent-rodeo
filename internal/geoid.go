@@ -68,3 +68,15 @@ func ListGeoIDs(fs *firestore.Client) ([]GeoID, error) {
 	}
 	return geoIDs, nil
 }
+
+func GetGeoIDKeys(fs *firestore.Client) ([]string, error) {
+	geoIDs, err := ListGeoIDs(fs)
+	if err != nil {
+		return nil, err
+	}
+	keys := []string{}
+	for _, geoID := range geoIDs {
+		keys = append(keys, geoID.ID)
+	}
+	return keys, nil
+}

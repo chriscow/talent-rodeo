@@ -545,8 +545,8 @@ func TestProvider_ProcessQueuedSearch(t *testing.T) {
 
 		// Verify job details
 		job := jobs[0]
-		if job.ID != "test-job1" {
-			t.Errorf("job.ID = %v, want test-job1", job.ID)
+		if job.ID != "scrapingdog-test-job1" {
+			t.Errorf("job.ID = %v, want scrapingdog-test-job1", job.ID)
 		}
 		if job.Status != "new" {
 			t.Errorf("job.Status = %v, want new", job.Status)
@@ -556,8 +556,8 @@ func TestProvider_ProcessQueuedSearch(t *testing.T) {
 		}
 		if job.JobRef == nil {
 			t.Error("job.JobRef is nil")
-		} else if job.JobRef.ID != "test-job1" {
-			t.Errorf("job.JobRef.ID = %v, want test-job1", job.JobRef.ID)
+		} else if job.JobRef.ID != "scrapingdog-test-job1" {
+			t.Errorf("job.JobRef.ID = %v, want scrapingdog-test-job1", job.JobRef.ID)
 		}
 	})
 

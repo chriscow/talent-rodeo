@@ -78,8 +78,7 @@ func (app *application) handleVapiWebhook(w http.ResponseWriter, r *http.Request
 	}
 
 	app.logger.Info("received webhook message",
-		"type", msg.Message.Type,
-		"data_keys", getMapKeys(msg.Message.Data))
+		"type", msg.Message.Type)
 
 	// Always try to save the webhook payload - the save function will handle all conditions
 	saveWebhookPayload(msg.Message.Type, body, app.logger, app.fs)
@@ -94,7 +93,7 @@ func (app *application) handleVapiWebhook(w http.ResponseWriter, r *http.Request
 		app.handleTransferDestinationRequest(w, r, msg)
 	case vapi.MsgTypeEndOfCallReport:
 		app.logger.Debug("processing end-of-call report")
-		app.handleEndOfCallReport(r, msg)
+		handleEndOfCallReport(r, app, body)
 	default:
 		// For other message types, we don't need to send a response
 		app.logger.Debug("no response needed for message type", "type", msg.Message.Type)
@@ -235,27 +234,17 @@ func getMapKeys(data []byte) []string {
 }
 
 // handleEndOfCallReport processes an end-of-call report webhook
-func (app *application) handleEndOfCallReport(r *http.Request, webhookMsg vapi.WebhookMessage) error {
-	report, err := app.validateEndOfCallReport(webhookMsg)
+func handleEndOfCallReport(r *http.Request, app *application, msg []byte) error {
+	report, err := validateEndOfCallReport(msg)
 	if err != nil {
-		app.reportServerError(r, fmt.Errorf("failed to validate end-of-call report: %w", err))
-		app.logger.Error("failed to validate end-of-call report", "error", err)
 		return fmt.Errorf("failed to validate end-of-call report: %w", err)
 	}
 
 	appointmentID := *report.Call.Name
-	customerID := ""
-	if report.Call.Customer != nil && report.Call.CustomerID != nil {
-		customerID = *report.Call.CustomerID
-		if customerID == "" {
-			app.logger.Error("missing customer ID in end of call report", "report", report)
-			return nil
-		}
-	}
+
+	customerID := report.Call.Customer.Name
 
 	if err := app.processCompletedAppointment(r, customerID, appointmentID, *report); err != nil {
-		app.logger.Error("failed to process completed appointment", "error", err)
-		app.reportServerError(r, fmt.Errorf("failed to process completed appointment: %w", err))
 		return fmt.Errorf("failed to process completed appointment: %w", err)
 	}
 
@@ -264,37 +253,39 @@ func (app *application) handleEndOfCallReport(r *http.Request, webhookMsg vapi.W
 	return nil
 }
 
-func (app *application) validateEndOfCallReport(webhookMsg vapi.WebhookMessage) (*vapi.EndOfCallReport, error) {
+func validateEndOfCallReport(webhookMsg []byte) (*vapi.EndOfCallReport, error) {
 	// Parse the message data into a report
-	var report vapi.EndOfCallReport
-	if err := json.Unmarshal(webhookMsg.Message.Data, &report); err != nil {
-		app.logger.Error("failed to unmarshal end-of-call report", "error", err)
+	type envelope struct {
+		Message vapi.EndOfCallReport `json:"message"`
+	}
+
+	var env envelope
+
+	if err := json.Unmarshal(webhookMsg, &env); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal end-of-call report: %w", err)
 	}
 
 	// Validate required fields
+	report := env.Message
 	if report.Call == nil {
-		app.logger.Error("missing call information in end of call report")
 		return nil, fmt.Errorf("missing call information in end of call report")
 	}
 
 	if report.Call.ID == nil {
-		app.logger.Error("missing call ID in end of call report")
 		return nil, fmt.Errorf("missing call ID in end of call report")
 	}
 
-	// Debug log the call ID
-	app.logger.Debug("processing call", "id", *report.Call.ID)
-
 	// The appointment ID is stored in the call name
 	if report.Call.Name == nil {
-		app.logger.Error("missing call name in end of call report")
 		return nil, fmt.Errorf("missing call name in end of call report")
 	}
 
+	if report.Call.Customer == nil {
+		return nil, fmt.Errorf("missing customer information in end of call report")
+	}
+
 	// The customer ID is required for getting the appointment
-	if report.Call.CustomerID == nil {
-		app.logger.Error("missing customer ID in end of call report")
+	if report.Call.Customer.Name == "" {
 		return nil, fmt.Errorf("missing customer ID in end of call report")
 	}
 

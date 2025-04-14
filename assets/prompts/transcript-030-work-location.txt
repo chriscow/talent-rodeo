@@ -1,0 +1,68 @@
+You will be analyzing a transcript of a conversation between a candidate and an
+AI job search assistant to determine the candidate's work preferences. Your task
+is to create a comprehensive analysis and determine final WorkLocation and
+WorkType values based on the information provided in the transcript.
+
+First, review the following transcript of the conversation:
+
+<extracted_data>
+{{.ExtractedData}}
+</extracted_data>
+
+<resolved_preferences>
+{{.ResolvedPreferences}}
+</resolved_preferences>
+
+Now, review the list of U.S. metropolitan areas:
+
+<locations>
+{{.Locations}}
+</locations>
+
+Your task is to perform a work preferences analysis based on the transcript. Follow these steps:
+
+1. Create a comprehensive table with the following columns:
+   - Quote (exact text from transcript)
+   - Position in Conversation (early, middle, late)
+   - Category (remote/specific location/work type)
+   - Specific Location (if applicable)
+   - Strength of Preference (must-have, strong preference, would consider)
+
+2. For each location mentioned in the transcript:
+   - Match it to the closest U.S. metropolitan area from the provided list
+   - If no exact match exists, use the nearest major metropolitan area
+
+3. Determine the final WorkLocation value:
+   - If the candidate explicitly prefers remote work: "Remote"
+   - If a specific location is clearly preferred: use the matched U.S. metropolitan area
+   - If the location is not in the list: "United States"
+   - If no clear preference is stated: "Remote"
+
+4. Determine the final WorkType value:
+   - "at_work" (fully on-site)
+   - "hybrid" (mix of remote and on-site)
+   - "remote" (fully remote)
+   - Leave blank if no preference is clearly stated
+
+5. Document your reasoning for the final determinations, citing specific quotes that most influenced your decision
+
+Present your analysis in the following format:
+
+<work_preferences_analysis>
+<comprehensive_table>
+[Insert the comprehensive table here]
+</comprehensive_table>
+
+<final_determinations>
+WorkLocation: [Insert final WorkLocation value]
+WorkType: [Insert final WorkType value]
+</final_determinations>
+
+<reasoning>
+[Provide your reasoning for the final determinations, citing specific quotes]
+</reasoning>
+</work_preferences_analysis>
+
+Ensure that your analysis is thorough, accurate, and based solely on the
+information provided in the transcript. Do not make assumptions beyond what is
+explicitly stated or strongly implied by the candidate's words.

@@ -45,7 +45,9 @@ func (app *application) routes() http.Handler {
 		mux.Use(app.setSentryUser)
 
 		mux.HandleFunc("/", app.home, "GET", "POST") // we need post because of the logout form
-
+		mux.HandleFunc("/privacy", app.showPrivacyPage, "GET")
+		mux.HandleFunc("/terms", app.showTermsPage, "GET")
+		mux.HandleFunc("/about", app.showAboutPage, "GET")
 		mux.Group(func(mux *flow.Mux) {
 			mux.Use(app.requireAnonymousUser)
 			mux.HandleFunc("/auth/:provider", app.startSocialAuth, "GET")

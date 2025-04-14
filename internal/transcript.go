@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"talent-rodeo/internal/utils"
-	"talent-rodeo/internal/vapi"
 
 	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/providers/openai"
@@ -54,46 +53,4 @@ func (t *Transcript) String() string {
 		sb.WriteString(fmt.Sprintf("%s: %s\n", msg.Role, msg.Content))
 	}
 	return sb.String()
-}
-
-// ConvertCallResultToTranscript converts a CallResult's messages to a Transcript
-func ConvertCallResultToTranscript(callResult vapi.Call) *Transcript {
-	messages := make([]minds.Message, 0, len(callResult.Messages))
-
-	for _, msg := range callResult.Messages {
-		// Map VAPI roles to OpenAI roles
-		role := ""
-		switch msg.Role {
-		case "bot":
-			role = string(minds.RoleAssistant)
-		case "system":
-			role = string(minds.RoleSystem)
-		case "user":
-			role = string(minds.RoleUser)
-		case "tool_calls":
-			role = string(minds.RoleTool)
-		case "tool_call_result":
-			role = string(minds.RoleFunction)
-		case "developer":
-			role = "developer"
-		default:
-			continue
-		}
-
-		// Skip empty messages except for tool_calls and tool_call_result
-		if msg.Message == "" &&
-			role != string(minds.RoleTool) &&
-			role != string(minds.RoleFunction) {
-			continue
-		}
-
-		messages = append(messages, minds.Message{
-			Role:    minds.Role(role),
-			Content: msg.Message,
-		})
-	}
-
-	return &Transcript{
-		Messages: messages,
-	}
 }

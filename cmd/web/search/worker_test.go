@@ -2,8 +2,10 @@ package search
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
+	"reflect"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/search"
 	"testing"
@@ -41,52 +43,56 @@ func setupTestService(t *testing.T) (*Service, *firestore.Client) {
 func createTestJobDetail(t *testing.T, fs *firestore.Client) *search.JobDetail {
 	t.Helper()
 
-	// Create a test job detail
+	// Generate a unique job ID for testing
+	jobID := fmt.Sprintf("test-job-%d", time.Now().UnixNano())
+	now := time.Now()
+
+	// Create a job detail
 	jobDetail := &search.JobDetail{
-		ID:            "test-job-id",
-		Provider:      "test-provider",
-		ProviderJobID: "provider-test-job-id",
-		Title:         "Software Engineer",
-		Company:       "Test Company",
-		Location:      "Remote",
-		PostedDate:    time.Now(),
-		URL:           "https://example.com/job",
-		FullDescription: "This is a test job description for a Software Engineer position. " +
-			"Responsibilities include developing and maintaining software applications, " +
-			"collaborating with cross-functional teams, and implementing new features.",
-		Requirements: []string{
-			"5+ years of experience in software development",
-			"Strong knowledge of Go programming language",
-			"Experience with cloud platforms like AWS or GCP",
-		},
-		Qualifications: []string{
-			"Bachelor's degree in Computer Science or related field",
-			"Experience with microservices architecture",
-		},
-		Skills:         []string{"Go", "Docker", "Kubernetes", "SQL"},
-		EmploymentType: "Full-time",
-		WorkplaceType:  "Remote",
+		ID:              jobID,
+		Title:           "Software Engineer",
+		Company:         "Test Company",
+		Location:        "Remote",
+		PostedDate:      now.Add(-24 * time.Hour),
+		FullDescription: "This is a Software Engineer position at Test Company. The role involves developing and maintaining software applications.",
+		Requirements:    []string{"5+ years of experience", "Strong knowledge of Go"},
+		Qualifications:  []string{"Bachelor's degree in Computer Science or related field"},
+		Skills:          []string{"Go", "Docker", "Kubernetes"},
+		EmploymentType:  "Full-time",
+		WorkplaceType:   "Remote",
+		Industry:        "Technology",
 		CompanyInfo: &search.Company{
-			Name:    "Test Company",
-			LogoURL: "https://example.com/logo.png",
+			Name:        "Test Company",
+			Description: "A great place to work",
+			Industry:    "Technology",
+			Size:        "50-100 employees",
+			LogoURL:     "https://example.com/logo.png",
 		},
+		ExtractedData: &search.JobSummary{
+			Summary: "A Software Engineer position at Test Company focused on Go development.",
+			Qualifications: []string{
+				"Bachelor's degree in Computer Science",
+				"Experience with microservices architecture",
+			},
+			Requirements: []string{
+				"5+ years of experience",
+				"Go expertise",
+			},
+		},
+		Status:         "active",
+		SeniorityLevel: "Mid-Senior level",
+		JobFunction:    "Engineering",
+		CreatedAt:      now,
 	}
 
-	// Save to Firestore
-	_, err := fs.Collection("job_details").Doc(jobDetail.ID).Set(context.Background(), jobDetail)
+	// Save the job detail
+	ctx := context.Background()
+	_, err := fs.Collection("job_details").Doc(jobDetail.ID).Set(ctx, jobDetail)
 	if err != nil {
 		t.Fatalf("Failed to create test job detail: %v", err)
 	}
 
 	return jobDetail
-}
-
-func createTestUser(t *testing.T, fs *firestore.Client) *internal.User {
-	t.Helper()
-
-	// Create a test user
-	user := internal.CreateTestUser(t, fs, "Test User", "test@example.com", "+1234567890", false)
-	return user
 }
 
 func TestLoadJobDetail(t *testing.T) {
@@ -122,14 +128,17 @@ func TestLoadUserJob(t *testing.T) {
 	defer internal.DeleteTestData(t, fs, "test-")
 
 	// Create test user and job detail
-	user := createTestUser(t, fs)
+	user := internal.CreateTestUser(t, fs, "Test User", "test@example.com", "+1234567890", false)
 	jobDetail := createTestJobDetail(t, fs)
 
 	// First test - when job doesn't exist
 	ctx := context.Background()
 	_, found, err := internal.GetUserJob(ctx, fs, user.ID, jobDetail.ID)
-	if err == nil {
-		t.Errorf("loadUserJob() expected error, got nil")
+	if found {
+		t.Fatalf("loadUserJob() expected job to not be found, got found")
+	}
+	if err != nil {
+		t.Fatalf("loadUserJob() error = %v", err)
 	}
 
 	// Create a user job to test loading
@@ -162,39 +171,30 @@ func TestLoadUserJob(t *testing.T) {
 	}
 }
 
-func TestSummarizeJobDetails(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping test in short mode")
-	}
-
+func TestJobDetailHasSummary(t *testing.T) {
 	service, fs := setupTestService(t)
 	defer fs.Close()
 	defer internal.DeleteTestData(t, fs, "test-")
 
-	// Create test job detail
-	jobDetail := createTestJobDetail(t, fs)
+	// Create test user
+	user := internal.CreateTestUser(t, fs, "Test User", "test@example.com", "+1234567890", false)
 
-	// Test summarizing job details
+	// Create a job detail with summary and qualifications
+	jobDetail := createTestJobDetail(t, fs)
+	jobDetail.ExtractedData = &search.JobSummary{
+		Summary: "This is a Software Engineer position at Test Company. The role involves developing and maintaining software applications, with a focus on Go programming. Requirements include 5+ years of experience and strong knowledge of Go.",
+		Qualifications: []string{
+			"Bachelor's degree in Computer Science or related field",
+			"Experience with microservices architecture",
+		},
+	}
+
+	// Save the job detail
 	ctx := context.Background()
-	summary, err := service.summarizeJobDetails(ctx, jobDetail)
+	_, err := fs.Collection("job_details").Doc(jobDetail.ID).Set(ctx, jobDetail)
 	if err != nil {
-		t.Fatalf("summarizeJobDetails() error = %v", err)
+		t.Fatalf("Failed to save job detail: %v", err)
 	}
-
-	// Verify summary is not empty
-	if summary.Summary == "" {
-		t.Error("summarizeJobDetails() got empty summary")
-	}
-}
-
-func TestSaveUserJobSummary(t *testing.T) {
-	service, fs := setupTestService(t)
-	defer fs.Close()
-	defer internal.DeleteTestData(t, fs, "test-")
-
-	// Create test user and job detail
-	user := createTestUser(t, fs)
-	jobDetail := createTestJobDetail(t, fs)
 
 	// Create a user job
 	userJob := &internal.UserJob{
@@ -203,43 +203,23 @@ func TestSaveUserJobSummary(t *testing.T) {
 		Status: "new",
 	}
 
-	// Test summary
-	summary := &internal.UserJobSummary{
-		Summary: "This is a Software Engineer position at Test Company. The role involves developing and maintaining software applications, with a focus on Go programming. Requirements include 5+ years of experience and strong knowledge of Go.",
-		Qualifications: []string{
-			"Bachelor's degree in Computer Science or related field",
-			"Experience with microservices architecture",
-		},
+	// Save the user job
+	if err := internal.SaveUserJob(ctx, fs, user.ID, userJob); err != nil {
+		t.Fatalf("Failed to save user job: %v", err)
 	}
 
-	// Test saving the job summary
-	ctx := context.Background()
-	err := service.saveUserJobSummary(ctx, user.ID, userJob, summary, jobDetail)
+	// Load the job detail
+	loadedDetail, err := service.loadJobDetail(ctx, jobDetail.ID)
 	if err != nil {
-		t.Fatalf("saveUserJobSummary() error = %v", err)
+		t.Fatalf("loadJobDetail() error = %v", err)
 	}
 
-	// Load the job to verify
-	jobs, err := internal.GetUserJobs(ctx, fs, user.ID)
-	if err != nil {
-		t.Fatalf("Failed to get user jobs: %v", err)
+	// Verify job detail fields
+	if loadedDetail.ExtractedData.Summary != jobDetail.ExtractedData.Summary {
+		t.Errorf("JobDetail has incorrect Summary = %v, want %v", loadedDetail.ExtractedData.Summary, jobDetail.ExtractedData.Summary)
 	}
-
-	if len(jobs) != 1 {
-		t.Fatalf("Expected 1 job, got %d", len(jobs))
-	}
-
-	savedJob := jobs[0]
-
-	// Verify job fields
-	if savedJob.Summary != summary.Summary {
-		t.Errorf("saveUserJobSummary() got Summary = %v, want %v", savedJob.Summary, summary)
-	}
-	if savedJob.CompanyName != jobDetail.Company {
-		t.Errorf("saveUserJobSummary() got CompanyName = %v, want %v", savedJob.CompanyName, jobDetail.Company)
-	}
-	if jobDetail.CompanyInfo != nil && savedJob.CompanyLogo != jobDetail.CompanyInfo.LogoURL {
-		t.Errorf("saveUserJobSummary() got CompanyLogo = %v, want %v", savedJob.CompanyLogo, jobDetail.CompanyInfo.LogoURL)
+	if !reflect.DeepEqual(loadedDetail.ExtractedData.Qualifications, jobDetail.ExtractedData.Qualifications) {
+		t.Errorf("JobDetail has incorrect Qualifications = %v, want %v", loadedDetail.ExtractedData.Qualifications, jobDetail.ExtractedData.Qualifications)
 	}
 }
 
@@ -257,7 +237,7 @@ func TestNotifyUser(t *testing.T) {
 	service.pusher = mockPusher
 
 	// Create test user
-	user := createTestUser(t, fs)
+	user := internal.CreateTestUser(t, fs, "Test User", "test@example.com", "+1234567890", false)
 
 	// Test notifying user
 	ctx := context.Background()
@@ -293,7 +273,7 @@ func TestProcessQueuedJob(t *testing.T) {
 	service.pusher = mockPusher
 
 	// Create test user and job detail
-	user := createTestUser(t, fs)
+	user := internal.CreateTestUser(t, fs, "Test User", "test@example.com", "+1234567890", false)
 	jobDetail := createTestJobDetail(t, fs)
 
 	// Create a user job first since loadUserJob won't create it
@@ -327,9 +307,25 @@ func TestProcessQueuedJob(t *testing.T) {
 		t.Fatalf("Expected 1 job, got %d", len(jobs))
 	}
 
-	// Verify the job has a summary now
-	if jobs[0].Summary == "" {
-		t.Errorf("Job was not updated with summary")
+	// Verify job status was updated
+	if jobs[0].Status != internal.JobStatusNew {
+		t.Errorf("Job status was not updated to 'new', got %s", jobs[0].Status)
+	}
+
+	// Verify the job detail now has analysis
+	if jobs[0].Analysis == nil {
+		t.Errorf("Job was not updated with analysis")
+	}
+
+	// Load job detail to check for summary
+	loadedDetail, err := service.loadJobDetail(ctx, jobDetail.ID)
+	if err != nil {
+		t.Fatalf("Failed to load job detail: %v", err)
+	}
+
+	// The loaded job detail should have a summary from the scrapingdog provider
+	if loadedDetail.ExtractedData == nil || loadedDetail.ExtractedData.Summary == "" {
+		t.Errorf("Job detail was not updated with extracted data and summary")
 	}
 
 	// Verify notification was sent

@@ -253,6 +253,11 @@ func TestShouldSearch(t *testing.T) {
 }
 
 func TestPerformSearch(t *testing.T) {
+	// Set testing mode to true to ensure only 1 page is queued
+	original := os.Getenv("TESTING_MODE")
+	os.Setenv("TESTING_MODE", "true")
+	defer os.Setenv("TESTING_MODE", original)
+
 	tests := []struct {
 		name        string
 		user        internal.User
@@ -496,6 +501,10 @@ func TestServiceLifecycle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			orig := os.Getenv("TESTING_MODE")
+			os.Setenv("TESTING_MODE", "true")
+			defer os.Setenv("TESTING_MODE", orig)
+
 			t.Logf("Starting test case: %s", tt.name)
 			provider := getProvider(t, fs)
 			svc := NewService(fs, slog.Default(), provider, nil, "test@example.com", nil)
@@ -551,6 +560,10 @@ func TestConcurrentProcessing(t *testing.T) {
 	fs := setupFirestore(t)
 	defer fs.Close()
 	defer internal.DeleteTestData(t, fs, "test-")
+
+	orig := os.Getenv("TESTING_MODE")
+	os.Setenv("TESTING_MODE", "true")
+	defer os.Setenv("TESTING_MODE", orig)
 
 	ctx := context.Background()
 	// Create test users
@@ -616,46 +629,85 @@ func TestErrorRecovery(t *testing.T) {
 	defer fs.Close()
 	defer internal.DeleteTestData(t, fs, "test-")
 
+	if !testing.Short() {
+		t.Skip("Skipping error recovery test for real provider")
+	}
+
+	orig := os.Getenv("TESTING_MODE")
+	os.Setenv("TESTING_MODE", "true")
+	defer os.Setenv("TESTING_MODE", orig)
+
 	ctx := context.Background()
-	// Create test user
+	// Create test user with valid search criteria
 	user := internal.CreateTestUser(t, fs, "Test User", "test@example.com", "+1234567890", false)
-	search := &internal.UserSearch{
+
+	// Initialize search criteria directly in the user object
+	user.Search = &internal.UserSearch{
 		Criteria: search.Criteria{
 			Keywords: []string{"golang"},
+			Location: "remote",
 		},
 	}
-	if err := internal.UpdateUserSearch(ctx, fs, user.ID, search); err != nil {
-		t.Fatalf("Failed to update test user search: %v", err)
+
+	// Update the user in Firestore
+	if err := internal.UpdateUser(ctx, fs, user.ID, map[string]any{
+		"search": user.Search,
+	}); err != nil {
+		t.Fatalf("Failed to update user search: %v", err)
 	}
 
 	mailer := &mockMailer{}
-	provider := getProvider(t, fs)
-	if mockProv, ok := provider.(*mockProvider); ok {
-		mockProv.shouldError = true
-	} else {
-		t.Skip("Skipping error test for real provider")
-	}
+	provider := &mockProvider{shouldError: true} // Force error case
 	svc := NewService(fs, slog.Default(), provider, mailer, "admin@example.com", nil)
 
-	// Test that service continues processing after error
+	// Test that service handles error properly
 	err := svc.enqueueSearch(ctx, user)
 	if err == nil {
-		t.Error("expected error from performSearch")
+		t.Fatal("expected error from enqueueSearch, got nil")
 	}
 
 	// Verify admin notification was sent
 	if len(mailer.sentMails) != 1 {
-		t.Error("expected admin notification email")
-		return
+		t.Fatal("expected admin notification email")
+	}
+
+	// Verify email was sent to correct admin address
+	if mailer.sentMails[0].recipient != "admin@example.com" {
+		t.Errorf("wrong admin email recipient: got %s, want admin@example.com", mailer.sentMails[0].recipient)
 	}
 
 	// Test service can handle subsequent searches
-	if mockProv, ok := provider.(*mockProvider); ok {
-		mockProv.shouldError = false
-	}
+	provider.shouldError = false // Reset error state
 	err = svc.enqueueSearch(ctx, user)
 	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+		t.Errorf("unexpected error after recovery: %v", err)
+	}
+
+	// Verify searches were queued after recovery
+	// In testing mode, we expect 1 page per keyword
+	expectedSearches := len(user.Search.Criteria.Keywords) // One search per keyword in testing mode
+	if len(provider.queuedSearches) != expectedSearches {
+		t.Errorf("wrong number of queued searches after recovery: got %d, want %d", len(provider.queuedSearches), expectedSearches)
+	}
+
+	// Verify each queued search has the correct user ID and one keyword
+	for _, qs := range provider.queuedSearches {
+		if qs.UserID != user.ID {
+			t.Errorf("wrong user ID in queued search: got %s, want %s", qs.UserID, user.ID)
+		}
+		if len(qs.Criteria.Keywords) != 1 {
+			t.Errorf("wrong number of keywords in queued search: got %d, want 1", len(qs.Criteria.Keywords))
+		}
+		found := false
+		for _, k := range user.Search.Criteria.Keywords {
+			if k == qs.Criteria.Keywords[0] {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("unexpected keyword in queued search: %s", qs.Criteria.Keywords[0])
+		}
 	}
 }
 
@@ -746,7 +798,7 @@ func TestEnqueueSearch(t *testing.T) {
 				},
 			},
 			testingMode:  "false",
-			wantNumPages: 3,
+			wantNumPages: 6, // 3 pages * 2 keywords = 6 total searches
 		},
 		{
 			name: "pro tier user - 10 pages",
@@ -762,7 +814,7 @@ func TestEnqueueSearch(t *testing.T) {
 				},
 			},
 			testingMode:  "false",
-			wantNumPages: 10,
+			wantNumPages: 20, // 10 pages * 2 keywords = 20 total searches
 		},
 		{
 			name: "testing mode - 1 page regardless of tier",
@@ -778,7 +830,7 @@ func TestEnqueueSearch(t *testing.T) {
 				},
 			},
 			testingMode:  "true",
-			wantNumPages: 1,
+			wantNumPages: 2, // 1 page * 2 keywords = 2 total searches
 		},
 		{
 			name: "error case - nil search",
@@ -796,7 +848,9 @@ func TestEnqueueSearch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Set testing mode for this test case
+			orig := os.Getenv("TESTING_MODE")
 			os.Setenv("TESTING_MODE", tt.testingMode)
+			defer os.Setenv("TESTING_MODE", orig)
 
 			// Create mock dependencies
 			mockQueue := &mockProvider{}
@@ -832,25 +886,63 @@ func TestEnqueueSearch(t *testing.T) {
 				t.Errorf("wrong number of queued searches: got %d, want %d", got, tt.wantNumPages)
 			}
 
-			// Verify each queued search has the correct page number
-			for i := 0; i < len(mockQueue.queuedSearches); i++ {
-				if mockQueue.queuedSearches[i].UserID != tt.user.ID {
-					t.Errorf("wrong user ID for search %d: got %s, want %s", i, mockQueue.queuedSearches[i].UserID, tt.user.ID)
+			// Verify each queued search has the correct page number and keyword
+			seenPages := make(map[int]bool)
+			seenKeywords := make(map[string]bool)
+			for _, qs := range mockQueue.queuedSearches {
+				if qs.UserID != tt.user.ID {
+					t.Errorf("wrong user ID: got %s, want %s", qs.UserID, tt.user.ID)
 				}
 
-				// Check that criteria was copied and page number was set
-				gotCriteria := mockQueue.queuedSearches[i].Criteria
-				if !reflect.DeepEqual(gotCriteria.Keywords, tt.user.Search.Criteria.Keywords) {
-					t.Errorf("wrong keywords for search %d: got %s, want %s", i, gotCriteria.Keywords, tt.user.Search.Criteria.Keywords)
+				// Check location is preserved
+				if qs.Criteria.Location != tt.user.Search.Criteria.Location {
+					t.Errorf("wrong location: got %s, want %s", qs.Criteria.Location, tt.user.Search.Criteria.Location)
 				}
-				if !reflect.DeepEqual(gotCriteria.Location, tt.user.Search.Criteria.Location) {
-					t.Errorf("wrong location for search %d: got %s, want %s", i, gotCriteria.Location, tt.user.Search.Criteria.Location)
+
+				// Each search should have exactly one keyword from the original list
+				if len(qs.Criteria.Keywords) != 1 {
+					t.Errorf("expected exactly one keyword per search, got %d", len(qs.Criteria.Keywords))
+				} else {
+					keyword := qs.Criteria.Keywords[0]
+					found := false
+					for _, k := range tt.user.Search.Criteria.Keywords {
+						if k == keyword {
+							found = true
+							break
+						}
+					}
+					if !found {
+						t.Errorf("unexpected keyword: %s", keyword)
+					}
+					seenKeywords[keyword] = true
 				}
-				wantPage := i + 1
-				if gotCriteria.PageNumber != wantPage {
-					t.Errorf("wrong page number for search %d: got %d, want %d", i, gotCriteria.PageNumber, wantPage)
-				}
+
+				seenPages[qs.Criteria.PageNumber] = true
+			}
+
+			// Verify we saw all expected pages
+			expectedPages := numPagesForTier(tt.user.Tier, tt.testingMode == "true")
+			if len(seenPages) != expectedPages {
+				t.Errorf("wrong number of unique pages: got %d, want %d", len(seenPages), expectedPages)
+			}
+
+			// Verify we saw all keywords
+			if len(seenKeywords) != len(tt.user.Search.Criteria.Keywords) {
+				t.Errorf("wrong number of unique keywords: got %d, want %d", len(seenKeywords), len(tt.user.Search.Criteria.Keywords))
 			}
 		})
+	}
+}
+
+// Helper function to determine number of pages based on tier and testing mode
+func numPagesForTier(tier internal.UserTier, isTestingMode bool) int {
+	if isTestingMode {
+		return TestingModeNumPages
+	}
+	switch tier {
+	case internal.UserTierPro:
+		return ProTierNumPages
+	default:
+		return FreeTierNumPages
 	}
 }

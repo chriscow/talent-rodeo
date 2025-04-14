@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"os"
@@ -43,7 +44,11 @@ func NewFirestoreClient(ctx context.Context, opts ...Option) (*firestore.Client,
 
 	// If FIREBASE_CREDENTIALS is set, use it directly
 	if credentials := os.Getenv("FIREBASE_CREDENTIALS"); credentials != "" {
-		options = append(options, option.WithCredentialsJSON([]byte(credentials)))
+		decoded, err := base64.StdEncoding.DecodeString(credentials)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode FIREBASE_CREDENTIALS: %w", err)
+		}
+		options = append(options, option.WithCredentialsJSON(decoded))
 	}
 
 	// Initialize Firebase app with options (or default credentials if no options provided)

@@ -180,11 +180,6 @@ func updateEndOfCallReport(reportData []byte, userID, appointmentID string) (*va
 		return nil, fmt.Errorf("invalid message structure")
 	}
 
-	// Check if there's nested data structure
-	if nestedData, ok := messageData["data"].(map[string]any); ok {
-		messageData = nestedData
-	}
-
 	// Initialize or update call information
 	var call map[string]any
 	if existingCall, ok := messageData["call"].(map[string]any); ok {
@@ -215,11 +210,21 @@ func updateEndOfCallReport(reportData []byte, userID, appointmentID string) (*va
 	fmt.Printf("DEBUG: Final report structure: %s\n", truncateJSON(string(reportBytes), 200))
 
 	// Create the webhook message with the updated report
-	msg.Message.Type = vapi.MsgTypeEndOfCallReport
-	msg.Message.Data = reportBytes
+
+	type envelope struct {
+		Message vapi.EndOfCallReport `json:"message"`
+	}
+
+	var report vapi.EndOfCallReport
+	if err := json.Unmarshal(reportBytes, &report); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal report: %w", err)
+	}
+
+	var env envelope
+	env.Message = report
 
 	// Debug log the final webhook message
-	if msgBytes, err := json.Marshal(msg); err == nil {
+	if msgBytes, err := json.Marshal(env); err == nil {
 		fmt.Printf("DEBUG: Final webhook message: %s\n", truncateJSON(string(msgBytes), 200))
 	}
 
@@ -235,7 +240,6 @@ func createWebhookPayload(msg *vapi.WebhookMessage) (*th.WebhookPayload, error) 
 
 	// Debug log the incoming message
 	fmt.Printf("DEBUG: Input message type: %s\n", msg.Message.Type)
-	fmt.Printf("DEBUG: Input message data length: %d\n", len(msg.Message.Data))
 
 	// Marshal the webhook message directly
 	webhookBody, err := json.Marshal(msg)

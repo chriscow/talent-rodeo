@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -410,8 +411,13 @@ func checkEnv() error {
 		return fmt.Errorf("FIREBASE_CREDENTIALS environment variable is required")
 	}
 
+	decoded, err := base64.StdEncoding.DecodeString(firebaseCredentials)
+	if err != nil {
+		return fmt.Errorf("failed to decode FIREBASE_CREDENTIALS from base64: %w", err)
+	}
+
 	var creds map[string]any
-	if err := json.Unmarshal([]byte(firebaseCredentials), &creds); err != nil {
+	if err := json.Unmarshal(decoded, &creds); err != nil {
 		return fmt.Errorf("failed to unmarshal FIREBASE_CREDENTIALS: %w", err)
 	}
 

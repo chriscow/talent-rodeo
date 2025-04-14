@@ -1,34 +1,77 @@
 {{define "page:main"}}
 <main class="container">
+    {{if .TestMode}}
+    <!-- Test Mode Controls - TEMPORARY -->
+    <div class="test-mode-controls" style="background-color: #f8f8f8; padding: 10px; margin-bottom: 15px; border: 1px dashed #999;">
+        <strong>Test Mode Controls:</strong>
+        <div class="test-links">
+            <a href="/dashboard" class="button-small">Default</a>
+            <a href="/dashboard?test_mode=searching" class="button-small">Searching</a>
+            <a href="/dashboard?test_mode=scheduled_soon" class="button-small">Scheduled Soon</a>
+            <a href="/dashboard?test_mode=scheduled_future" class="button-small">Scheduled Future</a>
+            <a href="/dashboard?test_mode=no_schedule" class="button-small">No Schedule</a>
+        </div>
+        <div class="current-state">
+            <small>
+                Current State: 
+                {{if .IsSearching}}
+                    <strong>Searching</strong>
+                {{else if eq .NextSearchTime.IsZero true}}
+                    <strong>No Schedule</strong>
+                {{else if .NextSearchTime.Before .CurrentTime}}
+                    <strong>Search Imminent</strong>
+                {{else}}
+                    <strong>Scheduled</strong> for {{.NextSearchTime.Format "Jan 02, 2006 at 3:04 PM"}}
+                {{end}}
+            </small>
+        </div>
+    </div>
+    {{end}}
+
     <header>
-        <div class="grid">
-            <div>
+        <!-- <div>
+            <div class="rating-filter">
+                <label>
+                    <input type="checkbox" id="show-all-ratings" {{if .ShowAllRatings}}checked{{end}}>
+                    Show all jobs (including non-recommended)
+                </label>
             </div>
-            <div>
-                <div id="new-jobs-indicator" class="notice" style="display: none;">
-                    <span id="new-jobs-count"></span> new jobs are available. 
-                    <a href="/dashboard">Refresh</a>
-                </div>
-                <div id="search-completion-indicator" class="notice" style="display: none;">
-                    Search complete! Found <span id="search-completion-count"></span> jobs. 
-                    <a href="/dashboard">Refresh</a>
-                </div>
+        </div> -->
+        <div>
+            <ins id="new-jobs-indicator" class="notice" style="display: none;">
+                <span id="new-jobs-count"></span> new jobs are available. 
+                <a href="/dashboard{{if .TestMode}}?test_mode={{.TestMode}}{{end}}">Refresh</a>
+            </ins>
+            <div id="search-completion-indicator" class="notice" style="display: none;">
+                Search complete! Found <span id="search-completion-count"></span> jobs. 
+                <a href="/dashboard{{if .TestMode}}?test_mode={{.TestMode}}{{end}}">Refresh</a>
             </div>
         </div>
     </header>
     
     <!-- Status updates during job search -->
-    <div id="search-status" class="notice secondary" {{if not .IsSearching}}style="display: none;"{{end}}>
+    <ins id="search-status" class="notice secondary" >
         <span id="search-status-message">
+            {{if .IsSearching}}
+                Currently searching for jobs...
+            {{else if eq .NextSearchTime.IsZero true}}
+                No job search scheduled.
+            {{else if .NextSearchTime.Before .CurrentTime}}
+                Next job search is scheduled to run shortly.
+            {{else}}
+                Next job search is scheduled for {{.NextSearchTime.Format "Jan 02, 2006 at 3:04 PM"}}.
+            {{end}}
         </span>
-    </div>
+    </ins>
+
+
 
     <!-- Job Status Tabs -->
     <nav class="job-status-tabs">
         <ul>
             {{range $index, $status := .JobStatuses}}
                 <li {{if eq $.ActiveStatus (lowercase $status)}}class="active"{{end}}>
-                    <a href="/dashboard?status={{lowercase $status}}">
+                    <a href="/dashboard?status={{lowercase $status}}{{if $.ShowAllRatings}}&show_all=true{{end}}{{if $.TestMode}}&test_mode={{$.TestMode}}{{end}}">
                         {{$status}} Jobs
                     </a>
                 </li>
@@ -52,12 +95,12 @@
             <!-- Pagination controls -->
             <nav class="pagination">
                 
-                    <a href="/dashboard?status={{.ActiveStatus}}" role="button" class="outline" {{if eq .CurrentPageToken ""}}disabled{{end}}>
+                    <a href="/dashboard?status={{.ActiveStatus}}{{if .ShowAllRatings}}&show_all=true{{end}}{{if .TestMode}}&test_mode={{.TestMode}}{{end}}" role="button" class="outline" {{if eq .CurrentPageToken ""}}disabled{{end}}>
                         First Page
                     </a>
                 
                 {{if .HasNextPage}}
-                    <a href="/dashboard?status={{.ActiveStatus}}&page={{.NextPageToken}}" 
+                    <a href="/dashboard?status={{.ActiveStatus}}&page={{.NextPageToken}}{{if .ShowAllRatings}}&show_all=true{{end}}{{if .TestMode}}&test_mode={{.TestMode}}{{end}}" 
                        role="button" class="outline">
                         Next Page
                     </a>
@@ -65,7 +108,29 @@
             </nav>
         {{else}}
             <article class="notice">
-                <p>No {{.ActiveStatus}} jobs found.</p>
+                {{if .IsSearching}}
+                    <p>A job search is currently in progress. Results will appear here as they are found.</p>
+                {{else if .FirestoreError}}
+                    <p>Welcome! Your job search will begin soon. 
+                    {{if .NextSearchTime.Before .CurrentTime}}
+                        A search will run shortly.
+                    {{else if eq .NextSearchTime.IsZero false}}
+                        The first search is scheduled for <span class="next-search-time" data-timestamp="{{.NextSearchTime.Unix}}">{{.NextSearchTime.Format "Jan 02, 2006 at 3:04 PM"}}</span>.
+                    {{else}}
+                        Check back soon for matching jobs!
+                    {{end}}
+                    </p>
+                {{else if not .HasJobs}}
+                    <p>No {{.ActiveStatus}} jobs found. 
+                       {{if .NextSearchTime.Before .CurrentTime}}
+                           A new search will run shortly.
+                       {{else if eq .NextSearchTime.IsZero false}}
+                           The next search is scheduled for <span class="next-search-time" data-timestamp="{{.NextSearchTime.Unix}}">{{.NextSearchTime.Format "Jan 02, 2006 at 3:04 PM"}}</span>.
+                       {{end}}
+                    </p>
+                {{else}}
+                    <p>No {{.ActiveStatus}} jobs found.</p>
+                {{end}}
             </article>
         {{end}}
     </section>
@@ -75,6 +140,7 @@
 <div data-user-id="{{.User.ID}}" 
      data-pusher-key="{{.PusherKey}}" 
      data-pusher-cluster="{{.PusherCluster}}"
+     data-next-search-time="{{.NextSearchTime.Unix}}"
      hidden></div>
 {{end}}
 
@@ -96,17 +162,25 @@
             <p>{{.}}</p>
         </div>
         {{end}}
+        {{with .Requirements}}
+        {{if .}}
+        <div class="requirements">
+            <h4>Requirements</h4>
+            <ul>
+                {{range .}}
+                <li>{{.}}</li>
+                {{end}}
+            </ul>
+        </div>
+        {{end}}
+        {{end}}
         {{with .Qualifications}}
         {{if .}}
         <div class="qualifications">
             <h4>Qualifications</h4>
             <ul>
                 {{range .}}
-                <li>
-                    <label>
-                        <input type="checkbox"> {{.}}
-                    </label>
-                </li>
+                <li>{{.}}</li>
                 {{end}}
             </ul>
         </div>
@@ -124,6 +198,26 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         console.log('Dashboard: Initializing...');
+        
+        // Format all search time elements in local timezone
+        const searchTimeElements = document.querySelectorAll('.next-search-time');
+        searchTimeElements.forEach(element => {
+            const timestamp = parseInt(element.dataset.timestamp, 10);
+            if (!isNaN(timestamp)) {
+                const date = new Date(timestamp * 1000);
+                // Format the date in user's local timezone
+                const formattedDate = date.toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric'
+                });
+                const formattedTime = date.toLocaleTimeString(undefined, {
+                    hour: 'numeric',
+                    minute: '2-digit'
+                });
+                element.textContent = `${formattedDate} at ${formattedTime}`;
+            }
+        });
         
         // Initialize Notyf
         const notyf = new Notyf({
@@ -185,6 +279,26 @@
             cluster: userElement.dataset.pusherCluster,
             userId: userElement.dataset.userId
         });
+        
+        // Set up automatic refresh based on next search time
+        const nextSearchTimeUnix = parseInt(userElement.dataset.nextSearchTime, 10);
+        if (!isNaN(nextSearchTimeUnix) && nextSearchTimeUnix > 0) {
+            const nextSearchTime = new Date(nextSearchTimeUnix * 1000);
+            const now = new Date();
+            
+            if (nextSearchTime > now) {
+                // Calculate time until refresh (add a small buffer of 5 seconds after search time)
+                const refreshDelay = nextSearchTime.getTime() - now.getTime() + 5000;
+                
+                console.log('Dashboard: Scheduling page refresh at', nextSearchTime.toLocaleString());
+                
+                // Schedule page refresh
+                setTimeout(function() {
+                    console.log('Dashboard: Auto-refreshing page for scheduled search');
+                    window.location.reload();
+                }, refreshDelay);
+            }
+        }
         
         const pusher = new Pusher(userElement.dataset.pusherKey, {
             cluster: userElement.dataset.pusherCluster
@@ -304,6 +418,28 @@
         pusher.connection.bind('error', function(err) {
             console.error('Dashboard: Pusher connection error:', err);
         });
+
+        // Add event listener for the rating filter checkbox
+        const showAllRatingsCheckbox = document.getElementById('show-all-ratings');
+        if (showAllRatingsCheckbox) {
+            showAllRatingsCheckbox.addEventListener('change', function() {
+                // Get current URL and update the show_all parameter
+                const url = new URL(window.location.href);
+                url.searchParams.set('show_all', this.checked);
+                
+                // Keep the current status if it exists
+                const currentStatus = url.searchParams.get('status');
+                if (currentStatus) {
+                    url.searchParams.set('status', currentStatus);
+                }
+                
+                // Remove page parameter when filter changes
+                url.searchParams.delete('page');
+                
+                // Navigate to the new URL
+                window.location.href = url.toString();
+            });
+        }
     });
 </script>
 {{end}}
@@ -384,11 +520,13 @@
         overflow-y: auto;
     }
     
+    .job-card .requirements h4,
     .job-card .qualifications h4 {
         font-size: 1rem;
         margin-bottom: 0.5rem;
     }
     
+    .job-card .requirements ul,
     .job-card .qualifications ul {
         list-style: none;
         padding-left: 0;
@@ -397,6 +535,7 @@
         overflow-y: auto;
     }
     
+    .job-card .requirements li,
     .job-card .qualifications li {
         margin-bottom: 0.25rem;
     }
@@ -427,11 +566,80 @@
     .notice.secondary {
         background-color: var(--secondary-focus);
         color: var(--secondary-inverse);
+        text-align: center;
+        width: 100%;
+        display: inline-block;
+    }
+    
+    .notice.info {
+        background-color: var(--info-100);
+        color: var(--info-700);
+        border: 1px solid var(--info-300);
     }
     
     .notice a {
         color: inherit;
         text-decoration: underline;
+    }
+
+    /* Rating filter styles */
+    .rating-filter {
+        margin: 1rem 0;
+    }
+    
+    .rating-filter label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 500;
+    }
+    
+    .rating-filter input[type="checkbox"] {
+        margin: 0;
+    }
+    
+    /* Next search info styles */
+    #next-search-info {
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+    }
+    
+    #next-search-info::before {
+        content: "⏰";
+        margin-right: 0.5rem;
+        font-size: 1.1rem;
+    }
+    
+    /* Test mode controls - TEMPORARY */
+    .test-mode-controls {
+        border-radius: var(--border-radius);
+    }
+    
+    .test-links {
+        margin: 10px 0;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    
+    .button-small {
+        display: inline-block;
+        padding: 5px 10px;
+        background-color: #e0e0e0;
+        border-radius: 3px;
+        text-decoration: none;
+        color: #333;
+        font-size: 0.85rem;
+    }
+    
+    .button-small:hover {
+        background-color: #d0d0d0;
+    }
+    
+    .current-state {
+        margin-top: 5px;
+        color: #555;
     }
 </style>
 {{end}}

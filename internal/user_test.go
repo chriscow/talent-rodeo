@@ -266,8 +266,8 @@ func TestUserStates(t *testing.T) {
 			{UserStatusPendingResumeUpload, "Pending Resume Upload", "We are waiting for your resume to be uploaded."},
 			{UserStatusResumeUploaded, "Resume Uploaded", "The resume has been successfully uploaded but a call has not been scheduled yet."},
 			{UserStatusCallScheduled, "Call Scheduled", "We have your resume and a call has been scheduled."},
-			{UserStatusCallStarted, "Call Started", "Your introductory call has started."},
-			{UserStatusCallAnalysisStarted, "Call Analysis Started", "Your introductory call has been completed and we are analyzing the call."},
+			{UserStatusCallStarted, "Call Started", "Your call has started."},
+			{UserStatusCallAnalysisStarted, "Call Analysis Started", "Your call has been completed and we are analyzing the call."},
 		}
 
 		for _, tt := range tests {

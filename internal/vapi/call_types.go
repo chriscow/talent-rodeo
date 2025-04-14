@@ -171,14 +171,14 @@ type Transport struct {
 
 // PhoneNumber represents phone number configuration
 type PhoneNumber struct {
-	TwilioAccountSid    string       `json:"twilioAccountSid"`
-	TwilioAuthToken     string       `json:"twilioAuthToken"`
-	TwilioPhoneNumber   string       `json:"twilioPhoneNumber"`
-	FallbackDestination Destination  `json:"fallbackDestination"`
-	Name                string       `json:"name"`
-	AssistantID         string       `json:"assistantId"`
-	SquadID             string       `json:"squadId"`
-	Server              ServerConfig `json:"server"`
+	TwilioAccountSid    string        `json:"twilioAccountSid"`
+	TwilioAuthToken     string        `json:"twilioAuthToken"`
+	TwilioPhoneNumber   string        `json:"twilioPhoneNumber"`
+	FallbackDestination *Destination  `json:"fallbackDestination,omitempty"`
+	Name                string        `json:"name,omitempty"`
+	AssistantID         string        `json:"assistantId,omitempty"`
+	SquadID             string        `json:"squadId,omitempty"`
+	Server              *ServerConfig `json:"server,omitempty"`
 }
 
 // Destination represents call destination configuration
@@ -238,11 +238,11 @@ type Message struct {
 
 // Customer contains customer information
 type Customer struct {
-	NumberE164CheckEnabled *bool   `json:"numberE164CheckEnabled,omitempty"`
-	Extension              *string `json:"extension,omitempty"`
-	Number                 string  `json:"number"`
-	SipURI                 *string `json:"sipUri,omitempty"`
-	Name                   string  `json:"name"`
+	NumberE164CheckEnabled *bool  `json:"numberE164CheckEnabled,omitempty"`
+	Extension              string `json:"extension,omitempty"`
+	Number                 string `json:"number"`
+	SipURI                 string `json:"sipUri,omitempty"`
+	Name                   string `json:"name"`
 }
 
 // Call represents a call request
@@ -286,10 +286,10 @@ type Call struct {
 
 // EndOfCallReport represents the report generated at the end of a call
 type EndOfCallReport struct {
-	Timestamp *float64 `json:"timestamp,omitempty"`
-	Type      string   `json:"type"`
-	Artifact  Artifact `json:"artifact"`
-	Analysis  Analysis `json:"analysis"`
+	Timestamp *float64  `json:"timestamp,omitempty"`
+	Type      string    `json:"type"`
+	Artifact  *Artifact `json:"artifact"`
+	Analysis  *Analysis `json:"analysis"`
 
 	// Optional fields
 	StartedAt   *time.Time `json:"startedAt,omitempty"`
