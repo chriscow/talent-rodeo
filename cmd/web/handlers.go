@@ -38,11 +38,35 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 
 	if err := response.Page(w, http.StatusOK, data, "pages/home.html"); err != nil {
 		app.serverError(w, r, err)
-		app.reportToSentry(r, err, sentry.LevelError, map[string]string{
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
 			"error_type":  "template_rendering",
 			"entity_type": "home_page",
 		})
 	}
 
 	app.logger.Debug("Home: rendered successfully")
+}
+
+func (app *application) showPrivacyPage(w http.ResponseWriter, r *http.Request) {
+	data := app.newTemplateData(r)
+
+	if err := response.Page(w, http.StatusOK, data, "pages/privacy.html"); err != nil {
+		app.serverError(w, r, err)
+	}
+}
+
+func (app *application) showTermsPage(w http.ResponseWriter, r *http.Request) {
+	data := app.newTemplateData(r)
+
+	if err := response.Page(w, http.StatusOK, data, "pages/terms.html"); err != nil {
+		app.serverError(w, r, err)
+	}
+}
+
+func (app *application) showAboutPage(w http.ResponseWriter, r *http.Request) {
+	data := app.newTemplateData(r)
+
+	if err := response.Page(w, http.StatusOK, data, "pages/about.html"); err != nil {
+		app.serverError(w, r, err)
+	}
 }

@@ -6,6 +6,8 @@ import (
 	"talent-rodeo/internal/funcs"
 	"time"
 
+	"sort"
+
 	"cloud.google.com/go/firestore"
 	"google.golang.org/api/iterator"
 )
@@ -16,12 +18,13 @@ type AppointmentStatus string
 const (
 	appointmentsCollection = "appointments"
 
-	AppointmentStatusScheduled AppointmentStatus = "scheduled"
-	AppointmentStatusRunning   AppointmentStatus = "running"
-	AppointmentStatusCompleted AppointmentStatus = "completed"
-	AppointmentStatusCancelled AppointmentStatus = "cancelled"
-	AppointmentStatusFailed    AppointmentStatus = "failed"
-	AppointmentStatusOther     AppointmentStatus = "other"
+	AppointmentStatusScheduled  AppointmentStatus = "scheduled"
+	AppointmentStatusRunning    AppointmentStatus = "running"
+	AppointmentStatusProcessing AppointmentStatus = "processing"
+	AppointmentStatusCompleted  AppointmentStatus = "completed"
+	AppointmentStatusCancelled  AppointmentStatus = "cancelled"
+	AppointmentStatusFailed     AppointmentStatus = "failed"
+	AppointmentStatusOther      AppointmentStatus = "other"
 )
 
 // Appointment represents a scheduled phone interview
@@ -37,6 +40,21 @@ type Appointment struct {
 	TranscriptSummary *string           `firestore:"transcript_summary"`
 	CreatedAt         time.Time         `firestore:"created_at"`
 	UpdatedAt         time.Time         `firestore:"updated_at"`
+	CompletedAt       *time.Time        `firestore:"completed_at"`
+	CancelledAt       *time.Time        `firestore:"cancelled_at"`
+	FailedAt          *time.Time        `firestore:"failed_at"`
+	Notes             *string           `firestore:"notes"`
+
+	// New fields for storing promptLLM responses
+	ExtractedData *ExtractedData `firestore:"extracted_data"`
+}
+
+type ExtractedData struct {
+	TranscriptExtract   *string `firestore:"01_transcript_extracted_data"`
+	ResolvedPreferences *string `firestore:"02_resolved_preferences"`
+	WorkPreferences     *string `firestore:"03_work_preferences"`
+	KeywordAnalysis     *string `firestore:"04_keyword_analysis"`
+	UserStatement       *string `firestore:"05_user_statement"`
 }
 
 func CreateAppointment(ctx context.Context, fs *firestore.Client, name string, user User, appointment *Appointment) error {
@@ -111,6 +129,52 @@ func ListAppointments(ctx context.Context, fs *firestore.Client, userID string) 
 	return appointments, nil
 }
 
+// ListCompletedAppointments retrieves all completed appointments for a user
+// and returns them sorted by CompletedAt in descending order
+func ListCompletedAppointments(ctx context.Context, fs *firestore.Client, userID string) ([]*Appointment, error) {
+	// Create a query for completed appointments where completed_at exists
+	query := fs.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).
+		Where("status", "==", AppointmentStatusCompleted).
+		Where("completed_at", ">", time.Time{}) // Filter for non-nil completed_at values
+
+	iter := query.Documents(ctx)
+
+	var appointments []*Appointment
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to iterate completed appointments: %w", err)
+		}
+
+		var appointment Appointment
+		if err := doc.DataTo(&appointment); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal appointment: %w", err)
+		}
+
+		// Double-check that CompletedAt is not nil - this shouldn't happen based on our query
+		// but it's good practice to validate
+		if appointment.CompletedAt == nil {
+			// Log a warning since this indicates data inconsistency
+			fmt.Printf(BGYellow("WARNING: Found appointment %s with status 'completed' but nil CompletedAt field\n"), appointment.ID)
+			continue
+		}
+
+		appointments = append(appointments, &appointment)
+	}
+
+	// Sort appointments by CompletedAt field in descending order (newest first)
+	if len(appointments) > 1 {
+		sort.SliceStable(appointments, func(i, j int) bool {
+			return appointments[i].CompletedAt.After(*appointments[j].CompletedAt)
+		})
+	}
+
+	return appointments, nil
+}
+
 func UpdateAppointment(ctx context.Context, fs *firestore.Client, appointment *Appointment) error {
 	_, err := fs.Collection(usersCollection).Doc(appointment.UserID).Collection(appointmentsCollection).Doc(appointment.ID).Set(ctx, appointment)
 	if err != nil {
@@ -177,4 +241,46 @@ func DeleteAppointment(ctx context.Context, fs *firestore.Client, userID, appoin
 		return fmt.Errorf("failed to delete appointment: %w", err)
 	}
 	return nil
+}
+
+// ListAppointmentsNeedingProcessing retrieves all appointments in the "processing" state
+// These are appointments that were interrupted during transcript processing
+func ListAppointmentsNeedingProcessing(ctx context.Context, fs *firestore.Client) ([]*Appointment, error) {
+	var appointments []*Appointment
+
+	// Query all users
+	usersIter := fs.Collection(usersCollection).Documents(ctx)
+	for {
+		userDoc, err := usersIter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to iterate users: %w", err)
+		}
+
+		// For each user, query their appointments in "processing" state
+		query := userDoc.Ref.Collection(appointmentsCollection).
+			Where("status", "==", AppointmentStatusProcessing)
+
+		apptIter := query.Documents(ctx)
+		for {
+			doc, err := apptIter.Next()
+			if err == iterator.Done {
+				break
+			}
+			if err != nil {
+				return nil, fmt.Errorf("failed to iterate appointments for user %s: %w", userDoc.Ref.ID, err)
+			}
+
+			var appointment Appointment
+			if err := doc.DataTo(&appointment); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal appointment: %w", err)
+			}
+
+			appointments = append(appointments, &appointment)
+		}
+	}
+
+	return appointments, nil
 }

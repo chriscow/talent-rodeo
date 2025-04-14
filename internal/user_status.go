@@ -110,3 +110,12 @@ func (s UserStatus) Description() string {
 		return "No description available for this status."
 	}
 }
+
+// IsOnboarding returns true if the user is in an onboarding state
+// This includes processing resume, call analysis, and call completion states
+func (s UserStatus) IsOnboarding() bool {
+	return s == UserStatusProcessingResume ||
+		s == UserStatusCallScheduled ||
+		s == UserStatusCallStarted ||
+		s == UserStatusCallAnalysisStarted
+}

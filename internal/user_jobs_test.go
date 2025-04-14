@@ -257,6 +257,105 @@ func TestUserJobs(t *testing.T) {
 			t.Error("UpdateUserJobStatus() with invalid job ID should return error")
 		}
 	})
+
+	t.Run("filter by rating", func(t *testing.T) {
+		// Create test user
+		user := CreateTestUser(t, fs, "test-user", "test@example.com", "+1234567890", false)
+
+		// Create test jobs with different ratings
+		jobs := []struct {
+			id     string
+			rating string
+		}{
+			{"test-job-yes", "Yes"},
+			{"test-job-strong-yes", "Strong Yes"},
+			{"test-job-definitely-yes", "Definitely Yes"},
+			{"test-job-maybe", "Maybe"},
+			{"test-job-no", "No"},
+		}
+
+		for _, j := range jobs {
+			userJob := &UserJob{
+				ID:         j.id,
+				SearchHash: "test-search-hash",
+				JobRef:     fs.Collection("job_details").Doc(j.id),
+				Status:     "new",
+				CreatedAt:  time.Now(),
+				UpdatedAt:  time.Now(),
+				Analysis: &JobAnalysis{
+					FinalJudgment: FinalJudgment{
+						Rating: j.rating,
+					},
+				},
+			}
+
+			if err := SaveUserJob(ctx, fs, user.ID, userJob); err != nil {
+				t.Fatalf("SaveUserJob() error = %v", err)
+			}
+		}
+
+		// Test filtering with showAllRatings=false (only "yes" ratings)
+		t.Run("show only yes ratings", func(t *testing.T) {
+			result, nextPageToken, err := GetUserJobsSorted(ctx, fs, user.ID, JobStatusNew, 10, "", false)
+			if err != nil {
+				t.Fatalf("GetUserJobsSorted() error = %v", err)
+			}
+
+			if len(result) != 3 {
+				t.Errorf("Expected 3 jobs with 'yes' ratings, got %d", len(result))
+			}
+
+			// Verify we only got jobs with "yes" ratings
+			for _, job := range result {
+				if !isYesRating(job.Analysis.FinalJudgment.Rating) {
+					t.Errorf("Got job with non-yes rating: %s", job.Analysis.FinalJudgment.Rating)
+				}
+			}
+
+			if nextPageToken != "" {
+				t.Errorf("Expected empty nextPageToken, got %s", nextPageToken)
+			}
+		})
+
+		// Test filtering with showAllRatings=true
+		t.Run("show all ratings", func(t *testing.T) {
+			result, nextPageToken, err := GetUserJobsSorted(ctx, fs, user.ID, JobStatusNew, 10, "", true)
+			if err != nil {
+				t.Fatalf("GetUserJobsSorted() error = %v", err)
+			}
+
+			if len(result) != 5 {
+				t.Errorf("Expected 5 jobs (all ratings), got %d", len(result))
+			}
+
+			if nextPageToken != "" {
+				t.Errorf("Expected empty nextPageToken, got %s", nextPageToken)
+			}
+		})
+
+		// Test job counts with rating filter
+		t.Run("count with rating filter", func(t *testing.T) {
+			// Count with only "yes" ratings
+			yesCount, err := GetJobsCount(ctx, fs, user.ID, JobStatusNew, false)
+			if err != nil {
+				t.Fatalf("GetJobsCount() error = %v", err)
+			}
+
+			if yesCount != 3 {
+				t.Errorf("Expected 3 jobs with 'yes' ratings, got %d", yesCount)
+			}
+
+			// Count all jobs regardless of rating
+			allCount, err := GetJobsCount(ctx, fs, user.ID, JobStatusNew, true)
+			if err != nil {
+				t.Fatalf("GetJobsCount() error = %v", err)
+			}
+
+			if allCount != 5 {
+				t.Errorf("Expected 5 jobs total, got %d", allCount)
+			}
+		})
+	})
 }
 
 func TestSaveAndGetUserJobs(t *testing.T) {
@@ -372,7 +471,7 @@ func TestGetUserJobsSorted(t *testing.T) {
 		// Retrieve jobs with a specific status and paging
 		pageSize := 3
 		pageToken := ""
-		result, nextPageToken, err := GetUserJobsSorted(ctx, fs, user.ID, JobStatusNew, pageSize, pageToken)
+		result, nextPageToken, err := GetUserJobsSorted(ctx, fs, user.ID, JobStatusNew, pageSize, pageToken, true)
 		if err != nil {
 			t.Fatalf("GetUserJobsSorted() error = %v", err)
 		}
@@ -446,7 +545,7 @@ func TestGetUserJobsSorted(t *testing.T) {
 			pagesRetrieved++
 
 			// Get the next page of results
-			jobs, nextPageToken, err := GetUserJobsSorted(ctx, fs, user.ID, JobStatusNew, pageSize, pageToken)
+			jobs, nextPageToken, err := GetUserJobsSorted(ctx, fs, user.ID, JobStatusNew, pageSize, pageToken, true)
 			if err != nil {
 				t.Fatalf("GetUserJobsSorted() error on page %d: %v", pagesRetrieved, err)
 			}
@@ -562,7 +661,7 @@ func TestGetUserJobsSorted(t *testing.T) {
 			pagesRetrieved++
 
 			// Get the next page of results
-			jobs, nextPageToken, err := GetUserJobsSorted(ctx, fs, user.ID, JobStatusNew, pageSize, pageToken)
+			jobs, nextPageToken, err := GetUserJobsSorted(ctx, fs, user.ID, JobStatusNew, pageSize, pageToken, true)
 			if err != nil {
 				t.Fatalf("GetUserJobsSorted() error on page %d: %v", pagesRetrieved, err)
 			}
@@ -668,7 +767,7 @@ func TestJobCounts(t *testing.T) {
 		}
 
 		for status, expectedCount := range statusCountMap {
-			count, err := GetJobsCount(ctx, fs, user.ID, status)
+			count, err := GetJobsCount(ctx, fs, user.ID, status, true)
 			if err != nil {
 				t.Errorf("GetJobsCount() error = %v", err)
 				continue
@@ -711,7 +810,7 @@ func TestJobCounts(t *testing.T) {
 		time.Sleep(2 * time.Second)
 
 		// Test GetAllJobStatusCounts
-		allCounts, err := GetAllJobStatusCounts(ctx, fs, user.ID)
+		allCounts, err := GetAllJobStatusCounts(ctx, fs, user.ID, true)
 		if err != nil {
 			t.Fatalf("GetAllJobStatusCounts() error = %v", err)
 		}
@@ -758,7 +857,7 @@ func TestJobCounts(t *testing.T) {
 		defer DeleteTestData(t, fs, user.ID)
 
 		// Test GetJobsCount for a status
-		count, err := GetJobsCount(ctx, fs, user.ID, JobStatusNew)
+		count, err := GetJobsCount(ctx, fs, user.ID, JobStatusNew, true)
 		if err != nil {
 			t.Errorf("GetJobsCount() error = %v", err)
 		}
@@ -768,7 +867,7 @@ func TestJobCounts(t *testing.T) {
 		}
 
 		// Test GetAllJobStatusCounts
-		allCounts, err := GetAllJobStatusCounts(ctx, fs, user.ID)
+		allCounts, err := GetAllJobStatusCounts(ctx, fs, user.ID, true)
 		if err != nil {
 			t.Fatalf("GetAllJobStatusCounts() error = %v", err)
 		}
@@ -782,12 +881,12 @@ func TestJobCounts(t *testing.T) {
 
 	t.Run("error cases", func(t *testing.T) {
 		// Test with empty user ID
-		_, err := GetJobsCount(ctx, fs, "", JobStatusNew)
+		_, err := GetJobsCount(ctx, fs, "", JobStatusNew, true)
 		if err == nil {
 			t.Error("GetJobsCount() with empty user ID should return error")
 		}
 
-		_, err = GetAllJobStatusCounts(ctx, fs, "")
+		_, err = GetAllJobStatusCounts(ctx, fs, "", true)
 		if err == nil {
 			t.Error("GetAllJobStatusCounts() with empty user ID should return error")
 		}

@@ -1,0 +1,24 @@
+You are an AI data integration specialist. 
+Your task is to compile the final output based on all previous analyses.
+
+<work_analysis>
+{{.WorkAnalysis}}
+</work_analysis>
+
+<search_phrases>
+{{.SearchPhrases}}
+</search_phrases>
+
+<preference_summary>
+{{.PreferenceSummary}}
+</preference_summary>
+
+Extract:
+1. WorkLocation from work_analysis
+2. WorkType from work_analysis
+3. Top 3 keywords or job titles from search_phrases
+4. JobType from resolved_preferences (temporary, contract, volunteer, full_time, part_time)
+5. Experience level from resolved_preferences (internship, entry_level, associate, mid_senior_level, director)
+6. FirstPersonPrompt from preference_summary
+
+Format your output in JSON
