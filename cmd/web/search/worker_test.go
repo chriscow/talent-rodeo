@@ -149,7 +149,7 @@ func TestLoadUserJob(t *testing.T) {
 	}
 
 	// Save the user job
-	if err := internal.SaveUserJob(ctx, fs, user.ID, userJob); err != nil {
+	if err := internal.CreateUserJob(ctx, fs, user.ID, userJob); err != nil {
 		t.Fatalf("Failed to save user job: %v", err)
 	}
 
@@ -204,7 +204,7 @@ func TestJobDetailHasSummary(t *testing.T) {
 	}
 
 	// Save the user job
-	if err := internal.SaveUserJob(ctx, fs, user.ID, userJob); err != nil {
+	if err := internal.CreateUserJob(ctx, fs, user.ID, userJob); err != nil {
 		t.Fatalf("Failed to save user job: %v", err)
 	}
 
@@ -284,7 +284,7 @@ func TestProcessQueuedJob(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	if err := internal.SaveUserJob(ctx, fs, user.ID, userJob); err != nil {
+	if err := internal.CreateUserJob(ctx, fs, user.ID, userJob); err != nil {
 		t.Fatalf("Failed to save user job: %v", err)
 	}
 

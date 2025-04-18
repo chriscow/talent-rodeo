@@ -45,7 +45,7 @@ func cleanupTestData(t *testing.T, store *JobStore, searchHash string) {
 	}
 
 	// Delete job listings
-	docs, err := store.fs.Collection("job_listings").Where("search_hash", "==", searchHash).Documents(ctx).GetAll()
+	docs, err := store.fs.Collection("job_listings").Where("SearchHash", "==", searchHash).Documents(ctx).GetAll()
 	if err != nil {
 		t.Logf("Failed to get job listings for cleanup: %v", err)
 		return
@@ -164,14 +164,14 @@ func TestJobStore_CacheExpiration(t *testing.T) {
 
 	// Set the timestamp to 25 hours ago (beyond the 24-hour cacheDurationJobListing)
 	pastTime := time.Now().Add(-25 * time.Hour)
-	t.Logf("Setting last_searched_at to %v (current time: %v)", pastTime, time.Now())
+	t.Logf("Setting LastSearchedAt to %v (current time: %v)", pastTime, time.Now())
 
-	// Manually update the last_searched_at to be 25 hours ago
+	// Manually update the LastSearchedAt to be 25 hours ago
 	searchRef := store.fs.Collection("job_searches").Doc(searchHash)
 	_, err := searchRef.Set(ctx, map[string]any{
-		"keywords":         criteria.Keywords,
-		"location":         criteria.Location,
-		"last_searched_at": pastTime,
+		"Keywords":       criteria.Keywords,
+		"Location":       criteria.Location,
+		"LastSearchedAt": pastTime,
 	})
 	if err != nil {
 		t.Fatalf("Failed to set search timestamp: %v", err)
@@ -183,7 +183,7 @@ func TestJobStore_CacheExpiration(t *testing.T) {
 		t.Fatalf("Failed to get search document: %v", err)
 	}
 	var searchData struct {
-		LastSearchedAt time.Time `firestore:"last_searched_at"`
+		LastSearchedAt time.Time `firestore:"LastSearchedAt"`
 	}
 	if err := searchDoc.DataTo(&searchData); err != nil {
 		t.Fatalf("Failed to parse search data: %v", err)

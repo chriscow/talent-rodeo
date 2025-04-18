@@ -9,6 +9,7 @@ import (
 	// "talent-rodeo/internal/firestore"
 
 	"cloud.google.com/go/firestore"
+	firestorepb "cloud.google.com/go/firestore/apiv1/firestorepb"
 	"google.golang.org/api/iterator"
 )
 
@@ -86,9 +87,9 @@ func (s *FirestoreTaskStorage) DeleteTask(ctx context.Context, id string) error 
 
 func (s *FirestoreTaskStorage) GetPendingTasks(ctx context.Context) ([]*internal.Task, error) {
 	query := s.client.Collection(s.tasksCollection()).
-		Where("status", "in", []string{internal.TaskStatusPending, internal.TaskStatusRetrying}).
-		Where("run_at", "<=", time.Now()).
-		OrderBy("run_at", firestore.Asc)
+		Where("Status", "in", []string{internal.TaskStatusPending, internal.TaskStatusRetrying}).
+		Where("RunAt", "<=", time.Now()).
+		OrderBy("RunAt", firestore.Asc)
 
 	docs, err := query.Documents(ctx).GetAll()
 	if err != nil {
@@ -117,7 +118,7 @@ func (s *FirestoreTaskStorage) GetTasksWithFilter(ctx context.Context, filter *T
 
 	// Add status filter if specified
 	if filter.Status != "" {
-		query = query.Where("status", "==", filter.Status)
+		query = query.Where("Status", "==", filter.Status)
 	}
 
 	// Execute query
@@ -151,14 +152,23 @@ func (s *FirestoreTaskStorage) GetTasksCount(ctx context.Context, statuses []str
 
 	// Add status filter if provided
 	if len(statuses) > 0 {
-		query = query.Where("status", "in", statuses)
+		query = query.Where("Status", "in", statuses)
 	}
 
-	// Get count
-	docs, err := query.Documents(ctx).GetAll()
+	// Use the more efficient aggregation query to get the count
+	aggregationQuery := query.NewAggregationQuery().WithCount("count")
+	results, err := aggregationQuery.Get(ctx)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to get tasks count: %w", err)
 	}
 
-	return len(docs), nil
+	// Extract the count from the results using the "count" alias
+	countResult, ok := results["count"]
+	if !ok {
+		return 0, fmt.Errorf("count not found in aggregation results")
+	}
+
+	// Convert the result to the correct type and extract the integer value
+	countValue := countResult.(*firestorepb.Value)
+	return int(countValue.GetIntegerValue()), nil
 }

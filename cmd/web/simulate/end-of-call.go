@@ -12,7 +12,6 @@ import (
 	"strings"
 	"talent-rodeo/internal"
 	th "talent-rodeo/internal/tasks/handlers"
-	"talent-rodeo/internal/vapi"
 	"time"
 )
 
@@ -53,7 +52,7 @@ func EndOfCall(ctx context.Context, processor TaskProcessor, userID, appointment
 		return fmt.Errorf("failed to load test data: %w", err)
 	}
 
-	logger.Debug("loaded test data", "data", truncateJSON(string(reportData), 200))
+	logger.Debug("loaded end-of-call test data", "data", truncateJSON(string(reportData), 200))
 
 	// Update report with appointment ID
 	msg, err := updateEndOfCallReport(reportData, userID, appointmentID)
@@ -145,6 +144,9 @@ func EndOfCall(ctx context.Context, processor TaskProcessor, userID, appointment
 
 // loadEndOfCallTestData loads the test data from the file system
 func loadEndOfCallTestData() ([]byte, error) {
+	wd, err := os.Getwd()
+	fmt.Printf("DEBUG: Working directory: %s\n", wd)
+
 	reportData, err := os.ReadFile("testdata/vapi/webhooks/end-of-call-report/end-of-call-report_1743786911443605712.json")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read test data: %w", err)
@@ -162,12 +164,7 @@ func loadEndOfCallTestData() ([]byte, error) {
 //
 // This function is used in testing to simulate VAPI webhook callbacks with
 // real appointment IDs while maintaining the structure of a real webhook response.
-func updateEndOfCallReport(reportData []byte, userID, appointmentID string) (*vapi.WebhookMessage, error) {
-	var msg vapi.WebhookMessage
-	if err := json.Unmarshal(reportData, &msg); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal report data: %w", err)
-	}
-
+func updateEndOfCallReport(reportData []byte, userID, appointmentID string) ([]byte, error) {
 	// Parse the message data into a map for debugging
 	var data map[string]any
 	if err := json.Unmarshal(reportData, &data); err != nil {
@@ -182,16 +179,21 @@ func updateEndOfCallReport(reportData []byte, userID, appointmentID string) (*va
 
 	// Initialize or update call information
 	var call map[string]any
-	if existingCall, ok := messageData["call"].(map[string]any); ok {
-		call = existingCall
-	} else {
-		call = make(map[string]any)
+	if call, ok = messageData["call"].(map[string]any); !ok {
+		return nil, fmt.Errorf("invalid call structure")
 	}
 
 	// Update call fields
 	call["id"] = appointmentID
 	call["name"] = appointmentID
-	call["customerId"] = userID
+
+	customer, ok := call["customer"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("invalid customer structure")
+	}
+
+	customer["name"] = userID
+
 	messageData["call"] = call
 
 	// Ensure required fields are present
@@ -200,55 +202,20 @@ func updateEndOfCallReport(reportData []byte, userID, appointmentID string) (*va
 		messageData["endedReason"] = "completed"
 	}
 
+	data["message"] = messageData
+
 	// Convert report to bytes
-	reportBytes, err := json.Marshal(messageData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal updated report: %w", err)
-	}
-
-	// Debug log the final report structure
-	fmt.Printf("DEBUG: Final report structure: %s\n", truncateJSON(string(reportBytes), 200))
-
-	// Create the webhook message with the updated report
-
-	type envelope struct {
-		Message vapi.EndOfCallReport `json:"message"`
-	}
-
-	var report vapi.EndOfCallReport
-	if err := json.Unmarshal(reportBytes, &report); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal report: %w", err)
-	}
-
-	var env envelope
-	env.Message = report
-
-	// Debug log the final webhook message
-	if msgBytes, err := json.Marshal(env); err == nil {
-		fmt.Printf("DEBUG: Final webhook message: %s\n", truncateJSON(string(msgBytes), 200))
-	}
-
-	return &msg, nil
+	return json.Marshal(data)
 }
 
 // createWebhookPayload creates a webhook payload from a webhook message
-func createWebhookPayload(msg *vapi.WebhookMessage) (*th.WebhookPayload, error) {
+func createWebhookPayload(msg []byte) (*th.WebhookPayload, error) {
 	webhookURL := os.Getenv("VAPI_WEBHOOK_URL")
 	if webhookURL == "" {
 		return nil, fmt.Errorf("VAPI_WEBHOOK_URL not set")
 	}
 
-	// Debug log the incoming message
-	fmt.Printf("DEBUG: Input message type: %s\n", msg.Message.Type)
-
-	// Marshal the webhook message directly
-	webhookBody, err := json.Marshal(msg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal webhook message: %w", err)
-	}
-
-	// Debug log the final webhook structure
-	fmt.Printf("DEBUG: Final webhook structure: %s\n", truncateJSON(string(webhookBody), 200))
+	fmt.Printf("DEBUG: Final webhook structure: %s\n", truncateJSON(string(msg), 200))
 
 	payload := &th.WebhookPayload{
 		URL:    webhookURL,
@@ -256,7 +223,7 @@ func createWebhookPayload(msg *vapi.WebhookMessage) (*th.WebhookPayload, error) 
 		Headers: map[string]string{
 			"Content-Type": "application/json",
 		},
-		Body: webhookBody,
+		Body: msg,
 	}
 
 	return payload, nil

@@ -14,6 +14,8 @@ toolchain go1.23.4
 
 // replace github.com/chriscow/go-openai-realtime => ../go-openai-realtime
 
+// replace github.com/chriscow/vapi-go => ../vapi-go
+
 require (
 	cloud.google.com/go/firestore v1.18.0
 	firebase.google.com/go/v4 v4.15.2
@@ -21,8 +23,6 @@ require (
 	github.com/ThreeDotsLabs/watermill-nats/v2 v2.1.2
 	github.com/alexedwards/flow v0.1.0
 	github.com/chriscow/minds v0.0.8-0.20250303171538-dc7c074db869
-	// github.com/chriscow/minds/providers/gemini v0.0.0-00010101000000-000000000000
-	// github.com/chriscow/minds/providers/openai v0.0.0-00010101000000-000000000000
 	github.com/fatih/color v1.16.0
 	github.com/fumiama/go-docx v0.0.0-20241231153056-9f8f327c74a5
 	github.com/go-playground/form/v4 v4.2.1
@@ -71,11 +71,13 @@ require (
 	github.com/alexedwards/scs/v2 v2.8.0
 	github.com/chriscow/minds/providers/gemini v0.0.5-0.20250303171538-dc7c074db869
 	github.com/chriscow/minds/providers/openai v0.0.5
+	github.com/chriscow/vapi-go v0.0.0-20250420143011-0a8970d55b72
 	github.com/cloudflare/cloudflare-go v0.115.0
 	github.com/dgraph-io/ristretto/v2 v2.2.0
 	github.com/getsentry/sentry-go v0.32.0
 	github.com/ledongthuc/pdf v0.0.0-20240201131950-da5b75280b06
-	github.com/sashabaranov/go-openai v1.38.1
+	github.com/pinecone-io/go-pinecone v1.1.1
+	github.com/sashabaranov/go-openai v1.38.2
 )
 
 require (
@@ -93,6 +95,7 @@ require (
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.48.1 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.48.1 // indirect
 	github.com/MicahParks/keyfunc v1.9.0 // indirect
+	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20241223141626-cff3c89139a3 // indirect
 	github.com/coder/websocket v1.8.12 // indirect
@@ -124,10 +127,12 @@ require (
 	github.com/nats-io/jwt/v2 v2.7.3 // indirect
 	github.com/nats-io/nkeys v0.4.9 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
+	github.com/oapi-codegen/runtime v1.1.1 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/stretchr/testify v1.10.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/contrib/detectors/gcp v1.34.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.59.0 // indirect
@@ -147,4 +152,5 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20250115164207-1a7da9e5054f // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250313205543-e70fdf4c4cb4 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

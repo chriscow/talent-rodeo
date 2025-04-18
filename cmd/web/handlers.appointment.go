@@ -5,8 +5,9 @@ import (
 	"net/http"
 	"talent-rodeo/cmd/web/transcript"
 	"talent-rodeo/internal"
-	"talent-rodeo/internal/vapi"
 	"time"
+
+	"github.com/chriscow/vapi-go"
 
 	"github.com/getsentry/sentry-go"
 )
@@ -16,8 +17,8 @@ import (
 // internal.reportToSentry(r.Context(), err, sentry.LevelWarning, tags) // Less critical errors
 // internal.reportToSentry(r.Context(), err, sentry.LevelFatal, tags)   // Application-crashing errors
 
-func (app *application) processCompletedAppointment(r *http.Request, userID, appointmentID string, report vapi.EndOfCallReport) error {
-	app.logger.Debug("received end of call report", "user_id", userID, "appointmentID", appointmentID)
+func (app *application) processCompletedAppointment(r *http.Request, userID, appointmentID string, env vapi.EndOfCallReportEnvelope) error {
+	app.logger.Debug("processCompletedAppointment: received end of call report", "user_id", userID, "appointmentID", appointmentID)
 
 	ipaddr := r.Header.Get("X-Forwarded-For")
 	internal.SentrySetUserContext(r.Context(), userID, ipaddr, map[string]interface{}{
@@ -40,6 +41,8 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 
 		return wrappedErr
 	}
+
+	report := env.Report
 
 	// Update the appointment with the call result and report
 	appt.CallID = report.Call.ID

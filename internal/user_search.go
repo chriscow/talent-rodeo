@@ -9,27 +9,23 @@ import (
 	"cloud.google.com/go/firestore"
 )
 
-const (
-	searchResultsCollection = "search_results"
-)
-
 type UserSearch struct {
 	// The time the search was queued
-	QueuedAt *time.Time `json:"queued_at" firestore:"queued_at"`
+	QueuedAt *time.Time
 
 	// The last time a successful search was completed
 	// The time the search was completed
-	CompletedAt *time.Time `json:"completed_at" firestore:"completed_at"`
+	CompletedAt *time.Time
 
 	// The criteria for the search
-	Criteria search.Criteria `json:"criteria" firestore:"criteria"`
+	Criteria search.Criteria
 
 	// A concise first-person statement of the user's preferences. This is
 	// used to further generate the search.Criteria above.
-	Statement string `json:"statement" firestore:"statement"`
+	Statement string
 
 	// Holds error messages from transcript processing.
-	Error string `json:"error" firestore:"error"`
+	Error string
 }
 
 // SearchResult represents a job that was found for a specific user
@@ -130,6 +126,6 @@ func UpdateUserSearch(ctx context.Context, fs *firestore.Client, userID string, 
 	user.Search = search
 
 	return UpdateUser(ctx, fs, userID, map[string]any{
-		"search": user.Search,
+		"Search": user.Search,
 	})
 }

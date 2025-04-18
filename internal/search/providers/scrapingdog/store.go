@@ -18,7 +18,9 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const cacheDurationJobListing = 24 * time.Hour
+const (
+	cacheDurationJobListing = 24 * time.Hour
+)
 
 // JobStore is responsible for managing job listings and caching them.
 type JobStore struct {
@@ -87,7 +89,7 @@ func (js *JobStore) GetCachedJobs(ctx context.Context, criteria search.Criteria)
 
 	// Check if the search is still fresh (within cacheDurationJobListing)
 	var searchData struct {
-		LastSearchedAt time.Time `firestore:"last_searched_at"`
+		LastSearchedAt time.Time
 	}
 	if err := searchDoc.DataTo(&searchData); err != nil {
 		return nil, fmt.Errorf("failed to parse search data: %w", err)
@@ -96,7 +98,7 @@ func (js *JobStore) GetCachedJobs(ctx context.Context, criteria search.Criteria)
 	if time.Since(searchData.LastSearchedAt) > cacheDurationJobListing {
 		js.logger.Debug("scrapingdog: cache is stale",
 			"hash", searchHash,
-			"last_searched_at", searchData.LastSearchedAt)
+			"LastSearchedAt", searchData.LastSearchedAt)
 		// Clear Ristretto cache for this search
 		key := fmt.Sprintf("search:%s", searchHash)
 		js.cache.Del(key)
@@ -122,7 +124,7 @@ func (js *JobStore) GetCachedJobs(ctx context.Context, criteria search.Criteria)
 
 	// Get the job listings from Firestore
 	js.logger.Debug("scrapingdog: retrieving cached job listings from Firestore", "hash", searchHash)
-	iter := js.fs.Collection("job_listings").Where("search_hash", "==", searchHash).Documents(ctx)
+	iter := js.fs.Collection("job_listings").Where("SearchHash", "==", searchHash).Documents(ctx)
 
 	var jobs []search.JobListing
 	for {
@@ -234,7 +236,7 @@ func (js *JobStore) SaveJobListings(ctx context.Context, criteria search.Criteri
 
 	// Delete existing job listings for this search hash
 	js.logger.Debug("scrapingdog: cleaning up old job listings", "hash", searchHash)
-	oldJobs, err := js.fs.Collection("job_listings").Where("search_hash", "==", searchHash).Documents(ctx).GetAll()
+	oldJobs, err := js.fs.Collection("job_listings").Where("SearchHash", "==", searchHash).Documents(ctx).GetAll()
 	if err != nil {
 		return fmt.Errorf("failed to get old job listings: %w", err)
 	}
@@ -245,12 +247,10 @@ func (js *JobStore) SaveJobListings(ctx context.Context, criteria search.Criteri
 	}
 
 	// Update the search record
+	now := time.Now()
+	criteria.LastSearchedAt = &now
 	js.logger.Debug("scrapingdog: updating search record", "hash", searchHash)
-	_, err = js.fs.Collection("job_searches").Doc(searchHash).Set(ctx, map[string]any{
-		"keywords":         criteria.Keywords,
-		"location":         criteria.Location,
-		"last_searched_at": time.Now(),
-	})
+	_, err = js.fs.Collection("job_searches").Doc(searchHash).Set(ctx, criteria)
 	if err != nil {
 		return fmt.Errorf("failed to save search record: %w", err)
 	}

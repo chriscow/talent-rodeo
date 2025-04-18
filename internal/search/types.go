@@ -74,14 +74,16 @@ const (
 // This struct is designed to be provider-agnostic, allowing each provider
 // to map these fields to their specific API parameters.
 type Criteria struct {
-	Keywords   []string `json:"keywords" firestore:"keywords" description:"Search phrases and keywords to find in job titles, descriptions, and requirements"`                                                                     // Required search terms
-	Location   string   `json:"location" firestore:"location" description:"Nearest major metropolitan area in the United States (can be 'Remote')"`                                                                                // Geographic location (can be remote)
-	PageNumber int      `json:"-" firestore:"-" jsonschema:"-"`                                                                                                                                                                    // Page number for pagination
-	SortBy     string   `json:"-" firestore:"-" jsonschema:"-"`                                                                                                                                                                    // day, week, month - for filtering by posting date
-	JobType    []string `json:"job-type" firestore:"job_type" enum:"temporary,contract,volunteer,full_time,part_time" description:"A value here will filter on job type.  Leave blank if you ant all jobs."`                       // temporary, contract, volunteer, full_time & part_time                                                                                                                                                                    // Full-time, part-time, contract, etc.
-	Experience []string `json:"experience" firestore:"experience" enum:"internship,entry_level,associate,mid_senior_level,director" description:"A value here will filter on experience level.  Leave blank if you ant all jobs."` // internship, entry_level, associate, mid_senior_level & director                                                                                                                                                                         // Experience levels
-	WorkType   string   `json:"work-type" firestore:"work_type" enum:"at_work,remote,hybrid" description:"This will FILTER OUT jobs. If the user was explicit about the work type, include a value here otherwise leave it blank"` // at_work, remote, hybrid
-	CompanyID  string   `json:"-" firestore:"-" jsonschema:"-"`                                                                                                                                                                    // LinkedIn company ID for filtering by company
+	Keywords   []string `json:"keywords"  description:"Search phrases and keywords to find in job titles, descriptions, and requirements"`                                                                    // Required search terms
+	Location   string   `json:"location"  description:"Nearest major metropolitan area in the United States (can be 'Remote')"`                                                                               // Geographic location (can be remote)
+	JobType    []string `json:"job-type"  enum:"temporary,contract,volunteer,full_time,part_time" description:"A value here will filter on job type.  Leave blank if you ant all jobs."`                      // temporary, contract, volunteer, full_time & part_time                                                                                                                                                                    // Full-time, part-time, contract, etc.
+	Experience []string `json:"experience"  enum:"internship,entry_level,associate,mid_senior_level,director" description:"A value here will filter on experience level.  Leave blank if you ant all jobs."`  // internship, entry_level, associate, mid_senior_level & director                                                                                                                                                                         // Experience levels
+	WorkType   string   `json:"work-type"  enum:"at_work,remote,hybrid" description:"This will FILTER OUT jobs. If the user was explicit about the work type, include a value here otherwise leave it blank"` // at_work, remote, hybrid
+
+	PageNumber     int        `json:"-" jsonschema:"-" firestore:"-" ` // Page number for pagination
+	SortBy         string     `json:"-" jsonschema:"-" firestore:"-"`  // day, week, month - for filtering by posting date
+	CompanyID      string     `json:"-" jsonschema:"-" firestore:"-"`
+	LastSearchedAt *time.Time `json:"-" jsonschema:"-"` // LinkedIn company ID for filtering by company
 }
 
 // ProgressUpdate represents a search progress update message
@@ -108,20 +110,20 @@ type Criteria struct {
 // This is the minimal set of fields returned from a search operation.
 // More detailed information is available via GetJobDetails.
 type JobListing struct {
-	ID             string    `json:"id" firestore:"id"`
-	Provider       string    `json:"provider" firestore:"provider"`
-	ProviderJobID  string    `json:"provider_job_id" firestore:"provider_job_id"` // Original ID from the provider
-	Title          string    `json:"title" firestore:"title"`                     // maps to Position in ScrapingDog
-	Company        string    `json:"company" firestore:"company"`                 // maps to CompanyName in ScrapingDog
-	Location       string    `json:"location" firestore:"location"`
-	PostedDate     time.Time `json:"posted_date" firestore:"posted_date"`
-	Description    string    `json:"description" firestore:"description"` // Brief description or snippet if available. ScrapingDog does not return this.
-	URL            string    `json:"url" firestore:"url"`                 // Provider-specific URL, maps to Link in ScrapingDog
-	CompanyProfile string    `json:"company_profile,omitempty" firestore:"company_profile"`
-	CompanyLogo    string    `json:"company_logo,omitempty" firestore:"company_logo"`
+	ID             string
+	Provider       string
+	ProviderJobID  string // Original ID from the provider
+	Title          string // maps to Position in ScrapingDog
+	Company        string // maps to CompanyName in ScrapingDog
+	Location       string
+	PostedDate     time.Time
+	Description    string // Brief description or snippet if available. ScrapingDog does not return this.
+	URL            string // Provider-specific URL, maps to Link in ScrapingDog
+	CompanyProfile string
+	CompanyLogo    string
 
-	SearchHash  string    `json:"-" firestore:"search_hash"`
-	FirstSeenAt time.Time `json:"-" firestore:"first_seen_at"`
+	SearchHash  string    `json:"-"`
+	FirstSeenAt time.Time `json:"-"`
 }
 
 // JobDetail contains comprehensive information about a specific job.
@@ -129,46 +131,46 @@ type JobListing struct {
 // information about the position.
 type JobDetail struct {
 	// Basic job information (duplicated from JobListing for clarity)
-	ID            string    `json:"id" firestore:"id"`
-	Provider      string    `json:"provider" firestore:"provider"`
-	ProviderJobID string    `json:"provider_job_id" firestore:"provider_job_id"`
-	Title         string    `json:"title" firestore:"title"`
-	Company       string    `json:"company" firestore:"company"`
-	Location      string    `json:"location" firestore:"location"`
-	PostedDate    time.Time `json:"posted_date" firestore:"posted_date"`
-	URL           string    `json:"url" firestore:"url"`
+	ID            string
+	Provider      string
+	ProviderJobID string
+	Title         string
+	Company       string
+	Location      string
+	PostedDate    time.Time
+	URL           string
 
 	// Detailed information
-	FullDescription string       `json:"full_description" firestore:"full_description"` // Complete job description
-	Requirements    []string     `json:"requirements" firestore:"requirements"`         // List of job requirements
-	Qualifications  []string     `json:"qualifications" firestore:"qualifications"`     // Required qualifications
-	Benefits        []string     `json:"benefits" firestore:"benefits"`                 // List of benefits
-	Skills          []string     `json:"skills" firestore:"skills"`                     // Required skills
-	SalaryInfo      *SalaryRange `json:"salary_info,omitempty" firestore:"salary_info"`
-	EmploymentType  string       `json:"employment_type" firestore:"employment_type"` // Full-time, part-time, contract, etc.
-	WorkplaceType   string       `json:"workplace_type" firestore:"workplace_type"`   // Remote, on-site, hybrid
-	Industry        string       `json:"industry" firestore:"industry"`
-	CompanyInfo     *Company     `json:"company_info,omitempty" firestore:"company_info"`
+	FullDescription string   // Complete job description
+	Requirements    []string // List of job requirements
+	Qualifications  []string // Required qualifications
+	Benefits        []string // List of benefits
+	Skills          []string // Required skills
+	SalaryInfo      *SalaryRange
+	EmploymentType  string // Full-time, part-time, contract, etc.
+	WorkplaceType   string // Remote, on-site, hybrid
+	Industry        string
+	CompanyInfo     *Company
 
 	// Summary information
-	ExtractedData *JobSummary `json:"extracted_data,omitempty" firestore:"extracted_data"` // Summarized job description
+	ExtractedData *JobSummary // Summarized job description
 
 	// Additional fields from ScrapingDog
-	Status           string       `json:"status,omitempty" firestore:"status"`
-	SeniorityLevel   string       `json:"seniority_level,omitempty" firestore:"seniority_level"`
-	JobFunction      string       `json:"job_function,omitempty" firestore:"job_function"`
-	Recruiters       []Recruiter  `json:"recruiters,omitempty" firestore:"recruiters"`
-	SimilarJobs      []RelatedJob `json:"similar_jobs,omitempty" firestore:"similar_jobs"`
-	PeopleAlsoViewed []RelatedJob `json:"people_also_viewed,omitempty" firestore:"people_also_viewed"`
+	Status           string
+	SeniorityLevel   string
+	JobFunction      string
+	Recruiters       []Recruiter
+	SimilarJobs      []RelatedJob
+	PeopleAlsoViewed []RelatedJob
 
-	CreatedAt    time.Time `firestore:"created_at"`
-	SearchPhrase []string  `firestore:"search_phrase"`
+	CreatedAt    time.Time
+	SearchPhrase []string
 }
 
 type JobSummary struct {
-	Summary        string   `json:"summary" description:"a concise summary of the job listing"`
-	Requirements   []string `json:"requirements" description:"the essential criteria that employers consider non-negotiable for a candidate to perform the job successfully"`
-	Qualifications []string `json:"qualifications" description:"the broader set of skills, experiences, and attributes that make someone a good fit for the role"`
+	Summary        string   `description:"a concise summary of the job listing"`
+	Requirements   []string `description:"the essential criteria that employers consider non-negotiable for a candidate to perform the job successfully"`
+	Qualifications []string `description:"the broader set of skills, experiences, and attributes that make someone a good fit for the role"`
 }
 
 // SearchResults represents the results of a job search
@@ -192,17 +194,17 @@ type SalaryRange struct {
 
 // Recruiter represents a recruiter associated with a job posting
 type Recruiter struct {
-	Photo      string `json:"photo"`
-	Name       string `json:"name"`
-	Title      string `json:"title"`
-	ProfileURL string `json:"profile_url"`
+	Photo      string
+	Name       string
+	Title      string
+	ProfileURL string
 }
 
 // RelatedJob represents a related or similar job posting
 type RelatedJob struct {
-	Title       string `json:"title"`
-	Company     string `json:"company"`
-	Location    string `json:"location"`
-	PostingDate string `json:"posting_date"`
-	URL         string `json:"url"`
+	Title       string
+	Company     string
+	Location    string
+	PostingDate string
+	URL         string
 }

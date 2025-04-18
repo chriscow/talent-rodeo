@@ -35,6 +35,7 @@ type Mailer interface {
 
 // JobEventHandler defines the interface for handling job-related events
 type JobEventHandler interface {
+	OnSearchError(userID string, err error) error
 	OnNewJob(userID string, count int) error
 	OnSearchCompleted(userID string, totalJobs int, errors []error) error
 }
@@ -53,11 +54,20 @@ type Service struct {
 	jobQueue          chan QueuedJob // Queue for job processing
 	jobSemaphore      chan struct{}  // Semaphore for job processing
 	maxConcurrentJobs int
+	progressCache     *SearchProgressCache // Cache for search progress
 }
 
 // NewService creates a new search service
 func NewService(fs *firestore.Client, logger *slog.Logger, queue search.JobQueue, mailer Mailer, recipient string, pusher PusherInterface) *Service {
 	maxConcurrentJobs := 5 // Can be made configurable
+
+	// Initialize the progress cache
+	progressCache, err := NewSearchProgressCache()
+	if err != nil {
+		logger.Error("failed to initialize progress cache", "error", err)
+		// Continue with nil cache, will fallback to map-based implementation
+	}
+
 	return &Service{
 		fs:                fs,
 		logger:            logger,
@@ -69,6 +79,7 @@ func NewService(fs *firestore.Client, logger *slog.Logger, queue search.JobQueue
 		jobQueue:          make(chan QueuedJob, 100), // Buffer size can be adjusted
 		jobSemaphore:      make(chan struct{}, maxConcurrentJobs),
 		maxConcurrentJobs: maxConcurrentJobs,
+		progressCache:     progressCache,
 	}
 }
 
@@ -165,6 +176,17 @@ func (s *Service) processSearches() {
 		if err := s.enqueueSearch(ctx, user); err != nil {
 			user.Search.Error = err.Error()
 			user.Search.QueuedAt = nil
+
+			// Notify the user about the error via Pusher
+			if s.pusher != nil {
+				if notifyErr := s.notifyUserSearchError(user.ID, err.Error()); notifyErr != nil {
+					s.logger.Error("failed to send search error notification",
+						"error", notifyErr,
+						"user_id", user.ID)
+				}
+			}
+
+			// Update the user record with the error
 			if err := internal.UpdateUserSearch(ctx, s.fs, user.ID, user.Search); err != nil {
 				s.logger.Error("error updating user search error", "error", err, "user_id", user.ID)
 				s.notifyAdmin(ctx, user, err)
@@ -196,6 +218,13 @@ func (s *Service) shouldSearch(user *internal.User) bool {
 	if user.Search == nil {
 		if testingMode {
 			s.logger.Debug("search: shouldSearch: user has no search criteria", "user_id", user.ID)
+		}
+		return false
+	}
+
+	if user.Search.Error != "" {
+		if testingMode {
+			s.logger.Debug("search: shouldSearch: user has a search error", "user_id", user.ID, "error", user.Search.Error)
 		}
 		return false
 	}
@@ -289,6 +318,14 @@ func (s *Service) enqueueSearch(ctx context.Context, user *internal.User) error 
 
 	s.logger.Info("search: enqueueSearch", "user_id", user.ID, "criteria", user.Search.Criteria)
 
+	// Notify the user that their search is being queued
+	if s.pusher != nil {
+		if err := s.notifyUserSearchQueued(user.ID); err != nil {
+			s.logger.Error("failed to send search queued notification", "error", err)
+			// Continue even if notification fails
+		}
+	}
+
 	// Determine number of pages based on tier and testing mode
 	numPages := FreeTierNumPages // Default for free tier
 	if user.Tier == internal.UserTierPro {
@@ -298,6 +335,27 @@ func (s *Service) enqueueSearch(ctx context.Context, user *internal.User) error 
 	// Override for testing mode
 	if os.Getenv("TESTING_MODE") == "true" {
 		numPages = TestingModeNumPages
+	}
+
+	// Reset the progress tracking for this user
+	progressMutex.Lock()
+	userSearchProgress[user.ID] = &SearchProgress{
+		UserID:             user.ID,
+		TotalJobsFound:     0,
+		JobsAnalyzed:       0,
+		JobsMatched:        0,
+		JobsNotMatched:     0,
+		SearchCompleted:    false,
+		AnalysisInProgress: false,
+	}
+	progressMutex.Unlock()
+
+	// Notify the user that their search is starting
+	if s.pusher != nil {
+		if err := s.notifyUserSearchStarted(user.ID); err != nil {
+			s.logger.Error("failed to send search started notification", "error", err)
+			// Continue even if notification fails
+		}
 	}
 
 	// Queue a search for each page
@@ -314,6 +372,17 @@ func (s *Service) enqueueSearch(ctx context.Context, user *internal.User) error 
 				// Notify admin of the error before returning
 				s.notifyAdmin(ctx, user, err)
 				return fmt.Errorf("failed to queue search: %w", err)
+			}
+
+			// Send periodic progress updates
+			if s.pusher != nil {
+				// Only send notifications occasionally to avoid flooding
+				if page == 1 || page == numPages {
+					if err := s.notifyUserSearchInProgress(user.ID); err != nil {
+						s.logger.Error("failed to send search progress notification", "error", err)
+						// Continue even if notification fails
+					}
+				}
 			}
 		}
 	}

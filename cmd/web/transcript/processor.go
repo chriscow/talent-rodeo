@@ -2,21 +2,24 @@ package transcript
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 
 	// Removing self-import of internal package
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/search"
-	"talent-rodeo/internal/utils"
-	"talent-rodeo/internal/vapi"
 	"time"
 
 	"cloud.google.com/go/firestore"
 	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/providers/openai"
+	"github.com/chriscow/vapi-go"
 	"github.com/getsentry/sentry-go"
+)
+
+const (
+	searchCriteriaModel = "gpt-4.1-nano"
+	transcriptModel     = "gpt-4.1-nano"
 )
 
 // ProcessCompletedAppointment updates the appointment after a successful call with the transcript summary.
@@ -55,6 +58,8 @@ func ProcessCompletedAppointment(hub *sentry.Hub, fs *firestore.Client, logger *
 			user.Search = &internal.UserSearch{}
 		}
 
+		start := time.Now()
+
 		processor, err := newProcessor(fs, logger)
 		if err != nil {
 			sentry.CaptureException(err)
@@ -79,6 +84,8 @@ func ProcessCompletedAppointment(hub *sentry.Hub, fs *firestore.Client, logger *
 				logger.Error("failed to update appointment status to failed", "error", err)
 			}
 		}
+
+		logger.Debug(internal.Blue("⏱️ appointment processing took"), "duration", time.Since(start).String())
 
 		// Only mark as completed if the entire process succeeds
 		appointment.Status = internal.AppointmentStatusCompleted
@@ -132,7 +139,7 @@ type processor struct {
 
 // newProcessor creates a new TranscriptProcessor
 func newProcessor(fs *firestore.Client, logger *slog.Logger) (*processor, error) {
-	llm, err := openai.NewProvider(openai.WithModel("gpt-4o"))
+	llm, err := openai.NewProvider(openai.WithModel(transcriptModel))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create openai provider: %w", err)
 	}
@@ -159,157 +166,231 @@ func (p *processor) process(ctx context.Context, user *internal.User, appointmen
 		},
 	})
 
-	p.logger.Debug("finalizing appointment", "user_id", user.ID, "appointment_id", appointment.ID)
-	if err := p.setApptProcessing(ctx, appointment); err != nil {
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"error_type":  "database_update",
-			"entity_type": "appointment",
-		})
-		return fmt.Errorf("failed to update appointment with transcript summary: %w", err)
-	}
-
-	transcript, err := p.getTranscript(ctx, appointment.UserID, *appointment.CallID)
-	if err != nil {
-		return fmt.Errorf("processor: failed to get transcript: %w", err)
-	}
-
 	// Initialize the ExtractedData struct if it doesn't exist
 	if appointment.ExtractedData == nil {
 		appointment.ExtractedData = &internal.ExtractedData{}
 	}
 
-	p.logger.Debug("extracting data from transcript", "user_id", user.ID, "appointment_id", appointment.ID)
-	extractedData, err := p.promptLLM(ctx, "prompts/transcript-010-extract.txt", map[string]any{
-		"Transcript": transcript.String(),
-	})
+	p.logger.Debug("setting appointment state to `processing`", "user_id", user.ID, "appointment_id", appointment.ID)
+	if err := p.setApptProcessing(ctx, appointment); err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
+		return fmt.Errorf("failed to update appointment with transcript summary: %w", err)
+	}
+
+	//
+	// Get the supported locations (Geo ID keys)
+	//
+	p.logger.Debug("getting geo ids")
+	locations, err := internal.GetGeoIDKeys(ctx, p.fs)
 	if err != nil {
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"error_type":  "prompt_execution",
-			"entity_type": "appointment",
-		})
-		return fmt.Errorf("failed to extract data from transcript: %w", err)
-	}
-
-	// Save extracted data to appointment
-	appointment.ExtractedData.TranscriptExtract = &extractedData
-	if err := internal.UpdateAppointment(ctx, p.fs, appointment); err != nil {
-		p.logger.Error("failed to update appointment with extracted data", "error", err)
-	}
-
-	p.logger.Debug("resolving preferences", "user_id", user.ID, "appointment_id", appointment.ID)
-	resolvedPreferences, err := p.promptLLM(ctx, "prompts/transcript-020-resolved-prefs.txt", map[string]any{
-		"ExtractedData": extractedData,
-	})
-	if err != nil {
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"error_type":  "prompt_execution",
-			"entity_type": "appointment",
-		})
-		return fmt.Errorf("failed to resolve preferences: %w", err)
-	}
-
-	// Save resolved preferences to appointment
-	appointment.ExtractedData.ResolvedPreferences = &resolvedPreferences
-	if err := internal.UpdateAppointment(ctx, p.fs, appointment); err != nil {
-		p.logger.Error("failed to update appointment with resolved preferences", "error", err)
-	}
-
-	p.logger.Debug("getting geo ids", "user_id", user.ID, "appointment_id", appointment.ID)
-	locations, err := internal.GetGeoIDKeys(p.fs)
-	if err != nil {
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"error_type":  "database_query",
-			"entity_type": "appointment",
-		})
+		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
 		return fmt.Errorf("failed to get geo ids: %w", err)
 	}
 
-	p.logger.Debug("resolving work preferences", "user_id", user.ID, "appointment_id", appointment.ID)
-	workPreferences, err := p.promptLLM(ctx, "prompts/transcript-030-work-location.txt", map[string]any{
-		"ExtractedData":       extractedData,
-		"ResolvedPreferences": resolvedPreferences,
-		"Locations":           locations,
-	})
+	//
+	// Get the transcript from the VAPI call
+	//
+	p.logger.Debug("getting transcript from VAPI call", "call_id", *appointment.CallID)
+	transcript, err := p.getTranscript(ctx, appointment.UserID, *appointment.CallID)
 	if err != nil {
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"error_type":  "prompt_execution",
-			"entity_type": "appointment",
-		})
-		return fmt.Errorf("failed to resolve work preferences: %w", err)
+		return fmt.Errorf("processor: failed to get transcript: %w", err)
 	}
 
-	// Save work preferences to appointment
-	appointment.ExtractedData.WorkPreferences = &workPreferences
-	if err := internal.UpdateAppointment(ctx, p.fs, appointment); err != nil {
-		p.logger.Error("failed to update appointment with work preferences", "error", err)
+	//
+	// Extract data from the transcript
+	//
+	if err := p.extract(ctx, transcript.String(), appointment); err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
+		return err
 	}
 
-	p.logger.Debug("generating search criteria", "user_id", user.ID, "appointment_id", appointment.ID)
-	keywordAnalysis, err := p.promptLLM(ctx, "prompts/transcript-040-search.txt", map[string]any{
-		"ExtractedData":       extractedData,
-		"ResolvedPreferences": resolvedPreferences,
-	})
-	if err != nil {
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"error_type":  "prompt_execution",
-			"entity_type": "appointment",
-		})
+	//
+	// Resolve discrepancies in the extracted data
+	//
+	if err := p.resolveDiscrepancies(ctx, appointment); err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
+		return fmt.Errorf("failed to resolve appointment: %w", err)
+	}
+
+	//
+	// Get work preferences
+	//
+	if err := p.getWorkPreferences(ctx, locations, appointment); err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
+		return fmt.Errorf("failed to get work preferences: %w", err)
+	}
+
+	//
+	// Generate keyword analysis
+	//
+	if err := p.generateKeywordAnalysis(ctx, appointment); err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
 		return fmt.Errorf("failed to generate keyword analysis: %w", err)
 	}
 
-	// Save keyword analysis to appointment
-	appointment.ExtractedData.KeywordAnalysis = &keywordAnalysis
-	if err := internal.UpdateAppointment(ctx, p.fs, appointment); err != nil {
-		p.logger.Error("failed to update appointment with keyword analysis", "error", err)
+	//
+	// Generate user statement
+	//
+	if err := p.generateUserStatement(ctx, user, appointment); err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
+		return fmt.Errorf("failed to generate user statement: %w", err)
 	}
 
-	p.logger.Debug("generating user statement", "user_id", user.ID, "appointment_id", appointment.ID)
-	userStatement, err := p.promptLLM(ctx, "prompts/transcript-050-user-statement.txt", map[string]any{
-		"ExtractedData":       extractedData,
-		"ResolvedPreferences": resolvedPreferences,
-		"WorkAnalysis":        workPreferences,
-		"SearchPhrases":       keywordAnalysis,
+	//
+	// Finally, generate search criteria
+	//
+	return p.generateSearchCriteria(ctx, user, appointment)
+}
+
+func (p *processor) extract(ctx context.Context, transcript string, appointment *internal.Appointment) error {
+	p.logger.Debug("extracting data from transcript", "user_id", appointment.UserID, "appointment_id", appointment.ID)
+
+	start := time.Now()
+	prompt, err := internal.GeneratePrompt("prompts/transcript-010-extract.txt", map[string]any{
+		"Transcript": transcript,
 	})
 	if err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"error_type":  "prompt_execution",
 			"entity_type": "appointment",
 		})
-		return fmt.Errorf("failed to generate user statement: %w", err)
+		return fmt.Errorf("failed to generate prompt: %w", err)
+	}
+
+	data, err := internal.Ask(ctx, prompt)
+	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
+		return fmt.Errorf("failed to ask LLM: %w", err)
+	}
+
+	// Save extracted data to appointment
+	appointment.ExtractedData.TranscriptExtract = &data
+	if err := internal.UpdateAppointment(ctx, p.fs, appointment); err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
+		return fmt.Errorf("failed to update appointment with extracted data: %w", err)
+	}
+
+	p.logger.Debug("extracted data from transcript", "user_id", appointment.UserID, "appointment_id", appointment.ID, "elapsed", time.Since(start).String())
+	return nil
+}
+
+func (p *processor) resolveDiscrepancies(ctx context.Context, appointment *internal.Appointment) error {
+	p.logger.Debug("resolving preferences", "user_id", appointment.UserID, "appointment_id", appointment.ID)
+	prompt, err := internal.GeneratePrompt("prompts/transcript-020-resolved-prefs.txt", map[string]any{
+		"ExtractedData": appointment.ExtractedData,
+	})
+	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
+		return fmt.Errorf("failed to generate prompt: %w", err)
+	}
+
+	// Ask LLM to resolve preferences
+	data, err := internal.Ask(ctx, prompt)
+	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
+		return fmt.Errorf("failed to ask LLM: %w", err)
+	}
+
+	// Save resolved preferences to appointment
+	appointment.ExtractedData.ResolvedPreferences = &data
+	if err := internal.UpdateAppointment(ctx, p.fs, appointment); err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
+		return fmt.Errorf("failed to update appointment with resolved preferences: %w", err)
+	}
+
+	return nil
+}
+
+func (p *processor) getWorkPreferences(ctx context.Context, locations []string, appointment *internal.Appointment) error {
+	p.logger.Debug("resolving work preferences", "user_id", appointment.UserID, "appointment_id", appointment.ID)
+
+	prompt, err := internal.GeneratePrompt("prompts/transcript-030-work-location.txt", map[string]any{
+		"ExtractedData":       appointment.ExtractedData.TranscriptExtract,
+		"ResolvedPreferences": appointment.ExtractedData.ResolvedPreferences,
+		"Locations":           locations,
+	})
+	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
+		return fmt.Errorf("failed to generate prompt: %w", err)
+	}
+
+	data, err := internal.Ask(ctx, prompt)
+	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
+		return fmt.Errorf("failed to ask LLM: %w", err)
+	}
+
+	appointment.ExtractedData.WorkPreferences = &data
+	if err := internal.UpdateAppointment(ctx, p.fs, appointment); err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
+		return fmt.Errorf("failed to update appointment with work preferences: %w", err)
+	}
+
+	return nil
+}
+
+func (p *processor) generateKeywordAnalysis(ctx context.Context, appointment *internal.Appointment) error {
+	p.logger.Debug("generating search criteria", "user_id", appointment.UserID, "appointment_id", appointment.ID)
+
+	prompt, err := internal.GeneratePrompt("prompts/transcript-040-search.txt", map[string]any{
+		"ExtractedData":       appointment.ExtractedData,
+		"ResolvedPreferences": appointment.ExtractedData.ResolvedPreferences,
+	})
+	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
+		return fmt.Errorf("failed to generate prompt: %w", err)
+	}
+
+	data, err := internal.Ask(ctx, prompt)
+	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
+		return fmt.Errorf("failed to ask LLM: %w", err)
+	}
+
+	appointment.ExtractedData.KeywordAnalysis = &data
+	if err := internal.UpdateAppointment(ctx, p.fs, appointment); err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
+		return fmt.Errorf("failed to update appointment with keyword analysis: %w", err)
+	}
+
+	return nil
+}
+
+func (p *processor) generateUserStatement(ctx context.Context, user *internal.User, appointment *internal.Appointment) error {
+	p.logger.Debug("generating user statement", "user_id", user.ID, "appointment_id", appointment.ID)
+	prompt, err := internal.GeneratePrompt("prompts/transcript-050-user-statement.txt", map[string]any{
+		"ExtractedData":       appointment.ExtractedData,
+		"ResolvedPreferences": appointment.ExtractedData.ResolvedPreferences,
+		"WorkAnalysis":        appointment.ExtractedData.WorkPreferences,
+		"SearchPhrases":       appointment.ExtractedData.KeywordAnalysis,
+	})
+	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
+		return fmt.Errorf("failed to generate prompt: %w", err)
+	}
+
+	// Ask LLM to generate user statement
+	data, err := internal.Ask(ctx, prompt)
+	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
+		return fmt.Errorf("failed to ask LLM: %w", err)
 	}
 
 	// Save user statement to appointment
-	appointment.ExtractedData.UserStatement = &userStatement
+	appointment.ExtractedData.UserStatement = &data
 	if err := internal.UpdateAppointment(ctx, p.fs, appointment); err != nil {
-		p.logger.Error("failed to update appointment with user statement", "error", err)
+		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
+		return fmt.Errorf("failed to update appointment with user statement: %w", err)
 	}
 
 	if user.Search == nil {
 		user.Search = &internal.UserSearch{}
 	}
 
-	user.Search.Statement = userStatement
-
-	criteria, err := p.generateSearchCriteria(ctx, user.ID, extractedData, resolvedPreferences, workPreferences, keywordAnalysis, userStatement)
-	if err != nil {
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"error_type":  "search_criteria_generation",
-			"entity_type": "appointment",
-		})
-		p.logger.Error("failed to generate search criteria", "error", err)
-		return fmt.Errorf("failed to generate search criteria: %w", err)
-	}
-
-	user.Search.Criteria = *criteria
-
+	user.Search.Statement = data
 	if err := internal.UpdateUserSearch(ctx, p.fs, user.ID, user.Search); err != nil {
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"error_type":  "database_update",
-			"entity_type": "appointment",
-		})
-		return fmt.Errorf("failed to update user search: %w", err)
+		p.logger.Error("failed to update user search with user statement", "error", err)
 	}
-
 	return nil
 }
 
@@ -354,52 +435,33 @@ func (p *processor) getTranscript(ctx context.Context, userID string, callID str
 }
 
 // generateSearchCriteria converts the analysis into structured search criteria
-func (p *processor) generateSearchCriteria(ctx context.Context, userID string, dataExtract, resolvedPreferences, workPreferences, searchPhrases, preferenceSummary string) (*search.Criteria, error) {
-	p.logger.Debug("generating search criteria", "user_id", userID)
-	defer p.logger.Debug("generated search criteria", "user_id", userID)
+func (p *processor) generateSearchCriteria(ctx context.Context, user *internal.User, appt *internal.Appointment) error {
+	p.logger.Debug("generating search criteria", "user_id", appt.UserID)
 
-	schema, err := minds.NewResponseSchema("search-criteria", "Structured search criteria from the transcript analysis", search.Criteria{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate schema: %w", err)
-	}
-
-	template, err := utils.CreateTemplate("prompts/transcript-060-final.txt")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create template: %w", err)
-	}
-
-	prompt, err := template.Execute(map[string]any{
-		"DataExtract":         dataExtract,
-		"ResolvedPreferences": resolvedPreferences,
-		"WorkAnalysis":        workPreferences,
-		"SearchPhrases":       searchPhrases,
-		"PreferenceSummary":   preferenceSummary,
+	prompt, err := internal.GeneratePrompt("prompts/transcript-060-final.txt", map[string]any{
+		"ExtractedData":       appt.ExtractedData,
+		"ResolvedPreferences": appt.ExtractedData.ResolvedPreferences,
+		"WorkAnalysis":        appt.ExtractedData.WorkPreferences,
+		"SearchPhrases":       appt.ExtractedData.KeywordAnalysis,
+		"PreferenceSummary":   appt.ExtractedData.UserStatement,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute template: %w", err)
+		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
+		return fmt.Errorf("generateSearchCriteria: failed to generate prompt: %w", err)
 	}
 
-	messages := []minds.Message{
-		{
-			Role:    minds.RoleUser,
-			Content: prompt,
-		},
-	}
-
-	req := minds.NewRequest(messages, minds.WithResponseSchema(*schema))
-
-	searchResp, err := p.llm.GenerateContent(ctx, req)
+	criteria, err := internal.StructuredAsk[search.Criteria](ctx, "search_criteria", prompt)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate content: %w", err)
+		return fmt.Errorf("failed to generate search criteria: %w", err)
 	}
 
-	var criteria search.Criteria
-	if err := json.Unmarshal([]byte(searchResp.String()), &criteria); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal search criteria: %w", err)
+	user.Search.Criteria = criteria
+	if err := internal.UpdateUserSearch(ctx, p.fs, user.ID, user.Search); err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
+		return fmt.Errorf("failed to update user search: %w", err)
 	}
 
-	// Create UserSearch with the criteria
-	return &criteria, nil
+	return nil
 }
 
 // convertCallResultToTranscript converts a CallResult's messages to a Transcript
@@ -483,28 +545,28 @@ func GetPromptResults(ctx context.Context, fs *firestore.Client, userID string, 
 	return results, nil
 }
 
-func (p *processor) promptLLM(ctx context.Context, promptFile string, data any) (string, error) {
-	tmpl, err := utils.CreateTemplate(promptFile)
-	if err != nil {
-		return "", fmt.Errorf("failed to create template %q: %w", promptFile, err)
-	}
+// func (p *processor) promptLLM(ctx context.Context, promptFile string, data any) (string, error) {
+// 	tmpl, err := utils.CreateTemplate(promptFile)
+// 	if err != nil {
+// 		return "", fmt.Errorf("failed to create template %q: %w", promptFile, err)
+// 	}
 
-	prompt, err := tmpl.Execute(data)
-	if err != nil {
-		return "", fmt.Errorf("failed to execute template %q with data type %T: %w", promptFile, data, err)
-	}
+// 	prompt, err := tmpl.Execute(data)
+// 	if err != nil {
+// 		return "", fmt.Errorf("failed to execute template %q with data type %T: %w", promptFile, data, err)
+// 	}
 
-	messages := []minds.Message{
-		{
-			Role:    minds.RoleUser,
-			Content: prompt,
-		},
-	}
+// 	messages := []minds.Message{
+// 		{
+// 			Role:    minds.RoleUser,
+// 			Content: prompt,
+// 		},
+// 	}
 
-	response, err := p.llm.GenerateContent(ctx, minds.NewRequest(messages))
-	if err != nil {
-		return "", fmt.Errorf("failed to generate content for template %q: %w", promptFile, err)
-	}
+// 	response, err := p.llm.GenerateContent(ctx, minds.NewRequest(messages))
+// 	if err != nil {
+// 		return "", fmt.Errorf("failed to generate content for template %q: %w", promptFile, err)
+// 	}
 
-	return response.String(), nil
-}
+// 	return response.String(), nil
+// }

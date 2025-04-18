@@ -47,7 +47,7 @@ func TestUserJobs(t *testing.T) {
 		}
 
 		// Save the job
-		err := SaveUserJob(ctx, fs, user.ID, userJob)
+		err := CreateUserJob(ctx, fs, user.ID, userJob)
 		if err != nil {
 			t.Fatalf("SaveUserJob() error = %v", err)
 		}
@@ -86,19 +86,19 @@ func TestUserJobs(t *testing.T) {
 			ID:         jobID,
 			SearchHash: "test-search-hash",
 			JobRef:     fs.Collection("job_details").Doc(jobID),
-			Status:     "new",
+			Status:     JobStatusNew,
 			CreatedAt:  time.Now(),
 			UpdatedAt:  time.Now(),
 		}
 
 		// Save the job
-		err := SaveUserJob(ctx, fs, user.ID, userJob)
+		err := CreateUserJob(ctx, fs, user.ID, userJob)
 		if err != nil {
 			t.Fatalf("SaveUserJob() error = %v", err)
 		}
 
 		// Update status to viewed
-		err = UpdateUserJobStatus(ctx, fs, user.ID, jobID, "viewed")
+		err = UpdateUserJobStatus(ctx, fs, user.ID, jobID, JobStatusViewed)
 		if err != nil {
 			t.Fatalf("UpdateUserJobStatus() error = %v", err)
 		}
@@ -123,8 +123,8 @@ func TestUserJobs(t *testing.T) {
 		}
 
 		// Verify status and timestamp
-		if updatedJob.Status != "viewed" {
-			t.Errorf("job.Status = %v, want viewed", updatedJob.Status)
+		if updatedJob.Status != JobStatusViewed {
+			t.Errorf("job.Status = %v, want Viewed", updatedJob.Status)
 		}
 		if updatedJob.ViewedAt == nil {
 			t.Error("ViewedAt timestamp not set")
@@ -147,7 +147,7 @@ func TestUserJobs(t *testing.T) {
 		}
 
 		// Save the job
-		err := SaveUserJob(ctx, fs, user.ID, userJob)
+		err := CreateUserJob(ctx, fs, user.ID, userJob)
 		if err != nil {
 			t.Fatalf("SaveUserJob() error = %v", err)
 		}
@@ -200,14 +200,14 @@ func TestUserJobs(t *testing.T) {
 		}
 
 		// Save the job first time
-		err := SaveUserJob(ctx, fs, user.ID, userJob)
+		err := CreateUserJob(ctx, fs, user.ID, userJob)
 		if err != nil {
 			t.Fatalf("First SaveUserJob() error = %v", err)
 		}
 
 		// Try to save the same job with a different search hash
 		userJob.SearchHash = "test-search-hash-2"
-		err = SaveUserJob(ctx, fs, user.ID, userJob)
+		err = CreateUserJob(ctx, fs, user.ID, userJob)
 		if err != nil {
 			t.Fatalf("Second SaveUserJob() error = %v", err)
 		}
@@ -234,13 +234,13 @@ func TestUserJobs(t *testing.T) {
 		user := CreateTestUser(t, fs, "test-user", "test@example.com", "+1234567890", false)
 
 		// Test missing user ID
-		err := SaveUserJob(ctx, fs, "", &UserJob{ID: "test"})
+		err := CreateUserJob(ctx, fs, "", &UserJob{ID: "test"})
 		if err == nil {
 			t.Error("SaveUserJob() with empty userID should return error")
 		}
 
 		// Test missing job ID
-		err = SaveUserJob(ctx, fs, user.ID, &UserJob{})
+		err = CreateUserJob(ctx, fs, user.ID, &UserJob{})
 		if err == nil {
 			t.Error("SaveUserJob() with empty job ID should return error")
 		}
@@ -289,7 +289,7 @@ func TestUserJobs(t *testing.T) {
 				},
 			}
 
-			if err := SaveUserJob(ctx, fs, user.ID, userJob); err != nil {
+			if err := CreateUserJob(ctx, fs, user.ID, userJob); err != nil {
 				t.Fatalf("SaveUserJob() error = %v", err)
 			}
 		}
@@ -387,7 +387,7 @@ func TestSaveAndGetUserJobs(t *testing.T) {
 	}
 
 	// Save user job
-	err = SaveUserJob(ctx, fs, testUserID, userJob)
+	err = CreateUserJob(ctx, fs, testUserID, userJob)
 	if err != nil {
 		t.Fatalf("Failed to save user job: %v", err)
 	}

@@ -11,16 +11,10 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-type PromptHeader struct {
-	Name    string         `yaml:"name,omitempty"`
-	Version string         `yaml:"version,omitempty"`
-	Format  string         `yaml:"format,omitempty"`
-	SHA256  string         `yaml:"sha256,omitempty"`
-	Extra   map[string]any `yaml:",inline"`
-}
+type PromptHeader map[string]any
 
 type Prompt struct {
-	Header     PromptHeader
+	Header     map[string]any
 	Template   *template.Template
 	RawContent string
 }
@@ -92,18 +86,16 @@ func CreateTemplate(filepath string) (Prompt, error) {
 	if err != nil {
 		return prompt, err
 	}
-	if header.SHA256 != "" && header.SHA256 != sha {
-		return prompt, fmt.Errorf("SHA256 mismatch. Bump the version and update the SHA256")
-	} else if header.SHA256 == "" {
-		header.SHA256 = sha
-		// if err := SavePromptTemplate(filepath, header, body); err != nil {
-		// 	return prompt, fmt.Errorf("failed to save prompt template while updating hash: %w", err)
-		// }
+
+	header["SHA256"] = sha
+	var name string
+	if name, ok := header["name"].(string); !ok || name == "" {
+		name = filepath
 	}
 	prompt.Header = header
 	prompt.RawContent = body
 
-	tmpl, err := template.New(header.Name).Parse(body)
+	tmpl, err := template.New(name).Parse(body)
 	if err != nil {
 		return prompt, err
 	}
@@ -140,7 +132,8 @@ func SavePromptTemplate(filePath string, header PromptHeader, body string) error
 
 func extractYAMLHeader(templateStr string) (PromptHeader, string, error) {
 	const delimiter = "---"
-	var header PromptHeader
+	header := make(PromptHeader)
+
 	parts := strings.Split(templateStr, delimiter)
 	if len(parts) < 3 {
 		return header, templateStr, nil

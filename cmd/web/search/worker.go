@@ -22,7 +22,7 @@ type QueuedJob struct {
 // StartJobWorkers initializes the job processing workers
 func (s *Service) StartJobWorkers(ctx context.Context, numWorkers int) {
 	s.logger.Info("starting job processing workers", "num_workers", numWorkers)
-	for i := 0; i < numWorkers; i++ {
+	for i := range numWorkers {
 		workerID := i
 		s.initializeJobWorker(ctx, workerID)
 	}
@@ -91,7 +91,7 @@ func (s *Service) processQueuedJob(ctx context.Context, job QueuedJob) error {
 			"job_id", job.JobID)
 
 		userJob.Status = internal.JobStatusNew
-		if err := internal.SaveUserJob(ctx, s.fs, job.UserID, userJob); err != nil {
+		if err := internal.CreateUserJob(ctx, s.fs, job.UserID, userJob); err != nil {
 			return fmt.Errorf("failed to save user job: %w", err)
 		}
 		return nil
@@ -123,20 +123,95 @@ func (s *Service) processQueuedJob(ctx context.Context, job QueuedJob) error {
 
 	userJob.Status = internal.JobStatusNew
 
+	// 5. Check if job is a match and update progress
+	rating := strings.ToLower(userJob.Analysis.FinalJudgment.Rating)
+	isMatch := strings.Contains(rating, "yes")
+
+	// Set the IsRecommended field based on the rating
+	userJob.IsRecommended = isMatch
+
 	// 4. Save the job analysis to the UserJob document
-	if err := internal.SaveUserJob(ctx, s.fs, job.UserID, userJob); err != nil {
+	if err := internal.CreateUserJob(ctx, s.fs, job.UserID, userJob); err != nil {
 		return fmt.Errorf("failed to save user job: %w", err)
 	}
 
-	// 5. Send a message to the user via Pusher
-	rating := strings.ToLower(userJob.Analysis.FinalJudgment.Rating)
-	if strings.Contains(rating, "yes") {
+	// Record the analysis results in our progress tracker
+	s.recordJobAnalyzed(job.UserID, isMatch)
+
+	// Send a notification only if it's a good match
+	if isMatch {
 		if err := s.notifyUser(ctx, job.UserID, job.JobID); err != nil {
 			return fmt.Errorf("failed to notify user: %w", err)
 		}
 	}
 
 	return nil
+}
+
+// getAnalysisProgress returns the total number of jobs and how many have been analyzed
+func (s *Service) getAnalysisProgress(ctx context.Context, userID string) (int, int, error) {
+	// Get all jobs for this user
+	jobs, err := internal.GetUserJobs(ctx, s.fs, userID)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to get user jobs: %w", err)
+	}
+
+	totalJobs := 0
+	analyzed := 0
+
+	for _, job := range jobs {
+		// Count only unprocessed jobs (jobs needing analysis) plus already analyzed ones
+		if job.Status == internal.JobStatusUnprocessed || job.Analysis != nil {
+			totalJobs++
+
+			// Count jobs that have already been analyzed
+			if job.Analysis != nil {
+				analyzed++
+			}
+		}
+	}
+
+	return totalJobs, analyzed, nil
+}
+
+// countMatchedJobs counts how many jobs were matched favorably for a user
+func (s *Service) countMatchedJobs(ctx context.Context, userID string) (int, error) {
+	// Get all jobs for this user
+	jobs, err := internal.GetUserJobs(ctx, s.fs, userID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get user jobs: %w", err)
+	}
+
+	matchedCount := 0
+
+	for _, job := range jobs {
+		if job.Analysis != nil && strings.Contains(strings.ToLower(job.Analysis.FinalJudgment.Rating), "yes") {
+			matchedCount++
+		}
+	}
+
+	return matchedCount, nil
+}
+
+// countPendingJobsForUser checks if there are any queued or in-progress jobs for a user
+func (s *Service) countPendingJobsForUser(ctx context.Context, userID string) (int, error) {
+	// Count queued jobs (still in the job queue)
+	count := 0
+
+	// Check if there are any unprocessed jobs in Firestore
+	jobs, err := internal.GetUserJobs(ctx, s.fs, userID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get user jobs: %w", err)
+	}
+
+	for _, job := range jobs {
+		if job.Status == internal.JobStatusUnprocessed {
+			count++
+		}
+	}
+
+	s.logger.Debug("countPendingJobsForUser", "user_id", userID, "pending_jobs", count)
+	return count, nil
 }
 
 // loadJobDetail loads the job details from Firestore
