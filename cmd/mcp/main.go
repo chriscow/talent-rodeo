@@ -27,7 +27,7 @@ func createFirestoreClient(ctx context.Context) (*firestore.Client, error) {
 		ProjectID: projectID,
 	}
 
-	opt := option.WithCredentialsFile(os.Getenv("FIREBASE_CREDENTIALS"))
+	opt := option.WithCredentialsFile(os.Getenv("FIREBASE_CREDENTIALS_FILE"))
 	app, err := firebase.NewApp(ctx, config, opt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Firebase app: %w", err)
@@ -41,12 +41,12 @@ func createFirestoreClient(ctx context.Context) (*firestore.Client, error) {
 	return fs, nil
 }
 
-type UserInfo struct {
-	ID    string  `json:"id"`
-	Name  string  `json:"name"`
-	Phone *string `json:"phone,omitempty"`
-	Email string  `json:"email"`
-}
+// type UserInfo struct {
+// 	ID    string  `json:"id"`
+// 	Name  string  `json:"name"`
+// 	Phone *string `json:"phone,omitempty"`
+// 	Email string  `json:"email"`
+// }
 
 type ListUsersParams struct {
 	Limit  int `json:"limit" description:"Maximum number of users to return"`
@@ -140,60 +140,89 @@ func NewTestFirestoreConnectionTool() mcp.Tool {
 }
 
 func listUsersHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Setup logging and result
+	result := map[string]interface{}{
+		"status":  "checking",
+		"details": make([]string, 0),
+	}
+
+	// Log function for both stderr and result details
+	logMsg := func(msg string) {
+		fmt.Fprintf(os.Stderr, "DEBUG: %s\n", msg)
+		result["details"] = append(result["details"].([]string), msg)
+	}
+
+	logMsg("Processing list users request...")
 	data, err := getJSONData(request.Params.Arguments)
 	if err != nil {
-		return nil, fmt.Errorf("invalid parameters: %w", err)
+		result["status"] = "error"
+		logMsg(fmt.Sprintf("Invalid parameters: %v", err))
+		return createResult(result)
 	}
+	logMsg(fmt.Sprintf("Received raw parameters: %s", string(data)))
 
 	var params struct {
 		Limit  int `json:"limit"`
 		Offset int `json:"offset"`
 	}
 	if err := json.Unmarshal(data, &params); err != nil {
-		return nil, fmt.Errorf("invalid parameters format: %w", err)
+		result["status"] = "error"
+		logMsg(fmt.Sprintf("Failed to parse parameters: %v", err))
+		return createResult(result)
 	}
+	logMsg(fmt.Sprintf("Parsed parameters - Limit: %d, Offset: %d", params.Limit, params.Offset))
 
 	if params.Limit == 0 {
 		params.Limit = 100
+		logMsg(fmt.Sprintf("No limit specified, defaulting to %d", params.Limit))
 	}
 
+	logMsg("Creating Firestore client...")
 	fs, err := createFirestoreClient(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Firestore client: %w", err)
+		result["status"] = "error"
+		logMsg(fmt.Sprintf("Failed to create Firestore client: %v", err))
+		return createResult(result)
 	}
 	defer fs.Close()
+	logMsg("Firestore client created successfully")
 
+	logMsg("Fetching users from Firestore...")
 	users, err := internal.ListUsers(ctx, fs, params.Limit, params.Offset)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list users: %w", err)
+		result["status"] = "error"
+		logMsg(fmt.Sprintf("Failed to list users: %v", err))
+		return createResult(result)
 	}
+	logMsg(fmt.Sprintf("Successfully retrieved %d users", len(users)))
 
-	userInfos := make([]UserInfo, len(users))
-	for i, user := range users {
-		userInfos[i] = UserInfo{
-			ID:    user.ID,
-			Name:  user.Name,
-			Phone: user.Phone,
-			Email: user.Email,
-		}
-	}
+	result["status"] = "success"
+	result["users"] = users
 
-	result, err := json.Marshal(userInfos)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling result: %w", err)
-	}
-
-	content := mcp.NewTextContent(string(result))
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{content},
-	}, nil
+	return createResult(result)
 }
 
 func deleteUserHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Setup logging and result
+	result := map[string]interface{}{
+		"status":  "checking",
+		"details": make([]string, 0),
+	}
+
+	// Log function for both stderr and result details
+	logMsg := func(msg string) {
+		fmt.Fprintf(os.Stderr, "DEBUG: %s\n", msg)
+		result["details"] = append(result["details"].([]string), msg)
+	}
+
+	logMsg("Processing delete user request...")
 	data, err := getJSONData(request.Params.Arguments)
 	if err != nil {
-		return nil, fmt.Errorf("invalid parameters: %w", err)
+		result["status"] = "error"
+		logMsg(fmt.Sprintf("Invalid parameters: %v", err))
+		return createResult(result)
 	}
+	logMsg(fmt.Sprintf("Received raw parameters: %s", string(data)))
 
 	var params struct {
 		ID     string `json:"id"`
@@ -201,69 +230,93 @@ func deleteUserHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.C
 		Prefix string `json:"prefix"`
 	}
 	if err := json.Unmarshal(data, &params); err != nil {
-		return nil, fmt.Errorf("invalid parameters format: %w", err)
+		result["status"] = "error"
+		logMsg(fmt.Sprintf("Failed to parse parameters: %v", err))
+		return createResult(result)
 	}
+	logMsg(fmt.Sprintf("Parsed parameters - ID: %s, Email: %s, Prefix: %s", params.ID, params.Email, params.Prefix))
 
 	if params.ID == "" && params.Email == "" && params.Prefix == "" {
-		return nil, fmt.Errorf("must specify either id, email, or prefix")
+		result["status"] = "error"
+		logMsg("Error: must specify either id, email, or prefix")
+		return createResult(result)
 	}
 
+	logMsg("Creating Firestore client...")
 	fs, err := createFirestoreClient(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Firestore client: %w", err)
+		result["status"] = "error"
+		logMsg(fmt.Sprintf("Failed to create Firestore client: %v", err))
+		return createResult(result)
 	}
 	defer fs.Close()
+	logMsg("Firestore client created successfully")
 
-	var result interface{}
+	var deleteResult interface{}
 
 	if params.Prefix != "" {
+		logMsg(fmt.Sprintf("Deleting users with prefix: %s", params.Prefix))
+		logMsg("Fetching all users to filter by prefix...")
 		users, err := internal.ListUsers(ctx, fs, 0, 0)
 		if err != nil {
-			return nil, fmt.Errorf("failed to list users: %w", err)
+			result["status"] = "error"
+			logMsg(fmt.Sprintf("Failed to list users: %v", err))
+			return createResult(result)
 		}
+		logMsg(fmt.Sprintf("Found %d total users to check against prefix", len(users)))
 
 		deleted := 0
 		for _, user := range users {
 			if len(user.ID) >= len(params.Prefix) && user.ID[:len(params.Prefix)] == params.Prefix {
+				logMsg(fmt.Sprintf("Deleting user with ID: %s", user.ID))
 				if err := internal.DeleteUser(ctx, fs, user.ID); err != nil {
-					return nil, fmt.Errorf("failed to delete user %s: %w", user.ID, err)
+					result["status"] = "error"
+					logMsg(fmt.Sprintf("Failed to delete user %s: %v", user.ID, err))
+					return createResult(result)
 				}
 				deleted++
+				logMsg(fmt.Sprintf("Successfully deleted user: %s", user.ID))
 			}
 		}
-		result = map[string]int{"deleted": deleted}
+		logMsg(fmt.Sprintf("Completed prefix deletion. Total users deleted: %d", deleted))
+		deleteResult = map[string]int{"deleted": deleted}
 	} else {
 		if params.Email != "" {
+			logMsg(fmt.Sprintf("Looking up user by email: %s", params.Email))
 			user, found, err := internal.GetUserByEmail(ctx, fs, params.Email)
 			if err != nil {
-				return nil, fmt.Errorf("failed to get user by email: %w", err)
+				result["status"] = "error"
+				logMsg(fmt.Sprintf("Failed to get user by email: %v", err))
+				return createResult(result)
 			}
 			if !found {
-				return nil, fmt.Errorf("user with email %s not found", params.Email)
+				result["status"] = "error"
+				logMsg(fmt.Sprintf("User with email %s not found", params.Email))
+				return createResult(result)
 			}
 			params.ID = user.ID
+			logMsg(fmt.Sprintf("Found user ID: %s for email: %s", params.ID, params.Email))
 		}
 
+		logMsg(fmt.Sprintf("Deleting user with ID: %s", params.ID))
 		if err := internal.DeleteUser(ctx, fs, params.ID); err != nil {
-			return nil, fmt.Errorf("failed to delete user: %w", err)
+			result["status"] = "error"
+			logMsg(fmt.Sprintf("Failed to delete user: %v", err))
+			return createResult(result)
 		}
-		result = map[string]string{"deleted": params.ID}
+		logMsg(fmt.Sprintf("Successfully deleted user with ID: %s", params.ID))
+		deleteResult = map[string]string{"deleted": params.ID}
 	}
 
-	jsonResult, err := json.Marshal(result)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling result: %w", err)
-	}
+	result["status"] = "success"
+	result["result"] = deleteResult
 
-	content := mcp.NewTextContent(string(jsonResult))
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{content},
-	}, nil
+	return createResult(result)
 }
 
 func listGeoIDsHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	// Setup logging and result
-	result := map[string]interface{}{
+	result := map[string]any{
 		"status":  "checking",
 		"details": make([]string, 0),
 	}
@@ -285,7 +338,7 @@ func listGeoIDsHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.C
 	logMsg("Firestore client created successfully")
 
 	logMsg("Attempting to list GeoIDs...")
-	geoIDs, err := internal.ListGeoIDs(fs)
+	geoIDs, err := internal.ListGeoIDs(ctx, fs)
 	if err != nil {
 		result["status"] = "error"
 		logMsg(fmt.Sprintf("Failed to list GeoIDs: %v", err))
@@ -300,7 +353,7 @@ func listGeoIDsHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.C
 }
 
 func testFirestoreConnectionHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	result := map[string]interface{}{
+	result := map[string]any{
 		"status":  "checking",
 		"details": make([]string, 0),
 	}
@@ -344,7 +397,7 @@ func testFirestoreConnectionHandler(ctx context.Context, request mcp.CallToolReq
 				logMsg(fmt.Sprintf("Successfully read %d bytes from credentials file", len(credBytes)))
 
 				// Validate JSON format
-				var credJSON map[string]interface{}
+				var credJSON map[string]any
 				if err := json.Unmarshal(credBytes, &credJSON); err != nil {
 					result["status"] = "error"
 					logMsg(fmt.Sprintf("Failed to parse credentials JSON: %v", err))
@@ -393,7 +446,7 @@ func testFirestoreConnectionHandler(ctx context.Context, request mcp.CallToolReq
 }
 
 // Helper function to create the final result
-func createResult(result map[string]interface{}) (*mcp.CallToolResult, error) {
+func createResult(result map[string]any) (*mcp.CallToolResult, error) {
 	jsonResult, err := json.Marshal(result)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling result: %w", err)
@@ -407,34 +460,37 @@ func createResult(result map[string]interface{}) (*mcp.CallToolResult, error) {
 
 // getJSONData extracts JSON data from an argument value
 func getJSONData(args interface{}) ([]byte, error) {
+	// Setup logging
+	fmt.Fprintf(os.Stderr, "DEBUG: Processing JSON data extraction...\n")
+
 	if args == nil {
+		fmt.Fprintf(os.Stderr, "DEBUG: Received nil argument\n")
 		return nil, fmt.Errorf("nil argument")
 	}
 
-	// If args is a map, extract the first value
-	if argsMap, ok := args.(map[string]interface{}); ok {
-		if len(argsMap) == 0 {
-			return nil, fmt.Errorf("empty arguments map")
-		}
-		// Get the first value from the map
-		for _, v := range argsMap {
-			args = v
-			break
-		}
-	}
+	fmt.Fprintf(os.Stderr, "DEBUG: Argument type: %T\n", args)
 
 	// Handle string input (already JSON encoded)
 	if str, ok := args.(string); ok {
+		fmt.Fprintf(os.Stderr, "DEBUG: Processing string input of length: %d\n", len(str))
 		return []byte(str), nil
 	}
 
 	// Handle []byte input (already JSON encoded)
 	if bytes, ok := args.([]byte); ok {
+		fmt.Fprintf(os.Stderr, "DEBUG: Processing []byte input of length: %d\n", len(bytes))
 		return bytes, nil
 	}
 
 	// For any other type, marshal to JSON
-	return json.Marshal(args)
+	fmt.Fprintf(os.Stderr, "DEBUG: Marshaling input to JSON\n")
+	result, err := json.Marshal(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "DEBUG: Failed to marshal to JSON: %v\n", err)
+		return nil, err
+	}
+	fmt.Fprintf(os.Stderr, "DEBUG: Successfully marshaled to JSON of length: %d\n", len(result))
+	return result, nil
 }
 
 func main() {

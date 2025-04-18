@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"talent-rodeo/internal/search"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -34,7 +35,7 @@ const (
 // Returns the parsed status and a boolean indicating if it was valid.
 // If invalid, the default JobStatusNew is returned with false.
 func ParseJobStatus(statusStr string) (JobStatus, bool) {
-	switch statusStr {
+	switch strings.ToLower(statusStr) {
 	case string(JobStatusNew):
 		return JobStatusNew, true
 	case string(JobStatusViewed):
@@ -53,57 +54,61 @@ func ParseJobStatus(statusStr string) (JobStatus, bool) {
 // UserJob represents a job that a user has interacted with
 type UserJob struct {
 	// ID is the same as the job_details document ID (provider_job_id)
-	ID string `firestore:"id"`
+	ID string
 
 	// Reference to the job_details document
-	JobRef *firestore.DocumentRef `firestore:"job_ref"`
+	JobRef *firestore.DocumentRef
 
 	// Analysis of the job match
-	Analysis *JobAnalysis `firestore:"analysis"`
+	Analysis *JobAnalysis
 
 	// Job metadata
-	CompanyName string `firestore:"company_name"`
-	CompanyLogo string `firestore:"company_logo"`
+	CompanyName string
+	CompanyLogo string
 
 	// User interaction metadata
-	Status     JobStatus  `firestore:"status"` // "new", "viewed", "saved", "applied", "rejected"
-	ViewedAt   *time.Time `firestore:"viewed_at,omitempty"`
-	SavedAt    *time.Time `firestore:"saved_at,omitempty"`
-	AppliedAt  *time.Time `firestore:"applied_at,omitempty"`
-	RejectedAt *time.Time `firestore:"rejected_at,omitempty"`
-	Notes      string     `firestore:"notes,omitempty"`
+	Status     JobStatus
+	ViewedAt   *time.Time
+	SavedAt    *time.Time
+	AppliedAt  *time.Time
+	RejectedAt *time.Time
+	Notes      string
 
 	// Search context
-	SearchHash string    `firestore:"search_hash"`
-	CreatedAt  time.Time `firestore:"created_at"`
-	UpdatedAt  time.Time `firestore:"updated_at"`
+	SearchHash string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+	Criteria   search.Criteria // Search criteria that found this job
+
+	// Whether the job is recommended (has a Yes rating)
+	IsRecommended bool
 }
 
 type JobAnalysis struct {
-	CandidateRequirementsAnalysis []RequirementAnalysis `json:"candidate_requirements_analysis"`
-	JobRequirementsAnalysis       []RequirementAnalysis `json:"job_requirements_analysis"`
-	Summary                       Summary               `json:"summary"`
-	FinalJudgment                 FinalJudgment         `json:"final_judgment"`
+	CandidateRequirementsAnalysis []RequirementAnalysis
+	JobRequirementsAnalysis       []RequirementAnalysis
+	Summary                       Summary
+	FinalJudgment                 FinalJudgment
 }
 
 type RequirementAnalysis struct {
-	Requirement string `json:"requirement"`
-	Fit         string `json:"fit"`
-	Examples    string `json:"examples"`
+	Requirement string
+	Fit         string
+	Examples    string
 }
 
 type Summary struct {
-	Matches []string `json:"matches"`
-	Gaps    []string `json:"gaps"`
+	Matches []string
+	Gaps    []string
 }
 
 type FinalJudgment struct {
-	Explanation string `json:"explanation"`
-	Rating      string `json:"rating" enum:"Definitely Yes,Strong Yes,Yes,Maybe,No"` // One of: "Definitely Yes", "Strong Yes", "Yes", "Maybe", "No"
+	Explanation string
+	Rating      string `enum:"Definitely Yes,Strong Yes,Yes,Maybe,No"` // One of: "Definitely Yes", "Strong Yes", "Yes", "Maybe", "No"
 }
 
-// SaveUserJob saves a job reference for a user
-func SaveUserJob(ctx context.Context, fs *firestore.Client, userID string, job *UserJob) error {
+// CreateUserJob saves a job reference for a user
+func CreateUserJob(ctx context.Context, fs *firestore.Client, userID string, job *UserJob) error {
 	if userID == "" {
 		return fmt.Errorf("user ID is required")
 	}
@@ -178,23 +183,23 @@ func GetUserJobs(ctx context.Context, fs *firestore.Client, userID string) ([]*U
 }
 
 // UpdateUserJobStatus updates the status and corresponding timestamp of a user's job
-func UpdateUserJobStatus(ctx context.Context, fs *firestore.Client, userID, jobID, status string) error {
+func UpdateUserJobStatus(ctx context.Context, fs *firestore.Client, userID, jobID string, status JobStatus) error {
 	now := time.Now()
 	updates := []firestore.Update{
-		{Path: "status", Value: status},
-		{Path: "updated_at", Value: now},
+		{Path: "Status", Value: status},
+		{Path: "UpdatedAt", Value: now},
 	}
 
 	// Add timestamp based on status
 	switch status {
-	case string(JobStatusViewed):
-		updates = append(updates, firestore.Update{Path: "viewed_at", Value: now})
-	case string(JobStatusSaved):
-		updates = append(updates, firestore.Update{Path: "saved_at", Value: now})
-	case string(JobStatusApplied):
-		updates = append(updates, firestore.Update{Path: "applied_at", Value: now})
-	case string(JobStatusRejected):
-		updates = append(updates, firestore.Update{Path: "rejected_at", Value: now})
+	case JobStatusViewed:
+		updates = append(updates, firestore.Update{Path: "ViewedAt", Value: now})
+	case JobStatusSaved:
+		updates = append(updates, firestore.Update{Path: "SavedAt", Value: now})
+	case JobStatusApplied:
+		updates = append(updates, firestore.Update{Path: "AppliedAt", Value: now})
+	case JobStatusRejected:
+		updates = append(updates, firestore.Update{Path: "RejectedAt", Value: now})
 	}
 
 	_, err := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Doc(jobID).Update(ctx, updates)
@@ -208,8 +213,8 @@ func UpdateUserJobStatus(ctx context.Context, fs *firestore.Client, userID, jobI
 // UpdateUserJobNotes updates the notes for a user's job
 func UpdateUserJobNotes(ctx context.Context, fs *firestore.Client, userID, jobID, notes string) error {
 	updates := []firestore.Update{
-		{Path: "notes", Value: notes},
-		{Path: "updated_at", Value: time.Now()},
+		{Path: "Notes", Value: notes},
+		{Path: "UpdatedAt", Value: time.Now()},
 	}
 
 	_, err := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Doc(jobID).Update(ctx, updates)
@@ -228,10 +233,17 @@ func isYesRating(rating string) bool {
 
 // GetUserJobsSorted retrieves user jobs with a specific status and supports paging
 func GetUserJobsSorted(ctx context.Context, fs *firestore.Client, userID string, status JobStatus, pageSize int, pageToken string, showAllRatings bool) ([]*UserJob, string, error) {
-	// Create base query for jobs with the specified status and ordered by creation time
+	// Create base query for jobs with the specified status
 	baseQuery := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).
-		Where("status", "==", string(status)).
-		OrderBy("created_at", firestore.Asc)
+		Where("Status", "==", string(status))
+
+	// Add IsRecommended filter if not showing all ratings
+	if !showAllRatings {
+		baseQuery = baseQuery.Where("IsRecommended", "==", true)
+	}
+
+	// Add ordering after filters
+	baseQuery = baseQuery.OrderBy("CreatedAt", firestore.Asc)
 
 	// Apply paging if a page token is provided
 	var query firestore.Query
@@ -270,13 +282,6 @@ func GetUserJobsSorted(ctx context.Context, fs *firestore.Client, userID string,
 			return nil, "", fmt.Errorf("failed to unmarshal user job: %w", err)
 		}
 
-		// Filter by rating if not showing all ratings
-		if !showAllRatings {
-			if job.Analysis == nil || job.Analysis.FinalJudgment.Rating == "" || !isYesRating(job.Analysis.FinalJudgment.Rating) {
-				continue
-			}
-		}
-
 		jobs = append(jobs, &job)
 	}
 
@@ -299,36 +304,14 @@ func GetJobsCount(ctx context.Context, fs *firestore.Client, userID string, stat
 	}
 
 	query := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).
-		Where("status", "==", string(status))
+		Where("Status", "==", string(status))
 
-	// If we're not showing all ratings, we need to manually count since we can't filter by rating in Firestore
+	// Add IsRecommended filter if not showing all ratings
 	if !showAllRatings {
-		iter := query.Documents(ctx)
-		var count int64
-
-		for {
-			doc, err := iter.Next()
-			if err == iterator.Done {
-				break
-			}
-			if err != nil {
-				return 0, fmt.Errorf("failed to iterate jobs: %w", err)
-			}
-
-			var job UserJob
-			if err := doc.DataTo(&job); err != nil {
-				return 0, fmt.Errorf("failed to unmarshal job: %w", err)
-			}
-
-			if job.Analysis != nil && job.Analysis.FinalJudgment.Rating != "" && isYesRating(job.Analysis.FinalJudgment.Rating) {
-				count++
-			}
-		}
-
-		return count, nil
+		query = query.Where("IsRecommended", "==", true)
 	}
 
-	// If showing all ratings, use the more efficient aggregation query
+	// Use the more efficient aggregation query
 	aggregationQuery := query.NewAggregationQuery().WithCount("count")
 	results, err := aggregationQuery.Get(ctx)
 	if err != nil {
@@ -447,7 +430,7 @@ func DeleteUserJob(ctx context.Context, fs *firestore.Client, userID, jobID stri
 
 // ListJobListings retrieves all job listings with optional limit and offset
 func ListJobListings(ctx context.Context, fs *firestore.Client, limit int, offset int) ([]map[string]interface{}, error) {
-	query := fs.Collection("job_listings").OrderBy("created_at", firestore.Desc)
+	query := fs.Collection("job_listings").OrderBy("CreatedAt", firestore.Desc)
 	if limit > 0 {
 		query = query.Limit(limit)
 	}
@@ -475,7 +458,7 @@ func ListJobListings(ctx context.Context, fs *firestore.Client, limit int, offse
 
 // ListJobDetails retrieves all job details with optional limit and offset
 func ListJobDetails(ctx context.Context, fs *firestore.Client, limit int, offset int) ([]map[string]interface{}, error) {
-	query := fs.Collection("job_details").OrderBy("created_at", firestore.Desc)
+	query := fs.Collection("job_details").OrderBy("CreatedAt", firestore.Desc)
 	if limit > 0 {
 		query = query.Limit(limit)
 	}
@@ -606,4 +589,61 @@ func DeleteAllUserJobsByPrefix(ctx context.Context, fs *firestore.Client, prefix
 	}
 
 	return deleted, nil
+}
+
+// MigrateUserJobsForRecommendation updates all existing user jobs to set the IsRecommended field
+// based on their current Analysis.FinalJudgment.Rating
+func MigrateUserJobsForRecommendation(ctx context.Context, fs *firestore.Client) (int, error) {
+	// Get all users
+	usersIter := fs.Collection(usersCollection).Documents(ctx)
+	migratedCount := 0
+
+	for {
+		userDoc, err := usersIter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return migratedCount, fmt.Errorf("failed to iterate users: %w", err)
+		}
+
+		userID := userDoc.Ref.ID
+
+		// For each user, get their jobs collection
+		jobsIter := userDoc.Ref.Collection(userJobsCollection).Documents(ctx)
+
+		for {
+			jobDoc, err := jobsIter.Next()
+			if err == iterator.Done {
+				break
+			}
+			if err != nil {
+				return migratedCount, fmt.Errorf("failed to iterate jobs for user %s: %w", userID, err)
+			}
+
+			var job UserJob
+			if err := jobDoc.DataTo(&job); err != nil {
+				return migratedCount, fmt.Errorf("failed to unmarshal job: %w", err)
+			}
+
+			// Determine if the job is recommended based on the rating
+			isRecommended := false
+			if job.Analysis != nil && job.Analysis.FinalJudgment.Rating != "" {
+				rating := strings.ToLower(job.Analysis.FinalJudgment.Rating)
+				isRecommended = strings.Contains(rating, "yes")
+			}
+
+			// Update the job with the IsRecommended field
+			_, err = jobDoc.Ref.Update(ctx, []firestore.Update{
+				{Path: "IsRecommended", Value: isRecommended},
+			})
+			if err != nil {
+				return migratedCount, fmt.Errorf("failed to update job %s for user %s: %w", jobDoc.Ref.ID, userID, err)
+			}
+
+			migratedCount++
+		}
+	}
+
+	return migratedCount, nil
 }

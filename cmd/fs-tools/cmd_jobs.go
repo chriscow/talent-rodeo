@@ -152,7 +152,11 @@ var updateJobCmd = &cobra.Command{
 		defer fs.Close()
 
 		if status != "" {
-			if err := internal.UpdateUserJobStatus(ctx, fs, userID, jobID, status); err != nil {
+			jobStatus, ok := internal.ParseJobStatus(status)
+			if !ok {
+				return fmt.Errorf("invalid job status: %s", status)
+			}
+			if err := internal.UpdateUserJobStatus(ctx, fs, userID, jobID, jobStatus); err != nil {
 				return fmt.Errorf("failed to update job status: %w", err)
 			}
 			fmt.Printf("Successfully updated job %s status to %s\n", jobID, status)

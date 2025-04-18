@@ -421,23 +421,23 @@ func TestProvider_QueueSearch(t *testing.T) {
 		t.Fatalf("failed to get user document: %v", err)
 	}
 
-	var userData map[string]interface{}
+	var userData map[string]any
 	if err := doc.DataTo(&userData); err != nil {
 		t.Fatalf("failed to unmarshal user data: %v", err)
 	}
 
-	search, ok := userData["search"].(map[string]interface{})
+	search, ok := userData["Search"].(map[string]any)
 	if !ok {
 		t.Fatal("search field not found or wrong type")
 	}
 
-	queuedAt, ok := search["queued_at"].(time.Time)
+	queuedAt, ok := search["QueuedAt"].(time.Time)
 	if !ok {
-		t.Fatal("queued_at field not found or wrong type")
+		t.Fatal("QueuedAt field not found or wrong type")
 	}
 
 	if queuedAt.IsZero() {
-		t.Error("queued_at should not be zero")
+		t.Error("QueuedAt should not be zero")
 	}
 }
 
@@ -488,8 +488,8 @@ func TestProvider_ProcessQueuedSearch(t *testing.T) {
 	// Initialize search state
 	_, err = fs.Collection("users").Doc(user.ID).Update(ctx, []firestore.Update{
 		{Path: "search", Value: map[string]any{
-			"status":     "pending",
-			"started_at": time.Now(),
+			"Status":    "pending",
+			"StartedAt": time.Now(),
 		}},
 	})
 	if err != nil {
@@ -524,13 +524,13 @@ func TestProvider_ProcessQueuedSearch(t *testing.T) {
 			t.Fatalf("failed to unmarshal user data: %v", err)
 		}
 
-		search, ok := data["search"].(map[string]any)
+		search, ok := data["Search"].(map[string]any)
 		if !ok {
 			t.Fatal("search field not found or wrong type")
 		}
 
-		if search["completed_at"] == nil {
-			t.Error("completed_at timestamp is nil")
+		if search["CompletedAt"] == nil {
+			t.Error("CompletedAt timestamp is nil")
 		}
 
 		// Verify user jobs were created
@@ -548,8 +548,8 @@ func TestProvider_ProcessQueuedSearch(t *testing.T) {
 		if job.ID != "scrapingdog-test-job1" {
 			t.Errorf("job.ID = %v, want scrapingdog-test-job1", job.ID)
 		}
-		if job.Status != "new" {
-			t.Errorf("job.Status = %v, want new", job.Status)
+		if job.Status != internal.JobStatusUnprocessed {
+			t.Errorf("job.Status = %v, want unprocessed", job.Status)
 		}
 		if job.SearchHash == "" {
 			t.Error("job.SearchHash is empty")
@@ -622,12 +622,12 @@ func TestProvider_UpdateUserSearchCompletion(t *testing.T) {
 		t.Fatalf("error unmarshaling data: %v", err)
 	}
 
-	search, ok := data["search"].(map[string]any)
+	search, ok := data["Search"].(map[string]any)
 	if !ok {
 		t.Fatal("search field not found or wrong type")
 	}
-	if search["completed_at"] == nil {
-		t.Error("completed_at timestamp is nil")
+	if search["CompletedAt"] == nil {
+		t.Error("CompletedAt timestamp is nil")
 	}
 }
 
@@ -949,7 +949,7 @@ func TestConcurrentSearchProcessing(t *testing.T) {
 			continue
 		}
 
-		if search["completed_at"] != nil {
+		if search["CompletedAt"] != nil {
 			completedCount++
 		}
 	}
@@ -1032,23 +1032,23 @@ func TestProvider_SearchFieldUpdates(t *testing.T) {
 			t.Fatalf("failed to get user document: %v", err)
 		}
 
-		var userData map[string]interface{}
+		var userData map[string]any
 		if err := doc.DataTo(&userData); err != nil {
 			t.Fatalf("failed to unmarshal user data: %v", err)
 		}
 
-		search, ok := userData["search"].(map[string]interface{})
+		search, ok := userData["Search"].(map[string]any)
 		if !ok {
 			t.Fatal("search field not found or wrong type")
 		}
 
-		queuedAt, ok := search["queued_at"].(time.Time)
+		queuedAt, ok := search["QueuedAt"].(time.Time)
 		if !ok {
-			t.Fatal("queued_at field not found or wrong type")
+			t.Fatal("QueuedAt field not found or wrong type")
 		}
 
 		if queuedAt.IsZero() {
-			t.Error("queued_at should not be zero")
+			t.Error("QueuedAt should not be zero")
 		}
 	})
 
@@ -1073,30 +1073,30 @@ func TestProvider_SearchFieldUpdates(t *testing.T) {
 			t.Fatalf("failed to get user document: %v", err)
 		}
 
-		var userData map[string]interface{}
+		var userData map[string]any
 		if err := doc.DataTo(&userData); err != nil {
 			t.Fatalf("failed to unmarshal user data: %v", err)
 		}
 
-		search, ok := userData["search"].(map[string]interface{})
+		search, ok := userData["Search"].(map[string]any)
 		if !ok {
 			t.Fatal("search field not found or wrong type")
 		}
 
 		// Verify QueuedAt is cleared
-		queuedAt, exists := search["queued_at"]
+		queuedAt, exists := search["QueuedAt"]
 		if exists && queuedAt != nil {
-			t.Error("queued_at should be nil after completion")
+			t.Error("QueuedAt should be nil after completion")
 		}
 
 		// Verify CompletedAt is set
-		completedAt, ok := search["completed_at"].(time.Time)
+		completedAt, ok := search["CompletedAt"].(time.Time)
 		if !ok {
-			t.Fatal("completed_at field not found or wrong type")
+			t.Fatal("CompletedAt field not found or wrong type")
 		}
 
 		if completedAt.IsZero() {
-			t.Error("completed_at should not be zero")
+			t.Error("CompletedAt should not be zero")
 		}
 	})
 }
@@ -1240,6 +1240,310 @@ func TestScrapingDogProvider_SearchJobs_LocationIntegration(t *testing.T) {
 				// Log the first job's location to verify it matches expectations
 				if len(jobs) > 0 {
 					t.Logf("First job location: %s", jobs[0].Location)
+				}
+			}
+		})
+	}
+}
+
+func TestParseSalaryRange(t *testing.T) {
+	// This test is designed to be lightweight and not actually call the Gemini API
+	// We'll test primarily that the function behaves correctly with different inputs
+
+	// Skip if running in short mode
+
+	// Here we look for direct behavior validation rather than specific outputs,
+	// since the actual parsing is done by Gemini and may vary
+	tests := []struct {
+		name    string
+		salary  string
+		wantNil bool
+		wantErr bool
+	}{
+		{
+			name:    "empty string",
+			salary:  "",
+			wantNil: true,
+			wantErr: false,
+		},
+		{
+			name:    "valid salary range",
+			salary:  "$80,000 - $120,000",
+			wantNil: false,
+			wantErr: false,
+		},
+		{
+			name:    "single value",
+			salary:  "$100,000",
+			wantNil: false,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Short test to focus on behavior, not exact values
+			got, err := parseSalaryRange(context.Background(), tt.salary)
+
+			// Check error expectations
+			if (err != nil) != tt.wantErr {
+				t.Errorf("parseSalaryRange() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			// Check nil expectations
+			if (got == nil) != tt.wantNil {
+				t.Errorf("parseSalaryRange() returned %v, wantNil %v", got, tt.wantNil)
+			}
+		})
+	}
+}
+
+func TestHandleAPIError_ComprehensiveErrorCodes(t *testing.T) {
+	tests := []struct {
+		name       string
+		statusCode int
+		wantErr    error
+		errType    any
+	}{
+		{
+			name:       "success",
+			statusCode: 200,
+			wantErr:    nil,
+			errType:    nil,
+		},
+		{
+			name:       "request timeout",
+			statusCode: 410,
+			wantErr:    errors.New("request timed out after 60 seconds"),
+			errType:    &ErrRequestTimeout{},
+		},
+		{
+			name:       "invalid URL",
+			statusCode: 404,
+			wantErr:    errors.New("invalid URL or resource not found"),
+			errType:    &ErrInvalidURL{},
+		},
+		{
+			name:       "request pending",
+			statusCode: 202,
+			wantErr:    errors.New("request accepted, scraping in progress"),
+			errType:    &ErrRequestPending{},
+		},
+		{
+			name:       "plan limit reached",
+			statusCode: 403,
+			wantErr:    errors.New("monthly request limit reached on current plan"),
+			errType:    &ErrPlanLimitReached{},
+		},
+		{
+			name:       "concurrent limit",
+			statusCode: 429,
+			wantErr:    errors.New("concurrent connection limit reached, please slow down"),
+			errType:    &ErrConcurrentLimit{},
+		},
+		{
+			name:       "invalid API key",
+			statusCode: 401,
+			wantErr:    errors.New("invalid API key"),
+			errType:    &ErrInvalidAPIKey{},
+		},
+		{
+			name:       "request failed",
+			statusCode: 400,
+			wantErr:    errors.New("request failed, please check parameters"),
+			errType:    &ErrRequestFailed{},
+		},
+		{
+			name:       "unknown error",
+			statusCode: 500,
+			wantErr:    errors.New("unexpected status code: 500"),
+			errType:    &ErrRequestFailed{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := handleAPIError(tt.statusCode)
+
+			// Check if error is nil when expected
+			if tt.wantErr == nil {
+				if err != nil {
+					t.Errorf("handleAPIError() error = %v, wantErr nil", err)
+				}
+				return
+			}
+
+			// Error should not be nil when expected
+			if err == nil {
+				t.Errorf("handleAPIError() error = nil, want error")
+				return
+			}
+
+			// Check error message
+			if err.Error() != tt.wantErr.Error() {
+				t.Errorf("handleAPIError() error message = %v, want %v", err.Error(), tt.wantErr.Error())
+			}
+
+			// Check error type using errors.As
+			if tt.errType != nil {
+				errValue := tt.errType
+				if !errors.As(err, &errValue) {
+					t.Errorf("handleAPIError() error type = %T, want %T", err, tt.errType)
+				}
+			}
+		})
+	}
+}
+
+func TestConvertJobListings(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   []jobListing
+		want    []search.JobListing
+		wantErr bool
+	}{
+		{
+			name:  "empty input",
+			input: []jobListing{},
+			want:  []search.JobListing{},
+		},
+		{
+			name: "single job listing",
+			input: []jobListing{
+				{
+					ID:             "123",
+					LinkedInJobID:  "linkedin-123",
+					Position:       "Senior Go Developer",
+					Link:           "https://linkedin.com/jobs/123",
+					CompanyName:    "Test Company",
+					CompanyProfile: "https://linkedin.com/company/test",
+					Location:       "San Francisco, CA",
+					PostingDate:    "2024-03-15",
+					CompanyLogo:    "https://example.com/logo.png",
+				},
+			},
+			want: []search.JobListing{
+				{
+					ID:             fmt.Sprintf("%s-123", providerName),
+					Provider:       providerName,
+					ProviderJobID:  "linkedin-123",
+					Title:          "Senior Go Developer",
+					Company:        "Test Company",
+					Location:       "San Francisco, CA",
+					URL:            "https://linkedin.com/jobs/123",
+					CompanyProfile: "https://linkedin.com/company/test",
+					CompanyLogo:    "https://example.com/logo.png",
+					PostedDate:     time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC),
+				},
+			},
+		},
+		{
+			name: "multiple job listings",
+			input: []jobListing{
+				{
+					ID:             "123",
+					LinkedInJobID:  "linkedin-123",
+					Position:       "Senior Go Developer",
+					Link:           "https://linkedin.com/jobs/123",
+					CompanyName:    "Test Company",
+					CompanyProfile: "https://linkedin.com/company/test",
+					Location:       "San Francisco, CA",
+					PostingDate:    "2024-03-15",
+				},
+				{
+					ID:             "456",
+					LinkedInJobID:  "linkedin-456",
+					Position:       "Ruby Developer",
+					Link:           "https://linkedin.com/jobs/456",
+					CompanyName:    "Another Company",
+					CompanyProfile: "https://linkedin.com/company/another",
+					Location:       "Remote",
+					PostingDate:    "2024-03-14",
+				},
+			},
+			want: []search.JobListing{
+				{
+					ID:             fmt.Sprintf("%s-123", providerName),
+					Provider:       providerName,
+					ProviderJobID:  "linkedin-123",
+					Title:          "Senior Go Developer",
+					Company:        "Test Company",
+					Location:       "San Francisco, CA",
+					URL:            "https://linkedin.com/jobs/123",
+					CompanyProfile: "https://linkedin.com/company/test",
+					PostedDate:     time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC),
+				},
+				{
+					ID:             fmt.Sprintf("%s-456", providerName),
+					Provider:       providerName,
+					ProviderJobID:  "linkedin-456",
+					Title:          "Ruby Developer",
+					Company:        "Another Company",
+					Location:       "Remote",
+					URL:            "https://linkedin.com/jobs/456",
+					CompanyProfile: "https://linkedin.com/company/another",
+					PostedDate:     time.Date(2024, 3, 14, 0, 0, 0, 0, time.UTC),
+				},
+			},
+		},
+		{
+			name: "invalid date format",
+			input: []jobListing{
+				{
+					ID:             "123",
+					LinkedInJobID:  "linkedin-123",
+					Position:       "Senior Go Developer",
+					Link:           "https://linkedin.com/jobs/123",
+					CompanyName:    "Test Company",
+					CompanyProfile: "https://linkedin.com/company/test",
+					Location:       "San Francisco, CA",
+					PostingDate:    "invalid-date",
+				},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := convertJobListings(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("convertJobListings() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr {
+				return
+			}
+
+			if len(got) != len(tt.want) {
+				t.Errorf("convertJobListings() returned %d listings, want %d", len(got), len(tt.want))
+				return
+			}
+
+			for i, wantJob := range tt.want {
+				gotJob := got[i]
+
+				if gotJob.Provider != wantJob.Provider {
+					t.Errorf("job[%d].Provider = %v, want %v", i, gotJob.Provider, wantJob.Provider)
+				}
+				if gotJob.ProviderJobID != wantJob.ProviderJobID {
+					t.Errorf("job[%d].ProviderJobID = %v, want %v", i, gotJob.ProviderJobID, wantJob.ProviderJobID)
+				}
+				if gotJob.Title != wantJob.Title {
+					t.Errorf("job[%d].Title = %v, want %v", i, gotJob.Title, wantJob.Title)
+				}
+				if gotJob.Company != wantJob.Company {
+					t.Errorf("job[%d].Company = %v, want %v", i, gotJob.Company, wantJob.Company)
+				}
+				if gotJob.Location != wantJob.Location {
+					t.Errorf("job[%d].Location = %v, want %v", i, gotJob.Location, wantJob.Location)
+				}
+				if gotJob.URL != wantJob.URL {
+					t.Errorf("job[%d].URL = %v, want %v", i, gotJob.URL, wantJob.URL)
+				}
+				if !gotJob.PostedDate.Equal(wantJob.PostedDate) {
+					t.Errorf("job[%d].PostedDate = %v, want %v", i, gotJob.PostedDate, wantJob.PostedDate)
 				}
 			}
 		})

@@ -164,6 +164,11 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 			isSearching = false
 			nextSearchTime = time.Time{} // Zero time
 			app.logger.Info("TEST MODE: Setting nextSearchTime to zero time")
+		case "search_error":
+			isSearching = false
+			// Simulate a search error
+			data["SearchError"] = "Failed to connect to job search provider: connection timeout (This is a test error message)"
+			app.logger.Info("TEST MODE: Simulating a search error")
 		}
 
 		// Add test mode to template data for links
@@ -306,6 +311,11 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 	data["PusherKey"] = os.Getenv("PUSHER_KEY")
 	data["PusherCluster"] = os.Getenv("PUSHER_CLUSTER")
 	data["JobStatuses"] = internal.GetJobStatuses()
+
+	// Pass search error to the template if it exists
+	if user.Search != nil && user.Search.Error != "" {
+		data["SearchError"] = user.Search.Error
+	}
 
 	// Map for display names of job statuses
 	data["StatusDisplayNames"] = map[string]string{

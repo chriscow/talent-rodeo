@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"talent-rodeo/internal/vapi"
+	"github.com/chriscow/vapi-go"
 )
 
 // Tests for the webhook handler functionality will go here
@@ -30,6 +30,13 @@ func TestUnmarshalEndOfCallReports(t *testing.T) {
 
 	// Get all end-of-call report files
 	webhookDir := "/workspaces/talent-rodeo/testdata/webhooks"
+	if _, err := os.Stat(webhookDir); os.IsNotExist(err) {
+		webhookDir = "/Users/chris/dev/talent-rodeo/testdata/webhooks"
+		if _, err := os.Stat(webhookDir); os.IsNotExist(err) {
+			t.Fatalf("Failed to find webhook test directory: %v", err)
+		}
+	}
+
 	files, err := os.ReadDir(webhookDir)
 	if err != nil {
 		t.Fatalf("Failed to read webhook test directory: %v", err)
@@ -51,17 +58,13 @@ func TestUnmarshalEndOfCallReports(t *testing.T) {
 					t.Fatalf("Failed to read webhook file %s: %v", filePath, err)
 				}
 
-				// Test basic unmarshaling
-				var env struct {
-					Message vapi.EndOfCallReport `json:"message"`
-				}
-
+				var env vapi.EndOfCallReportEnvelope
 				err = json.Unmarshal(webhookData, &env)
 				if err != nil {
 					t.Errorf("Failed to unmarshal %s: %v", file.Name(), err)
 				} else {
 					// Basic validation of the report
-					report := env.Message
+					report := env.Report
 					if report.Type == "" {
 						t.Errorf("Report type should not be empty")
 					}
@@ -126,15 +129,12 @@ func TestValidateEndOfCallReport(t *testing.T) {
 					t.Skip("application.validateEndOfCallReport is not available in test build")
 				}
 
-				// Test with a simple validation to avoid calling methods we can't test
-				var env struct {
-					Message vapi.EndOfCallReport `json:"message"`
-				}
+				var env vapi.EndOfCallReportEnvelope
 				err = json.Unmarshal(webhookData, &env)
 				if err != nil {
 					t.Errorf("Failed to validate %s: %v", file.Name(), err)
 				} else {
-					report := env.Message
+					report := env.Report
 					if report.Call != nil && report.Call.ID != nil {
 						t.Logf("Successfully validated file: %s", file.Name())
 					} else {

@@ -10,9 +10,10 @@ import (
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/search"
 	"talent-rodeo/internal/utils"
-	"talent-rodeo/internal/vapi"
 	"testing"
 	"time"
+
+	"github.com/chriscow/vapi-go"
 
 	"github.com/chriscow/minds"
 	"github.com/joho/godotenv"

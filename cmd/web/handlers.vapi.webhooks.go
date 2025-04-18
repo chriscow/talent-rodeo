@@ -2,18 +2,20 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
+	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
-	"talent-rodeo/internal/vapi"
 	"time"
 
+	"github.com/chriscow/vapi-go"
+
 	"cloud.google.com/go/firestore"
+	"github.com/getsentry/sentry-go"
 )
 
 // MessageResponse represents the response to VAPI webhook messages
@@ -93,7 +95,16 @@ func (app *application) handleVapiWebhook(w http.ResponseWriter, r *http.Request
 		app.handleTransferDestinationRequest(w, r, msg)
 	case vapi.MsgTypeEndOfCallReport:
 		app.logger.Debug("processing end-of-call report")
-		handleEndOfCallReport(r, app, body)
+		if err := handleEndOfCallReport(r, app, body); err != nil {
+			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+				"webhook_type": "end-of-call-report",
+				"webhook_body": string(body),
+			})
+			app.logger.Error("failed to handle end-of-call report", "error", err)
+			response.JSON(w, http.StatusInternalServerError, MessageResponse{
+				Error: "failed to handle end-of-call report",
+			})
+		}
 	default:
 		// For other message types, we don't need to send a response
 		app.logger.Debug("no response needed for message type", "type", msg.Message.Type)
@@ -115,28 +126,6 @@ func saveWebhookPayload(msgType string, body []byte, logger *slog.Logger, fs *fi
 
 	// Generate a unique ID based on message type and timestamp
 	docID := fmt.Sprintf("%s_%d", msgType, time.Now().UnixNano())
-
-	// Try to save to Firestore
-	if os.Getenv("SAVE_WEBHOOK_TO_FIRESTORE") == "true" {
-		var data map[string]any
-		if err := json.Unmarshal(body, &data); err != nil {
-			logger.Error("Failed to parse webhook payload for Firestore", "error", err)
-		} else {
-			// Add metadata
-			data["_metadata"] = map[string]any{
-				"timestamp": time.Now(),
-				"type":      msgType,
-			}
-
-			// Save to Firestore
-			docRef := fs.Collection("webhook-data").Doc("vapi").Collection("webhooks").Doc(docID)
-			if _, err := docRef.Set(context.Background(), data); err != nil {
-				logger.Error("Failed to save webhook payload to Firestore", "error", err)
-			} else {
-				logger.Info("Saved webhook payload to Firestore", "doc_id", docID)
-			}
-		}
-	}
 
 	// Save to file system
 	webhooksDir := "testdata/webhooks"
@@ -235,16 +224,18 @@ func getMapKeys(data []byte) []string {
 
 // handleEndOfCallReport processes an end-of-call report webhook
 func handleEndOfCallReport(r *http.Request, app *application, msg []byte) error {
-	report, err := validateEndOfCallReport(msg)
+	envelope, err := validateEndOfCallReport(msg)
 	if err != nil {
 		return fmt.Errorf("failed to validate end-of-call report: %w", err)
 	}
+
+	report := envelope.Report
 
 	appointmentID := *report.Call.Name
 
 	customerID := report.Call.Customer.Name
 
-	if err := app.processCompletedAppointment(r, customerID, appointmentID, *report); err != nil {
+	if err := app.processCompletedAppointment(r, customerID, appointmentID, *envelope); err != nil {
 		return fmt.Errorf("failed to process completed appointment: %w", err)
 	}
 
@@ -253,20 +244,14 @@ func handleEndOfCallReport(r *http.Request, app *application, msg []byte) error 
 	return nil
 }
 
-func validateEndOfCallReport(webhookMsg []byte) (*vapi.EndOfCallReport, error) {
-	// Parse the message data into a report
-	type envelope struct {
-		Message vapi.EndOfCallReport `json:"message"`
-	}
-
-	var env envelope
-
+func validateEndOfCallReport(webhookMsg []byte) (*vapi.EndOfCallReportEnvelope, error) {
+	var env vapi.EndOfCallReportEnvelope
 	if err := json.Unmarshal(webhookMsg, &env); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal end-of-call report: %w", err)
 	}
 
 	// Validate required fields
-	report := env.Message
+	report := env.Report
 	if report.Call == nil {
 		return nil, fmt.Errorf("missing call information in end of call report")
 	}
@@ -289,5 +274,5 @@ func validateEndOfCallReport(webhookMsg []byte) (*vapi.EndOfCallReport, error) {
 		return nil, fmt.Errorf("missing customer ID in end of call report")
 	}
 
-	return &report, nil
+	return &env, nil
 }

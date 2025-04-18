@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/funcs"
@@ -56,84 +57,6 @@ func (p *Provider) initializeWorker(ctx context.Context, workerID int) {
 	}()
 }
 
-// processJobDetailsAndSave handles the processing of individual job details and saving to user jobs
-func (p *Provider) processJobDetailsAndSave(ctx context.Context, listing search.JobListing, searchHash string, userID string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-
-	p.logger.Debug("scrapingdog: processing job details",
-		"user_id", userID,
-		"job_id", listing.ProviderJobID)
-
-	if err := p.processJobDetails(ctx, listing.ProviderJobID, listing.URL); err != nil {
-		return fmt.Errorf("job %s: %w", listing.ProviderJobID, err)
-	}
-
-	// this is the full job ID with provider prefix that is in Fires
-	fullJobID := funcs.Slugify(fmt.Sprintf("%s %s", providerName, listing.ProviderJobID))
-
-	// Get the job details to get company info
-	jobDetails, err := p.store.GetCachedJobDetails(ctx, fullJobID)
-	if err != nil {
-		return fmt.Errorf("failed to get cached job details for %s: %w", listing.ProviderJobID, err)
-	}
-
-	// Create user job entry
-	userJob := &internal.UserJob{
-		ID:         fullJobID,
-		SearchHash: searchHash,
-		Status:     "unprocessed", // Set to unprocessed initially, will be set to "new" after analysis
-		JobRef:     p.fs.Collection("job_details").Doc(fullJobID),
-	}
-
-	// Set company info from job details
-	if jobDetails != nil {
-		userJob.CompanyName = jobDetails.Company
-		if jobDetails.CompanyInfo != nil {
-			userJob.CompanyLogo = jobDetails.CompanyInfo.LogoURL
-		}
-	}
-
-	if err := internal.SaveUserJob(ctx, p.fs, userID, userJob); err != nil {
-		return fmt.Errorf("failed to save user job %s: %w", listing.ProviderJobID, err)
-	}
-
-	p.notifySearchNewJob(ctx, userID, fullJobID)
-
-	return nil
-}
-
-func (p *Provider) notifySearchErrors(_ context.Context, userID string, totalJobs int, errors []error) {
-	if p.eventHandler != nil {
-		if err := p.eventHandler.OnSearchCompleted(userID, totalJobs, errors); err != nil {
-			p.logger.Error("failed to notify user of error",
-				"error", err,
-				"user_id", userID)
-		}
-	}
-}
-
-func (p *Provider) notifySearchComplete(_ context.Context, userID string, totalJobs int) {
-	if p.eventHandler != nil {
-		if err := p.eventHandler.OnSearchCompleted(userID, totalJobs, nil); err != nil {
-			p.logger.Error("failed to notify user of error",
-				"error", err,
-				"user_id", userID)
-		}
-	}
-}
-
-func (p *Provider) notifySearchNewJob(_ context.Context, userID, jobID string) {
-	if p.eventHandler != nil {
-		if err := p.eventHandler.OnNewJob(userID, jobID); err != nil {
-			p.logger.Error("failed to notify user of new jobs",
-				"error", err,
-				"user_id", userID)
-		}
-	}
-}
-
 // processQueuedSearch handles the complete job search flow for a queued search request
 func (p *Provider) processQueuedSearch(ctx context.Context, qs QueuedSearch) error {
 	// Check if context is already canceled before starting work
@@ -162,8 +85,14 @@ func (p *Provider) processQueuedSearch(ctx context.Context, qs QueuedSearch) err
 	// Process each job's details
 	var processingErrors []error
 	newJobCount := 0
+
+	testing := os.Getenv("TESTING_MODE") == "true"
+	if testing {
+		listings = listings[:3]
+	}
+
 	for _, listing := range listings {
-		if err := p.processJobDetailsAndSave(ctx, listing, searchHash, qs.UserID); err != nil {
+		if err := p.processJobDetailsAndSave(ctx, listing, searchHash, qs.UserID, qs.Criteria); err != nil {
 			processingErrors = append(processingErrors, err)
 			p.logger.Error("failed to process job details",
 				"error", err,
@@ -211,6 +140,85 @@ func (p *Provider) processQueuedSearch(ctx context.Context, qs QueuedSearch) err
 		"total_jobs", newJobCount)
 
 	return nil
+}
+
+// processJobDetailsAndSave handles the processing of individual job details and saving to user jobs
+func (p *Provider) processJobDetailsAndSave(ctx context.Context, listing search.JobListing, searchHash string, userID string, criteria search.Criteria) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	p.logger.Debug("scrapingdog: processing job details",
+		"user_id", userID,
+		"job_id", listing.ProviderJobID,
+		"criteria", criteria)
+
+	if err := p.processJobDetails(ctx, listing.ProviderJobID, listing.URL); err != nil {
+		return fmt.Errorf("job %s: %w", listing.ProviderJobID, err)
+	}
+
+	// this is the full job ID with provider prefix that is in Fires
+	fullJobID := funcs.Slugify(fmt.Sprintf("%s %s", providerName, listing.ProviderJobID))
+
+	// Get the job details to get company info
+	jobDetails, err := p.store.GetCachedJobDetails(ctx, fullJobID)
+	if err != nil {
+		return fmt.Errorf("failed to get cached job details for %s: %w", listing.ProviderJobID, err)
+	}
+
+	// Create user job entry
+	userJob := &internal.UserJob{
+		ID:         fullJobID,
+		SearchHash: searchHash,
+		Status:     internal.JobStatusUnprocessed, // Set to unprocessed initially, will be set to "new" after analysis
+		JobRef:     p.fs.Collection("job_details").Doc(fullJobID),
+		Criteria:   criteria,
+	}
+
+	// Set company info from job details
+	if jobDetails != nil {
+		userJob.CompanyName = jobDetails.Company
+		if jobDetails.CompanyInfo != nil {
+			userJob.CompanyLogo = jobDetails.CompanyInfo.LogoURL
+		}
+	}
+
+	if err := internal.CreateUserJob(ctx, p.fs, userID, userJob); err != nil {
+		return fmt.Errorf("failed to save user job %s: %w", listing.ProviderJobID, err)
+	}
+
+	p.notifySearchNewJob(ctx, userID, fullJobID)
+
+	return nil
+}
+
+func (p *Provider) notifySearchErrors(_ context.Context, userID string, totalJobs int, errors []error) {
+	if p.eventHandler != nil {
+		if err := p.eventHandler.OnSearchCompleted(userID, totalJobs, errors); err != nil {
+			p.logger.Error("failed to notify user of error",
+				"error", err,
+				"user_id", userID)
+		}
+	}
+}
+
+func (p *Provider) notifySearchComplete(_ context.Context, userID string, totalJobs int) {
+	if p.eventHandler != nil {
+		if err := p.eventHandler.OnSearchCompleted(userID, totalJobs, nil); err != nil {
+			p.logger.Error("failed to notify user of error",
+				"error", err,
+				"user_id", userID)
+		}
+	}
+}
+
+func (p *Provider) notifySearchNewJob(_ context.Context, userID, jobID string) {
+	if p.eventHandler != nil {
+		if err := p.eventHandler.OnNewJob(userID, jobID); err != nil {
+			p.logger.Error("failed to notify user of new jobs",
+				"error", err,
+				"user_id", userID)
+		}
+	}
 }
 
 // processJobDetails gets and stores job details
@@ -361,7 +369,7 @@ func (p *Provider) getJobListings(ctx context.Context, criteria search.Criteria)
 
 	// Handle location
 	if criteria.Location != "" {
-		geoid, err := internal.GetGeoID(p.fs, criteria.Location)
+		geoid, err := internal.GetGeoID(ctx, p.fs, criteria.Location)
 		if err != nil || geoid.Value == "" {
 			p.logger.Warn(internal.BGYellow("failed to get geo id"), "location", criteria.Location, "error", err)
 			params.Set("geoid", string(remoteGEOID))
@@ -602,9 +610,9 @@ func (p *Provider) GetJobDetails(ctx context.Context, jobID string) (*search.Job
 // updateUserSearchError updates the user's search status with an error
 func (p *Provider) updateUserSearchError(ctx context.Context, userID string, errMsg string) error {
 	_, err := p.fs.Collection("users").Doc(userID).Update(ctx, []firestore.Update{
-		{Path: "search.error", Value: errMsg},
-		{Path: "search.completed_at", Value: time.Now()},
-		{Path: "search.status", Value: "error"},
+		{Path: "Search.Error", Value: errMsg},
+		{Path: "Search.CompletedAt", Value: time.Now()},
+		{Path: "Search.Status", Value: "error"},
 	})
 	return err
 }

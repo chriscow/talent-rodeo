@@ -42,7 +42,7 @@
 
 <script>
 
-    htmx.logger = function (elt, event, data) { if (console) console.log(event, elt, data) }
+    // htmx.logger = function (elt, event, data) { if (console) console.log(event, elt, data) }
 
     var CSRF_TOKEN = '{{ .CSRFToken }}';
     document.body.addEventListener('htmx:configRequest', (event) => {

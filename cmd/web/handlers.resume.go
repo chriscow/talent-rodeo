@@ -186,8 +186,8 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 
 	// Save the phone number and update state
 	if err := internal.UpdateUser(context.Background(), app.fs, user.ID, map[string]any{
-		"phone": form.Phone,
-		"state": userState,
+		"Phone": form.Phone,
+		"State": userState,
 	}); err != nil {
 		app.serverError(w, r, fmt.Errorf("failed to update user: %w", err))
 		return

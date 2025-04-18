@@ -9,7 +9,8 @@ import (
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
 	"talent-rodeo/internal/utils"
-	"talent-rodeo/internal/vapi"
+
+	"github.com/chriscow/vapi-go"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

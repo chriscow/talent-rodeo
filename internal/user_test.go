@@ -118,7 +118,7 @@ func TestUser(t *testing.T) {
 	// Test UpdateUser
 	t.Run("UpdateUser", func(t *testing.T) {
 		updates := map[string]any{
-			"first_name": "Updated",
+			"FirstName": "Updated",
 		}
 		if err := UpdateUser(ctx, client, user.ID, updates); err != nil {
 			t.Fatalf("UpdateUser() error = %v", err)
