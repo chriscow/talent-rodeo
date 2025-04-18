@@ -21,6 +21,7 @@ const (
 type JobStatus string
 
 const (
+	// JobStatusUnprocessed is the initial status of a job detail when it is retrieved by the search provider.
 	JobStatusUnprocessed JobStatus = "unprocessed"
 	JobStatusNew         JobStatus = "new"
 	JobStatusViewed      JobStatus = "viewed"
