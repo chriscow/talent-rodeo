@@ -30,8 +30,8 @@ func CreateTestUserAndJob(ctx context.Context) (string, string, error) {
 	// Create test user
 	userRef := fs.Collection("users").Doc(testUserID)
 	_, err = userRef.Set(ctx, map[string]interface{}{
-		"email":      fmt.Sprintf("test-%s@example.com", testUserID),
-		"created_at": time.Now(),
+		"Email":     fmt.Sprintf("test-%s@example.com", testUserID),
+		"CreatedAt": time.Now(),
 	})
 	if err != nil {
 		return "", "", fmt.Errorf("failed to create test user: %w", err)
@@ -40,14 +40,14 @@ func CreateTestUserAndJob(ctx context.Context) (string, string, error) {
 	// Create test job detail
 	jobRef := fs.Collection("job_details").Doc(testJobID)
 	_, err = jobRef.Set(ctx, map[string]interface{}{
-		"id":              testJobID,
-		"title":           "Software Engineer",
-		"company":         "Test Company Inc.",
-		"location":        "Remote, US",
-		"provider":        "test-provider",
-		"provider_job_id": testJobID,
-		"posted_date":     time.Now().AddDate(0, 0, -3), // 3 days ago
-		"created_at":      time.Now(),
+		"ID":            testJobID,
+		"Title":         "Software Engineer",
+		"Company":       "Test Company Inc.",
+		"Location":      "Remote, US",
+		"Provider":      "test-provider",
+		"ProviderJobID": testJobID,
+		"PostedDate":    time.Now().AddDate(0, 0, -3), // 3 days ago
+		"CreatedAt":     time.Now(),
 	})
 	if err != nil {
 		return "", "", fmt.Errorf("failed to create test job: %w", err)
@@ -64,7 +64,7 @@ func CreateTestUserAndJob(ctx context.Context) (string, string, error) {
 		UpdatedAt:  time.Now(),
 	}
 
-	err = internal.SaveUserJob(ctx, fs, testUserID, userJob)
+	err = internal.CreateUserJob(ctx, fs, testUserID, userJob)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to save user job: %w", err)
 	}

@@ -49,7 +49,7 @@ func CreateTestJob(t *testing.T, client *firestore.Client, userID string, jobID 
 		UpdatedAt:  createdAt,
 	}
 
-	if err := SaveUserJob(context.Background(), client, userID, job); err != nil {
+	if err := CreateUserJob(context.Background(), client, userID, job); err != nil {
 		t.Fatalf("Failed to create test job: %v", err)
 	}
 
@@ -102,7 +102,7 @@ func DeleteTestData(t *testing.T, client *firestore.Client, prefix string) {
 	ctx := context.Background()
 
 	// First get all test users
-	iter := client.Collection(usersCollection).Where("id", ">=", prefix).Where("id", "<", prefix+"~").Documents(ctx)
+	iter := client.Collection(usersCollection).Where("ID", ">=", prefix).Where("ID", "<", prefix+"~").Documents(ctx)
 	for {
 		doc, err := iter.Next()
 		if err == iterator.Done {
@@ -180,7 +180,7 @@ func DeleteTestData(t *testing.T, client *firestore.Client, prefix string) {
 	// Clean up any other top-level collections
 	otherCollections := []string{"job_searches", "job_listings", "job_details"} // Add other top-level collections as needed
 	for _, collection := range otherCollections {
-		iter := client.Collection(collection).Where("id", ">=", prefix).Where("id", "<", prefix+"~").Documents(ctx)
+		iter := client.Collection(collection).Where("ID", ">=", prefix).Where("ID", "<", prefix+"~").Documents(ctx)
 		for {
 			doc, err := iter.Next()
 			if err == iterator.Done {

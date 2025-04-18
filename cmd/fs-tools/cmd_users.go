@@ -172,7 +172,7 @@ var listGeoIDsCmd = &cobra.Command{
 		}
 		defer fs.Close()
 
-		geoIDs, err := internal.ListGeoIDs(fs)
+		geoIDs, err := internal.ListGeoIDs(ctx, fs)
 		if err != nil {
 			return fmt.Errorf("failed to list GeoIDs: %w", err)
 		}

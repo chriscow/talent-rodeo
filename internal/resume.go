@@ -24,9 +24,9 @@ const (
 )
 
 type resumeAnalysis struct {
-	Analysis    string  `json:"analysis"`
-	IsResume    bool    `json:"is_resume"`
-	YAMLSummary *string `json:"yaml_summary"`
+	Analysis    string
+	IsResume    bool
+	YAMLSummary *string
 }
 
 type ErrResumeExists struct {
@@ -38,25 +38,25 @@ func (e ErrResumeExists) Error() string {
 }
 
 type Resume struct {
-	ID     string `firestore:"id"`
-	UserID string `firestore:"user_id"`
+	ID     string
+	UserID string
 
 	// JobID is the ID of the job that the resume is customized for.
-	JobID *string `firestore:"job_id,omitempty"`
+	JobID *string
 
-	RawText string `firestore:"raw_text"`
+	RawText string
 
 	// Annotated is the LLM annotated resume text.
-	Annotated *string `firestore:"annotated,omitempty"`
+	Annotated *string
 
 	// Validated is true if the resume has been validated.
-	IsValid bool `firestore:"is_valid"`
+	IsValid bool
 
 	// Analysis is the LLM analysis of the resume.
-	Analysis *string `firestore:"analysis,omitempty"`
+	Analysis *string
 
-	CreatedAt time.Time `firestore:"created_at"`
-	UpdatedAt time.Time `firestore:"updated_at"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // CreateResume creates a resume for a user in Firestore (using subcollection).
@@ -150,7 +150,7 @@ func annotateResumeTestMode(logger *slog.Logger, user *User, resume *Resume) err
 	resume.Analysis = &result.Analysis
 	resume.UpdatedAt = time.Now()
 
-	logger.Info("using test annotation data",
+	logger.Debug("using test annotation data",
 		"file", testFile,
 		"user_id", user.ID,
 		"resume_id", resume.ID)
@@ -163,11 +163,13 @@ func AnnotateResume(ctx context.Context, fs *firestore.Client, logger *slog.Logg
 	if os.Getenv("TESTING_MODE") == "true" {
 		logger.Debug("annotateResume: using test mode")
 		if err := annotateResumeTestMode(logger, user, resume); err != nil {
+			logger.Error("annotateResume: test mode failed", "error", err)
 			return fmt.Errorf("test mode annotation failed: %w", err)
 		}
 
 		// Update resume in Firestore and handle user state
 		if err := UpdateResume(ctx, fs, *resume); err != nil {
+			logger.Error("failed to update resume in Firestore", "error", err)
 			return fmt.Errorf("failed to update resume in Firestore: %w", err)
 		}
 
@@ -292,7 +294,7 @@ func GetLatestResume(ctx context.Context, fs *firestore.Client, userID string) (
 		return nil, fmt.Errorf("user ID for Firestore is required")
 	}
 
-	iter := fs.Collection(usersCollection).Doc(userID).Collection(resumeCollection).OrderBy("created_at", firestore.Desc).Limit(1).Documents(ctx)
+	iter := fs.Collection(usersCollection).Doc(userID).Collection(resumeCollection).OrderBy("CreatedAt", firestore.Desc).Limit(1).Documents(ctx)
 	doc, err := iter.Next()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get latest resume: %w", err)

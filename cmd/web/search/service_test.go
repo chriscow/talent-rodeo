@@ -2,7 +2,6 @@ package search
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"log/slog"
@@ -24,29 +23,6 @@ func init() {
 	// Load environment variables from the project root .env file
 	if err := godotenv.Overload("../../../.env"); err != nil {
 		log.Printf("Warning: Error loading .env file: %v", err)
-	}
-
-	// Debug: Print environment variables
-	projectID := os.Getenv("FIREBASE_PROJECT_ID")
-	creds := os.Getenv("FIREBASE_CREDENTIALS")
-	log.Printf("FIREBASE_PROJECT_ID: %s", projectID)
-	log.Printf("FIREBASE_CREDENTIALS length: %d", len(creds))
-
-	// Verify required environment variables are set
-	if projectID == "" {
-		log.Fatal("FIREBASE_PROJECT_ID environment variable is not set")
-	}
-	if creds == "" {
-		log.Fatal("FIREBASE_CREDENTIALS environment variable is not set")
-	}
-
-	// Remove any surrounding quotes from credentials
-	creds = strings.Trim(creds, "'\"")
-
-	// Verify credentials are valid JSON
-	var value map[string]interface{}
-	if err := json.Unmarshal([]byte(creds), &value); err != nil {
-		log.Fatalf("Error unmarshalling FIREBASE_CREDENTIALS: %v", err)
 	}
 }
 

@@ -1,0 +1,258 @@
+package main
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+	"talent-rodeo/internal"
+
+	"github.com/spf13/cobra"
+)
+
+func init() {
+	// Add webhooks command
+	rootCmd.AddCommand(webhooksCmd)
+
+	// Add subcommands
+	webhooksCmd.AddCommand(listWebhooksCmd)
+	webhooksCmd.AddCommand(deleteWebhooksCmd)
+
+	// Add flags
+	listWebhooksCmd.Flags().BoolVar(&prettyOutput, "pretty", false, "Pretty print JSON output")
+	listWebhooksCmd.Flags().Bool("id-only", false, "Only output document IDs (one per line)")
+
+	// Add flags for delete command
+	deleteWebhooksCmd.Flags().StringP("id", "i", "", "Webhook ID to delete")
+	deleteWebhooksCmd.Flags().StringP("prefix", "p", "", "Delete all webhooks with this prefix")
+	deleteWebhooksCmd.Flags().Bool("all", false, "Delete all webhooks in the collection (requires confirmation)")
+	deleteWebhooksCmd.Flags().Bool("force", false, "Skip confirmation prompt when using --all")
+}
+
+var webhooksCmd = &cobra.Command{
+	Use:   "webhooks",
+	Short: "Manage webhook data",
+	Long:  `Webhooks command allows you to manage webhook data in the system`,
+}
+
+var deleteWebhooksCmd = &cobra.Command{
+	Use:   "delete",
+	Short: "Delete webhook(s)",
+	Long:  `Delete webhook(s) by ID or prefix from webhook-data/vapi/webhooks collection`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		webhookID, _ := cmd.Flags().GetString("id")
+		prefix, _ := cmd.Flags().GetString("prefix")
+		all, _ := cmd.Flags().GetBool("all")
+		force, _ := cmd.Flags().GetBool("force")
+
+		if !all && webhookID == "" && prefix == "" && len(args) == 0 {
+			return fmt.Errorf("must specify either --id, --prefix, --all, or provide IDs as arguments")
+		}
+
+		if all && (webhookID != "" || prefix != "" || len(args) > 0) {
+			return fmt.Errorf("--all cannot be used with other deletion options")
+		}
+
+		ctx := context.Background()
+		fs, err := internal.NewFirestoreClient(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to create Firestore client: %w", err)
+		}
+		defer fs.Close()
+
+		// Handle --all flag
+		if all {
+			if !force {
+				fmt.Fprintf(os.Stderr, "WARNING: This will delete ALL webhooks in the collection.\nAre you sure? [y/N]: ")
+				reader := bufio.NewReader(os.Stdin)
+				response, err := reader.ReadString('\n')
+				if err != nil {
+					return fmt.Errorf("failed to read response: %w", err)
+				}
+				response = strings.ToLower(strings.TrimSpace(response))
+				if response != "y" && response != "yes" {
+					fmt.Fprintln(os.Stderr, "Operation cancelled")
+					return nil
+				}
+			}
+
+			deleted := 0
+			iter := fs.Collection("webhook-data").Doc("vapi").Collection("webhooks").Documents(ctx)
+			defer iter.Stop()
+
+			batch := fs.Batch()
+			batchSize := 0
+			maxBatchSize := 100 // Reduced from 500 to handle transaction size limits
+
+			for {
+				doc, err := iter.Next()
+				if err != nil {
+					break // Stop at end of iterator
+				}
+
+				batch.Delete(doc.Ref)
+				batchSize++
+				deleted++
+
+				// If batch is full, commit it and start a new one
+				if batchSize == maxBatchSize {
+					if _, err := batch.Commit(ctx); err != nil {
+						return fmt.Errorf("failed to commit batch delete: %w", err)
+					}
+					fmt.Fprintf(os.Stderr, "Progress: deleted %d webhooks...\n", deleted)
+					batch = fs.Batch()
+					batchSize = 0
+				}
+			}
+
+			// Commit any remaining documents
+			if batchSize > 0 {
+				if _, err := batch.Commit(ctx); err != nil {
+					return fmt.Errorf("failed to commit final batch delete: %w", err)
+				}
+			}
+
+			fmt.Fprintf(os.Stderr, "Successfully deleted %d webhooks\n", deleted)
+			return nil
+		}
+
+		// If we have a prefix, delete all matching documents
+		if prefix != "" {
+			deleted := 0
+			iter := fs.Collection("webhook-data").Doc("vapi").Collection("webhooks").Documents(ctx)
+			defer iter.Stop()
+
+			batch := fs.Batch()
+			batchSize := 0
+			maxBatchSize := 100 // Reduced from 500 to handle transaction size limits
+
+			for {
+				doc, err := iter.Next()
+				if err != nil {
+					break // Stop at end of iterator
+				}
+
+				if strings.HasPrefix(doc.Ref.ID, prefix) {
+					batch.Delete(doc.Ref)
+					batchSize++
+					deleted++
+
+					// If batch is full, commit it and start a new one
+					if batchSize == maxBatchSize {
+						if _, err := batch.Commit(ctx); err != nil {
+							return fmt.Errorf("failed to commit batch delete: %w", err)
+						}
+						fmt.Fprintf(os.Stderr, "Progress: deleted %d webhooks...\n", deleted)
+						batch = fs.Batch()
+						batchSize = 0
+					}
+				}
+			}
+
+			// Commit any remaining documents
+			if batchSize > 0 {
+				if _, err := batch.Commit(ctx); err != nil {
+					return fmt.Errorf("failed to commit final batch delete: %w", err)
+				}
+			}
+
+			fmt.Fprintf(os.Stderr, "Successfully deleted %d webhooks with prefix %s\n", deleted, prefix)
+			return nil
+		}
+
+		// Handle single ID from flag
+		if webhookID != "" {
+			args = append(args, webhookID)
+		}
+
+		// Delete each provided ID
+		for _, id := range args {
+			docRef := fs.Collection("webhook-data").Doc("vapi").Collection("webhooks").Doc(id)
+			if _, err := docRef.Delete(ctx); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to delete webhook %s: %v\n", id, err)
+				continue
+			}
+			fmt.Fprintf(os.Stderr, "Successfully deleted webhook: %s\n", id)
+		}
+
+		return nil
+	},
+}
+
+var listWebhooksCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List webhook data",
+	Long:  `List webhook data from the webhook-data/vapi/webhooks collection`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := context.Background()
+
+		fs, err := internal.NewFirestoreClient(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to create Firestore client: %w", err)
+		}
+		defer fs.Close()
+
+		// Get all documents from the webhook-data/vapi/webhooks collection
+		iter := fs.Collection("webhook-data").Doc("vapi").Collection("webhooks").Documents(ctx)
+		defer iter.Stop()
+
+		idOnly, _ := cmd.Flags().GetBool("id-only")
+
+		if idOnly {
+			// Only collect and output document IDs
+			count := 0
+			for {
+				doc, err := iter.Next()
+				if err != nil {
+					break // Stop at end of iterator
+				}
+				fmt.Println(doc.Ref.ID) // Print directly to stdout
+				count++
+			}
+
+			if count == 0 {
+				fmt.Fprintln(os.Stderr, "No webhook data found")
+				return nil
+			}
+
+			fmt.Fprintf(os.Stderr, "Retrieved %d webhook IDs\n", count)
+			return nil
+		}
+
+		// Regular output with full webhook data
+		var webhooks []map[string]interface{}
+		for {
+			doc, err := iter.Next()
+			if err != nil {
+				break // Stop at end of iterator
+			}
+
+			webhook := doc.Data()
+			webhook["id"] = doc.Ref.ID // Add document ID to the data
+			webhooks = append(webhooks, webhook)
+		}
+
+		if len(webhooks) == 0 {
+			fmt.Fprintln(os.Stderr, "No webhook data found")
+			return nil
+		}
+
+		var output []byte
+		if prettyOutput {
+			output, err = json.MarshalIndent(webhooks, "", "  ")
+		} else {
+			output, err = json.Marshal(webhooks)
+		}
+
+		if err != nil {
+			return fmt.Errorf("failed to marshal webhook data: %w", err)
+		}
+
+		fmt.Fprintf(os.Stderr, "Retrieved %d webhook entries\n", len(webhooks))
+		fmt.Println(string(output))
+
+		return nil
+	},
+}

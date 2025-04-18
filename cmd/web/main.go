@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"talent-rodeo/cmd/web/search"
+	"talent-rodeo/cmd/web/transcript"
 
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/auth"
@@ -190,6 +191,9 @@ func run(logger *slog.Logger) error {
 
 	firestoreClient, err := internal.NewFirestoreClient(ctx)
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"error_type": "firestore_client_new",
+		})
 		return err
 	}
 	defer firestoreClient.Close()
@@ -211,6 +215,9 @@ func run(logger *slog.Logger) error {
 
 	mailer, err := smtp.NewMailer(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.from)
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"error_type": "smtp_mailer_new",
+		})
 		return err
 	}
 
@@ -220,6 +227,9 @@ func run(logger *slog.Logger) error {
 	}
 
 	if len(cfg.session.secretKey) < 32 {
+		internal.SentryReportError(ctx, fmt.Errorf("SESSION_SECRET must be at least 32 bytes long"), sentry.LevelError, map[string]string{
+			"error_type": "session_secret_too_short",
+		})
 		return fmt.Errorf("SESSION_SECRET must be at least 32 bytes long")
 	}
 
@@ -300,10 +310,20 @@ func run(logger *slog.Logger) error {
 
 	searchService := search.NewService(firestoreClient, logger, searchProvider, mailer, cfg.notifications.email, pusherClient)
 	if err := searchService.Start(); err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"error_type": "search_service_start",
+		})
 		return fmt.Errorf("failed to start search service: %w", err)
 	}
 
 	searchProvider.SetEventHandler(searchService)
+
+	if err := transcript.RecoverProcessingAppointments(sentry.CurrentHub(), firestoreClient, logger); err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"error_type": "transcript_recovery",
+		})
+		return fmt.Errorf("failed to recover processing appointments: %w", err)
+	}
 
 	app := &application{
 		config: cfg,

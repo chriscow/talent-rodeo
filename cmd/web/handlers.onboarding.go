@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"talent-rodeo/internal"
+
+	"cloud.google.com/go/firestore"
 )
 
 // resetOnboardingState handles POST requests to reset a user's onboarding progress.
@@ -32,9 +34,11 @@ func (app *application) resetOnboardingState(w http.ResponseWriter, r *http.Requ
 	}
 
 	user.State.Status = internal.UserStatusPendingResumeUpload
+	user.Search = nil
 
 	if err := internal.UpdateUser(context.Background(), app.fs, user.ID, map[string]any{
-		"state": user.State,
+		"State":  user.State,
+		"Search": firestore.Delete,
 	}); err != nil {
 		app.serverError(w, r, fmt.Errorf("resetOnboardingState: failed to update onboarding: %w", err))
 		return

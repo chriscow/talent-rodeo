@@ -21,14 +21,12 @@ const (
 	UserStatusJobSearchScheduled  // 8
 	UserStatusJobSearchStarted    // 9
 	UserStatusJobSearchComplete   // 10
-
-	usersCollection = "users"
 )
 
 type UserState struct {
-	Status  UserStatus `firestore:"status"`
-	Started time.Time  `firestore:"started"`
-	Error   *string    `firestore:"error"`
+	Status  UserStatus
+	Started time.Time
+	Error   *string
 }
 
 func UpdateUserStatus(ctx context.Context, fs *firestore.Client, user *User, status UserStatus) error {
@@ -37,7 +35,7 @@ func UpdateUserStatus(ctx context.Context, fs *firestore.Client, user *User, sta
 	user.State.Error = nil // Clear any previous errors
 
 	return UpdateUser(ctx, fs, user.ID, map[string]any{
-		"state": user.State,
+		"State": user.State,
 	})
 }
 
@@ -49,7 +47,7 @@ func UpdateUserStateWithError(ctx context.Context, fs *firestore.Client, user *U
 	user.State.Error = &errorCopy
 
 	return UpdateUser(ctx, fs, user.ID, map[string]any{
-		"state": user.State,
+		"State": user.State,
 	})
 }
 

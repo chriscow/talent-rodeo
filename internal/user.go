@@ -20,36 +20,38 @@ const (
 	UserTierFree       UserTier = "free"
 	UserTierPro        UserTier = "pro"
 	UserTierEnterprise UserTier = "enterprise"
+
+	usersCollection = "users"
 )
 
 // User represents a user document in Firestore
 type User struct {
-	ID           string    `firestore:"id"`
-	CreatedAt    time.Time `firestore:"created_at"`
-	UpdatedAt    time.Time `firestore:"updated_at"`
-	Email        string    `firestore:"email"`
-	HashedSecret string    `firestore:"hashed_secret,omitempty"`
-	IsSuperUser  bool      `firestore:"is_superuser"`
+	ID           string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	Email        string
+	HashedSecret string
+	IsSuperUser  bool
 
-	Provider    string `firestore:"provider,omitempty"`
-	Name        string `firestore:"name,omitempty"`
-	FirstName   string `firestore:"first_name,omitempty"`
-	LastName    string `firestore:"last_name,omitempty"`
-	NickName    string `firestore:"nick_name,omitempty"`
-	Description string `firestore:"description,omitempty"`
-	UserID      string `firestore:"user_id,omitempty"`
-	AvatarURL   string `firestore:"avatar_url,omitempty"`
-	Location    string `firestore:"location,omitempty"`
+	Provider    string
+	Name        string
+	FirstName   string
+	LastName    string
+	NickName    string
+	Description string
+	UserID      string
+	AvatarURL   string
+	Location    string
 
-	Phone *string `firestore:"phone,omitempty"`
+	Phone *string
 
-	State UserState `firestore:"state"`
+	State UserState
 
-	Search *UserSearch `firestore:"search,omitempty"`
+	Search *UserSearch
 
-	Tier            UserTier   `firestore:"tier"`
-	CompletedAt     *time.Time `firestore:"last_search_at"`
-	SubscriptionEnd *time.Time `firestore:"subscription_end_date"`
+	Tier            UserTier
+	CompletedAt     *time.Time
+	SubscriptionEnd *time.Time
 }
 
 type ErrUserExists struct {
@@ -117,7 +119,7 @@ func GetUser(ctx context.Context, fs *firestore.Client, id string) (*User, bool,
 
 // GetUserByEmail retrieves a user by email
 func GetUserByEmail(ctx context.Context, fs *firestore.Client, email string) (*User, bool, error) {
-	iter := fs.Collection(usersCollection).Where("email", "==", email).Limit(1).Documents(ctx)
+	iter := fs.Collection(usersCollection).Where("Email", "==", email).Limit(1).Documents(ctx)
 	doc, err := iter.Next()
 	if err != nil {
 		if err == iterator.Done {
@@ -136,7 +138,7 @@ func GetUserByEmail(ctx context.Context, fs *firestore.Client, email string) (*U
 
 // GetUserByPhone retrieves a user by phone number
 func GetUserByPhone(ctx context.Context, fs *firestore.Client, phone string) (*User, bool, error) {
-	iter := fs.Collection(usersCollection).Where("phone", "==", phone).Limit(1).Documents(ctx)
+	iter := fs.Collection(usersCollection).Where("Phone", "==", phone).Limit(1).Documents(ctx)
 	doc, err := iter.Next()
 	if err != nil {
 		if err == iterator.Done {
@@ -158,6 +160,12 @@ func UpdateUser(ctx context.Context, fs *firestore.Client, id string, updates ma
 	var fsUpdates []firestore.Update
 
 	for field, value := range updates {
+
+		// if any field name is not capitalized, return an error
+		if field[0] < 'A' || field[0] > 'Z' {
+			return fmt.Errorf("field name %s must be capitalized", field)
+		}
+
 		fsUpdates = append(fsUpdates, firestore.Update{
 			Path:  field,
 			Value: value,
@@ -165,7 +173,7 @@ func UpdateUser(ctx context.Context, fs *firestore.Client, id string, updates ma
 	}
 
 	fsUpdates = append(fsUpdates, firestore.Update{
-		Path:  "updated_at",
+		Path:  "UpdatedAt",
 		Value: time.Now(),
 	})
 
@@ -192,7 +200,7 @@ func DeleteUser(ctx context.Context, fs *firestore.Client, id string) error {
 
 // ListUsers retrieves all users with optional limit and offset
 func ListUsers(ctx context.Context, fs *firestore.Client, limit int, offset int) ([]*User, error) {
-	query := fs.Collection(usersCollection).OrderBy("created_at", firestore.Asc)
+	query := fs.Collection(usersCollection).OrderBy("CreatedAt", firestore.Asc)
 	if limit > 0 {
 		query = query.Limit(limit)
 	}

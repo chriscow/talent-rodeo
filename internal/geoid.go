@@ -37,21 +37,27 @@ var (
 */
 
 type GeoID struct {
-	ID    string
-	Value string
+	ID    string `firestore:"id"`
+	Value string `firestore:"value"`
 }
 
-func GetGeoID(fs *firestore.Client, id string) (GeoID, error) {
-	doc, err := fs.Collection("geo_ids").Doc(id).Get(context.Background())
+func GetGeoID(ctx context.Context, fs *firestore.Client, id string) (GeoID, error) {
+	doc, err := fs.Collection("geo_ids").Doc(id).Get(ctx)
 	if err != nil {
 		return GeoID{}, err
 	}
-	return GeoID{ID: doc.Data()["id"].(string), Value: doc.Data()["value"].(string)}, nil
+
+	var geoID GeoID
+	if err := doc.DataTo(&geoID); err != nil {
+		return GeoID{}, err
+	}
+	return geoID, nil
 }
 
-func ListGeoIDs(fs *firestore.Client) ([]GeoID, error) {
+func ListGeoIDs(ctx context.Context, fs *firestore.Client) ([]GeoID, error) {
 	geoIDs := []GeoID{}
-	iter := fs.Collection("geo_ids").Documents(context.Background())
+	iter := fs.Collection("geo_ids").Documents(ctx)
+
 	for {
 		doc, err := iter.Next()
 		if err == iterator.Done {
@@ -60,17 +66,18 @@ func ListGeoIDs(fs *firestore.Client) ([]GeoID, error) {
 		if err != nil {
 			return nil, err
 		}
-		geoID := GeoID{
-			ID:    doc.Data()["id"].(string),
-			Value: doc.Data()["value"].(string),
+		var geoID GeoID
+		if err := doc.DataTo(&geoID); err != nil {
+			return nil, err
 		}
+		geoID.ID = doc.Ref.ID
 		geoIDs = append(geoIDs, geoID)
 	}
 	return geoIDs, nil
 }
 
-func GetGeoIDKeys(fs *firestore.Client) ([]string, error) {
-	geoIDs, err := ListGeoIDs(fs)
+func GetGeoIDKeys(ctx context.Context, fs *firestore.Client) ([]string, error) {
+	geoIDs, err := ListGeoIDs(ctx, fs)
 	if err != nil {
 		return nil, err
 	}
