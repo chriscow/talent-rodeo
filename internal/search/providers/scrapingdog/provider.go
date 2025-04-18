@@ -408,7 +408,9 @@ func (p *Provider) StartSearchWorkers(ctx context.Context, numWorkers int) {
 	}
 }
 
-// Update processJobListings to return context.Canceled directly
+// processJobListings first checks the cache for job listings
+// If no cached job listings are found, it performs a new search
+// It then returns the job listings
 func (p *Provider) processJobListings(ctx context.Context, criteria search.Criteria) ([]search.JobListing, error) {
 	var listings []search.JobListing
 	var err error
