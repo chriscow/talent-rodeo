@@ -182,55 +182,6 @@ func GetUserJobs(ctx context.Context, fs *firestore.Client, userID string) ([]*U
 	return jobs, nil
 }
 
-// UpdateUserJobStatus updates the status and corresponding timestamp of a user's job
-func UpdateUserJobStatus(ctx context.Context, fs *firestore.Client, userID, jobID string, status JobStatus) error {
-	now := time.Now()
-	updates := []firestore.Update{
-		{Path: "Status", Value: status},
-		{Path: "UpdatedAt", Value: now},
-	}
-
-	// Add timestamp based on status
-	switch status {
-	case JobStatusViewed:
-		updates = append(updates, firestore.Update{Path: "ViewedAt", Value: now})
-	case JobStatusSaved:
-		updates = append(updates, firestore.Update{Path: "SavedAt", Value: now})
-	case JobStatusApplied:
-		updates = append(updates, firestore.Update{Path: "AppliedAt", Value: now})
-	case JobStatusRejected:
-		updates = append(updates, firestore.Update{Path: "RejectedAt", Value: now})
-	}
-
-	_, err := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Doc(jobID).Update(ctx, updates)
-	if err != nil {
-		return fmt.Errorf("failed to update user job status: %w", err)
-	}
-
-	return nil
-}
-
-// UpdateUserJobNotes updates the notes for a user's job
-func UpdateUserJobNotes(ctx context.Context, fs *firestore.Client, userID, jobID, notes string) error {
-	updates := []firestore.Update{
-		{Path: "Notes", Value: notes},
-		{Path: "UpdatedAt", Value: time.Now()},
-	}
-
-	_, err := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Doc(jobID).Update(ctx, updates)
-	if err != nil {
-		return fmt.Errorf("failed to update user job notes: %w", err)
-	}
-
-	return nil
-}
-
-// isYesRating checks if a rating contains "yes" (case insensitive)
-func isYesRating(rating string) bool {
-	rating = strings.ToLower(rating)
-	return strings.Contains(rating, "yes")
-}
-
 // GetUserJobsSorted retrieves user jobs with a specific status and supports paging
 func GetUserJobsSorted(ctx context.Context, fs *firestore.Client, userID string, status JobStatus, pageSize int, pageToken string, showAllRatings bool) ([]*UserJob, string, error) {
 	// Create base query for jobs with the specified status
@@ -411,25 +362,8 @@ func StatusToDisplayName(status string) string {
 	}
 }
 
-// DeleteUserJob deletes a job for a user
-func DeleteUserJob(ctx context.Context, fs *firestore.Client, userID, jobID string) error {
-	if userID == "" {
-		return fmt.Errorf("user ID is required")
-	}
-	if jobID == "" {
-		return fmt.Errorf("job ID is required")
-	}
-
-	_, err := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Doc(jobID).Delete(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to delete user job: %w", err)
-	}
-
-	return nil
-}
-
 // ListJobListings retrieves all job listings with optional limit and offset
-func ListJobListings(ctx context.Context, fs *firestore.Client, limit int, offset int) ([]map[string]interface{}, error) {
+func ListJobListings(ctx context.Context, fs *firestore.Client, limit int, offset int) ([]map[string]any, error) {
 	query := fs.Collection("job_listings").OrderBy("CreatedAt", firestore.Desc)
 	if limit > 0 {
 		query = query.Limit(limit)
@@ -439,7 +373,7 @@ func ListJobListings(ctx context.Context, fs *firestore.Client, limit int, offse
 	}
 
 	iter := query.Documents(ctx)
-	var listings []map[string]interface{}
+	var listings []map[string]any
 
 	for {
 		doc, err := iter.Next()
@@ -457,7 +391,7 @@ func ListJobListings(ctx context.Context, fs *firestore.Client, limit int, offse
 }
 
 // ListJobDetails retrieves all job details with optional limit and offset
-func ListJobDetails(ctx context.Context, fs *firestore.Client, limit int, offset int) ([]map[string]interface{}, error) {
+func ListJobDetails(ctx context.Context, fs *firestore.Client, limit int, offset int) ([]map[string]any, error) {
 	query := fs.Collection("job_details").OrderBy("CreatedAt", firestore.Desc)
 	if limit > 0 {
 		query = query.Limit(limit)
@@ -467,7 +401,7 @@ func ListJobDetails(ctx context.Context, fs *firestore.Client, limit int, offset
 	}
 
 	iter := query.Documents(ctx)
-	var details []map[string]interface{}
+	var details []map[string]any
 
 	for {
 		doc, err := iter.Next()
@@ -482,6 +416,66 @@ func ListJobDetails(ctx context.Context, fs *firestore.Client, limit int, offset
 	}
 
 	return details, nil
+}
+
+// UpdateUserJobStatus updates the status and corresponding timestamp of a user's job
+func UpdateUserJobStatus(ctx context.Context, fs *firestore.Client, userID, jobID string, status JobStatus) error {
+	now := time.Now()
+	updates := []firestore.Update{
+		{Path: "Status", Value: status},
+		{Path: "UpdatedAt", Value: now},
+	}
+
+	// Add timestamp based on status
+	switch status {
+	case JobStatusViewed:
+		updates = append(updates, firestore.Update{Path: "ViewedAt", Value: now})
+	case JobStatusSaved:
+		updates = append(updates, firestore.Update{Path: "SavedAt", Value: now})
+	case JobStatusApplied:
+		updates = append(updates, firestore.Update{Path: "AppliedAt", Value: now})
+	case JobStatusRejected:
+		updates = append(updates, firestore.Update{Path: "RejectedAt", Value: now})
+	}
+
+	_, err := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Doc(jobID).Update(ctx, updates)
+	if err != nil {
+		return fmt.Errorf("failed to update user job status: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateUserJobNotes updates the notes for a user's job
+func UpdateUserJobNotes(ctx context.Context, fs *firestore.Client, userID, jobID, notes string) error {
+	updates := []firestore.Update{
+		{Path: "Notes", Value: notes},
+		{Path: "UpdatedAt", Value: time.Now()},
+	}
+
+	_, err := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Doc(jobID).Update(ctx, updates)
+	if err != nil {
+		return fmt.Errorf("failed to update user job notes: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteUserJob deletes a job for a user
+func DeleteUserJob(ctx context.Context, fs *firestore.Client, userID, jobID string) error {
+	if userID == "" {
+		return fmt.Errorf("user ID is required")
+	}
+	if jobID == "" {
+		return fmt.Errorf("job ID is required")
+	}
+
+	_, err := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Doc(jobID).Delete(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to delete user job: %w", err)
+	}
+
+	return nil
 }
 
 // DeleteJobListingsByPrefix deletes all job listings with IDs starting with the given prefix
@@ -591,59 +585,8 @@ func DeleteAllUserJobsByPrefix(ctx context.Context, fs *firestore.Client, prefix
 	return deleted, nil
 }
 
-// MigrateUserJobsForRecommendation updates all existing user jobs to set the IsRecommended field
-// based on their current Analysis.FinalJudgment.Rating
-func MigrateUserJobsForRecommendation(ctx context.Context, fs *firestore.Client) (int, error) {
-	// Get all users
-	usersIter := fs.Collection(usersCollection).Documents(ctx)
-	migratedCount := 0
-
-	for {
-		userDoc, err := usersIter.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return migratedCount, fmt.Errorf("failed to iterate users: %w", err)
-		}
-
-		userID := userDoc.Ref.ID
-
-		// For each user, get their jobs collection
-		jobsIter := userDoc.Ref.Collection(userJobsCollection).Documents(ctx)
-
-		for {
-			jobDoc, err := jobsIter.Next()
-			if err == iterator.Done {
-				break
-			}
-			if err != nil {
-				return migratedCount, fmt.Errorf("failed to iterate jobs for user %s: %w", userID, err)
-			}
-
-			var job UserJob
-			if err := jobDoc.DataTo(&job); err != nil {
-				return migratedCount, fmt.Errorf("failed to unmarshal job: %w", err)
-			}
-
-			// Determine if the job is recommended based on the rating
-			isRecommended := false
-			if job.Analysis != nil && job.Analysis.FinalJudgment.Rating != "" {
-				rating := strings.ToLower(job.Analysis.FinalJudgment.Rating)
-				isRecommended = strings.Contains(rating, "yes")
-			}
-
-			// Update the job with the IsRecommended field
-			_, err = jobDoc.Ref.Update(ctx, []firestore.Update{
-				{Path: "IsRecommended", Value: isRecommended},
-			})
-			if err != nil {
-				return migratedCount, fmt.Errorf("failed to update job %s for user %s: %w", jobDoc.Ref.ID, userID, err)
-			}
-
-			migratedCount++
-		}
-	}
-
-	return migratedCount, nil
+// isYesRating checks if a rating contains "yes" (case insensitive)
+func isYesRating(rating string) bool {
+	rating = strings.ToLower(rating)
+	return strings.Contains(rating, "yes")
 }
