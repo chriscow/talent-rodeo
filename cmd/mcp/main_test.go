@@ -116,3 +116,91 @@ func TestListUsers(t *testing.T) {
 		}
 	})
 }
+
+func TestListUserJobs(t *testing.T) {
+	ctx := context.Background()
+
+	// First, get a user ID to use for testing
+	t.Run("Get test user ID", func(t *testing.T) {
+		fs, err := createFirestoreClient(ctx)
+		if err != nil {
+			t.Fatalf("Failed to create Firestore client: %v", err)
+		}
+		defer fs.Close()
+
+		users, err := internal.ListUsers(ctx, fs, 1, 0)
+		if err != nil {
+			t.Fatalf("ListUsers failed: %v", err)
+		}
+
+		if len(users) == 0 {
+			t.Skip("No users found, skipping test")
+		}
+
+		testUserID := users[0].ID
+		t.Logf("Using test user ID: %s", testUserID)
+
+		// Test direct GetUserJobs function
+		jobs, err := internal.GetUserJobs(ctx, fs, testUserID)
+		if err != nil {
+			t.Fatalf("GetUserJobs failed: %v", err)
+		}
+
+		t.Logf("Direct call found %d jobs for user", len(jobs))
+		for i, job := range jobs {
+			if i < 5 { // Only log first 5 jobs to avoid excessive output
+				t.Logf("Job %d: ID=%s, Status=%s, Company=%s", i, job.ID, job.Status, job.CompanyName)
+			}
+		}
+
+		// Test through handler
+		params := map[string]interface{}{
+			"user_id": testUserID,
+		}
+
+		request := mcp.CallToolRequest{
+			Params: struct {
+				Name      string                 `json:"name"`
+				Arguments map[string]interface{} `json:"arguments,omitempty"`
+				Meta      *struct {
+					ProgressToken mcp.ProgressToken `json:"progressToken,omitempty"`
+				} `json:"_meta,omitempty"`
+			}{
+				Arguments: params,
+			},
+		}
+
+		result, err := listUserJobsHandler(ctx, request)
+		if err != nil {
+			t.Fatalf("Handler failed: %v", err)
+		}
+
+		if len(result.Content) == 0 {
+			t.Fatal("No content in result")
+		}
+
+		var response map[string]interface{}
+		if err := json.Unmarshal([]byte(result.Content[0].(mcp.TextContent).Text), &response); err != nil {
+			t.Fatalf("Failed to parse response: %v", err)
+		}
+
+		t.Logf("Raw response: %s", result.Content[0].(mcp.TextContent).Text)
+
+		if response["status"] != "success" {
+			t.Errorf("Expected status success, got %v", response["status"])
+		}
+
+		if jobs, ok := response["jobs"].([]interface{}); ok {
+			t.Logf("Handler call found %d jobs", len(jobs))
+			for i, job := range jobs {
+				if i < 5 && job != nil { // Only log first 5 jobs
+					if j, ok := job.(map[string]interface{}); ok {
+						t.Logf("Job %d: ID=%v, Status=%v, Company=%v", i, j["ID"], j["Status"], j["CompanyName"])
+					}
+				}
+			}
+		} else {
+			t.Log("No jobs array in response or user has no jobs")
+		}
+	})
+}
