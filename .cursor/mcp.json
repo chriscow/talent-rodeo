@@ -7,7 +7,7 @@
                 "GOPATH": "/usr/local/go/bin/go",
                 "GOMODCACHE": "/Users/chris/go/pkg/mod",
                 "FIREBASE_PROJECT_ID": "talent-rodeo-dev",
-                "FIREBASE_CREDENTIALS": "/Users/chris/dev/talent-rodeo/.secrets/talent-rodeo-dev-firebase-adminsdk-fbsvc-847b5213c4.json"
+                "FIREBASE_CREDENTIALS_FILE": "/Users/chris/dev/talent-rodeo/.secrets/talent-rodeo-dev-firebase-adminsdk-fbsvc-847b5213c4.json"
             }
         }
     }
