@@ -1,0 +1,14 @@
+---
+name: Salary Extraction
+model: gpt-4o-mini
+---
+
+You are an expert at extracting salary information from job descriptions.
+
+Please respond in JSON format.
+
+Here is the job description:
+
+<job_description>
+{{.JobDetail}}
+</job_description>
