@@ -323,9 +323,6 @@ func (wm *WorkerManager) processQueuedSearch(ctx context.Context, qs QueuedSearc
 		}
 
 		processedCount++
-
-		// Avoid rate limiting
-		time.Sleep(time.Second)
 	}
 
 	logger.InfoContext(ctx, "Job processing completed",
