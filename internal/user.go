@@ -102,9 +102,11 @@ func CreateUser(ctx context.Context, fs *FirestoreClient, u *User) error {
 
 // GetUser retrieves a user by ID
 func GetUser(ctx context.Context, fs *FirestoreClient, id string) (*User, bool, error) {
-	if obj, found := fs.UsersCache.Get(id); found {
-		if found {
-			return obj.(*User), true, nil
+	if fs.UsersCache != nil {
+		if obj, found := fs.UsersCache.Get(id); found {
+			if found {
+				return obj.(*User), true, nil
+			}
 		}
 	}
 
@@ -122,7 +124,9 @@ func GetUser(ctx context.Context, fs *FirestoreClient, id string) (*User, bool, 
 	}
 
 	// Cache the user in memory
-	fs.UsersCache.Set(id, &user, cache.NoExpiration)
+	if fs.UsersCache != nil {
+		fs.UsersCache.Set(id, &user, cache.NoExpiration)
+	}
 
 	return &user, true, nil
 }
@@ -144,7 +148,9 @@ func GetUserByEmail(ctx context.Context, fs *FirestoreClient, email string) (*Us
 	}
 
 	// Cache the user in memory
-	fs.UsersCache.Set(user.ID, &user, cache.NoExpiration)
+	if fs.UsersCache != nil {
+		fs.UsersCache.Set(user.ID, &user, cache.NoExpiration)
+	}
 
 	return &user, true, nil
 }
@@ -166,7 +172,9 @@ func GetUserByPhone(ctx context.Context, fs *FirestoreClient, phone string) (*Us
 	}
 
 	// Cache the user in memory
-	fs.UsersCache.Set(user.ID, &user, cache.NoExpiration)
+	if fs.UsersCache != nil {
+		fs.UsersCache.Set(user.ID, &user, cache.NoExpiration)
+	}
 
 	return &user, true, nil
 }
@@ -202,23 +210,46 @@ func UpdateUser(ctx context.Context, fs *FirestoreClient, id string, updates map
 	}
 
 	// Invalidate the user in memory cache
-	if _, found := fs.UsersCache.Get(id); found {
-		fs.UsersCache.Delete(id)
+	if fs.UsersCache != nil {
+		if _, found := fs.UsersCache.Get(id); found {
+			fs.UsersCache.Delete(id)
+		}
 	}
 
 	return nil
 }
 
-// DeleteUser deletes a user document
+// DeleteUser deletes a user document and all its subcollections
 func DeleteUser(ctx context.Context, fs *FirestoreClient, id string) error {
+
+	// Find all subcollections and delete each one
+	subcollections := fs.Collection(usersCollection).Doc(id).Collections(ctx)
+	for {
+		colRef, err := subcollections.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("failed to get subcollection: %w", err)
+		}
+
+		// Delete this subcollection using the generic DeleteCollection function
+		if err := fs.DeleteCollection(ctx, colRef.Path, 100, true); err != nil {
+			return fmt.Errorf("failed to delete subcollection %s: %w", colRef.Path, err)
+		}
+	}
+
+	// Now delete the main user document
 	_, err := fs.Collection(usersCollection).Doc(id).Delete(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to delete user: %w", err)
 	}
 
 	// Invalidate the user in memory cache
-	if _, found := fs.UsersCache.Get(id); found {
-		fs.UsersCache.Delete(id)
+	if fs.UsersCache != nil {
+		if _, found := fs.UsersCache.Get(id); found {
+			fs.UsersCache.Delete(id)
+		}
 	}
 
 	return nil
@@ -226,17 +257,18 @@ func DeleteUser(ctx context.Context, fs *FirestoreClient, id string) error {
 
 // ListUsers retrieves all users with optional limit and offset
 func ListUsers(ctx context.Context, fs *FirestoreClient, limit int, offset int) ([]*User, error) {
-
-	// Get all users from the cache
-	usersMap := fs.UsersCache.Items()
-	if len(usersMap) > 0 {
-		users := make([]*User, 0, len(usersMap))
-		for _, user := range usersMap {
-			if u, ok := user.Object.(*User); ok {
-				users = append(users, u)
+	// Get all users from the cache if available
+	if fs.UsersCache != nil {
+		usersMap := fs.UsersCache.Items()
+		if len(usersMap) > 0 {
+			users := make([]*User, 0, len(usersMap))
+			for _, user := range usersMap {
+				if u, ok := user.Object.(*User); ok {
+					users = append(users, u)
+				}
 			}
+			return users, nil
 		}
-		return users, nil
 	}
 
 	query := fs.Collection(usersCollection).OrderBy("CreatedAt", firestore.Asc)
@@ -267,8 +299,10 @@ func ListUsers(ctx context.Context, fs *FirestoreClient, limit int, offset int) 
 	}
 
 	// Cache the users in memory
-	for _, user := range users {
-		fs.UsersCache.Set(user.ID, user, cache.NoExpiration)
+	if fs.UsersCache != nil {
+		for _, user := range users {
+			fs.UsersCache.Set(user.ID, user, cache.NoExpiration)
+		}
 	}
 
 	return users, nil

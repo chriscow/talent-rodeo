@@ -19,10 +19,6 @@ const (
 	FreeTierFrequency       = 72 * time.Hour // 3 days
 	ProTierFrequency        = 24 * time.Hour // 1 day
 	EnterpriseTierFrequency = 4 * time.Hour  // 4 hours
-
-	TestingModeNumPages = 1
-	FreeTierNumPages    = 3
-	ProTierNumPages     = 10
 )
 
 // Mailer interface for sending notifications
@@ -70,7 +66,6 @@ func NewService(fs *internal.FirestoreClient, logger *slog.Logger, queue search.
 	return &Service{
 		fs:                fs,
 		logger:            logger,
-		queue:             queue,
 		mailer:            mailer,
 		done:              make(chan struct{}),
 		recipient:         recipient,
@@ -80,6 +75,10 @@ func NewService(fs *internal.FirestoreClient, logger *slog.Logger, queue search.
 		maxConcurrentJobs: maxConcurrentJobs,
 		progressCache:     progressCache,
 	}
+}
+
+func (s *Service) SetJobQueue(queue search.JobQueue) {
+	s.queue = queue
 }
 
 // Start begins the background search processing
@@ -337,17 +336,6 @@ func (s *Service) enqueueSearch(ctx context.Context, user *internal.User) error 
 		}
 	}
 
-	// Determine number of pages based on tier and testing mode
-	numPages := FreeTierNumPages // Default for free tier
-	if user.Tier == internal.UserTierPro {
-		numPages = ProTierNumPages
-	}
-
-	// Override for testing mode
-	if os.Getenv("TESTING_MODE") == "true" {
-		numPages = TestingModeNumPages
-	}
-
 	// Reset the progress tracking for this user
 	progressMutex.Lock()
 	userSearchProgress[user.ID] = &SearchProgress{
@@ -369,32 +357,21 @@ func (s *Service) enqueueSearch(ctx context.Context, user *internal.User) error 
 		}
 	}
 
-	// Queue a search for each page
-	for page := 1; page <= numPages; page++ {
-		// Create a copy of the criteria for this page
-		criteria := user.Search.Criteria
-		criteria.PageNumber = page
+	// Create a copy of the criteria for this page
+	criteria := user.Search.Criteria
 
-		// ScrapingDog requires a single keyword, so we need to queue a search for each keyword
-		for _, keyword := range criteria.Keywords {
-			criteria.Keywords = []string{keyword}
-			// Queue the search with the provider
-			if err := s.queue.QueueSearch(ctx, user.ID, criteria); err != nil {
-				// Notify admin of the error before returning
-				s.notifyAdmin(ctx, user, err)
-				return fmt.Errorf("failed to queue search: %w", err)
-			}
+	// Queue the search with the provider
+	if err := s.queue.QueueSearch(ctx, user.ID, criteria); err != nil {
+		// Notify admin of the error before returning
+		s.notifyAdmin(ctx, user, err)
+		return fmt.Errorf("failed to queue search: %w", err)
+	}
 
-			// Send periodic progress updates
-			if s.pusher != nil {
-				// Only send notifications occasionally to avoid flooding
-				if page == 1 || page == numPages {
-					if err := s.notifyUserSearchInProgress(user.ID); err != nil {
-						s.logger.Error("failed to send search progress notification", "error", err)
-						// Continue even if notification fails
-					}
-				}
-			}
+	// Send periodic progress updates
+	if s.pusher != nil {
+		if err := s.notifyUserSearchInProgress(user.ID); err != nil {
+			s.logger.Error("failed to send search progress notification", "error", err)
+			// Continue even if notification fails
 		}
 	}
 

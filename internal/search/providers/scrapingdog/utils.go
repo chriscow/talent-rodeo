@@ -1,89 +1,60 @@
-package scrapingdog2
+package scrapingdog
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"talent-rodeo/internal"
 	"talent-rodeo/internal/funcs"
 	"talent-rodeo/internal/search"
 )
 
 // CreateProviderJobID formats a provider job ID to ensure uniqueness across providers
 func CreateProviderJobID(providerJobID string) string {
-	return funcs.Slugify(fmt.Sprintf("%s %s", ProviderName, providerJobID))
+	if providerJobID == "" {
+		return ProviderName
+	}
+	// First slugify the ID to handle spaces and basic special characters
+	id := funcs.Slugify(providerJobID)
+	// Then replace any remaining underscores with hyphens
+	id = strings.ReplaceAll(id, "_", "-")
+	return fmt.Sprintf("%s-%s", ProviderName, id)
 }
 
 // ParseSalaryRange parses a salary string into a structured SalaryRange object
-func ParseSalaryRange(ctx context.Context, salary string) (*search.SalaryRange, error) {
-	if salary == "" {
+func ParseSalaryRange(ctx context.Context, basePay string) (*search.SalaryRange, error) {
+	if basePay == "" {
 		return nil, nil
 	}
 
-	// Match patterns like "$50K-$70K", "$50,000-$70,000", etc.
-	salaryRangeRegex := regexp.MustCompile(`\$?(\d+(?:,\d+)?(?:\.\d+)?)\s*(?:K|k|thousand)?\s*-\s*\$?(\d+(?:,\d+)?(?:\.\d+)?)\s*(?:K|k|thousand)?`)
-	matches := salaryRangeRegex.FindStringSubmatch(salary)
-
-	if len(matches) < 3 {
-		// Try single value format like "$70K"
-		singleValueRegex := regexp.MustCompile(`\$?(\d+(?:,\d+)?(?:\.\d+)?)\s*(?:K|k|thousand)?`)
-		matches = singleValueRegex.FindStringSubmatch(salary)
-		if len(matches) < 2 {
-			return nil, fmt.Errorf("unable to parse salary: %s", salary)
-		}
-		// For single value, use the same value for min and max
-		matches = append(matches, matches[1])
+	// Basic validation for salary format
+	if !strings.Contains(basePay, "$") && !strings.Contains(strings.ToLower(basePay), "k") &&
+		!strings.Contains(basePay, ",") && !strings.Contains(strings.ToLower(basePay), "thousand") {
+		return nil, fmt.Errorf("invalid salary format: %s", basePay)
 	}
 
-	// Clean and convert to number
-	cleanValue := func(val string) (float64, error) {
-		// Remove commas
-		val = strings.ReplaceAll(val, ",", "")
-
-		// Check if the value is in thousands (K)
-		isThousands := strings.Contains(strings.ToLower(val), "k") ||
-			strings.Contains(strings.ToLower(val), "thousand")
-
-		// Remove K or thousand
-		val = regexp.MustCompile(`(?i)k|thousand`).ReplaceAllString(val, "")
-
-		// Convert to float
-		num, err := strconv.ParseFloat(strings.TrimSpace(val), 64)
-		if err != nil {
-			return 0, err
-		}
-
-		// Multiply by 1000 if value is in thousands
-		if isThousands {
-			num *= 1000
-		}
-
-		return num, nil
-	}
-
-	min, err := cleanValue(matches[1])
+	prompt, err := internal.GeneratePrompt("prompts/match-000.salary.txt", map[string]any{
+		"BasePay": basePay,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse min salary: %w", err)
+		return nil, fmt.Errorf("failed to generate prompt: %w", err)
 	}
 
-	max, err := cleanValue(matches[2])
+	salary, err := internal.StructuredAsk[search.SalaryRange](ctx, "salary_data", prompt)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse max salary: %w", err)
+		return nil, fmt.Errorf("failed to ask: %w", err)
 	}
 
-	return &search.SalaryRange{
-		Min:      min,
-		Max:      max,
-		Currency: "USD",    // Assuming USD as default
-		Period:   "yearly", // Assuming yearly as default
-	}, nil
+	return &salary, nil
 }
 
 // ConvertJobListings converts provider-specific job listings to a common format
-func ConvertJobListings(jobListings []JobListing) ([]search.JobListing, error) {
+func ConvertJobListings(jobListings []LinkedInJobListing) ([]search.JobListing, error) {
 	result := make([]search.JobListing, len(jobListings))
 
 	for i, job := range jobListings {
@@ -122,9 +93,9 @@ func ConvertJobListings(jobListings []JobListing) ([]search.JobListing, error) {
 }
 
 // ConvertJobDetail converts provider-specific job details to a common format
-func ConvertJobDetail(detail JobDetail) (search.JobDetail, error) {
-	// Format provider job ID
-	providerJobID := CreateProviderJobID(detail.ID)
+func ConvertJobDetail(detail LinkedInJobDetail) (search.JobDetail, error) {
+	// Use the raw ID from the detail
+	rawID := detail.ID
 
 	// Parse posting date
 	var postedDate time.Time
@@ -141,8 +112,7 @@ func ConvertJobDetail(detail JobDetail) (search.JobDetail, error) {
 	// Parse salary range
 	salaryRange, err := ParseSalaryRange(context.Background(), detail.BasePay)
 	if err != nil {
-		// Log the error but don't fail the conversion
-		salaryRange = nil
+		// noop - we don't want to fail the conversion
 	}
 
 	// Convert recruiters
@@ -181,14 +151,14 @@ func ConvertJobDetail(detail JobDetail) (search.JobDetail, error) {
 	}
 
 	result := search.JobDetail{
-		ID:               providerJobID,
+		ID:               CreateProviderJobID(rawID),
 		Provider:         ProviderName,
-		ProviderJobID:    detail.ID,
+		ProviderJobID:    rawID,
 		Title:            detail.Position,
 		Company:          detail.CompanyName,
 		Location:         detail.Location,
 		PostedDate:       postedDate,
-		URL:              "", // Not available in detail
+		URL:              "",
 		FullDescription:  detail.Description,
 		SalaryInfo:       salaryRange,
 		EmploymentType:   detail.EmploymentType,
@@ -203,6 +173,31 @@ func ConvertJobDetail(detail JobDetail) (search.JobDetail, error) {
 	}
 
 	return result, nil
+}
+
+// SummarizeJobDetails uses LLM to create a job summary directly on the JobDetail
+func SummarizeJobDetails(ctx context.Context, jobDetail *search.JobDetail) error {
+
+	jobJSON, err := json.MarshalIndent(jobDetail, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal job details: %w", err)
+	}
+
+	prompt, err := internal.GeneratePrompt("prompts/job-summary.001.txt", map[string]any{
+		"JobDetail": string(jobJSON),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to generate prompt: %w", err)
+	}
+
+	summary, err := internal.StructuredAsk[search.ExtractedData](ctx, "job_summary", prompt)
+	if err != nil {
+		return fmt.Errorf("failed to ask: %w", err)
+	}
+
+	jobDetail.ExtractedData = &summary
+
+	return nil
 }
 
 // parsePostedDate converts a string like "1h ago", "2d ago" to a time.Time
@@ -241,7 +236,7 @@ func parsePostedDate(dateStr string) (time.Time, error) {
 		return now.AddDate(0, 0, -num), nil
 	case "w": // Weeks
 		return now.AddDate(0, 0, -num*7), nil
-	case "m": // Months
+	case "m": // Months (using exact month calculation)
 		return now.AddDate(0, -num, 0), nil
 	case "y": // Years
 		return now.AddDate(-num, 0, 0), nil

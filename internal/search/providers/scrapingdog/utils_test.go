@@ -1,4 +1,4 @@
-package scrapingdog2
+package scrapingdog
 
 import (
 	"context"
@@ -141,7 +141,7 @@ func TestConvertJobListings(t *testing.T) {
 	now := time.Now()
 
 	// Create test data
-	jobListings := []JobListing{
+	jobListings := []LinkedInJobListing{
 		{
 			ID:             "1",
 			LinkedInJobID:  "linkedin-1",
@@ -195,7 +195,7 @@ func TestConvertJobDetail(t *testing.T) {
 	now := time.Now()
 
 	// Create test job detail
-	jobDetail := JobDetail{
+	jobDetail := LinkedInJobDetail{
 		ID:                "detail-1",
 		Position:          "Senior Go Developer",
 		Status:            "active",
@@ -292,6 +292,7 @@ func TestParsePostedDate(t *testing.T) {
 		dateStr          string
 		expectedDuration time.Duration
 		expectError      bool
+		isMonth          bool // New field to indicate if this is a month test
 	}{
 		{
 			name:             "Hours ago",
@@ -316,6 +317,7 @@ func TestParsePostedDate(t *testing.T) {
 			dateStr:          "1m ago",
 			expectedDuration: 30 * 24 * time.Hour, // Approximate
 			expectError:      false,
+			isMonth:          true,
 		},
 		{
 			name:             "Years ago",
@@ -358,6 +360,17 @@ func TestParsePostedDate(t *testing.T) {
 				// "now" or "just now" cases
 				timeDiff := now.Sub(result)
 				assert.Less(t, timeDiff.Seconds(), 1.0, "Time difference should be less than 1 second")
+				return
+			}
+
+			// For month tests, we need to be more flexible with our comparison
+			if tc.isMonth {
+				// For months, we'll accept a range between 28 and 31 days
+				minDuration := 28 * 24 * time.Hour
+				maxDuration := 31 * 24 * time.Hour
+				timeDiff := now.Sub(result)
+				assert.True(t, timeDiff >= minDuration && timeDiff <= maxDuration,
+					"Month duration should be between 28 and 31 days, got %v", timeDiff)
 				return
 			}
 

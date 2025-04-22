@@ -6,3 +6,8 @@ Keep the summary brief but informative, focusing on what would matter most to jo
 The each qualification should be simplified but complete.
 
 Please respond in JSON format.
+
+Here is the job listing:
+
+{{.JobDetail}}
+
