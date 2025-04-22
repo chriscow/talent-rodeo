@@ -2,512 +2,219 @@ package scrapingdog
 
 import (
 	"context"
-	"fmt"
-	"log"
 	"log/slog"
-	"os"
-	"strings"
-	"sync"
 	"testing"
 	"time"
 
-	"talent-rodeo/internal/funcs"
+	"talent-rodeo/internal"
 	"talent-rodeo/internal/search"
 
-	"github.com/joho/godotenv"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func init() {
-	if err := godotenv.Overload("../../../../.env"); err != nil {
-		log.Println("No .env file found, using system env")
-	}
-}
-
-func setupTestStore(t *testing.T) *JobStore {
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	store, err := NewJobStore(context.Background(), logger)
-	if err != nil {
-		t.Fatalf("Failed to create job store: %v", err)
-	}
-	t.Cleanup(func() {
-		store.cache.Close()
-	})
-	return store
-}
-
-func cleanupTestData(t *testing.T, store *JobStore, searchHash string) {
-	ctx := context.Background()
-
-	// Delete search record
-	_, err := store.fs.Collection("job_searches").Doc(searchHash).Delete(ctx)
-	if err != nil {
-		t.Logf("Failed to cleanup search record: %v", err)
+// Integration test for FirestoreStore using a real Firestore client
+func TestFirestoreStore(t *testing.T) {
+	// Skip if running in CI environment without credentials
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
 	}
 
-	// Delete job listings
-	docs, err := store.fs.Collection("job_listings").Where("SearchHash", "==", searchHash).Documents(ctx).GetAll()
+	// Get a real Firestore client
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Create test prefix for cleanup
+	testPrefix := "test-scrapingdog-" + time.Now().Format("20060102-150405")
+
+	fs, cleanup, err := setupFirestoreTest(t, ctx)
 	if err != nil {
-		t.Logf("Failed to get job listings for cleanup: %v", err)
+		t.Skipf("Skipping test due to Firestore client error: %v", err)
 		return
 	}
+	defer cleanup()
 
-	for _, doc := range docs {
-		_, err := doc.Ref.Delete(ctx)
-		if err != nil {
-			t.Logf("Failed to delete job listing %s: %v", doc.Ref.ID, err)
-		}
+	// Create a store with the client
+	store := NewFirestoreStore(fs,
+		WithStoreLogger(slog.Default()),
+		WithCacheEnabled(true),
+		WithCacheTimeout(1*time.Hour),
+	)
+
+	// Create test data
+	criteria := search.Criteria{
+		Query:    "golang",
+		Location: "remote",
 	}
-}
 
-func getSearchHash(keywords []string, location string) string {
-	// Join all keywords with underscore to create a unique combined search
-	kw := strings.Join(keywords, "-")
-	return funcs.Slugify(fmt.Sprintf("%s %s %s", kw, location, providerName))
-}
-
-func getJobID(provider, providerJobID string) string {
-	return funcs.Slugify(fmt.Sprintf("%s %s", provider, providerJobID))
-}
-
-func TestJobStore_SaveAndGetCachedJobs(t *testing.T) {
-	const testProvider = "scrapingdog-test"
-	store := setupTestStore(t)
-	defer cleanupTestData(t, store, "test-job-1")
-	ctx := context.Background()
-
-	// Test data
-	postedDate := time.Date(2024, 2, 9, 0, 0, 0, 0, time.UTC)
+	// Create test jobs
 	testJobs := []search.JobListing{
 		{
-			Provider:       testProvider,
-			ProviderJobID:  "test-job1",
-			Title:          "Software Engineer",
+			ID:             testPrefix + "-job-1",
+			Provider:       ProviderName,
+			ProviderJobID:  "test-provider-job-1",
+			Title:          "Senior Go Developer",
 			Company:        "Test Company",
 			Location:       "Remote",
-			PostedDate:     postedDate,
-			URL:            "https://example.com/job1",
-			CompanyProfile: "Test company profile",
+			PostedDate:     time.Now().Add(-24 * time.Hour),
+			URL:            "https://example.com/jobs/1",
+			CompanyProfile: "https://example.com/companies/1",
+			FirstSeenAt:    time.Now(),
 		},
-	}
-
-	// Set expected ID
-	testJobs[0].ID = getJobID(testJobs[0].Provider, testJobs[0].ProviderJobID)
-
-	criteria := search.Criteria{
-		Keywords: []string{"golang"},
-		Location: "Remote",
-	}
-
-	searchHash := getSearchHash(criteria.Keywords, criteria.Location)
-	defer cleanupTestData(t, store, searchHash)
-
-	// Save job
-	if err := store.SaveJobListings(ctx, criteria, testJobs); err != nil {
-		t.Fatalf("Failed to save job listings: %v", err)
-	}
-
-	// Get cached jobs
-	cachedJobs, err := store.GetCachedJobs(ctx, criteria)
-	if err != nil {
-		t.Fatalf("Failed to get cached jobs: %v", err)
-	}
-
-	// Verify we got the job back
-	if len(cachedJobs) != 1 {
-		t.Fatalf("Expected 1 cached job, got %d", len(cachedJobs))
-	}
-
-	// Verify job details
-	job := cachedJobs[0]
-	if job.Title != testJobs[0].Title {
-		t.Errorf("Title mismatch: got %s, want %s", job.Title, testJobs[0].Title)
-	}
-	if job.Company != testJobs[0].Company {
-		t.Errorf("Company mismatch: got %s, want %s", job.Company, testJobs[0].Company)
-	}
-	if job.SearchHash != searchHash {
-		t.Errorf("SearchHash mismatch: got %s, want %s", job.SearchHash, searchHash)
-	}
-}
-
-func TestJobStore_CacheExpiration(t *testing.T) {
-	const testProvider = "scrapingdog-test"
-	store := setupTestStore(t)
-	ctx := context.Background()
-
-	// Test data
-	postedDate := time.Date(2024, 2, 9, 0, 0, 0, 0, time.UTC)
-	expiredJob := []search.JobListing{{
-		Provider:      testProvider,
-		ProviderJobID: "expired-job",
-		Title:         "Old Position",
-		Company:       "Old Company",
-		Location:      "Remote",
-		PostedDate:    postedDate,
-	}}
-
-	// Set expected ID
-	expiredJob[0].ID = getJobID(expiredJob[0].Provider, expiredJob[0].ProviderJobID)
-
-	criteria := search.Criteria{
-		Keywords: []string{"golang"},
-		Location: "Remote",
-	}
-
-	searchHash := getSearchHash(criteria.Keywords, criteria.Location)
-	defer cleanupTestData(t, store, searchHash)
-
-	// Save job with old timestamp
-	if err := store.SaveJobListings(ctx, criteria, expiredJob); err != nil {
-		t.Fatalf("Failed to save job listings: %v", err)
-	}
-
-	// Set the timestamp to 25 hours ago (beyond the 24-hour cacheDurationJobListing)
-	pastTime := time.Now().Add(-25 * time.Hour)
-	t.Logf("Setting LastSearchedAt to %v (current time: %v)", pastTime, time.Now())
-
-	// Manually update the LastSearchedAt to be 25 hours ago
-	searchRef := store.fs.Collection("job_searches").Doc(searchHash)
-	_, err := searchRef.Set(ctx, map[string]any{
-		"Keywords":       criteria.Keywords,
-		"Location":       criteria.Location,
-		"LastSearchedAt": pastTime,
-	})
-	if err != nil {
-		t.Fatalf("Failed to set search timestamp: %v", err)
-	}
-
-	// Verify the timestamp was set correctly
-	searchDoc, err := store.fs.Collection("job_searches").Doc(searchHash).Get(ctx)
-	if err != nil {
-		t.Fatalf("Failed to get search document: %v", err)
-	}
-	var searchData struct {
-		LastSearchedAt time.Time
-	}
-	if err := searchDoc.DataTo(&searchData); err != nil {
-		t.Fatalf("Failed to parse search data: %v", err)
-	}
-	timeDiff := time.Since(searchData.LastSearchedAt)
-	t.Logf("Time difference: %v, cacheDurationJobListing: %v", timeDiff, cacheDurationJobListing)
-	if timeDiff <= cacheDurationJobListing {
-		t.Fatalf("Expected time difference to be > %v, got %v", cacheDurationJobListing, timeDiff)
-	}
-
-	// Clear the Ristretto cache to ensure we're testing the Firestore expiration
-	store.cache.Clear()
-
-	// Try to retrieve the expired job
-	cachedJobs, err := store.GetCachedJobs(ctx, criteria)
-	if err != nil {
-		t.Fatalf("Failed to get cached jobs: %v", err)
-	}
-
-	// Should not return expired jobs (older than cacheDurationJobListing)
-	if len(cachedJobs) != 0 {
-		t.Errorf("Expected 0 cached jobs (due to expiration), got %d", len(cachedJobs))
-	}
-}
-
-func TestJobStore_SaveAndGetCachedJobDetails(t *testing.T) {
-	store := setupTestStore(t)
-	defer cleanupTestData(t, store, "test-job-1")
-	ctx := context.Background()
-
-	// Test data
-	jobDetail := &search.JobDetail{
-		ID:            "test-job-1",
-		Provider:      providerName,
-		ProviderJobID: "test-job1",
-		Title:         "Senior Go Developer",
-		Company:       "Test Company",
-		Location:      "Remote",
-		URL:           "https://example.com/job1",
-	}
-
-	// Save job details
-	if err := store.SaveJobDetails(ctx, jobDetail); err != nil {
-		t.Fatalf("Failed to save job details: %v", err)
-	}
-
-	// Get cached job details using the ID
-	cached, err := store.GetCachedJobDetails(ctx, jobDetail.ID)
-	if err != nil {
-		t.Fatalf("Failed to get cached job details by ID: %v", err)
-	}
-
-	// Verify we got the job details back
-	if cached == nil {
-		t.Fatal("Expected cached job details when retrieving by ID, got nil")
-	}
-
-	// Verify the cached data matches
-	if cached.ID != jobDetail.ID {
-		t.Errorf("ID mismatch: got %s, want %s", cached.ID, jobDetail.ID)
-	}
-	if cached.Title != jobDetail.Title {
-		t.Errorf("Title mismatch: got %s, want %s", cached.Title, jobDetail.Title)
-	}
-
-	// Test cache miss
-	cached, err = store.GetCachedJobDetails(ctx, "non-existent-job")
-	if err != nil {
-		t.Fatalf("Failed to get non-existent job details: %v", err)
-	}
-	if cached != nil {
-		t.Error("Expected nil for non-existent job, got job details")
-	}
-}
-
-// TestJobStore_GetCachedJobDetailsByProviderID tests retrieving job details using provider ID
-func TestJobStore_GetCachedJobDetailsByProviderID(t *testing.T) {
-	store := setupTestStore(t)
-	defer cleanupTestData(t, store, "test-job-1")
-	ctx := context.Background()
-
-	// Test data
-	providerJobID := "test-job1"
-	fullJobID := funcs.Slugify(fmt.Sprintf("%s %s", providerName, providerJobID))
-
-	jobDetail := &search.JobDetail{
-		ID:            fullJobID, // Use the full job ID here
-		Provider:      providerName,
-		ProviderJobID: providerJobID,
-		Title:         "Senior Go Developer",
-		Company:       "Test Company",
-		Location:      "Remote",
-		URL:           "https://example.com/job1",
-	}
-
-	// Save job details
-	if err := store.SaveJobDetails(ctx, jobDetail); err != nil {
-		t.Fatalf("Failed to save job details: %v", err)
-	}
-
-	// Get cached job details using the full job ID
-	cached, err := store.GetCachedJobDetails(ctx, fullJobID)
-	if err != nil {
-		t.Fatalf("Failed to get cached job details by full job ID: %v", err)
-	}
-
-	// Verify we got the job details back
-	if cached == nil {
-		t.Fatalf("Expected cached job details when retrieving by full job ID, got nil")
-	}
-
-	// Verify the cached data matches
-	if cached.ID != jobDetail.ID {
-		t.Errorf("ID mismatch: got %s, want %s", cached.ID, jobDetail.ID)
-	}
-	if cached.Title != jobDetail.Title {
-		t.Errorf("Title mismatch: got %s, want %s", cached.Title, jobDetail.Title)
-	}
-	if cached.ProviderJobID != jobDetail.ProviderJobID {
-		t.Errorf("ProviderJobID mismatch: got %s, want %s", cached.ProviderJobID, jobDetail.ProviderJobID)
-	}
-}
-
-func TestJobStore_TwoLevelCaching(t *testing.T) {
-	store := setupTestStore(t)
-	ctx := context.Background()
-
-	// Test data
-	testJobs := []search.JobListing{
 		{
-			Provider:      "scrapingdog-test",
-			ProviderJobID: "test-job1",
-			Title:         "Software Engineer",
-			Company:       "Test Company",
-			Location:      "Remote",
-			PostedDate:    time.Now(),
+			ID:             testPrefix + "-job-2",
+			Provider:       ProviderName,
+			ProviderJobID:  "test-provider-job-2",
+			Title:          "Go Backend Engineer",
+			Company:        "Another Company",
+			Location:       "San Francisco",
+			PostedDate:     time.Now().Add(-48 * time.Hour),
+			URL:            "https://example.com/jobs/2",
+			CompanyProfile: "https://example.com/companies/2",
+			FirstSeenAt:    time.Now(),
 		},
 	}
-	testJobs[0].ID = getJobID(testJobs[0].Provider, testJobs[0].ProviderJobID)
 
-	criteria := search.Criteria{
-		Keywords: []string{"golang"},
-		Location: "Remote",
-	}
-
-	searchHash := getSearchHash(criteria.Keywords, criteria.Location)
-	defer cleanupTestData(t, store, searchHash)
-
-	// Save jobs to both caches
-	if err := store.SaveJobListings(ctx, criteria, testJobs); err != nil {
-		t.Fatalf("Failed to save job listings: %v", err)
-	}
-
-	// Test 1: First call should hit Ristretto cache
-	t.Run("ristretto cache hit", func(t *testing.T) {
-		start := time.Now()
-		jobs, err := store.GetCachedJobs(ctx, criteria)
-		if err != nil {
-			t.Fatalf("Failed to get cached jobs: %v", err)
-		}
-		if len(jobs) != 1 {
-			t.Fatalf("Expected 1 job, got %d", len(jobs))
-		}
-		duration := time.Since(start)
-		t.Logf("Ristretto cache retrieval took: %v", duration)
+	// Test saving jobs
+	t.Run("SaveJobs", func(t *testing.T) {
+		err := store.SaveJobs(ctx, criteria, testJobs)
+		require.NoError(t, err)
 	})
 
-	// Test 2: Clear Ristretto cache and verify Firestore fallback
-	t.Run("firestore fallback", func(t *testing.T) {
-		store.cache.Clear() // Clear Ristretto cache
+	// Test getting cached jobs
+	t.Run("GetCachedJobs", func(t *testing.T) {
+		cachedJobs, err := store.GetCachedJobs(ctx, criteria)
+		require.NoError(t, err)
+		require.NotNil(t, cachedJobs)
+		assert.Len(t, cachedJobs, 2)
+		assert.Equal(t, testJobs[0].ID, cachedJobs[0].ID)
+		assert.Equal(t, testJobs[1].ID, cachedJobs[1].ID)
+	})
 
-		start := time.Now()
-		jobs, err := store.GetCachedJobs(ctx, criteria)
-		if err != nil {
-			t.Fatalf("Failed to get cached jobs from Firestore: %v", err)
+	// Test job details
+	t.Run("JobDetails", func(t *testing.T) {
+		// Create test job detail
+		jobDetail := search.JobDetail{
+			ID:              testPrefix + "-job-detail-1",
+			Provider:        ProviderName,
+			ProviderJobID:   "test-provider-job-detail-1",
+			Title:           "Senior Go Developer",
+			Company:         "Test Company",
+			Location:        "Remote",
+			PostedDate:      time.Now().Add(-24 * time.Hour),
+			URL:             "https://example.com/job-detail/1",
+			FullDescription: "This is a test job description for a Senior Go Developer position",
+			EmploymentType:  "Full-time",
+			Status:          "active",
+			SeniorityLevel:  "Senior",
+			JobFunction:     "Engineering",
+			Industry:        "Software",
+			CreatedAt:       time.Now(),
 		}
-		if len(jobs) != 1 {
-			t.Fatalf("Expected 1 job from Firestore, got %d", len(jobs))
-		}
-		duration := time.Since(start)
-		t.Logf("Firestore cache retrieval took: %v", duration)
 
-		// Verify job was cached back in Ristretto
-		key := fmt.Sprintf("search:%s", searchHash)
-		_, found := store.cache.Get(key)
-		if !found {
-			t.Error("Job should have been cached in Ristretto after Firestore retrieval")
+		// Test saving job details
+		err := store.SaveJobDetails(ctx, jobDetail)
+		require.NoError(t, err)
+
+		// Test getting job details
+		retrievedDetails, err := store.GetJobDetails(ctx, jobDetail.ID)
+		require.NoError(t, err)
+		require.NotNil(t, retrievedDetails)
+		assert.Equal(t, jobDetail.ID, retrievedDetails.ID)
+		assert.Equal(t, jobDetail.Title, retrievedDetails.Title)
+		assert.Equal(t, jobDetail.Company, retrievedDetails.Company)
+		assert.Equal(t, jobDetail.FullDescription, retrievedDetails.FullDescription)
+	})
+
+	// Test cache timeout
+	t.Run("CacheExpiration", func(t *testing.T) {
+		// Create a store with a very short timeout
+		shortStore := NewFirestoreStore(fs,
+			WithCacheTimeout(1*time.Millisecond),
+		)
+
+		// Save test jobs
+		shortCriteria := search.Criteria{
+			Query:    "expired",
+			Location: "expired location",
 		}
+
+		err := shortStore.SaveJobs(ctx, shortCriteria, testJobs)
+		require.NoError(t, err)
+
+		// Wait for cache to expire
+		time.Sleep(10 * time.Millisecond)
+
+		// Check that cache is expired
+		cachedJobs, err := shortStore.GetCachedJobs(ctx, shortCriteria)
+		require.NoError(t, err)
+		assert.Nil(t, cachedJobs, "Cache should be expired")
+	})
+
+	// Test cache disabled
+	t.Run("CacheDisabled", func(t *testing.T) {
+		// Create a store with cache disabled
+		disabledStore := NewFirestoreStore(fs,
+			WithCacheEnabled(false),
+		)
+
+		// Save test jobs - this should be a no-op
+		disabledCriteria := search.Criteria{
+			Query:    "disabled",
+			Location: "disabled location",
+		}
+
+		err := disabledStore.SaveJobs(ctx, disabledCriteria, testJobs)
+		require.NoError(t, err)
+
+		// Verify that cache was not actually saved
+		// We need to use a different store with cache enabled to verify
+		enabledStore := NewFirestoreStore(fs)
+		cachedJobs, err := enabledStore.GetCachedJobs(ctx, disabledCriteria)
+		require.NoError(t, err)
+		assert.Nil(t, cachedJobs, "No jobs should be in cache when cache disabled")
 	})
 }
 
-func TestJobStore_ConcurrentAccess(t *testing.T) {
-	store := setupTestStore(t)
-	ctx := context.Background()
+// Helper function to set up a Firestore test
+func setupFirestoreTest(t *testing.T, ctx context.Context) (*internal.FirestoreClient, func(), error) {
+	t.Helper()
 
-	// Test data
-	testJobs := []search.JobListing{
-		{
-			Provider:      "scrapingdog-test",
-			ProviderJobID: "test-job1",
-			Title:         "Software Engineer",
-			Company:       "Test Company",
-			Location:      "Remote",
-			PostedDate:    time.Now(),
-		},
-	}
-	testJobs[0].ID = getJobID(testJobs[0].Provider, testJobs[0].ProviderJobID)
-
-	criteria := search.Criteria{
-		Keywords: []string{"golang"},
-		Location: "Remote",
+	// Use the shared function from internal package
+	fs, err := internal.NewFirestoreClient(ctx)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	searchHash := getSearchHash(criteria.Keywords, criteria.Location)
-	defer cleanupTestData(t, store, searchHash)
+	// Create a cleanup function to delete test data
+	cleanup := func() {
+		t.Logf("Cleaning up test data...")
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 
-	// Save initial data
-	if err := store.SaveJobListings(ctx, criteria, testJobs); err != nil {
-		t.Fatalf("Failed to save job listings: %v", err)
-	}
-
-	// Run concurrent reads and writes
-	const numGoroutines = 10
-	var wg sync.WaitGroup
-	errCh := make(chan error, numGoroutines*2)
-
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(2)
-
-		// Concurrent reads
-		go func() {
-			defer wg.Done()
-			jobs, err := store.GetCachedJobs(ctx, criteria)
+		// Delete test collections to clean up
+		collections := []string{jobListingsCollection, jobDetailsCollection}
+		for _, collection := range collections {
+			// Get all documents in the collection that match our test prefix
+			iter := fs.Collection(collection).Where("ID", ">=", "test-scrapingdog-").Where("ID", "<=", "test-scrapingdog-~").Documents(cleanupCtx)
+			docs, err := iter.GetAll()
 			if err != nil {
-				errCh <- fmt.Errorf("read error: %v", err)
-				return
+				t.Logf("Failed to get documents for cleanup: %v", err)
+				continue
 			}
-			if len(jobs) != 1 {
-				errCh <- fmt.Errorf("expected 1 job, got %d", len(jobs))
-			}
-		}()
 
-		// Concurrent writes
-		go func(i int) {
-			defer wg.Done()
-			jobs := []search.JobListing{
-				{
-					Provider:      "scrapingdog-test",
-					ProviderJobID: fmt.Sprintf("test-job-%d", i),
-					Title:         fmt.Sprintf("Software Engineer %d", i),
-					Company:       "Test Company",
-					Location:      "Remote",
-					PostedDate:    time.Now(),
-				},
+			// Delete each document
+			for _, doc := range docs {
+				_, err := doc.Ref.Delete(cleanupCtx)
+				if err != nil {
+					t.Logf("Failed to delete document %s: %v", doc.Ref.ID, err)
+				}
 			}
-			jobs[0].ID = getJobID(jobs[0].Provider, jobs[0].ProviderJobID)
+		}
 
-			if err := store.SaveJobListings(ctx, criteria, jobs); err != nil {
-				errCh <- fmt.Errorf("write error: %v", err)
-			}
-		}(i)
+		// Close the Firestore client
+		fs.Close()
 	}
 
-	wg.Wait()
-	close(errCh)
-
-	// Check for errors
-	for err := range errCh {
-		t.Errorf("Concurrent operation error: %v", err)
-	}
-}
-
-func TestJobStore_DetailsCaching(t *testing.T) {
-	store := setupTestStore(t)
-	ctx := context.Background()
-
-	// Test data
-	jobDetail := &search.JobDetail{
-		ID:            "test-job-1",
-		ProviderJobID: "test-job1",
-		Title:         "Senior Go Developer",
-		Company:       "Test Company",
-		Location:      "Remote",
-		URL:           "https://example.com/job1",
-	}
-
-	// Test 1: Save and retrieve from Ristretto cache
-	t.Run("ristretto cache hit for details", func(t *testing.T) {
-		if err := store.SaveJobDetails(ctx, jobDetail); err != nil {
-			t.Fatalf("Failed to save job details: %v", err)
-		}
-
-		start := time.Now()
-		cached, err := store.GetCachedJobDetails(ctx, jobDetail.ID)
-		if err != nil {
-			t.Fatalf("Failed to get cached job details: %v", err)
-		}
-		if cached == nil {
-			t.Fatal("Expected cached job details, got nil")
-		}
-		duration := time.Since(start)
-		t.Logf("Ristretto cache retrieval took: %v", duration)
-	})
-
-	// Test 2: Clear Ristretto cache and verify Firestore fallback
-	t.Run("firestore fallback for details", func(t *testing.T) {
-		store.cache.Clear() // Clear Ristretto cache
-
-		start := time.Now()
-		cached, err := store.GetCachedJobDetails(ctx, jobDetail.ID)
-		if err != nil {
-			t.Fatalf("Failed to get cached job details from Firestore: %v", err)
-		}
-		if cached == nil {
-			t.Fatal("Expected cached job details from Firestore, got nil")
-		}
-		duration := time.Since(start)
-		t.Logf("Firestore cache retrieval took: %v", duration)
-
-		// Verify details were cached back in Ristretto
-		key := fmt.Sprintf("job_details:%s", jobDetail.ID)
-		_, found := store.cache.Get(key)
-		if !found {
-			t.Error("Job details should have been cached in Ristretto after Firestore retrieval")
-		}
-	})
+	return fs, cleanup, nil
 }

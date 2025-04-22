@@ -131,6 +131,11 @@ func CreateUserJob(ctx context.Context, fs *FirestoreClient, userID string, job 
 		job.JobRef = fs.Collection("job_details").Doc(job.ID)
 	}
 
+	// Set IsRecommended based on rating if analysis exists
+	if job.Analysis != nil && job.Analysis.FinalJudgment.Rating != "" {
+		job.IsRecommended = isYesRating(job.Analysis.FinalJudgment.Rating)
+	}
+
 	// Save to user's jobs subcollection
 	// Using job.ID as document ID ensures deduplication
 	_, err := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Doc(job.ID).Set(ctx, job)

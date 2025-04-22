@@ -1,4 +1,4 @@
-package scrapingdog2
+package scrapingdog
 
 import (
 	"context"
@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// MockProvider implements the Provider interface for testing
-type MockProvider struct {
+// MockSearchProvider implements the SearchProvider interface for testing
+type MockSearchProvider struct {
 	searchJobsCalled    bool
 	getJobDetailsCalled bool
 	mockJobs            []search.JobListing
@@ -24,7 +24,7 @@ type MockProvider struct {
 	getJobDetailsFunc   func(ctx context.Context, jobID string) (search.JobDetail, error)
 }
 
-func (m *MockProvider) SearchJobs(ctx context.Context, criteria search.Criteria) ([]search.JobListing, error) {
+func (m *MockSearchProvider) SearchJobListings(ctx context.Context, criteria search.Criteria) ([]search.JobListing, error) {
 	m.searchJobsCalled = true
 	if m.searchJobsFunc != nil {
 		return m.searchJobsFunc(ctx, criteria)
@@ -32,7 +32,7 @@ func (m *MockProvider) SearchJobs(ctx context.Context, criteria search.Criteria)
 	return m.mockJobs, m.searchJobsError
 }
 
-func (m *MockProvider) GetJobDetails(ctx context.Context, jobID string) (search.JobDetail, error) {
+func (m *MockSearchProvider) GetJobDetails(ctx context.Context, jobID string) (search.JobDetail, error) {
 	m.getJobDetailsCalled = true
 	if m.getJobDetailsFunc != nil {
 		return m.getJobDetailsFunc(ctx, jobID)
@@ -100,59 +100,59 @@ func (m *MockEventHandler) OnSearchCompleted(userID string, criteria search.Crit
 }
 
 func TestNewWorkerManager(t *testing.T) {
-	mockProvider := &MockProvider{}
+	mockSearchProvider := &MockSearchProvider{}
 	maxConcurrent := 3
 	queueSize := 5
 
-	wm := NewWorkerManager(mockProvider, maxConcurrent, queueSize)
+	wm := NewWorkerManager(mockSearchProvider, maxConcurrent, queueSize)
 
 	assert.NotNil(t, wm)
-	assert.Equal(t, mockProvider, wm.provider)
+	assert.Equal(t, mockSearchProvider, wm.provider)
 	assert.Equal(t, maxConcurrent, cap(wm.semaphore))
 	assert.Equal(t, queueSize, cap(wm.searchQueue))
 }
 
 func TestWorkerManagerWithOptions(t *testing.T) {
-	mockProvider := &MockProvider{}
+	mockSearchProvider := &MockSearchProvider{}
 	mockStore := &MockJobStore{}
 	mockHandler := &MockEventHandler{}
 	mockLogger := slog.Default()
 
 	wm := NewWorkerManager(
-		mockProvider, 3, 5,
+		mockSearchProvider, 3, 5,
 		WithWorkerLogger(mockLogger),
 		WithJobStore(mockStore),
 		WithEventHandler(mockHandler),
 	)
 
 	assert.NotNil(t, wm)
-	assert.Equal(t, mockProvider, wm.provider)
+	assert.Equal(t, mockSearchProvider, wm.provider)
 	assert.Equal(t, mockStore, wm.store)
 	assert.Equal(t, mockHandler, wm.eventHandler)
 	assert.Equal(t, mockLogger, wm.logger)
 }
 
 func TestQueueSearchAndGetQueueDepth(t *testing.T) {
-	mockProvider := &MockProvider{}
-	wm := NewWorkerManager(mockProvider, 3, 5)
+	mockSearchProvider := &MockSearchProvider{}
+	wm := NewWorkerManager(mockSearchProvider, 3, 5)
 
 	// Initial queue should be empty
 	assert.Equal(t, 0, wm.GetQueueDepth())
 
 	// Add a search to the queue
 	ctx := context.Background()
-	err := wm.QueueSearch(ctx, "user123", search.Criteria{Keywords: []string{"golang"}})
+	err := wm.QueueSearch(ctx, "user123", search.Criteria{Query: "golang"})
 	assert.NoError(t, err)
 	assert.Equal(t, 1, wm.GetQueueDepth())
 
 	// Add another search
-	err = wm.QueueSearch(ctx, "user456", search.Criteria{Keywords: []string{"python"}})
+	err = wm.QueueSearch(ctx, "user456", search.Criteria{Query: "python"})
 	assert.NoError(t, err)
 	assert.Equal(t, 2, wm.GetQueueDepth())
 }
 
 func TestWorkerManagerStartAndShutdown(t *testing.T) {
-	mockProvider := &MockProvider{
+	mockSearchProvider := &MockSearchProvider{
 		mockJobs: []search.JobListing{
 			{ID: "job1", Title: "Job 1"},
 			{ID: "job2", Title: "Job 2"},
@@ -163,16 +163,18 @@ func TestWorkerManagerStartAndShutdown(t *testing.T) {
 	mockHandler := &MockEventHandler{}
 
 	wm := NewWorkerManager(
-		mockProvider, 3, 5,
+		mockSearchProvider, 3, 5,
 		WithEventHandler(mockHandler),
 	)
+
+	assert.NotNil(t, wm.eventHandler)
 
 	// Start workers
 	ctx := context.Background()
 	wm.Start(ctx, 2)
 
 	// Queue a search
-	err := wm.QueueSearch(ctx, "user123", search.Criteria{Keywords: []string{"golang"}})
+	err := wm.QueueSearch(ctx, "user123", search.Criteria{Query: "golang"})
 	assert.NoError(t, err)
 
 	// Give workers time to process
@@ -195,10 +197,26 @@ func TestProcessQueuedSearch(t *testing.T) {
 
 	mockJobDetail := search.JobDetail{ID: "job1", Title: "Job 1 Detail"}
 
-	// Create a mock provider that returns our test jobs
-	mockProvider := &MockProvider{
+	mockSearchProvider := &MockSearchProvider{
 		mockJobs:      mockJobs,
 		mockJobDetail: mockJobDetail,
+	}
+
+	// Set up a custom searchJobsFunc that only returns jobs on the first call
+	var searchCalled bool
+	mockSearchProvider.searchJobsFunc = func(ctx context.Context, criteria search.Criteria) ([]search.JobListing, error) {
+		if searchCalled {
+			return []search.JobListing{}, nil
+		}
+		searchCalled = true
+		return mockJobs, nil
+	}
+
+	// Set up getJobDetailsFunc to track calls for each job
+	jobDetailsCalled := make(map[string]bool)
+	mockSearchProvider.getJobDetailsFunc = func(ctx context.Context, jobID string) (search.JobDetail, error) {
+		jobDetailsCalled[jobID] = true
+		return search.JobDetail{ID: jobID, Title: "Details for " + jobID}, nil
 	}
 
 	// Create a mock event handler to track callbacks
@@ -206,13 +224,13 @@ func TestProcessQueuedSearch(t *testing.T) {
 
 	// Create a worker manager with our mocks
 	wm := NewWorkerManager(
-		mockProvider, 3, 5,
+		mockSearchProvider, 3, 5,
 		WithEventHandler(mockHandler),
 	)
 
 	// Create test criteria
 	criteria := search.Criteria{
-		Keywords: []string{"golang"},
+		Query:    "golang",
 		Location: "remote",
 	}
 
@@ -227,8 +245,8 @@ func TestProcessQueuedSearch(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify the provider methods were called
-	assert.True(t, mockProvider.searchJobsCalled, "SearchJobs should have been called")
-	assert.True(t, mockProvider.getJobDetailsCalled, "GetJobDetails should have been called")
+	assert.True(t, mockSearchProvider.searchJobsCalled, "SearchJobs should have been called")
+	assert.True(t, mockSearchProvider.getJobDetailsCalled, "GetJobDetails should have been called")
 
 	// Verify the event handler methods were called
 	assert.True(t, mockHandler.onNewJobCalled, "OnNewJob should have been called")
@@ -240,38 +258,38 @@ func TestProcessQueuedSearch(t *testing.T) {
 
 func TestProcessQueuedSearchWithErrors(t *testing.T) {
 	// Test with search error
-	mockProvider := &MockProvider{
+	mockSearchProvider := &MockSearchProvider{
 		searchJobsError: assert.AnError,
 	}
 
 	mockHandler := &MockEventHandler{}
 
 	wm := NewWorkerManager(
-		mockProvider, 3, 5,
+		mockSearchProvider, 3, 5,
 		WithEventHandler(mockHandler),
 	)
 
 	ctx := context.Background()
 	err := wm.processQueuedSearch(ctx, QueuedSearch{
 		UserID:   "user123",
-		Criteria: search.Criteria{Keywords: []string{"golang"}},
+		Criteria: search.Criteria{Query: "golang"},
 	})
 
 	assert.NoError(t, err, "Process should complete even with search errors")
-	assert.True(t, mockProvider.searchJobsCalled, "SearchJobs should have been called")
+	assert.True(t, mockSearchProvider.searchJobsCalled, "SearchJobs should have been called")
 	assert.True(t, mockHandler.onSearchCompletedCalled, "OnSearchCompleted should have been called")
 }
 
 func TestQueueSearchWhenShuttingDown(t *testing.T) {
-	mockProvider := &MockProvider{}
-	wm := NewWorkerManager(mockProvider, 3, 5)
+	mockSearchProvider := &MockSearchProvider{}
+	wm := NewWorkerManager(mockSearchProvider, 3, 5)
 
 	// Set shutdown flag
 	wm.shutdownFlag = 1
 
 	// Try to queue a search
 	ctx := context.Background()
-	err := wm.QueueSearch(ctx, "user123", search.Criteria{Keywords: []string{"golang"}})
+	err := wm.QueueSearch(ctx, "user123", search.Criteria{Query: "golang"})
 
 	// Should return an error
 	assert.Error(t, err)
@@ -279,21 +297,21 @@ func TestQueueSearchWhenShuttingDown(t *testing.T) {
 }
 
 func TestQueueSearchWhenQueueIsFull(t *testing.T) {
-	mockProvider := &MockProvider{}
+	mockSearchProvider := &MockSearchProvider{}
 
 	// Create a worker manager with a small queue
-	wm := NewWorkerManager(mockProvider, 3, 1)
+	wm := NewWorkerManager(mockSearchProvider, 3, 1)
 
 	// Fill the queue
 	ctx := context.Background()
-	err := wm.QueueSearch(ctx, "user123", search.Criteria{Keywords: []string{"golang"}})
+	err := wm.QueueSearch(ctx, "user123", search.Criteria{Query: "golang"})
 	assert.NoError(t, err)
 
 	// Try to add another search to the full queue with a timeout context
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 	defer cancel()
 
-	err = wm.QueueSearch(ctxWithTimeout, "user456", search.Criteria{Keywords: []string{"python"}})
+	err = wm.QueueSearch(ctxWithTimeout, "user456", search.Criteria{Query: "python"})
 
 	// Should return an error
 	assert.Error(t, err)

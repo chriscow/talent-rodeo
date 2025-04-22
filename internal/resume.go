@@ -7,12 +7,9 @@ import (
 	"log/slog"
 	"os"
 	"talent-rodeo/internal/funcs"
-	"talent-rodeo/internal/utils"
 	"time"
 
 	"cloud.google.com/go/firestore"
-	"github.com/chriscow/minds"
-	"github.com/chriscow/minds/providers/openai"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -187,44 +184,14 @@ func AnnotateResume(ctx context.Context, fs *FirestoreClient, logger *slog.Logge
 		return nil
 	}
 
-	prompt, err := utils.CreateTemplate(resumeAnnotationPromptTemplate)
+	prompt, err := GeneratePrompt(resumeAnnotationPromptTemplate, nil)
 	if err != nil {
-		return fmt.Errorf("convertResume: failed to create template: %w", err)
+		return fmt.Errorf("convertResume: failed to generate prompt: %w", err)
 	}
 
-	messages := []minds.Message{
-		{
-			Role:    minds.RoleDeveloper,
-			Content: prompt.RawContent,
-		},
-		{
-			Role:    minds.RoleUser,
-			Content: resume.RawText,
-		},
-	}
-
-	schema, err := minds.NewResponseSchema("resume_analysis", "Analysis of the resume", resumeAnalysis{})
+	result, err := StructuredAsk[resumeAnalysis](ctx, "resume-annotation", prompt)
 	if err != nil {
-		return fmt.Errorf("failed to generate schema: %w", err)
-	}
-	req := minds.NewRequest(messages, minds.WithResponseSchema(*schema))
-
-	llm, err := openai.NewProvider(openai.WithModel("gpt-4o"))
-	if err != nil {
-		return fmt.Errorf("failed to generate analysis: %w", err)
-	}
-
-	resp, err := llm.GenerateContent(ctx, req)
-	if err != nil {
-		return fmt.Errorf("failed to generate analysis: %w", err)
-	}
-
-	respJSON := resp.String()
-
-	var result resumeAnalysis
-	err = json.Unmarshal([]byte(respJSON), &result)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal analysis: %w", err)
+		return fmt.Errorf("convertResume: failed to ask LLM: %w", err)
 	}
 
 	resume.IsValid = result.IsResume

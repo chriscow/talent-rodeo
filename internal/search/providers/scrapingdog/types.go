@@ -1,8 +1,67 @@
 package scrapingdog
 
-// jobListing represents a job listing from the ScrapingDog API
-type jobListing struct {
-	ID             string `json:"id"`
+import (
+	"context"
+	"talent-rodeo/internal/search"
+	"time"
+)
+
+const (
+	ProviderName       = "scrapingdog"
+	DefaultBaseURL     = "https://api.scrapingdog.com/linkedinjobs"
+	MaxRetries         = 3
+	RetryDelay         = 5 * time.Second
+	DefaultConcurrency = 5
+	DefaultQueueSize   = 100
+)
+
+// GeoID represents a LinkedIn location ID
+type GeoID string
+
+const (
+	RemoteGeoID GeoID = "103644278"
+)
+
+// QueuedSearch represents a search job in the queue
+type QueuedSearch struct {
+	UserID   string
+	Criteria search.Criteria
+}
+
+// JobProvider interface defines methods that must be implemented by all job providers
+type JobProvider interface {
+	Name() string
+	Validate(ctx context.Context) error
+	SearchJobListings(ctx context.Context, criteria search.Criteria) ([]search.JobListing, error)
+	GetJobDetails(ctx context.Context, jobID string) (*search.JobDetail, error)
+}
+
+// JobQueue interface defines methods for queuing and managing job searches
+type JobQueue interface {
+	QueueSearch(ctx context.Context, userID string, criteria search.Criteria) error
+	GetQueueDepth(ctx context.Context) (int, error)
+}
+
+// JobEventHandler interface defines methods for handling job-related events
+type JobEventHandler interface {
+	OnNewJob(userID string, criteria search.Criteria, jobID string, details search.JobDetail) error
+	OnSearchCompleted(userID string, criteria search.Criteria, totalJobs int, errors []error) error
+}
+
+// JobStore interface defines methods for job data persistence
+type JobStore interface {
+	GetCachedJobs(ctx context.Context, criteria search.Criteria) ([]search.JobListing, error)
+	SaveJobs(ctx context.Context, criteria search.Criteria, jobs []search.JobListing) error
+	GetJobDetails(ctx context.Context, jobID string) (*search.JobDetail, error)
+	SaveJobDetails(ctx context.Context, jobDetail search.JobDetail) error
+	// CreateUserJob(ctx context.Context, userID string, searchHash string, job search.JobListing, details *search.JobDetail) error
+}
+
+// API Response Types
+
+// LinkedInJobListing represents a job listing from the ScrapingDog API
+type LinkedInJobListing struct {
+	ID             string `json:"-"`
 	LinkedInJobID  string `json:"job_id"`
 	Position       string `json:"job_position"`
 	Link           string `json:"job_link"`
@@ -13,12 +72,12 @@ type jobListing struct {
 	CompanyLogo    string `json:"company_logo_url"`
 }
 
-// jobListings is a slice of JobListing
-type jobListings []jobListing
+// LinkedInJobListings is a slice of JobListing
+type LinkedInJobListings []LinkedInJobListing
 
-// jobDetail represents detailed job information from the ScrapingDog API
-type jobDetail struct {
-	ID                string       `json:"id,omitempty"`
+// LinkedInJobDetail represents detailed job information from the ScrapingDog API
+type LinkedInJobDetail struct {
+	ID                string       `json:"-"`
 	Position          string       `json:"job_position"`
 	Status            string       `json:"jobs_status"`
 	Location          string       `json:"job_location"`
@@ -31,21 +90,22 @@ type jobDetail struct {
 	EmploymentType    string       `json:"Employment_type"`
 	JobFunction       string       `json:"Job_function"`
 	Industries        string       `json:"Industries"`
-	Recruiters        []recruiter  `json:"recruiter_details"`
-	SimilarJobs       []relatedJob `json:"similar_jobs"`
-	PeopleAlsoViewed  []relatedJob `json:"people_also_viewed"`
+	JobApplyLink      string       `json:"job_apply_link"`
+	Recruiters        []Recruiter  `json:"recruiter_details"`
+	SimilarJobs       []RelatedJob `json:"similar_jobs"`
+	PeopleAlsoViewed  []RelatedJob `json:"people_also_viewed"`
 }
 
-// recruiter represents a recruiter from the ScrapingDog API
-type recruiter struct {
+// Recruiter represents a recruiter from the ScrapingDog API
+type Recruiter struct {
 	Photo      string `json:"recruiter_photo"`
 	Name       string `json:"recruiter_name"`
 	Title      string `json:"recruiter_title"`
 	ProfileURL string `json:"recruiter_profile_url"`
 }
 
-// relatedJob represents a related or similar job from the ScrapingDog API
-type relatedJob struct {
+// RelatedJob represents a related or similar job from the ScrapingDog API
+type RelatedJob struct {
 	Position    string `json:"job_position"`
 	Company     string `json:"job_company"`
 	Location    string `json:"job_location"`
