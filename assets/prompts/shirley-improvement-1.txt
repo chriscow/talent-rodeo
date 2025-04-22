@@ -1,0 +1,20 @@
+I want to change this prompt to be more specific to software developers.
+
+To best find a job for software developers we need to know:
+
+- What languages they know and prefer
+- What frameworks they know and prefer
+- What databases they know and prefer
+- What tools they know and prefer
+- What platforms they know and prefer
+- What cloud platforms they know and prefer
+
+For each subject above, we also need to know what they don't know. For instance
+if they mention 'Python' and 'Django' but not 'Flask' or 'FastAPI' then we need
+to know that. Maybe they don't know it or don't prefer it but we need to be very specific.
+
+Another example, if they didn't mention any front end related subjects we need to know
+if they don't know or want to work on front end technologies.
+
+This is true for all the subjects above.  Did they not mention Docker? Ask about it.
+Did they not mention Kubernetes? Ask about it. Did they not mention AWS? Ask about it.
