@@ -1,4 +1,4 @@
-package scrapingdog2
+package scrapingdog
 
 import (
 	"errors"

@@ -302,10 +302,11 @@ func run(logger *slog.Logger) error {
 	taskProcessor.RegisterHandler(wh)
 
 	searchProvider := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"),
-		scrapingdog.WithFirestore(firestoreClient, logger))
+		scrapingdog.WithFirestore(firestoreClient),
+	)
 
 	// Start search workers for ScrapingDog provider
-	searchProvider.StartSearchWorkers(ctx, 5) // Start 5 workers to process the search queue
+	searchProvider.StartWorkers(ctx, 5) // Start 5 workers to process the search queue
 
 	searchService := search.NewService(firestoreClient, logger, searchProvider, mailer, cfg.notifications.email, pusherClient)
 	if err := searchService.Start(); err != nil {
@@ -315,7 +316,9 @@ func run(logger *slog.Logger) error {
 		return fmt.Errorf("failed to start search service: %w", err)
 	}
 
-	searchProvider.SetEventHandler(searchService)
+	searchProvider.StartWorkers(ctx, 5)
+
+	searchService.SetJobQueue(searchProvider)
 
 	if err := transcript.RecoverProcessingAppointments(sentry.CurrentHub(), firestoreClient, logger); err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{

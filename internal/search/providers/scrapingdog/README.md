@@ -40,16 +40,16 @@ This package is a refactored implementation of the ScrapingDog job search provid
 import (
     "context"
     "log/slog"
-    "talent-rodeo/internal/search/providers/scrapingdog2"
+    "talent-rodeo/internal/search/providers/scrapingdog"
 )
 
 func main() {
     // Create a new provider
-    provider := scrapingdog2.NewScrapingDogProvider(
+    provider := scrapingdog.NewScrapingDogProvider(
         "your-api-key",
-        scrapingdog2.WithFirestore(firestoreClient),
-        scrapingdog2.WithJobEventHandler(eventHandler),
-        scrapingdog2.WithProviderLogger(logger),
+        scrapingdog.WithFirestore(firestoreClient),
+        scrapingdog.WithJobEventHandler(eventHandler),
+        scrapingdog.WithProviderLogger(logger),
     )
 
     // Start background workers
@@ -59,7 +59,7 @@ func main() {
 
     // Perform a search
     criteria := search.Criteria{
-        Keywords: []string{"software engineer"},
+        Query: "software engineer",
         Location: "remote",
     }
     

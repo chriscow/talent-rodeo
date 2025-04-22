@@ -45,48 +45,19 @@ const (
 	ExperienceDirector   ExperienceLevel = "director"
 )
 
-// Result represents a job search result with metadata
-// type Result struct {
-// 	Job       JobListing `json:"job"`
-// 	Score     float64    `json:"score"`
-// 	Keywords  []string   `json:"matched_keywords,omitempty"`
-// 	CreatedAt time.Time  `json:"created_at"`
-// }
-
-// CacheEntry represents a cached search result
-// type CacheEntry struct {
-// 	ID        uuid.UUID `json:"id"`
-// 	QueryHash string    `json:"query_hash"`
-// 	Provider  uuid.UUID `json:"provider_id"`
-// 	Results   []Result  `json:"results"`
-// 	CreatedAt time.Time `json:"created_at"`
-// 	ExpiresAt time.Time `json:"expires_at"`
-// }
-
-// Keyword represents an extracted and categorized keyword
-// type Keyword struct {
-// 	ID         uuid.UUID `json:"id"`
-// 	JobID      uuid.UUID `json:"job_id"`
-// 	Text       string    `json:"text"`
-// 	Category   string    `json:"category"` // skill, title, culture, etc.
-// 	Confidence float64   `json:"confidence"`
-// 	CreatedAt  time.Time `json:"created_at"`
-// }
-
 // Criteria defines the parameters used to search for jobs.
 // This struct is designed to be provider-agnostic, allowing each provider
 // to map these fields to their specific API parameters.
 type Criteria struct {
-	Keywords   []string `json:"keywords"  description:"Search phrases and keywords to find in job titles, descriptions, and requirements"`                                                                    // Required search terms
+	Query      string   `json:"query"  description:"Search query to find in job titles, descriptions, and requirements"`                                                                                      // Required search terms
 	Location   string   `json:"location"  description:"Nearest major metropolitan area in the United States (can be 'Remote')"`                                                                               // Geographic location (can be remote)
 	JobType    []string `json:"job-type"  enum:"temporary,contract,volunteer,full_time,part_time" description:"A value here will filter on job type.  Leave blank if you ant all jobs."`                      // temporary, contract, volunteer, full_time & part_time                                                                                                                                                                    // Full-time, part-time, contract, etc.
 	Experience []string `json:"experience"  enum:"internship,entry_level,associate,mid_senior_level,director" description:"A value here will filter on experience level.  Leave blank if you ant all jobs."`  // internship, entry_level, associate, mid_senior_level & director                                                                                                                                                                         // Experience levels
 	WorkType   string   `json:"work-type"  enum:"at_work,remote,hybrid" description:"This will FILTER OUT jobs. If the user was explicit about the work type, include a value here otherwise leave it blank"` // at_work, remote, hybrid
 
-	PageNumber     int        `json:"-" jsonschema:"-" firestore:"-" ` // Page number for pagination
-	SortBy         string     `json:"-" jsonschema:"-" firestore:"-"`  // day, week, month - for filtering by posting date
-	CompanyID      string     `json:"-" jsonschema:"-" firestore:"-"`
-	LastSearchedAt *time.Time `json:"-" jsonschema:"-"` // LinkedIn company ID for filtering by company
+	MaxPages  int    `json:"-" jsonschema:"-" firestore:"-" ` // Page number for pagination
+	SortBy    string `json:"-" jsonschema:"-" firestore:"-"`  // day, week, month - for filtering by posting date
+	CompanyID string `json:"-" jsonschema:"-" firestore:"-"`
 }
 
 func (c Criteria) GetSearchHash() string {
@@ -97,26 +68,6 @@ func (c Criteria) GetSearchHash() string {
 	}
 	return fmt.Sprintf("%x", sha256.Sum256(json))
 }
-
-// ProgressUpdate represents a search progress update message
-// type ProgressUpdate struct {
-// 	TotalJobs       int         `json:"totalJobs"`
-// 	AnalyzedJobs    int         `json:"analyzedJobs"`
-// 	GoodFitJobs     int         `json:"goodFitJobs"`
-// 	Status          string      `json:"status"`
-// 	IsComplete      bool        `json:"isComplete"`
-// 	PercentComplete float64     `json:"percentComplete"`
-// 	Results         []JobResult `json:"results,omitempty"`
-// }
-
-// JobResult represents a job search result
-// type JobResult struct {
-// 	Title      string          `json:"title"`
-// 	Company    string          `json:"company"`
-// 	Location   string          `json:"location"`
-// 	MatchScore int             `json:"matchScore"`
-// 	SkillMatch map[string]bool `json:"skillMatch"`
-// }
 
 // JobListing represents a basic job listing.
 // This is the minimal set of fields returned from a search operation.
@@ -165,7 +116,7 @@ type JobDetail struct {
 	CompanyInfo     *Company
 
 	// Summary information
-	ExtractedData *JobSummary // Summarized job description
+	ExtractedData *ExtractedData // Summarized job description
 
 	// Additional fields from ScrapingDog
 	Status           string
@@ -179,25 +130,20 @@ type JobDetail struct {
 	SearchPhrase []string
 }
 
-type JobSummary struct {
+type ExtractedData struct {
 	Summary        string   `description:"a concise summary of the job listing"`
 	Requirements   []string `description:"the essential criteria that employers consider non-negotiable for a candidate to perform the job successfully"`
 	Qualifications []string `description:"the broader set of skills, experiences, and attributes that make someone a good fit for the role"`
 }
 
-// SearchResults represents the results of a job search
-// type SearchResults struct {
-// 	Jobs []JobListing `json:"jobs"`
-// }
-
 // SalaryRange represents a salary range for job listings.
 // Some providers may not support all fields, so implementations
 // should handle partial data appropriately.
 type SalaryRange struct {
-	Min      float64
-	Max      float64
-	Currency string // ISO 4217 currency code
-	Period   string // yearly, monthly, hourly
+	Min      float64 `json:"min" description:"The minimum salary in the range"`
+	Max      float64 `json:"max" description:"The maximum salary in the range"`
+	Currency string  `json:"currency" description:"The currency of the salary range"`
+	Period   string  `json:"period" description:"The period of the salary range" enum:"yearly,monthly,hourly"`
 	// Future considerations:
 	// - Equity compensation
 	// - Bonus structure

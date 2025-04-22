@@ -128,6 +128,10 @@ func TestResumeValidation(t *testing.T) {
 		}
 		updatedResume := resumes[0]
 
+		if updatedResume == nil {
+			t.Fatal("nill resume returned")
+		}
+
 		// Check resume validation result
 		if updatedResume.IsValid {
 			t.Error("Resume should be invalid")
@@ -142,12 +146,16 @@ func TestResumeValidation(t *testing.T) {
 			t.Fatal("User not found")
 		}
 
-		wantErrorMsg := "The document you uploaded doesn't appear to be a valid resume. Please upload a proper resume document."
+		wantErrorMsg := "Uploaded document is not a valid resume"
 		if updated.State.Status != UserStatusError {
 			t.Errorf("User.State.Status = %v, want %v", updated.State.Status, UserStatusError)
 		}
-		if updated.State.Error == nil || *updated.State.Error != wantErrorMsg {
-			t.Errorf("User.State.Error = %v, want %v", updated.State.Error, wantErrorMsg)
+		if updated.State.Error == nil {
+			t.Errorf("User.State.Error is nil, want %v", wantErrorMsg)
+		}
+
+		if *updated.State.Error != wantErrorMsg {
+			t.Errorf("User.State.Error = %v, want %v", *updated.State.Error, wantErrorMsg)
 		}
 	})
 

@@ -2,451 +2,262 @@ package scrapingdog
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"sync/atomic"
-	"time"
 
 	"talent-rodeo/internal"
-	"talent-rodeo/internal/funcs"
 	"talent-rodeo/internal/search"
-
-	"github.com/chriscow/minds"
-	"github.com/chriscow/minds/providers/gemini"
 )
 
-/*
-# ScrapingDog Points to Remember
-
-  - Each request will be retried until it can be successfully completed (up to 60
-    seconds). Remember to set your timeout to 60 seconds to ensure this process
-    goes smoothly. In cases where every request fails in 60 seconds, our API will
-    return a 410 error, you may retry the request and you will not be charged for
-    the unsuccessful request (you are only charged for successful requests, 200
-    and 404 status codes). Make sure to catch these errors! They will occur on
-    roughly 1-2% of requests for hard-to-scrape websites.
-
-  - There is no overage allowed on the free plan, if you exceed 1000 requests per
-    month on the free plan, you will receive a 403 error.
-
-  - Each request will return a string containing the raw HTML from the page
-    requested, along with any headers and cookies.
-
-  - If you exceed your plan concurrent connection limit, the API will respond with
-    a 429 status code, this can be solved by slowing down your request rate or
-    upgrading to a bigger plan.
-
-# Error Codes
-
-| Code | Description |
-|------|-------------|
-| 200 | Successfull Request |
-| 410 | Request timeout |
-| 404 | URL is wrong |
-| 202 | Your request is accepted and the scraping is still going on. | **This status code only appears in the LinkedIn Scraping API**
-| 403 | Request Limit Reached. |
-| 429 | Concurrent connection limit reached. |
-| 401 | API Key is wrong. |
-| 400 | Request failed. |
-*/
-
-const (
-	defaultBaseURL = "https://api.scrapingdog.com/linkedinjobs"
-	maxRetries     = 3
-	retryDelay     = 5 * time.Second
-)
-
-/* DO NOT DELETE THIS
-France: 105015875
-Belgium: 100565514
-Spain: 105646813
-England: 102299470
-Germany: 101282230
-Italy: 103350119
-United States: 103644278
-Canada: 101174742
-Australia: 101452733
-India: 102713980
-China: 102890883
-Japan: 101355337
-Brazil: 106057199
-Mexico: 103323778
-Netherlands: 102890719
-Singapore: 102454443
-Switzerland: 106693272
-Sweden: 105117694
-South Korea: 105149562
-Russia: 101728296
-United Arab Emirates (UAE): 104305776
-*/
-
-// Could compare pricing to https://rapidapi.com/fantastic-jobs-fantastic-jobs-default/api/linkedin-jobs-api2/playground/apiendpoint_a6e7dfb5-61a7-4f5c-82e4-47b89a003e38
-
-type GeoID string
-
-const (
-	providerName = "scrapingdog"
-	remoteGEOID  = GeoID("103644278")
-)
-
-type QueuedSearch struct {
-	UserID   string
-	Criteria search.Criteria
-}
-
-// Custom error types for ScrapingDog API
-type (
-	ErrRequestTimeout   struct{ error }
-	ErrInvalidURL       struct{ error }
-	ErrRequestPending   struct{ error }
-	ErrPlanLimitReached struct{ error }
-	ErrConcurrentLimit  struct{ error }
-	ErrInvalidAPIKey    struct{ error }
-	ErrRequestFailed    struct{ error }
-)
-
-// Provider implements the JobProvider interface for ScrapingDog
+// Provider implements the search.JobProvider and search.JobQueue interfaces
 type Provider struct {
-	apiKey          string
-	baseURL         string
-	client          *http.Client
-	fs              *internal.FirestoreClient
-	store           *JobStore
-	logger          *slog.Logger
-	searchSemaphore chan struct{}          // Limits concurrent searches
-	searchQueue     chan QueuedSearch      // Queue of searches to be performed
-	shutdownCtx     context.Context        // Context used for shutdown signal
-	shutdown        int32                  // Atomic flag: 0 = running, 1 = shutdown
-	eventHandler    search.JobEventHandler // Handler for job-related events
+	apiClient     *APIClient
+	store         JobStore
+	workerManager *WorkerManager
+	eventHandler  search.JobEventHandler
+	logger        *slog.Logger
 }
 
-// Option is a function that configures the Provider
-type Option func(*Provider)
+// ProviderOption configures the Provider
+type ProviderOption func(*Provider)
 
 // WithBaseURL sets a custom base URL for the provider
-func WithBaseURL(url string) Option {
+func WithBaseURL(url string) ProviderOption {
 	return func(p *Provider) {
-		p.baseURL = url + "/linkedinjobs"
+		// Update baseURL on existing APIClient without recreating
+		p.apiClient.baseURL = url
 	}
 }
 
 // WithHTTPClient sets a custom HTTP client for the provider
-func WithHTTPClient(client *http.Client) Option {
+func WithHTTPClient(client *http.Client) ProviderOption {
 	return func(p *Provider) {
-		p.client = client
+		// Update HTTP client on existing APIClient without recreating
+		p.apiClient.client = client
 	}
 }
 
-func WithFirestore(fs *internal.FirestoreClient, logger *slog.Logger) Option {
+// WithFirestore sets a Firestore client for the provider
+func WithFirestore(fs *internal.FirestoreClient) ProviderOption {
 	return func(p *Provider) {
-		p.fs = fs
-		p.logger = logger
-		// Initialize store in SearchJobs since it needs context
+		// Initialize store with Firestore
+		p.store = NewFirestoreStore(fs, WithStoreLogger(p.logger))
 	}
 }
 
-// WithJobStore sets the job store for the provider
-func WithJobStore(store *JobStore) Option {
-	return func(p *Provider) {
-		p.store = store
-	}
-}
-
-// WithEventHandler sets the job event handler for the provider
-func WithEventHandler(handler search.JobEventHandler) Option {
+// WithJobEventHandler sets the job event handler for the provider
+func WithJobEventHandler(handler search.JobEventHandler) ProviderOption {
 	return func(p *Provider) {
 		p.eventHandler = handler
 	}
 }
 
+// WithProviderLogger sets a custom logger for the provider
+func WithProviderLogger(logger *slog.Logger) ProviderOption {
+	return func(p *Provider) {
+		p.logger = logger
+
+		// Update loggers for components if they exist
+		if p.apiClient != nil {
+			p.apiClient.logger = logger
+		}
+
+		if store, ok := p.store.(*FirestoreStore); ok {
+			store.logger = logger
+		}
+
+		if p.workerManager != nil {
+			p.workerManager.logger = logger
+		}
+	}
+}
+
+// WithWorkerCount sets the number of worker goroutines
+func WithWorkerCount(count int) ProviderOption {
+	return func(p *Provider) {
+		// This will be used when starting workers
+	}
+}
+
 // NewProvider creates a new ScrapingDog provider
-func NewProvider(apiKey string, opts ...Option) *Provider {
-	p := &Provider{
-		apiKey:          apiKey,
-		baseURL:         defaultBaseURL,
-		client:          &http.Client{Timeout: 60 * time.Second},
-		logger:          slog.Default(),
-		searchSemaphore: make(chan struct{}, 5),       // Limit to 5 concurrent searches
-		searchQueue:     make(chan QueuedSearch, 100), // Buffer size of 100 searches
+func NewProvider(apiKey string, opts ...ProviderOption) *Provider {
+	logger := slog.Default()
+
+	// Create provider with default configuration
+	provider := &Provider{
+		logger: logger,
 	}
 
+	// Create API client with default configuration
+	provider.apiClient = NewAPIClient(apiKey, WithAPILogger(logger))
+
+	// Apply options
 	for _, opt := range opts {
-		opt(p)
+		opt(provider)
 	}
 
-	return p
+	// Create worker manager if not already set
+	if provider.workerManager == nil {
+		provider.workerManager = NewWorkerManager(
+			provider,
+			DefaultConcurrency,
+			DefaultQueueSize,
+			WithWorkerLogger(logger),
+			WithJobStore(provider.store),
+			WithEventHandler(provider.eventHandler),
+		)
+	}
+
+	return provider
 }
 
 func (p *Provider) SetEventHandler(handler search.JobEventHandler) {
 	p.eventHandler = handler
-}
-
-// QueueSearch adds a search to the queue
-func (p *Provider) QueueSearch(ctx context.Context, userID string, criteria search.Criteria) error {
-	// If the shutdown context is cancelled, update the atomic shutdown flag
-	if p.shutdownCtx != nil && p.shutdownCtx.Err() != nil {
-		atomic.StoreInt32(&p.shutdown, 1)
-	}
-	if atomic.LoadInt32(&p.shutdown) == 1 {
-		return fmt.Errorf("provider shutdown")
-	}
-
-	select {
-	case p.searchQueue <- QueuedSearch{UserID: userID, Criteria: criteria}:
-		if err := p.updateUserSearchQueued(ctx, userID); err != nil {
-			return fmt.Errorf("failed to update user search queued: %w", err)
-		}
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-		return fmt.Errorf("search queue is full")
+	if p.workerManager != nil {
+		p.workerManager.eventHandler = handler
 	}
 }
 
-func (p *Provider) GetQueueDepth(ctx context.Context) (int, error) {
-	return len(p.searchQueue), nil
-}
-
-// updateUserSearchCompletion updates the user's search completion status
-func (p *Provider) updateUserSearchCompletion(ctx context.Context, userID string) error {
-	user, found, err := internal.GetUser(ctx, p.fs, userID)
-	if err != nil {
-		return fmt.Errorf("failed to get user: %w", err)
-	}
-	if !found {
-		return fmt.Errorf("user not found")
-	}
-
-	now := time.Now()
-	user.Search.QueuedAt = nil
-	user.Search.CompletedAt = &now
-
-	if err := internal.UpdateUserSearch(ctx, p.fs, userID, user.Search); err != nil {
-		return fmt.Errorf("failed to update user search completion: %w", err)
-	}
-
-	return nil
-}
-
-func (p *Provider) updateUserSearchQueued(ctx context.Context, userID string) error {
-	user, found, err := internal.GetUser(ctx, p.fs, userID)
-	if err != nil {
-		return fmt.Errorf("failed to get user: %w", err)
-	}
-	if !found {
-		return fmt.Errorf("user not found")
-	}
-
-	now := time.Now()
-	user.Search.QueuedAt = &now
-
-	if err := internal.UpdateUserSearch(ctx, p.fs, userID, user.Search); err != nil {
-		return fmt.Errorf("failed to update user search queued: %w", err)
-	}
-
-	return nil
-}
-
-func convertJobListings(jobListings []jobListing) ([]search.JobListing, error) {
-	const provider = "scrapingdog"
-	providerJobs := make([]search.JobListing, len(jobListings))
-	for i, listing := range jobListings {
-		// If PostingDate is empty, assign a default date
-		if listing.PostingDate == "" {
-			listing.PostingDate = "2000-01-01"
-		}
-		postedDate, err := time.Parse("2006-01-02", listing.PostingDate)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse posting date: %w", err)
-		}
-		providerJobs[i] = search.JobListing{
-			ID:             funcs.Slugify(fmt.Sprintf("%s %s", provider, listing.LinkedInJobID)),
-			Title:          listing.Position,
-			Company:        listing.CompanyName,
-			Location:       listing.Location,
-			PostedDate:     postedDate,
-			URL:            listing.Link,
-			Provider:       provider,
-			ProviderJobID:  listing.LinkedInJobID,
-			Description:    listing.CompanyProfile,
-			CompanyProfile: listing.CompanyProfile,
-			CompanyLogo:    listing.CompanyLogo,
-		}
-	}
-	return providerJobs, nil
-}
-
-// Name returns the provider name
+// Name returns the provider's name
 func (p *Provider) Name() string {
-	return "scrapingdog"
+	return ProviderName
 }
 
-// Validate verifies that the provider is properly configured
+// Validate checks if the provider is properly configured
 func (p *Provider) Validate(ctx context.Context) error {
-	if p.apiKey == "" {
-		return fmt.Errorf("API key is required")
+	p.logger.InfoContext(ctx, "Validating ScrapingDog provider")
+
+	// Try a test search with minimal parameters
+	criteria := search.Criteria{
+		Query:    "software engineer",
+		Location: "remote",
 	}
+
+	_, err := p.SearchJobListings(ctx, criteria)
+	if err != nil {
+		return fmt.Errorf("validation failed: %w", err)
+	}
+
+	p.logger.InfoContext(ctx, "ScrapingDog provider validation successful")
 	return nil
 }
 
-// parseSalaryRange attempts to parse a salary range string
-func parseSalaryRange(ctx context.Context, salary string) (*search.SalaryRange, error) {
-	// This is a very basic implementation
-	// In a real system, we would need more sophisticated parsing
-	if salary == "" {
-		return nil, nil
-	}
-
-	llm, err := gemini.NewProvider(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create gemini client: %w", err)
-	}
-
-	prompt := minds.Messages{{
-		Role: minds.RoleUser,
-		Content: `
-		You are a helpful assistant that parses salary ranges from a given string.
-		Please return the salary range in JSON format.
-
-		Parse the following string:
-		` + salary,
-	}}
-
-	schema, err := minds.NewResponseSchema("salary_range", "A salary range with a minimum and maximum value, currency, and period", search.SalaryRange{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create schema: %w", err)
-	}
-
-	req := minds.NewRequest(prompt, minds.WithResponseSchema(*schema))
-
-	response, err := llm.GenerateContent(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate content: %w", err)
-	}
-
-	var salaryRange search.SalaryRange
-	if err := json.Unmarshal([]byte(response.String()), &salaryRange); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
-	}
-
-	return &salaryRange, nil
+// StartWorkers starts background worker goroutines
+func (p *Provider) StartWorkers(ctx context.Context, numWorkers int) {
+	p.workerManager.Start(ctx, numWorkers)
 }
 
-func handleAPIError(statusCode int) error {
-	switch statusCode {
-	case http.StatusOK:
-		return nil
-	case 410:
-		return &ErrRequestTimeout{fmt.Errorf("request timed out after 60 seconds")}
-	case http.StatusNotFound:
-		return &ErrInvalidURL{fmt.Errorf("invalid URL or resource not found")}
-	case 202:
-		return &ErrRequestPending{fmt.Errorf("request accepted, scraping in progress")}
-	case http.StatusForbidden:
-		return &ErrPlanLimitReached{fmt.Errorf("monthly request limit reached on current plan")}
-	case http.StatusTooManyRequests:
-		return &ErrConcurrentLimit{fmt.Errorf("concurrent connection limit reached, please slow down")}
-	case http.StatusUnauthorized:
-		return &ErrInvalidAPIKey{fmt.Errorf("invalid API key")}
-	case http.StatusBadRequest:
-		return &ErrRequestFailed{fmt.Errorf("request failed, please check parameters")}
-	default:
-		return fmt.Errorf("unexpected status code: %d", statusCode)
-	}
+// StopWorkers gracefully stops the background workers
+func (p *Provider) StopWorkers(ctx context.Context) error {
+	return p.workerManager.Shutdown(ctx)
 }
 
-func (p *Provider) doRequestWithRetry(_ context.Context, req *http.Request) (*http.Response, error) {
-	var lastErr error
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		resp, err := p.client.Do(req)
-		if err != nil {
-			lastErr = err
-			continue
-		}
+// SearchJobListings searches for jobs matching the given criteria
+func (p *Provider) SearchJobListings(ctx context.Context, criteria search.Criteria) ([]search.JobListing, error) {
+	p.logger.InfoContext(ctx, "Searching for jobs",
+		"keywords", criteria.Query,
+		"location", criteria.Location)
 
-		// Handle specific status codes that warrant a retry
-		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == 410 {
-			resp.Body.Close()
-			p.logger.Debug("rate limited or timeout, retrying",
-				"attempt", attempt+1,
-				"status", resp.StatusCode)
-
-			// For rate limits, wait longer
-			if resp.StatusCode == http.StatusTooManyRequests {
-				time.Sleep(retryDelay * time.Duration(attempt+1))
-			} else {
-				time.Sleep(retryDelay)
-			}
-			continue
-		}
-
-		return resp, nil
-	}
-
-	if lastErr != nil {
-		return nil, fmt.Errorf("failed after %d retries: %w", maxRetries, lastErr)
-	}
-	return nil, fmt.Errorf("failed after %d retries", maxRetries)
-}
-
-func (p *Provider) StartSearchWorkers(ctx context.Context, numWorkers int) {
-	p.logger.Info("starting search workers", "num_workers", numWorkers)
-	p.shutdownCtx = ctx // store shutdown context
-	// Spawn goroutine to set shutdown flag atomically when context is canceled
-	go func() {
-		<-ctx.Done()
-		atomic.StoreInt32(&p.shutdown, 1)
-	}()
-	for i := range numWorkers {
-		workerID := i
-		p.initializeWorker(ctx, workerID)
-	}
-}
-
-// processJobListings first checks the cache for job listings
-// If no cached job listings are found, it performs a new search
-// It then returns the job listings
-func (p *Provider) processJobListings(ctx context.Context, criteria search.Criteria) ([]search.JobListing, error) {
-	var listings []search.JobListing
-	var err error
-
-	// First check cache
+	// Check if we have cached results
 	if p.store != nil {
-		p.logger.Debug("scrapingdog: checking cache for jobs")
-		listings, err = p.store.GetCachedJobs(ctx, criteria)
+		cachedJobs, err := p.store.GetCachedJobs(ctx, criteria)
 		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				return nil, context.Canceled
-			}
-			return nil, fmt.Errorf("failed to get cached jobs: %w", err)
+			p.logger.WarnContext(ctx, "Failed to check job cache", "error", err)
+			// Continue with live search despite cache error
+		} else if len(cachedJobs) > 0 {
+			p.logger.InfoContext(ctx, "Using cached job results", "count", len(cachedJobs))
+			return cachedJobs, nil
 		}
-		if len(listings) > 0 {
-			p.logger.Debug("scrapingdog: found cached jobs", "num_jobs", len(listings))
-			return listings, nil
-		}
-		p.logger.Debug("scrapingdog: no cached jobs found")
 	}
 
-	// If no cached job listings, perform the search
-	if len(listings) == 0 {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
+	// Perform live search
+	p.logger.InfoContext(ctx, "Performing live search")
 
-		p.logger.Debug("scrapingdog: performing job search", "keywords", criteria.Keywords)
-		listings, err = p.SearchJobListings(ctx, criteria)
-		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				return nil, context.Canceled
-			}
-			return nil, fmt.Errorf("failed to search jobs: %w", err)
-		}
-		p.logger.Debug("scrapingdog: job search completed", "num_jobs", len(listings))
+	// Set default page number if not specified
+	page := criteria.MaxPages
+	if page <= 0 {
+		page = 1
 	}
 
-	return listings, nil
+	// Call the API
+	jobListings, err := p.apiClient.SearchJobListings(ctx, criteria.Query, criteria.Location, page)
+	if err != nil {
+		return nil, fmt.Errorf("API search failed: %w", err)
+	}
+
+	// Convert to common format
+	jobs, err := ConvertJobListings(jobListings)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert job listings: %w", err)
+	}
+
+	// Cache the results
+	if p.store != nil && len(jobs) > 0 {
+		if err := p.store.SaveJobs(ctx, criteria, jobs); err != nil {
+			p.logger.WarnContext(ctx, "Failed to cache job results", "error", err)
+			// Continue despite cache error
+		}
+	}
+
+	p.logger.InfoContext(ctx, "Search completed", "count", len(jobs))
+	return jobs, nil
+}
+
+// GetJobDetails retrieves detailed information for a job
+func (p *Provider) GetJobDetails(ctx context.Context, jobID string) (search.JobDetail, error) {
+	p.logger.InfoContext(ctx, "Getting job details", "jobID", jobID)
+
+	// Check if we have cached results
+	if p.store != nil {
+		cachedDetails, err := p.store.GetJobDetails(ctx, jobID)
+		if err != nil {
+			p.logger.WarnContext(ctx, "Failed to check job details cache", "error", err)
+			// Continue with live fetch despite cache error
+		} else if cachedDetails != nil {
+			p.logger.InfoContext(ctx, "Using cached job details", "jobID", jobID)
+			return *cachedDetails, nil
+		}
+	}
+
+	// Perform live fetch
+	p.logger.InfoContext(ctx, "Fetching job details from API", "jobID", jobID)
+
+	// Call the API
+	jobDetail, err := p.apiClient.GetJobDetails(ctx, jobID)
+	if err != nil {
+		return search.JobDetail{}, fmt.Errorf("API job details fetch failed: %w", err)
+	}
+
+	// Convert to common format
+	details, err := ConvertJobDetail(jobDetail)
+	if err != nil {
+		return search.JobDetail{}, fmt.Errorf("failed to convert job details: %w", err)
+	}
+
+	// Cache the results
+	if p.store != nil {
+		if err := p.store.SaveJobDetails(ctx, details); err != nil {
+			p.logger.WarnContext(ctx, "Failed to cache job details", "error", err)
+			// Continue despite cache error
+		}
+	}
+
+	p.logger.InfoContext(ctx, "Job details fetched successfully", "jobID", jobID)
+	return details, nil
+}
+
+// QueueSearch adds a search to the background processing queue
+func (p *Provider) QueueSearch(ctx context.Context, userID string, criteria search.Criteria) error {
+	p.logger.InfoContext(ctx, "Queueing search",
+		"userID", userID,
+		"keywords", criteria.Query)
+
+	return p.workerManager.QueueSearch(ctx, userID, criteria)
+}
+
+// GetQueueDepth returns the current number of items in the queue
+func (p *Provider) GetQueueDepth(ctx context.Context) (int, error) {
+	depth := p.workerManager.GetQueueDepth()
+	return depth, nil
 }
