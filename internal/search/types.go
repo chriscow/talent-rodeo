@@ -1,6 +1,9 @@
 package search
 
 import (
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -84,6 +87,15 @@ type Criteria struct {
 	SortBy         string     `json:"-" jsonschema:"-" firestore:"-"`  // day, week, month - for filtering by posting date
 	CompanyID      string     `json:"-" jsonschema:"-" firestore:"-"`
 	LastSearchedAt *time.Time `json:"-" jsonschema:"-"` // LinkedIn company ID for filtering by company
+}
+
+func (c Criteria) GetSearchHash() string {
+	// serialize the criteria to a json string and get the SHA256 hash
+	json, err := json.Marshal(c)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%x", sha256.Sum256(json))
 }
 
 // ProgressUpdate represents a search progress update message

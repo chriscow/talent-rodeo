@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"talent-rodeo/internal"
+	"talent-rodeo/internal/search"
 	"time"
 )
 
@@ -131,7 +132,7 @@ func (s *Service) cleanupProgress(userID string) {
 }
 
 // OnNewJob is called by the scrapingdog provider when a new job is found and saved
-func (s *Service) OnNewJob(userID, jobID string) error {
+func (s *Service) OnNewJob(userID string, criteria search.Criteria, jobID string, details search.JobDetail) error {
 	s.logger.Debug(internal.Blue("received new-job callback"),
 		"user_id", userID,
 		"job_id", jobID,
@@ -149,9 +150,11 @@ func (s *Service) OnNewJob(userID, jobID string) error {
 
 	// Create a bare-bones record first
 	job := &internal.UserJob{
-		ID:     jobID,
-		Status: internal.JobStatusUnprocessed,
-		JobRef: s.fs.Collection("job_details").Doc(jobID),
+		ID:         jobID,
+		Status:     internal.JobStatusUnprocessed,
+		JobRef:     s.fs.Collection("job_details").Doc(jobID),
+		Criteria:   criteria,
+		SearchHash: criteria.GetSearchHash(),
 	}
 
 	if err := internal.CreateUserJob(context.Background(), s.fs, userID, job); err != nil {
@@ -164,8 +167,9 @@ func (s *Service) OnNewJob(userID, jobID string) error {
 
 	// Queue the job for processing
 	s.jobQueue <- QueuedJob{
-		UserID: userID,
-		JobID:  jobID,
+		UserID:  userID,
+		JobID:   jobID,
+		Details: details,
 	}
 
 	return nil
@@ -438,7 +442,7 @@ func (s *Service) notifyUserNewJob(userID string, errors []error) error {
 }
 
 // OnSearchCompleted sends a search completed event through Pusher
-func (s *Service) OnSearchCompleted(userID string, totalJobs int, errors []error) error {
+func (s *Service) OnSearchCompleted(userID string, criteria search.Criteria, totalJobs int, errors []error) error {
 	s.logger.Debug(internal.BGGreen("received search completed callback"),
 		"user_id", userID,
 		"total_jobs", totalJobs,
@@ -449,11 +453,11 @@ func (s *Service) OnSearchCompleted(userID string, totalJobs int, errors []error
 	s.recordSearchCompleted(userID, totalJobs)
 
 	// Notify the user that search is complete
-	return s.notifyUserSearchCompleted(userID, totalJobs, errors)
+	return s.notifyUserSearchCompleted(userID, criteria, totalJobs, errors)
 }
 
 // notifyUserSearchCompleted sends a search completed event through Pusher
-func (s *Service) notifyUserSearchCompleted(userID string, totalJobs int, errors []error) error {
+func (s *Service) notifyUserSearchCompleted(userID string, criteria search.Criteria, totalJobs int, errors []error) error {
 	s.logger.Debug("notifyUserSearchCompleted - sending pusher event",
 		"user_id", userID,
 		"total_jobs", totalJobs,
