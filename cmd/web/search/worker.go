@@ -15,8 +15,9 @@ import (
 
 // QueuedJob represents a job to be processed
 type QueuedJob struct {
-	UserID string
-	JobID  string
+	UserID  string
+	JobID   string
+	Details search.JobDetail
 }
 
 // StartJobWorkers initializes the job processing workers
@@ -98,10 +99,7 @@ func (s *Service) processQueuedJob(ctx context.Context, job QueuedJob) error {
 	}
 
 	// 2. Load the job details from Firestore
-	jobDetail, err := s.loadJobDetail(ctx, job.JobID)
-	if err != nil {
-		return fmt.Errorf("failed to load job details: %w", err)
-	}
+	jobDetail := job.Details
 
 	user, found, err := internal.GetUser(ctx, s.fs, job.UserID)
 	if err != nil {
@@ -231,7 +229,7 @@ func (s *Service) loadJobDetail(ctx context.Context, jobID string) (*search.JobD
 	return &jobDetail, nil
 }
 
-func (s *Service) analyzeJobMatch(ctx context.Context, user *internal.User, job *internal.UserJob, jobDetail *search.JobDetail) (string, error) {
+func (s *Service) analyzeJobMatch(ctx context.Context, user *internal.User, job *internal.UserJob, jobDetail search.JobDetail) (string, error) {
 	s.logger.Debug("search: worker: analyzing job match", "user_id", user.ID, "job_id", job.ID)
 
 	// Create OpenAI provider with GPT-4o model

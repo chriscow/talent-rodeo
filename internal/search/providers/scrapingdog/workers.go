@@ -75,7 +75,7 @@ func (p *Provider) processQueuedSearch(ctx context.Context, qs QueuedSearch) err
 		if errors.Is(err, context.Canceled) {
 			return context.Canceled
 		}
-		p.notifySearchErrors(ctx, qs.UserID, 0, []error{err})
+		p.notifySearchErrors(ctx, qs.UserID, qs.Criteria, 0, []error{err})
 		return fmt.Errorf("failed to process job listings: %w", err)
 	}
 
@@ -114,7 +114,7 @@ func (p *Provider) processQueuedSearch(ctx context.Context, qs QueuedSearch) err
 		}
 
 		// Notify completion with errors
-		p.notifySearchErrors(ctx, qs.UserID, newJobCount, processingErrors)
+		p.notifySearchErrors(ctx, qs.UserID, qs.Criteria, newJobCount, processingErrors)
 		return fmt.Errorf("failed to process %d jobs: %v", len(processingErrors), processingErrors)
 	}
 
@@ -133,7 +133,7 @@ func (p *Provider) processQueuedSearch(ctx context.Context, qs QueuedSearch) err
 	}
 
 	// Notify successful completion
-	p.notifySearchComplete(ctx, qs.UserID, newJobCount)
+	p.notifySearchComplete(ctx, qs.UserID, qs.Criteria, newJobCount)
 
 	p.logger.Debug("scrapingdog: search processing completed successfully",
 		"user_id", qs.UserID,
@@ -186,14 +186,14 @@ func (p *Provider) processJobDetailsAndSave(ctx context.Context, listing search.
 		return fmt.Errorf("failed to save user job %s: %w", listing.ProviderJobID, err)
 	}
 
-	p.notifySearchNewJob(ctx, userID, fullJobID)
+	p.notifySearchNewJob(ctx, userID, criteria, fullJobID, *jobDetails)
 
 	return nil
 }
 
-func (p *Provider) notifySearchErrors(_ context.Context, userID string, totalJobs int, errors []error) {
+func (p *Provider) notifySearchErrors(_ context.Context, userID string, criteria search.Criteria, totalJobs int, errors []error) {
 	if p.eventHandler != nil {
-		if err := p.eventHandler.OnSearchCompleted(userID, totalJobs, errors); err != nil {
+		if err := p.eventHandler.OnSearchCompleted(userID, criteria, totalJobs, errors); err != nil {
 			p.logger.Error("failed to notify user of error",
 				"error", err,
 				"user_id", userID)
@@ -201,9 +201,9 @@ func (p *Provider) notifySearchErrors(_ context.Context, userID string, totalJob
 	}
 }
 
-func (p *Provider) notifySearchComplete(_ context.Context, userID string, totalJobs int) {
+func (p *Provider) notifySearchComplete(_ context.Context, userID string, criteria search.Criteria, totalJobs int) {
 	if p.eventHandler != nil {
-		if err := p.eventHandler.OnSearchCompleted(userID, totalJobs, nil); err != nil {
+		if err := p.eventHandler.OnSearchCompleted(userID, criteria, totalJobs, nil); err != nil {
 			p.logger.Error("failed to notify user of error",
 				"error", err,
 				"user_id", userID)
@@ -211,9 +211,9 @@ func (p *Provider) notifySearchComplete(_ context.Context, userID string, totalJ
 	}
 }
 
-func (p *Provider) notifySearchNewJob(_ context.Context, userID, jobID string) {
+func (p *Provider) notifySearchNewJob(_ context.Context, userID string, criteria search.Criteria, jobID string, details search.JobDetail) {
 	if p.eventHandler != nil {
-		if err := p.eventHandler.OnNewJob(userID, jobID); err != nil {
+		if err := p.eventHandler.OnNewJob(userID, criteria, jobID, details); err != nil {
 			p.logger.Error("failed to notify user of new jobs",
 				"error", err,
 				"user_id", userID)
