@@ -1,12 +1,25 @@
 {{define "partial:nav"}}
+<style>
+    .alpha-banner {
+        background-color: var(--pico-background);
+        color: var(--pico-color);
+        text-align: center;
+        padding: .5rem;
+        margin: 0.5rem 0;
+        font-size: 0.9rem;
+        border: 2px solid var(--pico-primary);
+        border-radius: var(--pico-border-radius);
+    }
+</style>
 <nav class="container">
     <ul>
         <h2><a style="text-decoration: none;" href="/">Talent Rodeo</a></h2>
     </ul>
     {{if .User}}
     <ul>
-        <!-- <li><a href="#">Auth Link 1</a></li>
-        <li><a href="#">Auth Link 2</a></li> -->
+        <div class="alpha-banner">
+            <p>🚧 Alpha Version: We're still building! You may experience some hiccups along the way. 🚧</p>
+        </div>
     </ul>
     {{end}}
     <ul>
