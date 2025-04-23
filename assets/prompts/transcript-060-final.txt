@@ -34,17 +34,4 @@ Please follow these steps to complete your task:
    - ExperienceLevel
    - FirstPersonPrompt
 
-Here's an example of the expected JSON structure (with generic placeholders):
-
-{
-  "WorkLocation": "location",
-  "WorkType": "type",
-  "Keywords": ["keyword1", "keyword2"],
-  "JobType": "type",
-  "ExperienceLevel": "level",
-  "FirstPersonPrompt": "prompt"
-}
-
-Remember to replace the placeholders with the actual extracted information. Ensure that all fields are filled based on the available information. If any information is missing or unclear, use "Not specified" as the value for that field.
-
 Please begin your analysis and provide the final JSON output.

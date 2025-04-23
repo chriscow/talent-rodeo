@@ -65,8 +65,16 @@
     </div>
     {{end}}
 
+    {{if .InviteOnly}}
+        <article class="container-narrow">
+            <hgroup>
+                <h2>Early Access is Full</h2>
+                <p>But don't worry, you're on the short list!</p>
+            </hgroup>
+            <p>We're blown away by the response to our platform! We've hit our early access limit but we're expanding quickly. You'll be among the first to know when your account is ready for job searching.</p>
+        </article>
+    {{else}}
 
-    
     <!-- Status updates during job search -->
     {{if .SearchError}}
     <article id="search-error" class="notice error">
@@ -138,6 +146,7 @@
             </article>
         {{end}}
     </section>
+    {{end}}
 </main>
 
 <!-- Add user data for state monitoring -->

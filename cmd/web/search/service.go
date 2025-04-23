@@ -207,6 +207,11 @@ func (s *Service) processSearches() {
 
 // shouldSearch determines if a user is due for a search based on their tier
 func (s *Service) shouldSearch(user *internal.User) bool {
+
+	if os.Getenv("INVITE_ONLY") == "true" {
+		return false
+	}
+
 	testingMode := os.Getenv("TESTING_MODE") == "true"
 	if strings.HasPrefix(user.ID, "test-") && !testingMode {
 		if testingMode {

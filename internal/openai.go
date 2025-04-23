@@ -35,7 +35,11 @@ func GeneratePrompt(promptFile string, data any) (string, error) {
 }
 
 func Ask(ctx context.Context, prompt string) (string, error) {
-	return AskModel(ctx, prompt, GPT41Nano)
+	model := os.Getenv("OPENAI_DEFAULT_MODEL")
+	if model == "" {
+		model = GPT41Nano
+	}
+	return AskModel(ctx, prompt, model)
 }
 
 func AskModel(ctx context.Context, prompt string, model string) (string, error) {
@@ -56,7 +60,12 @@ func AskModel(ctx context.Context, prompt string, model string) (string, error) 
 }
 
 func StructuredAsk[T any](ctx context.Context, name, prompt string) (T, error) {
-	return StructuredAskModel[T](ctx, name, prompt, GPT41Nano)
+	model := os.Getenv("OPENAI_DEFAULT_MODEL")
+	if model == "" {
+		model = GPT41Nano
+	}
+
+	return StructuredAskModel[T](ctx, name, prompt, model)
 }
 
 func StructuredAskModel[T any](ctx context.Context, name, prompt, model string) (T, error) {
