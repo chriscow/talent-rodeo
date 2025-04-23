@@ -191,7 +191,7 @@ func (p *processor) process(ctx context.Context, user *internal.User, appointmen
 	// Get the transcript from the VAPI call
 	//
 	p.logger.Debug("getting transcript from VAPI call", "call_id", *appointment.CallID)
-	transcript, err := p.getTranscript(ctx, appointment.UserID, *appointment.CallID)
+	transcript, err := p.getTranscript(ctx, *appointment.CallID)
 	if err != nil {
 		return fmt.Errorf("processor: failed to get transcript: %w", err)
 	}
@@ -419,7 +419,7 @@ func (p *processor) setApptProcessing(ctx context.Context, appointment *internal
 	return nil
 }
 
-func (p *processor) getTranscript(ctx context.Context, userID string, callID string) (*internal.Transcript, error) {
+func (p *processor) getTranscript(ctx context.Context, callID string) (*internal.Transcript, error) {
 
 	p.logger.Debug("getting VAPI call result", "call_id", callID)
 	call, err := vapi.GetCall(ctx, callID)
