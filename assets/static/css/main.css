@@ -76,8 +76,7 @@ a {
     width: 100%;
     margin-right: auto;
     margin-left: auto;
-    padding-right: var(--spacing);
-    padding-left: var(--spacing);
+    padding: 2rem;
 }
 
 /* Breakpoints for narrow container */
