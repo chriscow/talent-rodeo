@@ -84,6 +84,11 @@ func (j *JobWithDetails) Requirements() []string {
 func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 	data := app.newTemplateData(r)
 
+	// Add invite-only mode check near the beginning after data initialization
+	if os.Getenv("INVITE_ONLY") == "true" {
+		data["InviteOnly"] = true
+	}
+
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
 		app.logger.Warn("showDashboard: user not in context")
