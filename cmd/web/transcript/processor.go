@@ -450,7 +450,13 @@ func (p *processor) generateSearchCriteria(ctx context.Context, user *internal.U
 		return fmt.Errorf("generateSearchCriteria: failed to generate prompt: %w", err)
 	}
 
-	criteria, err := internal.StructuredAsk[search.Criteria](ctx, "search_criteria", prompt)
+	response, err := internal.Ask(ctx, prompt)
+	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
+		return fmt.Errorf("generateSearchCriteria: failed to ask LLM: %w", err)
+	}
+
+	criteria, err := internal.StructuredAsk[search.Criteria](ctx, "search_criteria", response)
 	if err != nil {
 		return fmt.Errorf("failed to generate search criteria: %w", err)
 	}

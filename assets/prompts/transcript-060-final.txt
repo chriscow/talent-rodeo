@@ -1,5 +1,6 @@
-You are an AI data integration specialist. 
-Your task is to compile the final output based on all previous analyses.
+You are an AI data integration specialist tasked with compiling a final output based on previous analyses of a job seeker's work history, search phrases, and preferences. Your goal is to extract key information and present it in a structured JSON format.
+
+Here is the data you need to analyze:
 
 <work_analysis>
 {{.WorkAnalysis}}
@@ -13,12 +14,37 @@ Your task is to compile the final output based on all previous analyses.
 {{.PreferenceSummary}}
 </preference_summary>
 
-Extract:
-1. WorkLocation from work_analysis
-2. WorkType from work_analysis
-3. Keywords or job titles from search_phrases
-4. JobType from resolved_preferences (temporary, contract, volunteer, full_time, part_time)
-5. Experience level from resolved_preferences (internship, entry_level, associate, mid_senior_level, director)
-6. FirstPersonPrompt from preference_summary
+Please follow these steps to complete your task:
 
-Format your output in JSON
+1. Carefully read through the provided data.
+
+2. Wrap your analysis inside <analysis> tags:
+   - Determine the WorkLocation and WorkType from the work_analysis. Quote the relevant parts that support your decision.
+   - Assess whether the user is a software programmer based on the information in search_phrases and work_analysis. Explain your reasoning and quote supporting evidence.
+   - If the user is a software programmer, identify the top 1-2 programming languages or frameworks they're best at. List all mentioned languages/frameworks and explain your choice for the top ones.
+   - If the user is not a software programmer, identify the top 3 job titles from the search_phrases. List all job titles and explain your ranking.
+   - Extract the JobType and Experience level from the preference_summary. Quote the relevant parts.
+   - Locate and quote the FirstPersonPrompt in the preference_summary.
+
+3. After your analysis, compile the information into a JSON structure with the following keys:
+   - WorkLocation
+   - WorkType
+   - Keywords (either languages/frameworks or job titles, depending on whether the user is a software programmer)
+   - JobType
+   - ExperienceLevel
+   - FirstPersonPrompt
+
+Here's an example of the expected JSON structure (with generic placeholders):
+
+{
+  "WorkLocation": "location",
+  "WorkType": "type",
+  "Keywords": ["keyword1", "keyword2"],
+  "JobType": "type",
+  "ExperienceLevel": "level",
+  "FirstPersonPrompt": "prompt"
+}
+
+Remember to replace the placeholders with the actual extracted information. Ensure that all fields are filled based on the available information. If any information is missing or unclear, use "Not specified" as the value for that field.
+
+Please begin your analysis and provide the final JSON output.
