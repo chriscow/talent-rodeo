@@ -184,7 +184,7 @@ func updateEndOfCallReport(reportData []byte, userID, appointmentID string) ([]b
 	}
 
 	// Update call fields
-	call["id"] = appointmentID
+	// call["id"] = appointmentID  -- the call id cannot be the appointment id
 	call["name"] = appointmentID
 
 	customer, ok := call["customer"].(map[string]any)
