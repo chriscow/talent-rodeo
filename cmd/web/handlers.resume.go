@@ -22,6 +22,7 @@ import (
 type resumeUploadForm struct {
 	Phone     string
 	Filename  string
+	Terms     bool // Add terms field
 	Validator validator.Validator
 }
 
@@ -104,6 +105,11 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+
+	// Check terms agreement
+	terms := r.FormValue("terms")
+	form.Terms = terms == "on"
+	form.Validator.CheckField(form.Terms, "terms", "You must agree to the Terms of Service to continue")
 
 	file, header, err := r.FormFile("resume")
 	if err != nil {
