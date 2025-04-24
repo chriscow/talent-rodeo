@@ -71,8 +71,31 @@
                 <h2>Early Access is Full</h2>
                 <p>But don't worry, you're on the short list!</p>
             </hgroup>
-            <p>We're blown away by the response to our platform! We've hit our early access limit but we're expanding quickly. You'll be among the first to know when your account is ready for job searching.</p>
+            <p>We're blown away by the response to our platform!</p> 
+            <p>We've hit our 
+                early access limit but we're expanding weekly. You'll be among the 
+                first to know when your account is ready for job searching.</p>            
         </article>
+
+        <style>
+            .opt-out-form {
+                margin-top: 2rem;
+                padding-top: 1rem;
+                border-top: 1px solid var(--muted-border-color);
+            }
+            .opt-out-form label {
+                display: block;
+                margin-bottom: 1rem;
+            }
+            .opt-out-form button {
+                color: var(--form-element-invalid-active-border-color);
+                border-color: var(--form-element-invalid-active-border-color);
+            }
+            .opt-out-form button:hover {
+                background-color: var(--form-element-invalid-active-border-color);
+                color: white;
+            }
+        </style>
     {{else}}
 
     <!-- Status updates during job search -->
@@ -157,6 +180,19 @@
      hidden></div>
 {{end}}
 
+{{define "waitlist-opt-out"}}
+<section class="container-narrow">
+    <p>If you prefer not to stay on the waitlist, you can delete all your data and remove yourself by clicking the button below.</p>
+    <form method="post" action="/account/delete" class="opt-out-form">
+        <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+    <label for="confirm-delete">
+        <input type="checkbox" id="confirm-delete" name="confirm_delete" required>
+        Permanently delete my account and remove me from the waitlist
+    </label>
+    <button type="submit" class="outline">Delete My Account</button>
+</form>
+</section>
+{{end}}
 
 {{define "job-card"}}
 <article class="job-card">
