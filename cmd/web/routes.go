@@ -82,6 +82,8 @@ func (app *application) routes() http.Handler {
 			mux.HandleFunc("/profile/schedule/reschedule", app.rescheduleAppointment, "POST")
 			mux.HandleFunc("/profile/schedule/call-now", app.callNow, "POST")
 
+			mux.HandleFunc("/account/delete", app.deleteAccount, "POST")
+
 			mux.HandleFunc("/dashboard", app.showDashboard, "GET")
 
 			mux.HandleFunc("/testing/reset-user-state", app.handleTestingResetUserState, "POST")
