@@ -65,38 +65,7 @@
     </div>
     {{end}}
 
-    {{if .InviteOnly}}
-        <article class="container-narrow">
-            <hgroup>
-                <h2>Early Access is Full</h2>
-                <p>But don't worry, you're on the short list!</p>
-            </hgroup>
-            <p>We're blown away by the response to our platform!</p> 
-            <p>We've hit our 
-                early access limit but we're expanding weekly. You'll be among the 
-                first to know when your account is ready for job searching.</p>            
-        </article>
 
-        <style>
-            .opt-out-form {
-                margin-top: 2rem;
-                padding-top: 1rem;
-                border-top: 1px solid var(--muted-border-color);
-            }
-            .opt-out-form label {
-                display: block;
-                margin-bottom: 1rem;
-            }
-            .opt-out-form button {
-                color: var(--form-element-invalid-active-border-color);
-                border-color: var(--form-element-invalid-active-border-color);
-            }
-            .opt-out-form button:hover {
-                background-color: var(--form-element-invalid-active-border-color);
-                color: white;
-            }
-        </style>
-    {{else}}
 
     <!-- Status updates during job search -->
     {{if .SearchError}}
@@ -156,9 +125,9 @@
                     {{end}}
                     </p>
                 {{else if not .HasJobs}}
-                    <p>No {{.ActiveStatus}} jobs found. 
+                    <p>No {{.ActiveStatus}} jobs yet. 
                        {{if .NextSearchTime.Before .CurrentTime}}
-                           A new search will run shortly.
+                           A new search will run shortly. Check back soon!
                        {{else if eq .NextSearchTime.IsZero false}}
                            The next search is scheduled for <span class="next-search-time" data-timestamp="{{.NextSearchTime.Unix}}">{{.NextSearchTime.Format "Jan 02, 2006 at 3:04 PM"}}</span>.
                        {{end}}
@@ -169,7 +138,6 @@
             </article>
         {{end}}
     </section>
-    {{end}}
 </main>
 
 <!-- Add user data for state monitoring -->
