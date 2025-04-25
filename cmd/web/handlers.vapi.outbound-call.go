@@ -8,7 +8,6 @@ import (
 	"talent-rodeo/cmd/web/simulate"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
-	"talent-rodeo/internal/utils"
 
 	"github.com/chriscow/vapi-go"
 
@@ -42,10 +41,12 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 			AppointmentStatusOther     AppointmentStatus = "other"
 		*/
 		if apptErr != nil {
+			errStr := apptErr.Error()
+			appointment.Error = &errStr
 			appointment.Status = internal.AppointmentStatusFailed
 			internal.UpdateAppointment(r.Context(), app.fs, &appointment)
 		} else {
-			appointment.Status = internal.AppointmentStatusCompleted
+			appointment.Status = internal.AppointmentStatusRunning
 			internal.UpdateAppointment(r.Context(), app.fs, &appointment)
 		}
 	}()
@@ -156,7 +157,7 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	resume, err := internal.GetLatestResume(r.Context(), app.fs, user.ID)
+	resume, found, err := internal.GetLatestResume(r.Context(), app.fs, user.ID)
 	if err != nil {
 		apptErr = fmt.Errorf("failed to get resume: %w", err)
 		if status.Code(err) == codes.NotFound {
@@ -174,54 +175,20 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if !resume.IsValid {
-		apptErr = fmt.Errorf("resume is not valid")
-		app.logger.Error("handleVapiCall: resume is not valid", "user_id", appointment.UserID)
-		app.logger.Debug("handleVapiCall: resume", "resume-analysis", resume.Analysis)
-		app.reportServerError(r, apptErr)
-
-		// return a 200 because we don't want them to retry
+	if !found {
+		app.logger.Error("handleVapiCall: user has no resume", "user_id", appointment.UserID)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	resumeText := resume.RawText
-	if resume.Annotated != nil {
-		resumeText = *resume.Annotated
-	}
-
-	// Create model config with system prompt
-	tmpl, err := utils.CreateTemplate("prompts/shirely.001.txt")
+	assistantOverrides, err := internal.BuildAssistantOverrides(r.Context(), user, resume, app.fs, app.logger)
 	if err != nil {
-		apptErr = fmt.Errorf("failed to create system prompt template: %w", err)
-		app.logger.Error("Failed to create system prompt template", "error", apptErr)
+		apptErr = fmt.Errorf("failed to build assistant overrides: %w", err)
+		app.logger.Error("Failed to build assistant overrides", "error", apptErr)
 		app.reportServerError(r, apptErr)
-
-		// This is likely our problem, so we don't want to retry
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-
-	systemPrompt, err := tmpl.Execute(map[string]any{
-		"FullName": user.Name,
-		"Resume":   resumeText,
-	})
-	if err != nil {
-		apptErr = fmt.Errorf("failed to render system prompt template: %w", err)
-		app.logger.Error("Failed to render system prompt template", "error", apptErr)
-		app.reportServerError(r, apptErr)
-
-		// This is likely our problem, so we don't want to retry
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	modelConfig := vapi.DefaultModelConfig
-	modelConfig.Model = "gpt-4o"
-	modelConfig.Messages = []vapi.ModelMessage{{
-		Role:    "system",
-		Content: systemPrompt,
-	}}
 
 	phone := vapi.PhoneNumber{
 		TwilioAccountSid:  os.Getenv("TWILIO_ACCOUNT_SID"),
@@ -231,27 +198,10 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 
 	// Create call config
 	callConfig := vapi.Call{
-		Name:        &appointment.ID,
-		AssistantID: &assistantID,
-		PhoneNumber: &phone,
-		AssistantOverrides: &vapi.Assistant{
-			Model: &modelConfig,
-			Server: &vapi.ServerConfig{
-				URL:            os.Getenv("VAPI_WEBHOOK_URL"),
-				TimeoutSeconds: 20,
-			},
-			ServerMessages: []string{
-				// "conversation-update",
-				"end-of-call-report",
-				"function-call",
-				"hang",
-				// "speech-update",
-				"status-update",
-				"tool-calls",
-				"transfer-destination-request",
-				"user-interrupted",
-			},
-		},
+		Name:               &appointment.ID,
+		AssistantID:        &assistantID,
+		PhoneNumber:        &phone,
+		AssistantOverrides: assistantOverrides,
 		Customer: &vapi.Customer{
 			Number: *user.Phone,
 			Name:   user.ID,

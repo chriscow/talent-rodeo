@@ -78,20 +78,40 @@ func (app *application) logAccess(next http.Handler) http.Handler {
 }
 
 func (app *application) preventCSRF(next http.Handler) http.Handler {
-	// app.logger.Warn("prevent csrf middleware")
 	csrfHandler := nosurf.New(next)
 
-	if app.config.testing {
-		// In testing mode, accept our test token
-		csrfHandler.SetFailureHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// Set up custom failure handler to provide more detailed logging
+	csrfHandler.SetFailureHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		app.logger.Error("CSRF validation failed",
+			"path", r.URL.Path,
+			"method", r.Method,
+			"token_in_form", r.PostForm.Get("csrf_token"),
+			"token_in_header", r.Header.Get("X-CSRF-Token"),
+			"real_token", nosurf.Token(r),
+			"cookie", r.Header.Get("Cookie"),
+		)
+
+		if app.config.testing {
+			// In testing mode, accept our test token
 			token := r.Header.Get("X-CSRF-Token")
 			if token == "test-csrf-token" {
+				app.logger.Info("Accepting test CSRF token")
 				next.ServeHTTP(w, r)
 				return
 			}
-			http.Error(w, "Bad Request", http.StatusBadRequest)
-		}))
-	}
+		}
+
+		http.Error(w, "Bad Request (CSRF validation failed)", http.StatusBadRequest)
+	}))
+
+	// Add logging for successful CSRF validation
+	wrappedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		app.logger.Debug("CSRF validation successful",
+			"path", r.URL.Path,
+			"method", r.Method,
+			"token", nosurf.Token(r))
+		csrfHandler.ServeHTTP(w, r)
+	})
 
 	csrfHandler.SetBaseCookie(http.Cookie{
 		HttpOnly: true,
@@ -101,7 +121,7 @@ func (app *application) preventCSRF(next http.Handler) http.Handler {
 		Secure:   true,
 	})
 
-	return csrfHandler
+	return wrappedHandler
 }
 
 func (app *application) clearSession(w http.ResponseWriter, r *http.Request) {

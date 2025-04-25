@@ -182,7 +182,7 @@ func TestTranscriptProcessor(t *testing.T) {
 		callID := "test-call-3"
 		appointment.CallID = &callID
 		summary := "Candidate has 5 years of Go experience and is looking for senior engineering roles"
-		appointment.TranscriptSummary = &summary
+		appointment.Summary = &summary
 
 		if err := processor.process(ctx, user, appointment); err != nil {
 			t.Fatalf("ProcessCompletedAppointment() error = %v", err)
@@ -355,7 +355,7 @@ func TestGetPromptResults(t *testing.T) {
 	appointment.ExtractedData.WorkPreferences = &workPrefs
 	appointment.ExtractedData.KeywordAnalysis = &keywordAnalysis
 	appointment.ExtractedData.UserStatement = &userStatement
-	appointment.TranscriptSummary = &transcriptSummary
+	appointment.Summary = &transcriptSummary
 
 	// Save the appointment
 	err = internal.CreateAppointment(ctx, client, "Test Prompt Results", *user, appointment)

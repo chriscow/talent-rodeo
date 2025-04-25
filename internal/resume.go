@@ -289,23 +289,26 @@ func GetResumes(ctx context.Context, fs *firestore.Client, userID string) ([]*Re
 	return resumes, nil
 }
 
-func GetLatestResume(ctx context.Context, fs *firestore.Client, userID string) (*Resume, error) {
+func GetLatestResume(ctx context.Context, fs *firestore.Client, userID string) (*Resume, bool, error) {
 	if userID == "" {
-		return nil, fmt.Errorf("user ID for Firestore is required")
+		return nil, false, fmt.Errorf("user ID for Firestore is required")
 	}
 
 	iter := fs.Collection(usersCollection).Doc(userID).Collection(resumeCollection).OrderBy("CreatedAt", firestore.Desc).Limit(1).Documents(ctx)
 	doc, err := iter.Next()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get latest resume: %w", err)
+		if err == iterator.Done {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("failed to get latest resume: %w", err)
 	}
 
 	var resume Resume
 	if err := doc.DataTo(&resume); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal resume data: %w", err)
+		return nil, false, fmt.Errorf("failed to unmarshal resume data: %w", err)
 	}
 
-	return &resume, nil
+	return &resume, true, nil
 }
 
 func DeleteResume(ctx context.Context, fs *firestore.Client, userID string, resumeID string) error {

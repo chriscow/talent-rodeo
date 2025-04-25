@@ -58,6 +58,11 @@ func ProcessCompletedAppointment(hub *sentry.Hub, fs *firestore.Client, logger *
 			user.Search = &internal.UserSearch{}
 		}
 
+		// Send initial processing state update
+		if err := internal.UpdateUserStatus(ctx, fs, user, internal.UserStatusCallProcessing); err != nil {
+			logger.Error("failed to update user state", "error", err)
+		}
+
 		start := time.Now()
 
 		processor, err := newProcessor(fs, logger)
@@ -83,6 +88,12 @@ func ProcessCompletedAppointment(hub *sentry.Hub, fs *firestore.Client, logger *
 			if err := internal.UpdateAppointment(ctx, fs, appointment); err != nil {
 				logger.Error("failed to update appointment status to failed", "error", err)
 			}
+
+			// Update user state to error
+			if err := internal.UpdateUserStateWithError(ctx, fs, user, err.Error()); err != nil {
+				logger.Error("failed to update user state", "error", err)
+			}
+			return
 		}
 
 		logger.Debug(internal.Blue("⏱️ appointment processing took"), "duration", time.Since(start).String())
@@ -93,6 +104,11 @@ func ProcessCompletedAppointment(hub *sentry.Hub, fs *firestore.Client, logger *
 		*appointment.CompletedAt = time.Now()
 		if err := internal.UpdateAppointment(ctx, fs, appointment); err != nil {
 			logger.Error("failed to update appointment status to completed", "error", err)
+		}
+
+		// Send completion state update
+		if err := internal.UpdateUserStatus(ctx, fs, user, internal.UserStatusCallCompleted); err != nil {
+			logger.Error("failed to update user state", "error", err)
 		}
 	}()
 
@@ -544,8 +560,8 @@ func GetPromptResults(ctx context.Context, fs *firestore.Client, userID string, 
 		}
 	}
 
-	if appointment.TranscriptSummary != nil {
-		results["TranscriptSummary"] = *appointment.TranscriptSummary
+	if appointment.Summary != nil {
+		results["TranscriptSummary"] = *appointment.Summary
 	}
 
 	return results, nil
