@@ -183,7 +183,7 @@ func TestJobStore_CacheExpiration(t *testing.T) {
 		t.Fatalf("Failed to get search document: %v", err)
 	}
 	var searchData struct {
-		LastSearchedAt time.Time `firestore:"LastSearchedAt"`
+		LastSearchedAt time.Time
 	}
 	if err := searchDoc.DataTo(&searchData); err != nil {
 		t.Fatalf("Failed to parse search data: %v", err)

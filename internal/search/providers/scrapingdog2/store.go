@@ -135,8 +135,8 @@ func (s *FirestoreStore) GetCachedJobs(ctx context.Context, criteria search.Crit
 
 	// Parse document data
 	var data struct {
-		Jobs      []search.JobListing `firestore:"jobs"`
-		CreatedAt time.Time           `firestore:"created_at"`
+		Jobs      []search.JobListing
+		CreatedAt time.Time
 	}
 
 	if err := doc.DataTo(&data); err != nil {

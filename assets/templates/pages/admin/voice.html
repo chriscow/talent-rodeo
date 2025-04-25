@@ -1,0 +1,83 @@
+{{define "page:main"}}
+<main class="container-narrow">
+    <hgroup>
+        <h2>Voice Assistant Admin</h2>
+        <p>Select a user to configure the assistant</p>
+    </hgroup>
+
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <div class="grid">
+            <div>
+                <label for="user-select">Select User</label>
+                <select id="user-select" name="user_id" onchange="this.form.submit()">
+                    <option value="">Choose a user...</option>
+                    <option value="_none" {{if eq $.SelectedUserID "_none"}}selected{{end}}>No User</option>
+                    {{range .Users}}
+                    <option value="{{.ID}}" {{if eq .ID $.SelectedUserID}}selected{{end}}>{{.Name}} ({{.Email}})</option>
+                    {{end}}
+                </select>
+            </div>
+        </div>
+    </form>
+
+    {{if .AssistantOverrides}}
+    <article>
+        <header>Assistant Configuration</header>
+        <p><strong>First Message:</strong> {{.AssistantOverrides.FirstMessage}}</p>
+        <p><strong>Model:</strong> {{.AssistantOverrides.Model.Model}}</p>
+        <details>
+            <summary>Prompt</summary>
+            <pre>{{.Prompt}}</pre>
+        </details>
+    </article>
+    {{end}}
+</main>
+{{end}}
+
+{{define "page:scripts"}}
+<script>
+    var vapiInstance = null;
+    const assistant = "{{.AssistantID}}"; // Substitute with your assistant ID
+    const apiKey = "{{.VapiAPIKey}}"; // Substitute with your Public key from Vapi Dashboard.
+    const buttonConfig = {}; // Modify this as required
+
+    function initVapi(overrides) {
+        if (vapiInstance) {
+            vapiInstance.destroy();
+        }
+
+        let assistantConfig = assistant;
+        if (overrides) {
+            assistantConfig = {
+                ...overrides,
+                id: assistant
+            };
+        }
+
+        vapiInstance = window.vapiSDK.run({
+            apiKey: apiKey,
+            assistant: assistantConfig,
+            config: buttonConfig,
+        });
+    }
+
+    (function (d, t) {
+        var g = document.createElement(t),
+            s = d.getElementsByTagName(t)[0];
+        g.src =
+            "https://cdn.jsdelivr.net/gh/VapiAI/html-script-tag@latest/dist/assets/index.js";
+        g.defer = true;
+        g.async = true;
+        s.parentNode.insertBefore(g, s);
+
+        g.onload = function () {
+            {{if .AssistantOverrides}}
+            initVapi({{.AssistantOverrides | json}});
+            {{else}}
+            initVapi();
+            {{end}}
+        };
+    })(document, "script");
+</script>
+{{end}}

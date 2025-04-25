@@ -410,6 +410,7 @@ func checkEnv() error {
 		// "CLOUDFLARE_API_EMAIL", "CLOUDFLARE_API_TOKEN",
 		// "CLOUDFLARE_GLOBAL_API_KEY", "CLOUDFLARE_KV_NAMESPACE_ID", "SCRAPINGDOG_API_KEY",
 		"VAPI_API_KEY", "VAPI_ASSISTANT_ID", "VAPI_OUTBOUND_PHONE_ID",
+		"VAPI_PUBLIC_API_KEY",
 		"VAPI_WEBHOOK_URL",     // URL that will receive webhooks from VAPI
 		"VAPI_START_CALL_PATH", // URL that we will use to start a call (we will POST to this URL to start a call)
 	}

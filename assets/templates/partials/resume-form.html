@@ -31,14 +31,15 @@
                 <small id="resume-help">PDF, DOCX, or TXT up to 10MB</small>
             </label>
         </div>
-
-        <label for="terms">
-            <input type="checkbox" id="terms" name="terms" required {{with .Form.Validator.FieldErrors.terms}} aria-invalid="true" aria-describedby="terms-error" {{end}}>
-            I agree to the <a href="/terms" target="_blank">Terms of Service</a>
-            {{with .Form.Validator.FieldErrors.terms}}
-            <small id="terms-error" role="alert">{{.}}</small>
-            {{end}}
-        </label>
+        <section>
+            <label for="terms">
+                <input type="checkbox" id="terms" name="terms" required {{with .Form.Validator.FieldErrors.terms}} aria-invalid="true" aria-describedby="terms-error" {{end}}>
+                I agree to the <a href="/terms" target="_blank">Terms of Service</a>
+                {{with .Form.Validator.FieldErrors.terms}}
+                <small id="terms-error" role="alert">{{.}}</small>
+                {{end}}
+            </label>
+        </section>
 
         <footer>
             <button type="submit">Continue</button>
