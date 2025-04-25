@@ -46,13 +46,13 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 
 	// Update the appointment with the call result and report
 	appt.CallID = report.Call.ID
-	appt.TranscriptSummary = report.Summary
+	appt.Summary = report.Summary
 	appt.UpdatedAt = time.Now()
 	endReason := report.EndedReason
 
 	// Update appointment status based on call result
 	status, shouldLog := internal.MapVapiEndReasonToAppointmentStatus(endReason)
-	appt.Status = status
+	appt.EndReason = &status
 
 	if err := internal.UpdateAppointment(r.Context(), app.fs, appt); err != nil {
 		wrappedErr := fmt.Errorf("failed to update appointment: %w", err)
@@ -83,33 +83,33 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 		return fmt.Errorf("user not found: %s", userID)
 	}
 
-	if status == internal.AppointmentStatusCompleted {
-		if err := internal.UpdateUserStatus(r.Context(), app.fs, user, internal.UserStatusCallAnalysisStarted); err != nil {
-			wrappedErr := fmt.Errorf("failed to update user status: %w", err)
-			app.logger.Error("failed to update user status", "error", err)
+	// if status == internal.AppointmentStatusCompleted {
+	// 	if err := internal.UpdateUserStatus(r.Context(), app.fs, user, internal.UserStatusCallAnalysisStarted); err != nil {
+	// 		wrappedErr := fmt.Errorf("failed to update user status: %w", err)
+	// 		app.logger.Error("failed to update user status", "error", err)
 
-			internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
-				"error_type":  "database_update",
-				"entity_type": "user_status",
-			})
+	// 		internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
+	// 			"error_type":  "database_update",
+	// 			"entity_type": "user_status",
+	// 		})
 
-			return wrappedErr
-		}
-	} else {
-		user.State.Status = internal.UserStatusError
-		err := fmt.Sprintf("Call ended with reason: %s", endReason)
-		if err := internal.UpdateUserStateWithError(r.Context(), app.fs, user, err); err != nil {
-			wrappedErr := fmt.Errorf("failed to update user state with error: %w", err)
-			app.logger.Error("failed to update user state with error", "error", err)
+	// 		return wrappedErr
+	// 	}
+	// } else {
+	// 	user.State.Status = internal.UserStatusError
+	// 	err := fmt.Sprintf("Call ended with reason: %s", endReason)
+	// 	if err := internal.UpdateUserStateWithError(r.Context(), app.fs, user, err); err != nil {
+	// 		wrappedErr := fmt.Errorf("failed to update user state with error: %w", err)
+	// 		app.logger.Error("failed to update user state with error", "error", err)
 
-			internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
-				"error_type":  "database_update",
-				"entity_type": "user_state",
-			})
+	// 		internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
+	// 			"error_type":  "database_update",
+	// 			"entity_type": "user_state",
+	// 		})
 
-			return wrappedErr
-		}
-	}
+	// 		return wrappedErr
+	// 	}
+	// }
 
 	if shouldLog {
 		app.logger.Info("appointment status updated",

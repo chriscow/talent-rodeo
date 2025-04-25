@@ -29,32 +29,37 @@ const (
 
 // Appointment represents a scheduled phone interview
 type Appointment struct {
-	ID                string            `firestore:"id"`
-	Name              string            `firestore:"name"`
-	UserID            string            `firestore:"user_id"`
-	ScheduledTime     time.Time         `firestore:"scheduled_time"`
-	Timezone          string            `firestore:"timezone"`
-	Status            AppointmentStatus `firestore:"status"`
-	OtherStatus       *string           `firestore:"other_status"`
-	CallID            *string           `firestore:"call_id"`
-	TranscriptSummary *string           `firestore:"transcript_summary"`
-	CreatedAt         time.Time         `firestore:"created_at"`
-	UpdatedAt         time.Time         `firestore:"updated_at"`
-	CompletedAt       *time.Time        `firestore:"completed_at"`
-	CancelledAt       *time.Time        `firestore:"cancelled_at"`
-	FailedAt          *time.Time        `firestore:"failed_at"`
-	Notes             *string           `firestore:"notes"`
+	ID            string
+	Name          string
+	UserID        string
+	ScheduledTime time.Time
+	Timezone      string
+	Status        AppointmentStatus
+
+	// This is the end reson given by VAPI when we get the end of call report
+	EndReason *string
+
+	// Error is an internal error that occurred during the appointment
+	Error       *string
+	CallID      *string
+	Summary     *string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	CompletedAt *time.Time
+	CancelledAt *time.Time
+	FailedAt    *time.Time
+	Notes       *string
 
 	// New fields for storing promptLLM responses
-	ExtractedData *ExtractedData `firestore:"extracted_data"`
+	ExtractedData *ExtractedData
 }
 
 type ExtractedData struct {
-	TranscriptExtract   *string `firestore:"01_transcript_extracted_data"`
-	ResolvedPreferences *string `firestore:"02_resolved_preferences"`
-	WorkPreferences     *string `firestore:"03_work_preferences"`
-	KeywordAnalysis     *string `firestore:"04_keyword_analysis"`
-	UserStatement       *string `firestore:"05_user_statement"`
+	TranscriptExtract   *string
+	ResolvedPreferences *string
+	WorkPreferences     *string
+	KeywordAnalysis     *string
+	UserStatement       *string
 }
 
 func CreateAppointment(ctx context.Context, fs *firestore.Client, name string, user User, appointment *Appointment) error {
@@ -196,43 +201,43 @@ func CancelAppointment(ctx context.Context, fs *firestore.Client, userID string,
 
 // MapVapiEndReasonToAppointmentStatus maps a VAPI call end reason to our appointment status
 // and returns both the status and whether the reason should be stored in OtherStatus
-func MapVapiEndReasonToAppointmentStatus(endReason string) (AppointmentStatus, bool) {
+func MapVapiEndReasonToAppointmentStatus(endReason string) (string, bool) {
 	// Successful completions
-	switch endReason {
-	case "vonage-completed",
-		"assistant-ended-call",
-		"assistant-said-end-call-phrase",
-		"assistant-ended-call-with-hangup-task",
-		"assistant-ended-call-after-message-spoken":
-		return AppointmentStatusCompleted, false
-	}
+	// switch endReason {
+	// case "vonage-completed",
+	// 	"assistant-ended-call",
+	// 	"assistant-said-end-call-phrase",
+	// 	"assistant-ended-call-with-hangup-task",
+	// 	"assistant-ended-call-after-message-spoken":
+	// 	return AppointmentStatusCompleted, false
+	// }
 
-	// Customer-initiated endings that we consider completed
-	switch endReason {
-	case "customer-ended-call":
-		return AppointmentStatusCompleted, true
-	}
+	// // Customer-initiated endings that we consider completed
+	// switch endReason {
+	// case "customer-ended-call":
+	// 	return AppointmentStatusCompleted, true
+	// }
 
-	// Customer-initiated cancellations
-	switch endReason {
-	case "customer-busy",
-		"customer-did-not-answer",
-		"customer-did-not-give-microphone-permission",
-		"voicemail":
-		return AppointmentStatusCancelled, true
-	}
+	// // Customer-initiated cancellations
+	// switch endReason {
+	// case "customer-busy",
+	// 	"customer-did-not-answer",
+	// 	"customer-did-not-give-microphone-permission",
+	// 	"voicemail":
+	// 	return AppointmentStatusCancelled, true
+	// }
 
-	// System cancellations
-	switch endReason {
-	case "exceeded-max-duration",
-		"manually-canceled",
-		"silence-timed-out",
-		"assistant-forwarded-call":
-		return AppointmentStatusCancelled, true
-	}
+	// // System cancellations
+	// switch endReason {
+	// case "exceeded-max-duration",
+	// 	"manually-canceled",
+	// 	"silence-timed-out",
+	// 	"assistant-forwarded-call":
+	// 	return AppointmentStatusCancelled, true
+	// }
 
 	// All other cases are considered failures and should store the specific reason
-	return AppointmentStatusFailed, true
+	return endReason, true
 }
 
 func DeleteAppointment(ctx context.Context, fs *firestore.Client, userID, appointmentID string) error {

@@ -44,6 +44,8 @@ github.com/chriscow/minds v0.0.8-0.20250303171538-dc7c074db869 h1:Xu1lu2mVX075rY
 github.com/chriscow/minds v0.0.8-0.20250303171538-dc7c074db869/go.mod h1:iznO9umfPFv30TzYbhmhSk5h1LiVPsNw//LX46AUH2k=
 github.com/chriscow/minds/providers/openai v0.0.5 h1:myTeCXszsKK+e7usfIbO5dBBb2+kgAF95yB5r51KX10=
 github.com/chriscow/minds/providers/openai v0.0.5/go.mod h1:pgyvq0DCT54xraFXzZpKq2UCT4oIzulw3rwiq/vik/A=
+github.com/chriscow/vapi-go v0.0.0-20250420143011-0a8970d55b72 h1:tM07kelQO1ivPH2NK7VS4iVSrlmeLRsB6Xibyfm1aSk=
+github.com/chriscow/vapi-go v0.0.0-20250420143011-0a8970d55b72/go.mod h1:UReXUnmse/QD6hM/kbg8DINbSrYmmNgJcNF3egKhx3U=
 github.com/cncf/xds/go v0.0.0-20241223141626-cff3c89139a3 h1:boJj011Hh+874zpIySeApCX4GeOjPl9qhRF3QuIZq+Q=
 github.com/cncf/xds/go v0.0.0-20241223141626-cff3c89139a3/go.mod h1:W+zGtBO5Y1IgJhy4+A9GOqVhqLpfZi+vwmdNXUehLA8=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

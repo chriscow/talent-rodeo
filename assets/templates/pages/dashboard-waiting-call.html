@@ -17,6 +17,14 @@
                 <p>
                     We are currently calling you! Please answer your phone when it rings.
                 </p>
+            {{else if eq .Appointment.Status "processing"}}
+                <p>
+                    We are processing your conversation and building your personalized job search criteria.
+                </p>
+                <progress style="width: 100%; margin: 1rem 0;"></progress>
+                <p class="text-small">
+                    This may take a few minutes. Please don't close this window.
+                </p>
             {{end}}
         </div>
 
@@ -64,12 +72,18 @@
         const pageTitle = document.getElementById('page-title');
         
         channel.bind('state-update', function(data) {
+            console.log('Received state update:', data); // Add logging to help debug
+
             // Handle different states
-            if (data.error || data.status_text === 'Error') {
+            if (data.error) {
                 window.location.href = '/profile';
                 return;
             }
-            if (data.status_text === 'Call Started') {
+
+            // Use the state.status_text value from the backend
+            const status = data.state.status_text;
+            
+            if (status === 'Call Started') {
                 pageTitle.textContent = 'Your Call is Starting';
                 statusContent.innerHTML = `
                     <p>
@@ -78,7 +92,20 @@
                 `;
                 return;
             }
-            if (data.status_text === 'Call Completed') {
+            if (status === 'Call Processing') {
+                pageTitle.textContent = 'Processing Your Conversation';
+                statusContent.innerHTML = `
+                    <p>
+                        We are processing your conversation and building your personalized job search criteria.
+                    </p>
+                    <progress style="width: 100%; margin: 1rem 0;"></progress>
+                    <p class="text-small">
+                        This may take a few minutes. Please don't close this window.
+                    </p>
+                `;
+                return;
+            }
+            if (status === 'Call Completed') {
                 window.location.href = '/dashboard';
                 return;
             }

@@ -18,9 +18,11 @@ const (
 	UserStatusCallScheduled       // 5
 	UserStatusCallStarted         // 6
 	UserStatusCallAnalysisStarted // 7
-	UserStatusJobSearchScheduled  // 8
-	UserStatusJobSearchStarted    // 9
-	UserStatusJobSearchComplete   // 10
+	UserStatusCallProcessing      // 8
+	UserStatusCallCompleted       // 9
+	UserStatusJobSearchScheduled  // 10
+	UserStatusJobSearchStarted    // 11
+	UserStatusJobSearchComplete   // 12
 )
 
 type UserState struct {
@@ -69,6 +71,10 @@ func (s UserStatus) String() string {
 		return "Call Started"
 	case UserStatusCallAnalysisStarted:
 		return "Call Analysis Started"
+	case UserStatusCallProcessing:
+		return "Call Processing"
+	case UserStatusCallCompleted:
+		return "Call Completed"
 	case UserStatusJobSearchScheduled:
 		return "Job Search Scheduled"
 	case UserStatusJobSearchStarted:
@@ -98,6 +104,10 @@ func (s UserStatus) Description() string {
 		return "Your call has started."
 	case UserStatusCallAnalysisStarted:
 		return "Your call has been completed and we are analyzing the call."
+	case UserStatusCallProcessing:
+		return "We are processing your conversation and building your personalized job search criteria."
+	case UserStatusCallCompleted:
+		return "Your call has been completed and processed."
 	case UserStatusJobSearchScheduled:
 		return "The job search has been scheduled."
 	case UserStatusJobSearchStarted:
@@ -115,5 +125,6 @@ func (s UserStatus) IsOnboarding() bool {
 	return s == UserStatusProcessingResume ||
 		s == UserStatusCallScheduled ||
 		s == UserStatusCallStarted ||
-		s == UserStatusCallAnalysisStarted
+		s == UserStatusCallAnalysisStarted ||
+		s == UserStatusCallProcessing
 }

@@ -2,6 +2,7 @@ package funcs
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"math"
@@ -28,7 +29,7 @@ var TemplateFuncs = template.FuncMap{
 	"timeSince":      time.Since,
 	"timeUntil":      time.Until,
 	"formatTime":     formatTime,
-	"approxDuration": approxDuration,
+	"approxDuration": ApproxDuration,
 	"humanDate":      humanDate,
 
 	// String functions
@@ -69,6 +70,9 @@ var TemplateFuncs = template.FuncMap{
 	"urlSetParam": urlSetParam,
 	"urlDelParam": urlDelParam,
 
+	// JSON functions
+	"json": marshalJSON,
+
 	// Dictionary functions
 	"dict": func(values ...any) (map[string]any, error) {
 		if len(values)%2 != 0 {
@@ -90,7 +94,7 @@ func formatTime(format string, t time.Time) string {
 	return t.Format(format)
 }
 
-func approxDuration(d time.Duration) string {
+func ApproxDuration(d time.Duration) string {
 	if d < time.Second {
 		return "less than 1 second"
 	}
@@ -263,4 +267,13 @@ func humanDate(t time.Time) string {
 		return ""
 	}
 	return t.Format("02 Jan 2006 at 15:04")
+}
+
+// marshalJSON converts a value to a JSON string for use in templates
+func marshalJSON(v any) (template.JS, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+	return template.JS(b), nil
 }

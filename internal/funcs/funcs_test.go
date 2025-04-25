@@ -1,6 +1,7 @@
 package funcs
 
 import (
+	"html/template"
 	"testing"
 	"time"
 )
@@ -67,4 +68,51 @@ func TestTimeCalculations(t *testing.T) {
 	t.Logf("\nFor future time:")
 	t.Logf("-time.Until(oneHourFuture) = %v (should be negative)", futureDuration)
 	t.Logf("ApproxDuration of that = %v", ApproxDuration(futureDuration))
+}
+
+func TestMarshalJSON(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    any
+		expected template.JS
+		wantErr  bool
+	}{
+		{
+			name:     "string",
+			input:    "hello",
+			expected: `"hello"`,
+			wantErr:  false,
+		},
+		{
+			name:     "number",
+			input:    42,
+			expected: "42",
+			wantErr:  false,
+		},
+		{
+			name:     "map",
+			input:    map[string]string{"key": "value"},
+			expected: `{"key":"value"}`,
+			wantErr:  false,
+		},
+		{
+			name:     "slice",
+			input:    []string{"a", "b", "c"},
+			expected: `["a","b","c"]`,
+			wantErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := marshalJSON(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("marshalJSON() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.expected {
+				t.Errorf("marshalJSON() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
 }
