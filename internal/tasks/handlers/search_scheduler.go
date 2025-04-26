@@ -20,7 +20,7 @@ type SearchSchedulerPayload struct {
 type SearchScheduler struct {
 	publisher Publisher         // Used to publish search messages
 	logger    *slog.Logger      // Structured logger for the scheduler
-	fs        *firestore.Client // Database connection for persistence
+	fs        *FirestoreClient // Database connection for persistence
 	taskProc  *tasks.Processor  // Processor for enqueueing new tasks
 	now       func() time.Time  // Function to get current time (for testing)
 }
@@ -36,7 +36,7 @@ type SearchScheduler struct {
 //   - taskProc: Task processor for enqueueing new tasks
 //
 // Returns a configured SearchScheduler instance ready to process tasks.
-func NewSearchScheduler(publisher Publisher, logger *slog.Logger, fs *firestore.Client, taskProc *tasks.Processor) *SearchScheduler {
+func NewSearchScheduler(publisher Publisher, logger *slog.Logger, fs *FirestoreClient, taskProc *tasks.Processor) *SearchScheduler {
 	return &SearchScheduler{
 		publisher: publisher,
 		logger:    logger.With(slog.String("component", "search_scheduler")),

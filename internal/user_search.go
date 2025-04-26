@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"talent-rodeo/internal/search"
 	"time"
-
-	"cloud.google.com/go/firestore"
 )
 
 type UserSearch struct {
@@ -28,7 +26,7 @@ type UserSearch struct {
 	Error string
 }
 
-func UpdateUserSearch(ctx context.Context, fs *firestore.Client, userID string, search *UserSearch) error {
+func UpdateUserSearch(ctx context.Context, fs *FirestoreClient, userID string, search *UserSearch) error {
 	user, found, err := GetUser(ctx, fs, userID)
 	if err != nil {
 		return fmt.Errorf("failed to get user: %w", err)

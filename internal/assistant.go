@@ -9,7 +9,6 @@ import (
 	"talent-rodeo/internal/utils"
 	"time"
 
-	"cloud.google.com/go/firestore"
 	"github.com/chriscow/vapi-go"
 )
 
@@ -37,7 +36,7 @@ func GetAssistantTemplate(userID string) (*utils.Prompt, error) {
 
 // BuildAssistantOverrides creates assistant overrides for a given user ID.
 // It returns the assistant request response which includes the overrides and any error encountered.
-func BuildAssistantOverrides(ctx context.Context, user *User, resume *Resume, fs *firestore.Client, logger *slog.Logger) (*vapi.Assistant, error) {
+func BuildAssistantOverrides(ctx context.Context, user *User, resume *Resume, fs *FirestoreClient, logger *slog.Logger) (*vapi.Assistant, error) {
 	assistantID := GetAssistantID(user.ID)
 
 	// Create template and data structure
@@ -79,7 +78,7 @@ func BuildAssistantOverrides(ctx context.Context, user *User, resume *Resume, fs
 			previousDiscussions = append(previousDiscussions, previousDiscussion{
 				Summary: *phoneCall.Summary,
 				// time.Until returns negative for past times, so we negate it to get a positive duration
-				When:   funcs.ApproxDuration(-time.Until(phoneCall.ScheduledTime)) + " ago",
+				When:   funcs.ApproxDuration(-time.Until(*phoneCall.CompletedAt)) + " ago",
 				Status: *phoneCall.EndReason,
 			})
 		}

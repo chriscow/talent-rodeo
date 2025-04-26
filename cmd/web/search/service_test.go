@@ -15,7 +15,6 @@ import (
 
 	"talent-rodeo/internal/search/providers/scrapingdog"
 
-	"cloud.google.com/go/firestore"
 	"github.com/joho/godotenv"
 )
 
@@ -75,7 +74,7 @@ func (m *mockMailer) Send(recipient string, data any, patterns ...string) error 
 }
 
 func TestNewService(t *testing.T) {
-	fs := &firestore.Client{}
+	fs := &internal.FirestoreClient{}
 	logger := slog.Default()
 	queue := &mockProvider{}
 	mailer := &mockMailer{}
@@ -376,7 +375,7 @@ func TestNotifyAdmin(t *testing.T) {
 // setupFirestore creates a Firestore client for testing and ensures cleanup
 // This function is crucial for setting up the Firestore environment needed for the tests.
 // It skips the test if the necessary environment variables are not set.
-func setupFirestore(t *testing.T) *firestore.Client {
+func setupFirestore(t *testing.T) *internal.FirestoreClient {
 	t.Helper()
 
 	// Skip if we're not in an environment with Firebase credentials
@@ -394,7 +393,7 @@ func setupFirestore(t *testing.T) *firestore.Client {
 }
 
 // getProvider returns either a mock provider or real ScrapingDog provider based on test flags
-func getProvider(t *testing.T, fs *firestore.Client) search.JobQueue {
+func getProvider(t *testing.T, fs *internal.FirestoreClient) search.JobQueue {
 	t.Helper()
 
 	if testing.Short() {

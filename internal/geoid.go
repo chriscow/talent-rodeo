@@ -3,7 +3,6 @@ package internal
 import (
 	"context"
 
-	"cloud.google.com/go/firestore"
 	"google.golang.org/api/iterator"
 )
 
@@ -41,7 +40,7 @@ type GeoID struct {
 	Value string `firestore:"value"`
 }
 
-func GetGeoID(ctx context.Context, fs *firestore.Client, id string) (GeoID, error) {
+func GetGeoID(ctx context.Context, fs *FirestoreClient, id string) (GeoID, error) {
 	doc, err := fs.Collection("geo_ids").Doc(id).Get(ctx)
 	if err != nil {
 		return GeoID{}, err
@@ -54,7 +53,7 @@ func GetGeoID(ctx context.Context, fs *firestore.Client, id string) (GeoID, erro
 	return geoID, nil
 }
 
-func ListGeoIDs(ctx context.Context, fs *firestore.Client) ([]GeoID, error) {
+func ListGeoIDs(ctx context.Context, fs *FirestoreClient) ([]GeoID, error) {
 	geoIDs := []GeoID{}
 	iter := fs.Collection("geo_ids").Documents(ctx)
 
@@ -76,7 +75,7 @@ func ListGeoIDs(ctx context.Context, fs *firestore.Client) ([]GeoID, error) {
 	return geoIDs, nil
 }
 
-func GetGeoIDKeys(ctx context.Context, fs *firestore.Client) ([]string, error) {
+func GetGeoIDKeys(ctx context.Context, fs *FirestoreClient) ([]string, error) {
 	geoIDs, err := ListGeoIDs(ctx, fs)
 	if err != nil {
 		return nil, err

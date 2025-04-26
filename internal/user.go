@@ -8,6 +8,7 @@ import (
 
 	"cloud.google.com/go/firestore"
 	"github.com/google/uuid"
+	"github.com/patrickmn/go-cache"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -63,7 +64,7 @@ func (e ErrUserExists) Error() string {
 }
 
 // CreateUser creates a new user document in Firestore
-func CreateUser(ctx context.Context, fs *firestore.Client, u *User) error {
+func CreateUser(ctx context.Context, fs *FirestoreClient, u *User) error {
 	if u.Name == "" {
 		return fmt.Errorf("user name is required")
 	}
@@ -100,7 +101,13 @@ func CreateUser(ctx context.Context, fs *firestore.Client, u *User) error {
 }
 
 // GetUser retrieves a user by ID
-func GetUser(ctx context.Context, fs *firestore.Client, id string) (*User, bool, error) {
+func GetUser(ctx context.Context, fs *FirestoreClient, id string) (*User, bool, error) {
+	if obj, found := fs.UsersCache.Get(id); found {
+		if found {
+			return obj.(*User), true, nil
+		}
+	}
+
 	doc, err := fs.Collection(usersCollection).Doc(id).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -114,11 +121,14 @@ func GetUser(ctx context.Context, fs *firestore.Client, id string) (*User, bool,
 		return nil, false, fmt.Errorf("failed to unmarshal user data: %w", err)
 	}
 
+	// Cache the user in memory
+	fs.UsersCache.Set(id, &user, cache.NoExpiration)
+
 	return &user, true, nil
 }
 
 // GetUserByEmail retrieves a user by email
-func GetUserByEmail(ctx context.Context, fs *firestore.Client, email string) (*User, bool, error) {
+func GetUserByEmail(ctx context.Context, fs *FirestoreClient, email string) (*User, bool, error) {
 	iter := fs.Collection(usersCollection).Where("Email", "==", email).Limit(1).Documents(ctx)
 	doc, err := iter.Next()
 	if err != nil {
@@ -133,11 +143,14 @@ func GetUserByEmail(ctx context.Context, fs *firestore.Client, email string) (*U
 		return nil, false, fmt.Errorf("failed to unmarshal user data: %w", err)
 	}
 
+	// Cache the user in memory
+	fs.UsersCache.Set(user.ID, &user, cache.NoExpiration)
+
 	return &user, true, nil
 }
 
 // GetUserByPhone retrieves a user by phone number
-func GetUserByPhone(ctx context.Context, fs *firestore.Client, phone string) (*User, bool, error) {
+func GetUserByPhone(ctx context.Context, fs *FirestoreClient, phone string) (*User, bool, error) {
 	iter := fs.Collection(usersCollection).Where("Phone", "==", phone).Limit(1).Documents(ctx)
 	doc, err := iter.Next()
 	if err != nil {
@@ -152,11 +165,14 @@ func GetUserByPhone(ctx context.Context, fs *firestore.Client, phone string) (*U
 		return nil, false, fmt.Errorf("failed to unmarshal user data: %w", err)
 	}
 
+	// Cache the user in memory
+	fs.UsersCache.Set(user.ID, &user, cache.NoExpiration)
+
 	return &user, true, nil
 }
 
 // UpdateUser updates an existing user document
-func UpdateUser(ctx context.Context, fs *firestore.Client, id string, updates map[string]any) error {
+func UpdateUser(ctx context.Context, fs *FirestoreClient, id string, updates map[string]any) error {
 	var fsUpdates []firestore.Update
 
 	for field, value := range updates {
@@ -185,21 +201,44 @@ func UpdateUser(ctx context.Context, fs *firestore.Client, id string, updates ma
 		return fmt.Errorf("failed to update user: %w", err)
 	}
 
+	// Invalidate the user in memory cache
+	if _, found := fs.UsersCache.Get(id); found {
+		fs.UsersCache.Delete(id)
+	}
+
 	return nil
 }
 
 // DeleteUser deletes a user document
-func DeleteUser(ctx context.Context, fs *firestore.Client, id string) error {
+func DeleteUser(ctx context.Context, fs *FirestoreClient, id string) error {
 	_, err := fs.Collection(usersCollection).Doc(id).Delete(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to delete user: %w", err)
+	}
+
+	// Invalidate the user in memory cache
+	if _, found := fs.UsersCache.Get(id); found {
+		fs.UsersCache.Delete(id)
 	}
 
 	return nil
 }
 
 // ListUsers retrieves all users with optional limit and offset
-func ListUsers(ctx context.Context, fs *firestore.Client, limit int, offset int) ([]*User, error) {
+func ListUsers(ctx context.Context, fs *FirestoreClient, limit int, offset int) ([]*User, error) {
+
+	// Get all users from the cache
+	usersMap := fs.UsersCache.Items()
+	if len(usersMap) > 0 {
+		users := make([]*User, 0, len(usersMap))
+		for _, user := range usersMap {
+			if u, ok := user.Object.(*User); ok {
+				users = append(users, u)
+			}
+		}
+		return users, nil
+	}
+
 	query := fs.Collection(usersCollection).OrderBy("CreatedAt", firestore.Asc)
 	if limit > 0 {
 		query = query.Limit(limit)
@@ -225,6 +264,11 @@ func ListUsers(ctx context.Context, fs *firestore.Client, limit int, offset int)
 			return nil, fmt.Errorf("failed to unmarshal user data: %w", err)
 		}
 		users = append(users, &user)
+	}
+
+	// Cache the users in memory
+	for _, user := range users {
+		fs.UsersCache.Set(user.ID, user, cache.NoExpiration)
 	}
 
 	return users, nil

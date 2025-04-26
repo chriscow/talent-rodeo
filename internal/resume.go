@@ -60,7 +60,7 @@ type Resume struct {
 }
 
 // CreateResume creates a resume for a user in Firestore (using subcollection).
-func CreateResume(ctx context.Context, fs *firestore.Client, user User, resume *Resume) error {
+func CreateResume(ctx context.Context, fs *FirestoreClient, user User, resume *Resume) error {
 	if resume.RawText == "" {
 		return fmt.Errorf("resume text is required")
 	}
@@ -99,7 +99,7 @@ func CreateResume(ctx context.Context, fs *firestore.Client, user User, resume *
 	return nil
 }
 
-func ListResumes(ctx context.Context, fs *firestore.Client, userID string) ([]*Resume, error) {
+func ListResumes(ctx context.Context, fs *FirestoreClient, userID string) ([]*Resume, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID for Firestore is required")
 	}
@@ -159,7 +159,7 @@ func annotateResumeTestMode(logger *slog.Logger, user *User, resume *Resume) err
 }
 
 // AnnotateResume uses an LLM to annotate the resume text and output it as YAML.
-func AnnotateResume(ctx context.Context, fs *firestore.Client, logger *slog.Logger, user *User, resume *Resume) error {
+func AnnotateResume(ctx context.Context, fs *FirestoreClient, logger *slog.Logger, user *User, resume *Resume) error {
 	if os.Getenv("TESTING_MODE") == "true" {
 		logger.Debug("annotateResume: using test mode")
 		if err := annotateResumeTestMode(logger, user, resume); err != nil {
@@ -253,7 +253,7 @@ func AnnotateResume(ctx context.Context, fs *firestore.Client, logger *slog.Logg
 	return nil
 }
 
-func UpdateResume(ctx context.Context, fs *firestore.Client, resume Resume) error {
+func UpdateResume(ctx context.Context, fs *FirestoreClient, resume Resume) error {
 	resume.UpdatedAt = time.Now()
 	_, err := fs.Collection(usersCollection).Doc(resume.UserID).Collection(resumeCollection).Doc(resume.ID).Set(ctx, resume)
 	if err != nil {
@@ -262,7 +262,7 @@ func UpdateResume(ctx context.Context, fs *firestore.Client, resume Resume) erro
 	return nil
 }
 
-func GetResumes(ctx context.Context, fs *firestore.Client, userID string) ([]*Resume, error) {
+func GetResumes(ctx context.Context, fs *FirestoreClient, userID string) ([]*Resume, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID for Firestore is required")
 	}
@@ -289,7 +289,7 @@ func GetResumes(ctx context.Context, fs *firestore.Client, userID string) ([]*Re
 	return resumes, nil
 }
 
-func GetLatestResume(ctx context.Context, fs *firestore.Client, userID string) (*Resume, bool, error) {
+func GetLatestResume(ctx context.Context, fs *FirestoreClient, userID string) (*Resume, bool, error) {
 	if userID == "" {
 		return nil, false, fmt.Errorf("user ID for Firestore is required")
 	}
@@ -311,7 +311,7 @@ func GetLatestResume(ctx context.Context, fs *firestore.Client, userID string) (
 	return &resume, true, nil
 }
 
-func DeleteResume(ctx context.Context, fs *firestore.Client, userID string, resumeID string) error {
+func DeleteResume(ctx context.Context, fs *FirestoreClient, userID string, resumeID string) error {
 	if userID == "" {
 		return fmt.Errorf("user ID for Firestore is required")
 	}

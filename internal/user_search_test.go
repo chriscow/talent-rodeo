@@ -3,11 +3,9 @@ package internal
 import (
 	"context"
 	"testing"
-
-	"cloud.google.com/go/firestore"
 )
 
-func setupTestFirestore(t *testing.T) *firestore.Client {
+func setupTestFirestore(t *testing.T) *FirestoreClient {
 	ctx := context.Background()
 	fs, err := NewFirestoreClient(ctx)
 	if err != nil {
@@ -17,7 +15,7 @@ func setupTestFirestore(t *testing.T) *firestore.Client {
 }
 
 /*
-func cleanupUserSearchResults(ctx context.Context, fs *firestore.Client, userID string) error {
+func cleanupUserSearchResults(ctx context.Context, fs *FirestoreClient, userID string) error {
 	iter := fs.Collection("users").Doc(userID).Collection("search_results").Documents(ctx)
 	for {
 		doc, err := iter.Next()

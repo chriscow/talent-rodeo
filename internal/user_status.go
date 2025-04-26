@@ -3,8 +3,6 @@ package internal
 import (
 	"context"
 	"time"
-
-	"cloud.google.com/go/firestore"
 )
 
 type UserStatus int
@@ -31,7 +29,7 @@ type UserState struct {
 	Error   *string
 }
 
-func UpdateUserStatus(ctx context.Context, fs *firestore.Client, user *User, status UserStatus) error {
+func UpdateUserStatus(ctx context.Context, fs *FirestoreClient, user *User, status UserStatus) error {
 	user.State.Status = status
 	user.State.Started = time.Now()
 	user.State.Error = nil // Clear any previous errors
@@ -42,7 +40,7 @@ func UpdateUserStatus(ctx context.Context, fs *firestore.Client, user *User, sta
 }
 
 // UpdateUserStateWithError updates the user state to Error and sets the error message
-func UpdateUserStateWithError(ctx context.Context, fs *firestore.Client, user *User, errorMsg string) error {
+func UpdateUserStateWithError(ctx context.Context, fs *FirestoreClient, user *User, errorMsg string) error {
 	user.State.Status = UserStatusError
 	user.State.Started = time.Now()
 	errorCopy := errorMsg // Make a copy to ensure it stays in memory

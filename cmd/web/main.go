@@ -24,7 +24,6 @@ import (
 	th "talent-rodeo/internal/tasks/handlers"
 	"talent-rodeo/internal/version"
 
-	"cloud.google.com/go/firestore"
 	scsfs "github.com/alexedwards/scs/firestore"
 	"github.com/alexedwards/scs/v2"
 	"github.com/getsentry/sentry-go"
@@ -95,7 +94,7 @@ type config struct {
 type application struct {
 	config         config
 	logger         *slog.Logger
-	fs             *firestore.Client
+	fs             *internal.FirestoreClient
 	js             jetstream.JetStream
 	processor      *tasks.Processor
 	search         *search.Service
@@ -234,7 +233,7 @@ func run(logger *slog.Logger) error {
 	}
 
 	sessionManager := scs.New()
-	sessionManager.Store = scsfs.New(firestoreClient)
+	sessionManager.Store = scsfs.New(firestoreClient.Client)
 	sessionManager.Lifetime = 24 * time.Hour
 	sessionManager.Cookie.Secure = true
 	sessionManager.Cookie.HttpOnly = true

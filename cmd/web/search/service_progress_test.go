@@ -9,7 +9,6 @@ import (
 
 	"talent-rodeo/internal"
 
-	"cloud.google.com/go/firestore"
 	firebase "firebase.google.com/go/v4"
 	"google.golang.org/api/option"
 )
@@ -36,7 +35,7 @@ func (p *MockPusher) Trigger(channel string, eventName string, data interface{})
 	return nil
 }
 
-func newTestFirestore(t *testing.T) *firestore.Client {
+func newTestFirestore(t *testing.T) *internal.FirestoreClient {
 	// Use the emulator for testing
 	os.Setenv("FIRESTORE_EMULATOR_HOST", "localhost:8080")
 
@@ -59,7 +58,7 @@ func newTestFirestore(t *testing.T) *firestore.Client {
 		client.Close()
 	})
 
-	return client
+	return &internal.FirestoreClient{Client: client}
 }
 
 func TestServiceProgressTracking(t *testing.T) {
