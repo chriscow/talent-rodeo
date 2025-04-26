@@ -53,6 +53,7 @@ type Service struct {
 	jobSemaphore      chan struct{}  // Semaphore for job processing
 	maxConcurrentJobs int
 	progressCache     *SearchProgressCache // Cache for search progress
+	inviteOnlyLogOnce sync.Once            // Used to log invite-only mode message once
 }
 
 // NewService creates a new search service
@@ -149,6 +150,13 @@ func (s *Service) run() {
 // processSearches finds users who need searches performed
 func (s *Service) processSearches() {
 	ctx := context.Background()
+
+	if os.Getenv("INVITE_ONLY") == "true" {
+		s.inviteOnlyLogOnce.Do(func() {
+			s.logger.Info(internal.BGYellow("search: invite-only mode, skipping search"))
+		})
+		return
+	}
 
 	// Test call to ListUsers to verify user retrieval
 	allUsers, err := internal.ListUsers(ctx, s.fs, 10, 0)
