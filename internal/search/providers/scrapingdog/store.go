@@ -11,7 +11,6 @@ import (
 
 	"talent-rodeo/internal"
 
-	"cloud.google.com/go/firestore"
 	"github.com/dgraph-io/ristretto/v2"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
@@ -24,7 +23,7 @@ const (
 
 // JobStore is responsible for managing job listings and caching them.
 type JobStore struct {
-	fs     *firestore.Client
+	fs     *internal.FirestoreClient
 	logger *slog.Logger
 	cache  *ristretto.Cache[string, any]
 }

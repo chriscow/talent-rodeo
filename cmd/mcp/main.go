@@ -7,7 +7,6 @@ import (
 	"os"
 	"talent-rodeo/internal"
 
-	"cloud.google.com/go/firestore"
 	firebase "firebase.google.com/go/v4"
 	"github.com/chriscow/minds"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -17,7 +16,7 @@ import (
 
 // createFirestoreClient creates a Firestore client using Firebase Admin SDK.
 // DO NOT USE internal/firestore.go - this is the canonical way to create the client.
-func createFirestoreClient(ctx context.Context) (*firestore.Client, error) {
+func createFirestoreClient(ctx context.Context) (*FirestoreClient, error) {
 	projectID := os.Getenv("FIREBASE_PROJECT_ID")
 	if projectID == "" {
 		return nil, fmt.Errorf("FIREBASE_PROJECT_ID environment variable is not set")

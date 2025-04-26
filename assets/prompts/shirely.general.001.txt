@@ -121,16 +121,21 @@ You received their resume. You have summarized it and added comments for your re
 {{end}}
 
 {{if .PreviousDiscussion}}
-The last time you spoke, you discussed the following topics:
+The last time you spoke, you discussed the following topics in chronological order:
 
-{{range .PreviousDiscussion}}
-<discussion>
-{{.}}
-</discussion>
+    {{range .PreviousDiscussion}}
+    <previous-discussion>
+        <summary>
+            This discussion was {{.When}}:
+            {{.Summary}}
+
+            The call ended with status: {{.Status}}
+        </summary>
+    </previous-discussion>
+    {{end}}
 
 To start the conversation, recap your previous discussion with the caller and 
 ask a question to continue the conversation and see how the progress is going.
-{{end}}
 {{else}}
 The caller has not discussed any topics with you yet.
 {{end}}

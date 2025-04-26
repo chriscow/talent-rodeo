@@ -14,7 +14,6 @@ import (
 
 	"github.com/chriscow/vapi-go"
 
-	"cloud.google.com/go/firestore"
 	"github.com/getsentry/sentry-go"
 )
 
@@ -112,7 +111,7 @@ func (app *application) handleVapiWebhook(w http.ResponseWriter, r *http.Request
 	}
 }
 
-func saveWebhookPayload(msgType string, body []byte, logger *slog.Logger, fs *firestore.Client) {
+func saveWebhookPayload(msgType string, body []byte, logger *slog.Logger, fs *internal.FirestoreClient) {
 	// Skip if saving is not enabled or if in testing mode
 	if os.Getenv("SAVE_WEBHOOK_PAYLOADS") != "true" {
 		logger.Debug("skipping webhook payload save - saving not enabled")
@@ -138,7 +137,7 @@ func saveWebhookPayload(msgType string, body []byte, logger *slog.Logger, fs *fi
 	if err := os.WriteFile(filename, body, 0644); err != nil {
 		logger.Error("Failed to save webhook payload to file", "error", err)
 	} else {
-		logger.Info("Saved webhook payload to file", "filename", filename)
+		logger.Info("saved webhook payload to file", "filename", filename)
 	}
 }
 
@@ -250,10 +249,13 @@ func validateEndOfCallReport(webhookMsg []byte) (*vapi.EndOfCallReportEnvelope, 
 		return nil, fmt.Errorf("failed to unmarshal end-of-call report: %w", err)
 	}
 
+	// call.name is the appointment ID
+	// call.customer.name is the customer ID
+
 	// Validate required fields
 	report := env.Report
 	if report.Call == nil {
-		return nil, fmt.Errorf("missing call information in end of call report")
+		return nil, fmt.Errorf("missing call object in end of call report")
 	}
 
 	if report.Call.ID == nil {
@@ -262,16 +264,16 @@ func validateEndOfCallReport(webhookMsg []byte) (*vapi.EndOfCallReportEnvelope, 
 
 	// The appointment ID is stored in the call name
 	if report.Call.Name == nil {
-		return nil, fmt.Errorf("missing call name in end of call report")
+		return nil, fmt.Errorf("missing call name in end of call report. call name stores the appointment ID")
 	}
 
 	if report.Call.Customer == nil {
-		return nil, fmt.Errorf("missing customer information in end of call report")
+		return nil, fmt.Errorf("missing customer object in end of call report")
 	}
 
 	// The customer ID is required for getting the appointment
 	if report.Call.Customer.Name == "" {
-		return nil, fmt.Errorf("missing customer ID in end of call report")
+		return nil, fmt.Errorf("missing customer name in end of call report. The customer name stores the customer ID")
 	}
 
 	return &env, nil

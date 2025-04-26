@@ -5,11 +5,14 @@ import (
 	"net/http"
 	"os"
 	"talent-rodeo/internal"
+	"talent-rodeo/internal/funcs"
 	"talent-rodeo/internal/response"
+	"time"
 )
 
 func (app *application) adminVoice(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	adminUser := contextGetAuthenticatedUser(r)
 	data := app.newTemplateData(r)
 	data["VapiAPIKey"] = os.Getenv("VAPI_PUBLIC_API_KEY")
 	data["AssistantID"] = os.Getenv("VAPI_ASSISTANT_ID")
@@ -70,7 +73,7 @@ func (app *application) adminVoice(w http.ResponseWriter, r *http.Request) {
 			}
 
 			// Fetch the user's latest resume
-			resume, found, err := internal.GetLatestResume(ctx, app.fs, selectedUserID)
+			resume, _, err := internal.GetLatestResume(ctx, app.fs, selectedUserID)
 			if err != nil {
 				app.logger.Warn("failed to get resume", "error", err, "user_id", selectedUserID)
 				// Continue without resume - it's optional
@@ -83,6 +86,23 @@ func (app *application) adminVoice(w http.ResponseWriter, r *http.Request) {
 				app.serverError(w, r, fmt.Errorf("failed to build assistant overrides: %w", err))
 				return
 			}
+
+			// call.name is the appointment ID
+			// call.customer.name is the customer ID
+			apptName := funcs.Slugify(fmt.Sprintf("admin-%s", adminUser.Name))
+			appt := &internal.Appointment{
+				UserID:        selectedUser.ID,
+				ScheduledTime: time.Now(),
+				Status:        internal.AppointmentStatusRunning,
+			}
+			if err := internal.CreateAppointment(ctx, app.fs, apptName, *selectedUser, appt); err != nil {
+				app.logger.Error("failed to create appointment", "error", err, "user_id", selectedUserID)
+				app.serverError(w, r, fmt.Errorf("failed to create appointment: %w", err))
+				return
+			}
+
+			data["CallName"] = appt.ID
+			data["CallCustomerName"] = selectedUser.ID
 			data["AssistantOverrides"] = overrides
 			data["Prompt"] = overrides.Model.Messages[0].Content
 		}

@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"time"
 
+	"talent-rodeo/internal"
 	"talent-rodeo/internal/search"
 
-	"cloud.google.com/go/firestore"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -22,7 +22,7 @@ const (
 
 // FirestoreStore implements the JobStore interface using Firestore
 type FirestoreStore struct {
-	fs           *firestore.Client
+	fs           *internal.FirestoreClient
 	logger       *slog.Logger
 	cacheEnabled bool
 	cacheTimeout time.Duration
@@ -53,7 +53,7 @@ func WithStoreLogger(logger *slog.Logger) StoreOption {
 }
 
 // NewFirestoreStore creates a new Firestore-backed job store
-func NewFirestoreStore(fs *firestore.Client, opts ...StoreOption) *FirestoreStore {
+func NewFirestoreStore(fs *internal.FirestoreClient, opts ...StoreOption) *FirestoreStore {
 	store := &FirestoreStore{
 		fs:           fs,
 		logger:       slog.Default(),

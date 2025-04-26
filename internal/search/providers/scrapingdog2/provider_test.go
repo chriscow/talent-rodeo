@@ -11,7 +11,6 @@ import (
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/search"
 
-	"cloud.google.com/go/firestore"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -280,7 +279,7 @@ func TestQueueSearch(t *testing.T) {
 }
 
 // Helper function to get a real Firestore client
-func getFirestoreClient(t *testing.T, ctx context.Context) (*firestore.Client, error) {
+func getFirestoreClient(t *testing.T, ctx context.Context) (*internal.FirestoreClient, error) {
 	t.Helper()
 
 	// Use the shared function from internal package

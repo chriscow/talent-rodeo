@@ -728,7 +728,7 @@ func TestProcessJobDetailsAndSave(t *testing.T) {
 			}))
 			defer server.Close()
 
-			var fs *firestore.Client
+			var fs *internal.FirestoreClient
 			var err error
 			var store *JobStore
 

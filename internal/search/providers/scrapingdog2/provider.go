@@ -6,9 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 
+	"talent-rodeo/internal"
 	"talent-rodeo/internal/search"
-
-	"cloud.google.com/go/firestore"
 )
 
 // ScrapingDogProvider implements the search.JobProvider and search.JobQueue interfaces
@@ -38,7 +37,7 @@ func WithHTTPClient(client *http.Client) ProviderOption {
 }
 
 // WithFirestore sets a Firestore client for the provider
-func WithFirestore(fs *firestore.Client) ProviderOption {
+func WithFirestore(fs *internal.FirestoreClient) ProviderOption {
 	return func(p *ScrapingDogProvider) {
 		// Initialize store with Firestore
 		p.store = NewFirestoreStore(fs, WithStoreLogger(p.logger))

@@ -108,7 +108,7 @@ type FinalJudgment struct {
 }
 
 // CreateUserJob saves a job reference for a user
-func CreateUserJob(ctx context.Context, fs *firestore.Client, userID string, job *UserJob) error {
+func CreateUserJob(ctx context.Context, fs *FirestoreClient, userID string, job *UserJob) error {
 	if userID == "" {
 		return fmt.Errorf("user ID is required")
 	}
@@ -141,7 +141,7 @@ func CreateUserJob(ctx context.Context, fs *firestore.Client, userID string, job
 	return nil
 }
 
-func GetUserJob(ctx context.Context, fs *firestore.Client, userID, jobID string) (*UserJob, bool, error) {
+func GetUserJob(ctx context.Context, fs *FirestoreClient, userID, jobID string) (*UserJob, bool, error) {
 	doc, err := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Doc(jobID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -159,7 +159,7 @@ func GetUserJob(ctx context.Context, fs *firestore.Client, userID, jobID string)
 }
 
 // GetUserJobs retrieves all jobs for a user
-func GetUserJobs(ctx context.Context, fs *firestore.Client, userID string) ([]*UserJob, error) {
+func GetUserJobs(ctx context.Context, fs *FirestoreClient, userID string) ([]*UserJob, error) {
 	iter := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Documents(ctx)
 	var jobs []*UserJob
 
@@ -183,7 +183,7 @@ func GetUserJobs(ctx context.Context, fs *firestore.Client, userID string) ([]*U
 }
 
 // GetUserJobsSorted retrieves user jobs with a specific status and supports paging
-func GetUserJobsSorted(ctx context.Context, fs *firestore.Client, userID string, status JobStatus, pageSize int, pageToken string, showAllRatings bool) ([]*UserJob, string, error) {
+func GetUserJobsSorted(ctx context.Context, fs *FirestoreClient, userID string, status JobStatus, pageSize int, pageToken string, showAllRatings bool) ([]*UserJob, string, error) {
 	// Create base query for jobs with the specified status
 	baseQuery := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).
 		Where("Status", "==", string(status))
@@ -249,7 +249,7 @@ func GetUserJobsSorted(ctx context.Context, fs *firestore.Client, userID string,
 }
 
 // GetJobsCount returns the count of jobs with the specified status for a user
-func GetJobsCount(ctx context.Context, fs *firestore.Client, userID string, status JobStatus, showAllRatings bool) (int64, error) {
+func GetJobsCount(ctx context.Context, fs *FirestoreClient, userID string, status JobStatus, showAllRatings bool) (int64, error) {
 	if userID == "" {
 		return 0, fmt.Errorf("user ID is required")
 	}
@@ -281,7 +281,7 @@ func GetJobsCount(ctx context.Context, fs *firestore.Client, userID string, stat
 }
 
 // GetAllJobStatusCounts returns a map with counts for all job statuses for a user
-func GetAllJobStatusCounts(ctx context.Context, fs *firestore.Client, userID string, showAllRatings bool) (map[string]int64, error) {
+func GetAllJobStatusCounts(ctx context.Context, fs *FirestoreClient, userID string, showAllRatings bool) (map[string]int64, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID is required")
 	}
@@ -308,7 +308,7 @@ func GetAllJobStatusCounts(ctx context.Context, fs *firestore.Client, userID str
 }
 
 // UserHasAnyJobs checks if a user has any jobs, without counting them all
-func UserHasAnyJobs(ctx context.Context, fs *firestore.Client, userID string) (bool, error) {
+func UserHasAnyJobs(ctx context.Context, fs *FirestoreClient, userID string) (bool, error) {
 	if userID == "" {
 		return false, fmt.Errorf("user ID is required")
 	}
@@ -363,7 +363,7 @@ func StatusToDisplayName(status string) string {
 }
 
 // ListJobListings retrieves all job listings with optional limit and offset
-func ListJobListings(ctx context.Context, fs *firestore.Client, limit int, offset int) ([]map[string]any, error) {
+func ListJobListings(ctx context.Context, fs *FirestoreClient, limit int, offset int) ([]map[string]any, error) {
 	query := fs.Collection("job_listings").OrderBy("CreatedAt", firestore.Desc)
 	if limit > 0 {
 		query = query.Limit(limit)
@@ -391,7 +391,7 @@ func ListJobListings(ctx context.Context, fs *firestore.Client, limit int, offse
 }
 
 // ListJobDetails retrieves all job details with optional limit and offset
-func ListJobDetails(ctx context.Context, fs *firestore.Client, limit int, offset int) ([]map[string]any, error) {
+func ListJobDetails(ctx context.Context, fs *FirestoreClient, limit int, offset int) ([]map[string]any, error) {
 	query := fs.Collection("job_details").OrderBy("CreatedAt", firestore.Desc)
 	if limit > 0 {
 		query = query.Limit(limit)
@@ -419,7 +419,7 @@ func ListJobDetails(ctx context.Context, fs *firestore.Client, limit int, offset
 }
 
 // UpdateUserJobStatus updates the status and corresponding timestamp of a user's job
-func UpdateUserJobStatus(ctx context.Context, fs *firestore.Client, userID, jobID string, status JobStatus) error {
+func UpdateUserJobStatus(ctx context.Context, fs *FirestoreClient, userID, jobID string, status JobStatus) error {
 	now := time.Now()
 	updates := []firestore.Update{
 		{Path: "Status", Value: status},
@@ -447,7 +447,7 @@ func UpdateUserJobStatus(ctx context.Context, fs *firestore.Client, userID, jobI
 }
 
 // UpdateUserJobNotes updates the notes for a user's job
-func UpdateUserJobNotes(ctx context.Context, fs *firestore.Client, userID, jobID, notes string) error {
+func UpdateUserJobNotes(ctx context.Context, fs *FirestoreClient, userID, jobID, notes string) error {
 	updates := []firestore.Update{
 		{Path: "Notes", Value: notes},
 		{Path: "UpdatedAt", Value: time.Now()},
@@ -462,7 +462,7 @@ func UpdateUserJobNotes(ctx context.Context, fs *firestore.Client, userID, jobID
 }
 
 // DeleteUserJob deletes a job for a user
-func DeleteUserJob(ctx context.Context, fs *firestore.Client, userID, jobID string) error {
+func DeleteUserJob(ctx context.Context, fs *FirestoreClient, userID, jobID string) error {
 	if userID == "" {
 		return fmt.Errorf("user ID is required")
 	}
@@ -479,7 +479,7 @@ func DeleteUserJob(ctx context.Context, fs *firestore.Client, userID, jobID stri
 }
 
 // DeleteJobListingsByPrefix deletes all job listings with IDs starting with the given prefix
-func DeleteJobListingsByPrefix(ctx context.Context, fs *firestore.Client, prefix string) (int, error) {
+func DeleteJobListingsByPrefix(ctx context.Context, fs *FirestoreClient, prefix string) (int, error) {
 	if prefix == "" {
 		return 0, fmt.Errorf("prefix is required")
 	}
@@ -511,7 +511,7 @@ func DeleteJobListingsByPrefix(ctx context.Context, fs *firestore.Client, prefix
 }
 
 // DeleteJobDetailsByPrefix deletes all job details with IDs starting with the given prefix
-func DeleteJobDetailsByPrefix(ctx context.Context, fs *firestore.Client, prefix string) (int, error) {
+func DeleteJobDetailsByPrefix(ctx context.Context, fs *FirestoreClient, prefix string) (int, error) {
 	if prefix == "" {
 		return 0, fmt.Errorf("prefix is required")
 	}
@@ -542,7 +542,7 @@ func DeleteJobDetailsByPrefix(ctx context.Context, fs *firestore.Client, prefix 
 }
 
 // DeleteAllUserJobsByPrefix deletes all user jobs with IDs starting with the given prefix across all users
-func DeleteAllUserJobsByPrefix(ctx context.Context, fs *firestore.Client, prefix string) (int, error) {
+func DeleteAllUserJobsByPrefix(ctx context.Context, fs *FirestoreClient, prefix string) (int, error) {
 	if prefix == "" {
 		return 0, fmt.Errorf("prefix is required")
 	}

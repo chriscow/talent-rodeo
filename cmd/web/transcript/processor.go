@@ -10,7 +10,6 @@ import (
 	"talent-rodeo/internal/search"
 	"time"
 
-	"cloud.google.com/go/firestore"
 	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/providers/openai"
 	"github.com/chriscow/vapi-go"
@@ -37,7 +36,7 @@ const (
 //   - Save the search criteria to the user
 //
 // Saving a new search criteria triggers a new search.
-func ProcessCompletedAppointment(hub *sentry.Hub, fs *firestore.Client, logger *slog.Logger, appointment *internal.Appointment) error {
+func ProcessCompletedAppointment(hub *sentry.Hub, fs *internal.FirestoreClient, logger *slog.Logger, appointment *internal.Appointment) error {
 
 	go func() {
 		ctx := context.Background()
@@ -116,7 +115,7 @@ func ProcessCompletedAppointment(hub *sentry.Hub, fs *firestore.Client, logger *
 }
 
 // RecoverProcessingAppointments finds and reprocesses any appointments that were interrupted during processing
-func RecoverProcessingAppointments(hub *sentry.Hub, fs *firestore.Client, logger *slog.Logger) error {
+func RecoverProcessingAppointments(hub *sentry.Hub, fs *internal.FirestoreClient, logger *slog.Logger) error {
 	ctx := context.Background()
 	logger.Info("recovering processing appointments")
 
@@ -148,13 +147,13 @@ func RecoverProcessingAppointments(hub *sentry.Hub, fs *firestore.Client, logger
 
 // processor handles the processing of appointment transcripts
 type processor struct {
-	fs     *firestore.Client
+	fs     *internal.FirestoreClient
 	logger *slog.Logger
 	llm    *openai.Provider
 }
 
 // newProcessor creates a new TranscriptProcessor
-func newProcessor(fs *firestore.Client, logger *slog.Logger) (*processor, error) {
+func newProcessor(fs *internal.FirestoreClient, logger *slog.Logger) (*processor, error) {
 	llm, err := openai.NewProvider(openai.WithModel(transcriptModel))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create openai provider: %w", err)
@@ -529,7 +528,7 @@ func convertCallResultToTranscript(callResult vapi.Call) *internal.Transcript {
 }
 
 // GetPromptResults retrieves all the intermediate prompt results for an appointment
-func GetPromptResults(ctx context.Context, fs *firestore.Client, userID string, appointmentID string) (map[string]string, error) {
+func GetPromptResults(ctx context.Context, fs *internal.FirestoreClient, userID string, appointmentID string) (map[string]string, error) {
 	appointment, err := internal.GetAppointment(ctx, fs, userID, appointmentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get appointment: %w", err)

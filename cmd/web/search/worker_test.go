@@ -10,11 +10,9 @@ import (
 	"talent-rodeo/internal/search"
 	"testing"
 	"time"
-
-	"cloud.google.com/go/firestore"
 )
 
-func setupTestService(t *testing.T) (*Service, *firestore.Client) {
+func setupTestService(t *testing.T) (*Service, *internal.FirestoreClient) {
 	t.Helper()
 
 	// Setup Firestore client
@@ -40,7 +38,7 @@ func setupTestService(t *testing.T) (*Service, *firestore.Client) {
 	return service, fs
 }
 
-func createTestJobDetail(t *testing.T, fs *firestore.Client) *search.JobDetail {
+func createTestJobDetail(t *testing.T, fs *internal.FirestoreClient) *search.JobDetail {
 	t.Helper()
 
 	// Generate a unique job ID for testing
