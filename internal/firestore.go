@@ -4,36 +4,25 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"log/slog"
 	"os"
 
 	"cloud.google.com/go/firestore"
 	firebase "firebase.google.com/go/v4"
 	"google.golang.org/api/option"
+
+	"github.com/patrickmn/go-cache"
 )
 
-// UserManager handles user-related operations including users, resumes, and appointments
-type UserManager struct {
-	fs     *firestore.Client
-	logger *slog.Logger
-}
-
-// Option is a function that configures a UserManager instance
-type Option func(*UserManager) error
-
-// WithLogger sets the logger for the UserManager instance
-func WithLogger(logger *slog.Logger) Option {
-	return func(c *UserManager) error {
-		c.logger = logger
-		return nil
-	}
+type FirestoreClient struct {
+	*firestore.Client
+	UsersCache *cache.Cache // *ristretto.Cache[string, *User]
 }
 
 // NewFirestoreClient creates a new Firestore client using Google Cloud credential chain:
 // 1. GOOGLE_APPLICATION_CREDENTIALS environment variable pointing to a JSON credentials file
 // 2. FIREBASE_CREDENTIALS environment variable containing the JSON credentials directly
 // 3. Application Default Credentials (ADC) if running in Google Cloud
-func NewFirestoreClient(ctx context.Context, opts ...Option) (*firestore.Client, error) {
+func NewFirestoreClient(ctx context.Context) (*FirestoreClient, error) {
 	projectID := os.Getenv("FIREBASE_PROJECT_ID")
 	if projectID == "" {
 		return nil, fmt.Errorf("FIREBASE_PROJECT_ID must be set")
@@ -62,5 +51,16 @@ func NewFirestoreClient(ctx context.Context, opts ...Option) (*firestore.Client,
 		return nil, fmt.Errorf("failed to create firestore client: %w", err)
 	}
 
-	return fs, nil
+	userCache := cache.New(cache.NoExpiration, cache.NoExpiration)
+	return &FirestoreClient{
+		Client:     fs,
+		UsersCache: userCache,
+	}, nil
+}
+
+func (fs *FirestoreClient) Close() error {
+	if fs.Client != nil {
+		return fs.Client.Close()
+	}
+	return nil
 }

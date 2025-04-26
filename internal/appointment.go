@@ -62,7 +62,7 @@ type ExtractedData struct {
 	UserStatement       *string
 }
 
-func CreateAppointment(ctx context.Context, fs *firestore.Client, name string, user User, appointment *Appointment) error {
+func CreateAppointment(ctx context.Context, fs *FirestoreClient, name string, user User, appointment *Appointment) error {
 	// Validate user exists first
 	_, found, err := GetUser(ctx, fs, user.ID)
 	if err != nil {
@@ -96,7 +96,7 @@ func CreateAppointment(ctx context.Context, fs *firestore.Client, name string, u
 	return nil
 }
 
-func GetAppointment(ctx context.Context, fs *firestore.Client, userID string, appointmentID string) (*Appointment, error) {
+func GetAppointment(ctx context.Context, fs *FirestoreClient, userID string, appointmentID string) (*Appointment, error) {
 	doc, err := fs.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).Doc(appointmentID).Get(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get appointment for user %s: %w", userID, err)
@@ -110,7 +110,7 @@ func GetAppointment(ctx context.Context, fs *firestore.Client, userID string, ap
 	return &appointment, nil
 }
 
-func ListAppointments(ctx context.Context, fs *firestore.Client, userID string) ([]*Appointment, error) {
+func ListAppointments(ctx context.Context, fs *FirestoreClient, userID string) ([]*Appointment, error) {
 	iter := fs.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).Documents(ctx)
 
 	var appointments []*Appointment
@@ -136,7 +136,7 @@ func ListAppointments(ctx context.Context, fs *firestore.Client, userID string) 
 
 // ListCompletedAppointments retrieves all completed appointments for a user
 // and returns them sorted by CompletedAt in descending order
-func ListCompletedAppointments(ctx context.Context, fs *firestore.Client, userID string) ([]*Appointment, error) {
+func ListCompletedAppointments(ctx context.Context, fs *FirestoreClient, userID string) ([]*Appointment, error) {
 	// Create a query for completed appointments where completed_at exists
 	query := fs.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).
 		Where("status", "==", AppointmentStatusCompleted).
@@ -180,7 +180,7 @@ func ListCompletedAppointments(ctx context.Context, fs *firestore.Client, userID
 	return appointments, nil
 }
 
-func UpdateAppointment(ctx context.Context, fs *firestore.Client, appointment *Appointment) error {
+func UpdateAppointment(ctx context.Context, fs *FirestoreClient, appointment *Appointment) error {
 	_, err := fs.Collection(usersCollection).Doc(appointment.UserID).Collection(appointmentsCollection).Doc(appointment.ID).Set(ctx, appointment)
 	if err != nil {
 		return fmt.Errorf("failed to update appointment: %w", err)
@@ -188,7 +188,7 @@ func UpdateAppointment(ctx context.Context, fs *firestore.Client, appointment *A
 	return nil
 }
 
-func CancelAppointment(ctx context.Context, fs *firestore.Client, userID string, appointmentID string) error {
+func CancelAppointment(ctx context.Context, fs *FirestoreClient, userID string, appointmentID string) error {
 	_, err := fs.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).Doc(appointmentID).Update(ctx, []firestore.Update{
 		{Path: "status", Value: AppointmentStatusCancelled},
 	})
@@ -240,7 +240,7 @@ func MapVapiEndReasonToAppointmentStatus(endReason string) (string, bool) {
 	return endReason, true
 }
 
-func DeleteAppointment(ctx context.Context, fs *firestore.Client, userID, appointmentID string) error {
+func DeleteAppointment(ctx context.Context, fs *FirestoreClient, userID, appointmentID string) error {
 	_, err := fs.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).Doc(appointmentID).Delete(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to delete appointment: %w", err)
@@ -250,7 +250,7 @@ func DeleteAppointment(ctx context.Context, fs *firestore.Client, userID, appoin
 
 // ListAppointmentsNeedingProcessing retrieves all appointments in the "processing" state
 // These are appointments that were interrupted during transcript processing
-func ListAppointmentsNeedingProcessing(ctx context.Context, fs *firestore.Client) ([]*Appointment, error) {
+func ListAppointmentsNeedingProcessing(ctx context.Context, fs *FirestoreClient) ([]*Appointment, error) {
 	var appointments []*Appointment
 
 	// Query all users

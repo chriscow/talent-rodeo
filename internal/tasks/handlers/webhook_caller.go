@@ -11,8 +11,6 @@ import (
 	"time"
 
 	"talent-rodeo/internal"
-
-	"cloud.google.com/go/firestore"
 )
 
 const (
@@ -34,11 +32,11 @@ type WebhookPayload struct {
 // WebhookScheduler handles scheduling and executing webhook calls
 type WebhookScheduler struct {
 	logger *slog.Logger
-	fs     *firestore.Client
+	fs     *internal.FirestoreClient
 }
 
 // NewWebhookScheduler creates a new webhook scheduler
-func NewWebhookScheduler(logger *slog.Logger, fs *firestore.Client) *WebhookScheduler {
+func NewWebhookScheduler(logger *slog.Logger, fs *internal.FirestoreClient) *WebhookScheduler {
 	return &WebhookScheduler{
 		logger: logger,
 		fs:     fs,

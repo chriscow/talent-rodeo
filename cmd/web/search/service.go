@@ -10,8 +10,6 @@ import (
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/search"
 	"time"
-
-	"cloud.google.com/go/firestore"
 )
 
 const (
@@ -42,7 +40,7 @@ type JobEventHandler interface {
 
 // Service manages background job searches for users
 type Service struct {
-	fs                *firestore.Client
+	fs                *internal.FirestoreClient
 	logger            *slog.Logger
 	ticker            *time.Ticker
 	queue             search.JobQueue
@@ -58,7 +56,7 @@ type Service struct {
 }
 
 // NewService creates a new search service
-func NewService(fs *firestore.Client, logger *slog.Logger, queue search.JobQueue, mailer Mailer, recipient string, pusher PusherInterface) *Service {
+func NewService(fs *internal.FirestoreClient, logger *slog.Logger, queue search.JobQueue, mailer Mailer, recipient string, pusher PusherInterface) *Service {
 	maxConcurrentJobs := 5 // Can be made configurable
 
 	// Initialize the progress cache

@@ -6,12 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"cloud.google.com/go/firestore"
 	"google.golang.org/api/iterator"
 )
 
 // CreateTestUser creates a test user with default values.
-func CreateTestUser(t *testing.T, client *firestore.Client, name, email, phone string, isSuperUser bool) *User {
+func CreateTestUser(t *testing.T, client *FirestoreClient, name, email, phone string, isSuperUser bool) *User {
 	t.Helper()
 
 	now := time.Now()
@@ -37,7 +36,7 @@ func CreateTestUser(t *testing.T, client *firestore.Client, name, email, phone s
 }
 
 // CreateTestJob creates a test job for a given user.
-func CreateTestJob(t *testing.T, client *firestore.Client, userID string, jobID string, status JobStatus, createdAt time.Time) *UserJob {
+func CreateTestJob(t *testing.T, client *FirestoreClient, userID string, jobID string, status JobStatus, createdAt time.Time) *UserJob {
 	t.Helper()
 
 	job := &UserJob{
@@ -57,7 +56,7 @@ func CreateTestJob(t *testing.T, client *firestore.Client, userID string, jobID 
 }
 
 // CreateTestResume creates a test resume for a given user.
-func CreateTestResume(t *testing.T, client *firestore.Client, user *User, resumeText, annotatedText string) *Resume {
+func CreateTestResume(t *testing.T, client *FirestoreClient, user *User, resumeText, annotatedText string) *Resume {
 	t.Helper()
 
 	now := time.Now()
@@ -74,7 +73,7 @@ func CreateTestResume(t *testing.T, client *firestore.Client, user *User, resume
 	return resume
 }
 
-func CreateTestAppointment(t *testing.T, client *firestore.Client, user *User) *Appointment {
+func CreateTestAppointment(t *testing.T, client *FirestoreClient, user *User) *Appointment {
 	t.Helper()
 
 	now := time.Now().UTC()
@@ -96,7 +95,7 @@ func CreateTestAppointment(t *testing.T, client *firestore.Client, user *User) *
 }
 
 // DeleteTestData deletes all test data from Firestore that matches the given prefix.
-func DeleteTestData(t *testing.T, client *firestore.Client, prefix string) {
+func DeleteTestData(t *testing.T, client *FirestoreClient, prefix string) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -200,7 +199,7 @@ func DeleteTestData(t *testing.T, client *firestore.Client, prefix string) {
 }
 
 // DeleteTestAppointments deletes all appointments for a given user.
-func DeleteTestAppointments(t *testing.T, client *firestore.Client, userID string) {
+func DeleteTestAppointments(t *testing.T, client *FirestoreClient, userID string) {
 	t.Helper()
 
 	ctx := context.Background()

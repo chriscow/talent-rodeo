@@ -47,31 +47,30 @@
             vapiInstance.destroy();
         }
 
-        let assistantConfig = assistant;
-        if (overrides) {
-            assistantConfig = {
-                ...overrides,
-                id: assistant
-            };
-        }
-
+        /*
+            data["CallName"] = fmt.Sprintf("admin-%s-%d", selectedUser.Name, time.Now().UnixNano())
+			data["CallCustomerName"] = selectedUser.ID
+            */
         vapiInstance = window.vapiSDK.run({
             apiKey: apiKey,
-            assistant: assistantConfig,
-            config: buttonConfig,
+            name: "{{.CallName}}", // appointment id
+            customer: {
+                name: "{{.CallCustomerName}}", 
+            },
+            assistant: overrides || assistant,
+            config: buttonConfig
         });
     }
 
-    (function (d, t) {
+    (function(d, t) {
         var g = document.createElement(t),
             s = d.getElementsByTagName(t)[0];
-        g.src =
-            "https://cdn.jsdelivr.net/gh/VapiAI/html-script-tag@latest/dist/assets/index.js";
+        g.src = "https://cdn.jsdelivr.net/gh/VapiAI/html-script-tag@latest/dist/assets/index.js";
         g.defer = true;
         g.async = true;
         s.parentNode.insertBefore(g, s);
 
-        g.onload = function () {
+        g.onload = function() {
             {{if .AssistantOverrides}}
             initVapi({{.AssistantOverrides | json}});
             {{else}}

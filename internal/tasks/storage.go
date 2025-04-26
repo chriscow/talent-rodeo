@@ -41,11 +41,11 @@ type TaskStorage interface {
 
 // FirestoreTaskStorage implements TaskStorage using Firestore
 type FirestoreTaskStorage struct {
-	client *firestore.Client
+	client *internal.FirestoreClient
 }
 
 // NewFirestoreTaskStorage creates a new FirestoreTaskStorage instance
-func NewFirestoreTaskStorage(client *firestore.Client) *FirestoreTaskStorage {
+func NewFirestoreTaskStorage(client *internal.FirestoreClient) *FirestoreTaskStorage {
 	return &FirestoreTaskStorage{
 		client: client,
 	}

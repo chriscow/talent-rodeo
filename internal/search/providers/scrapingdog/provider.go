@@ -14,7 +14,6 @@ import (
 	"talent-rodeo/internal/funcs"
 	"talent-rodeo/internal/search"
 
-	"cloud.google.com/go/firestore"
 	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/providers/gemini"
 )
@@ -114,7 +113,7 @@ type Provider struct {
 	apiKey          string
 	baseURL         string
 	client          *http.Client
-	fs              *firestore.Client
+	fs              *internal.FirestoreClient
 	store           *JobStore
 	logger          *slog.Logger
 	searchSemaphore chan struct{}          // Limits concurrent searches
@@ -141,7 +140,7 @@ func WithHTTPClient(client *http.Client) Option {
 	}
 }
 
-func WithFirestore(fs *firestore.Client, logger *slog.Logger) Option {
+func WithFirestore(fs *internal.FirestoreClient, logger *slog.Logger) Option {
 	return func(p *Provider) {
 		p.fs = fs
 		p.logger = logger
