@@ -98,12 +98,16 @@ func ProcessCompletedAppointment(hub *sentry.Hub, fs *internal.FirestoreClient, 
 		logger.Debug(internal.Blue("⏱️ appointment processing took"), "duration", time.Since(start).String())
 
 		// Only mark as completed if the entire process succeeds
-		appointment.Status = internal.AppointmentStatusCompleted
-		appointment.CompletedAt = &time.Time{}
-		*appointment.CompletedAt = time.Now()
-		if err := internal.UpdateAppointment(ctx, fs, appointment); err != nil {
-			logger.Error("failed to update appointment status to completed", "error", err)
+		// appointment.Status = internal.AppointmentStatusCompleted
+		// appointment.CompletedAt = &time.Time{}
+		// *appointment.CompletedAt = time.Now()
+		// if err := internal.UpdateAppointment(ctx, fs, appointment); err != nil {
+		// 	logger.Error("failed to update appointment status to completed", "error", err)
+		// }
+		if err := internal.CompleteProcessing(ctx, fs, appointment); err != nil {
+			logger.Error("failed to mark appointment as completed", "error", err)
 		}
+		logger.Debug(internal.Green("✅ appointment processing completed"), "user_id", user.ID, "appointment_id", appointment.ID)
 
 		// Send completion state update
 		if err := internal.UpdateUserStatus(ctx, fs, user, internal.UserStatusCallCompleted); err != nil {
@@ -187,7 +191,7 @@ func (p *processor) process(ctx context.Context, user *internal.User, appointmen
 	}
 
 	p.logger.Debug("setting appointment state to `processing`", "user_id", user.ID, "appointment_id", appointment.ID)
-	if err := p.setApptProcessing(ctx, appointment); err != nil {
+	if err := internal.MarkAppointmentAsProcessing(ctx, p.fs, appointment); err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
 		return fmt.Errorf("failed to update appointment with transcript summary: %w", err)
 	}
@@ -406,31 +410,6 @@ func (p *processor) generateUserStatement(ctx context.Context, user *internal.Us
 	if err := internal.UpdateUserSearch(ctx, p.fs, user.ID, user.Search); err != nil {
 		p.logger.Error("failed to update user search with user statement", "error", err)
 	}
-	return nil
-}
-
-// setApptProcessing updates the appointment with completion status and transcript summary
-func (p *processor) setApptProcessing(ctx context.Context, appointment *internal.Appointment) error {
-	appointment.UpdatedAt = time.Now()
-	appointment.CompletedAt = &appointment.UpdatedAt
-	appointment.Status = internal.AppointmentStatusProcessing
-
-	// I don't think we need to summarize the transcript anymore.
-	// summary, err := transcript.Summarize(ctx)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("failed to summarize transcript: %w", err)
-	// }
-	// appointment.TranscriptSummary = &summary
-
-	if err := internal.UpdateAppointment(ctx, p.fs, appointment); err != nil {
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"error_type":  "database_update",
-			"entity_type": "appointment",
-		})
-		p.logger.Error("failed to update appointment", "error", err)
-		return fmt.Errorf("failed to update appointment: %w", err)
-	}
-
 	return nil
 }
 
