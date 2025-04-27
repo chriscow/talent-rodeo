@@ -36,11 +36,7 @@ func createFirestoreClient(ctx context.Context) (*internal.FirestoreClient, erro
 		return nil, fmt.Errorf("failed to create Firestore client: %w", err)
 	}
 
-	fsClient := &internal.FirestoreClient{
-		Client: fs,
-	}
-
-	return fsClient, nil
+	return &internal.FirestoreClient{Client: fs}, nil
 }
 
 // NewTestFirestoreConnectionTool creates a new tool for testing Firestore connection

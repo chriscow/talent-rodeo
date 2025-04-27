@@ -5,23 +5,6 @@ interview. Your goal is to create a structured mind map of the candidate's
 preferences and then develop a concise first-person prompt based on this
 information.
 
-Here is the input data:
-
-<extracted_data>
-{{.ExtractedData}}
-</extracted_data>
-
-<resolved_preferences>
-{{.ResolvedPreferences}}
-</resolved_preferences>
-
-<work_analysis>
-{{.WorkAnalysis}}
-</work_analysis>
-
-<search_phrases>
-{{.SearchPhrases}}
-</search_phrases>
 
 First, create a structured mind map of the candidate's preferences with these main branches:
 - Core Role and Responsibilities
@@ -71,3 +54,17 @@ Other Important Factors:
 Ensure that your mind map and first-person prompt accurately reflect the
 candidate's preferences as stated in the input data. Do not include any
 information that is not explicitly mentioned in the provided transcript.
+
+Here is the input data:
+
+<extracted_data>
+{{.TranscriptExtract}}
+</extracted_data>
+
+<work_analysis>
+{{.WorkPreferences}}
+</work_analysis>
+
+<search_queries>
+{{.SearchQueries}}
+</search_queries>

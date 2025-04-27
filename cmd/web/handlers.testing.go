@@ -23,42 +23,11 @@ func (app *application) handleTestingResetUserState(w http.ResponseWriter, r *ht
 		return
 	}
 
-	// Reset the user's state using the proper UpdateUserStatus function
-	if err := internal.UpdateUserStatus(r.Context(), app.fs, user, internal.UserStatusPendingResumeUpload); err != nil {
+	// Reset the user's state using the helper function
+	if err := internal.ResetUserState(r.Context(), app.fs, user); err != nil {
 		app.logger.Error("failed to reset user state", "error", err)
 		app.reportServerError(r, fmt.Errorf("failed to reset user state: %w", err))
 		return
-	}
-
-	// Delete all appointments for the user
-	appointments, err := internal.ListAppointments(r.Context(), app.fs, user.ID)
-	if err != nil {
-		app.logger.Error("failed to list appointments", "error", err)
-		app.reportServerError(r, fmt.Errorf("failed to list appointments: %w", err))
-		return
-	}
-
-	for _, appointment := range appointments {
-		if err := internal.DeleteAppointment(r.Context(), app.fs, user.ID, appointment.ID); err != nil {
-			app.logger.Error("failed to delete appointment", "error", err)
-			app.reportServerError(r, fmt.Errorf("failed to delete appointment: %w", err))
-			return
-		}
-	}
-
-	resumes, err := internal.ListResumes(r.Context(), app.fs, user.ID)
-	if err != nil {
-		app.logger.Error("failed to list resumes", "error", err)
-		app.reportServerError(r, fmt.Errorf("failed to list resumes: %w", err))
-		return
-	}
-
-	for _, resume := range resumes {
-		if err := internal.DeleteResume(r.Context(), app.fs, user.ID, resume.ID); err != nil {
-			app.logger.Error("failed to delete resume", "error", err)
-			app.reportServerError(r, fmt.Errorf("failed to delete resume: %w", err))
-			return
-		}
 	}
 
 	app.logger.Info("reset user state for testing",
@@ -67,4 +36,47 @@ func (app *application) handleTestingResetUserState(w http.ResponseWriter, r *ht
 
 	// Redirect back to profile
 	http.Redirect(w, r, "/profile", http.StatusSeeOther)
+}
+
+// handleTestingAuthenticate sets up authentication for a specific test user.
+// Only available when TESTING_MODE is enabled.
+func (app *application) handleTestingAuthenticate(w http.ResponseWriter, r *http.Request) {
+	// Only allow this in testing mode
+	if os.Getenv("TESTING_MODE") != "true" {
+		app.clientError(w, http.StatusForbidden)
+		return
+	}
+
+	// Require POST method
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		app.clientError(w, http.StatusMethodNotAllowed)
+		return
+	}
+
+	userID := r.Header.Get("X-Test-User-ID")
+	if userID == "" {
+		app.clientError(w, http.StatusBadRequest)
+		return
+	}
+
+	// Get the user from Firestore to ensure it exists
+	user, found, err := internal.GetUser(r.Context(), app.fs, userID)
+	if err != nil {
+		app.logger.Error("failed to get test user", "error", err)
+		app.serverError(w, r, fmt.Errorf("failed to get test user: %w", err))
+		return
+	}
+	if !found {
+		app.clientError(w, http.StatusNotFound)
+		return
+	}
+
+	// Set the user in the session
+	app.sessionManager.Put(r.Context(), "UserID", userID)
+	app.logger.Info("test mode: authenticated user",
+		"user_id", user.ID,
+		"email", user.Email)
+
+	w.WriteHeader(http.StatusOK)
 }

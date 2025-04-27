@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"talent-rodeo/internal"
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
@@ -32,6 +33,7 @@ const (
 )
 
 func (app *application) serveHTTP() error {
+	app.logger.Info(internal.BGGreen("Starting HTTP server"), "port", app.config.httpPort)
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", app.config.httpPort),
 		Handler:      app.routes(),
@@ -155,7 +157,15 @@ func (app *application) serve(srv *http.Server) error {
 
 		// Stop the search service first
 		app.logger.Info("app: stopping search service")
-		app.search.Stop()
+		if err := app.searchScheduler.Close(ctx); err != nil {
+			app.logger.Error("error stopping search scheduler", "error", err)
+		}
+		if err := app.matchAnalyzer.Close(ctx); err != nil {
+			app.logger.Error("error stopping job processor", "error", err)
+		}
+		if err := app.searchProvider.Close(ctx); err != nil {
+			app.logger.Error("error stopping search provider", "error", err)
+		}
 		app.logger.Info("app: search service stopped")
 
 		// Stop the task processor first

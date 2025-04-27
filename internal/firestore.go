@@ -4,20 +4,27 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"log/slog"
 	"os"
+	"sync"
 
 	"cloud.google.com/go/firestore"
 	firebase "firebase.google.com/go/v4"
+	"github.com/dgraph-io/ristretto/v2"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
-
-	"github.com/patrickmn/go-cache"
 )
 
+// FirestoreClient implements FirestoreClientInterface
 type FirestoreClient struct {
 	*firestore.Client
-	UsersCache *cache.Cache // *ristretto.Cache[string, *User]
+
+	jobListingCache *ristretto.Cache[string, *JobListing]
+	jobDetailCache  *ristretto.Cache[string, *JobDetail]
 }
+
+// Track if this is the first call to NewFirestoreClient
+var initOnce sync.Once
 
 // NewFirestoreClient creates a new Firestore client using Google Cloud credential chain:
 // 1. GOOGLE_APPLICATION_CREDENTIALS environment variable pointing to a JSON credentials file
@@ -28,6 +35,26 @@ func NewFirestoreClient(ctx context.Context) (*FirestoreClient, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("FIREBASE_PROJECT_ID must be set")
 	}
+
+	// Log project ID and first 20 chars of credentials on first call
+	initOnce.Do(func() {
+		logger := slog.Default()
+		credentialsPreview := ""
+		if credentials := os.Getenv("FIREBASE_CREDENTIALS"); credentials != "" {
+			if len(credentials) > 20 {
+				credentialsPreview = credentials[:20] + "..."
+			} else {
+				credentialsPreview = credentials + "..."
+			}
+		}
+
+		usingEmulator := os.Getenv("FIRESTORE_EMULATOR_HOST") != ""
+		if usingEmulator {
+			logger.Info(BGMagenta("using Firestore emulator"),
+				"projectID", projectID,
+				"credentials_preview", credentialsPreview)
+		}
+	})
 
 	config := &firebase.Config{ProjectID: projectID}
 	var options []option.ClientOption
@@ -52,14 +79,42 @@ func NewFirestoreClient(ctx context.Context) (*FirestoreClient, error) {
 		return nil, fmt.Errorf("failed to create firestore client: %w", err)
 	}
 
-	userCache := cache.New(cache.NoExpiration, cache.NoExpiration)
+	jobListingCache, err := ristretto.NewCache(&ristretto.Config[string, *JobListing]{
+		NumCounters: 1e6,     // number of keys to track frequency of
+		MaxCost:     1 << 30, // maximum cost of cache (1GB)
+		BufferItems: 64,      // number of keys per Get buffer
+		Metrics:     false,   // no metrics collection
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create job listing cache: %w", err)
+	}
+
+	jobDetailCache, err := ristretto.NewCache(&ristretto.Config[string, *JobDetail]{
+		NumCounters: 1e6,     // number of keys to track frequency of
+		MaxCost:     1 << 30, // maximum cost of cache (1GB)
+		BufferItems: 64,      // number of keys per Get buffer
+		Metrics:     false,   // no metrics collection
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create job detail cache: %w", err)
+	}
+
 	return &FirestoreClient{
-		Client:     fs,
-		UsersCache: userCache,
+		Client:          fs,
+		jobListingCache: jobListingCache,
+		jobDetailCache:  jobDetailCache,
 	}, nil
 }
 
 func (fs *FirestoreClient) Close() error {
+	if fs.jobListingCache != nil {
+		fs.jobListingCache.Close()
+	}
+
+	if fs.jobDetailCache != nil {
+		fs.jobDetailCache.Close()
+	}
+
 	if fs.Client != nil {
 		return fs.Client.Close()
 	}
@@ -68,7 +123,7 @@ func (fs *FirestoreClient) Close() error {
 
 // DeleteCollection deletes all documents in a collection in batches using BulkWriter
 // If recursive is true, it will also delete all documents in all subcollections
-func (fs *FirestoreClient) DeleteCollection(ctx context.Context, collectionPath string, batchSize int, recursive bool) error {
+func DeleteCollection(ctx context.Context, fs *FirestoreClient, collectionPath string, batchSize int, recursive bool) error {
 	if batchSize <= 0 {
 		batchSize = 100 // Default batch size if not specified
 	}
@@ -105,7 +160,7 @@ func (fs *FirestoreClient) DeleteCollection(ctx context.Context, collectionPath 
 					}
 
 					// Recursively delete the subcollection
-					err = fs.DeleteCollection(ctx, subCol.Path, batchSize, recursive)
+					err = DeleteCollection(ctx, fs, subCol.Path, batchSize, recursive)
 					if err != nil {
 						return fmt.Errorf("failed to delete subcollection %s: %w", subCol.Path, err)
 					}

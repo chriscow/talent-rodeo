@@ -1,0 +1,14 @@
+{
+	"folders": [
+        {
+            "path": "."
+        },
+        {
+            "path": "../vapi-go"
+        },
+        {
+            "path": "../thoughtnet/minds"
+        }
+    ],
+    "settings": {}
+}

@@ -20,7 +20,7 @@ type SearchSchedulerPayload struct {
 type SearchScheduler struct {
 	publisher Publisher         // Used to publish search messages
 	logger    *slog.Logger      // Structured logger for the scheduler
-	fs        *FirestoreClient // Database connection for persistence
+	fs        FirestoreClient // Database connection for persistence
 	taskProc  *tasks.Processor  // Processor for enqueueing new tasks
 	now       func() time.Time  // Function to get current time (for testing)
 }

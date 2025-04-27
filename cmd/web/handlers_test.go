@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -19,17 +20,25 @@ import (
 	th "talent-rodeo/internal/tasks/handlers"
 
 	"github.com/alexedwards/scs/v2"
-	"github.com/joho/godotenv"
 	"github.com/nats-io/nats-server/v2/test"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/pusher/pusher-http-go/v5"
 )
 
-func init() {
-	if err := godotenv.Overload("../../.env"); err != nil {
-		log.Fatal("Error loading .env file")
+func TestMain(m *testing.M) {
+	// Start emulator
+	if err := internal.StartEmulator(); err != nil {
+		log.Fatalf("Failed to start emulator: %v", err)
 	}
+
+	// Ensure emulator is stopped after tests
+	defer internal.StopEmulator()
+
+	// Run tests
+	code := m.Run()
+
+	os.Exit(code)
 }
 
 type testServer struct {
@@ -66,11 +75,19 @@ func deleteStreams(t *testing.T, js jetstream.JetStream) {
 func newTestServer(t *testing.T, name string) *testServer {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	// Initialize test database using the Postgres setup
-	// db := database.SetupTestDB(t)
-	fs, err := internal.NewFirestoreClient(context.Background())
-	if err != nil {
-		t.Fatalf("Failed to create firestore client: %v", err)
+	// Initialize Firestore client based on test mode
+	var fs *internal.FirestoreClient
+	var err error
+	if testing.Short() {
+		fs, err = internal.NewTestFirestoreClient(context.Background())
+		if err != nil {
+			t.Fatalf("Failed to create test firestore client: %v", err)
+		}
+	} else {
+		fs, err = internal.NewFirestoreClient(context.Background())
+		if err != nil {
+			t.Fatalf("Failed to create firestore client: %v", err)
+		}
 	}
 
 	// Create test session manager

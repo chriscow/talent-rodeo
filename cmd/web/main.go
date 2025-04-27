@@ -13,15 +13,14 @@ import (
 	"sync"
 	"time"
 
-	"talent-rodeo/cmd/web/search"
-	"talent-rodeo/cmd/web/transcript"
-
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/auth"
+	"talent-rodeo/internal/search"
 	"talent-rodeo/internal/search/providers/scrapingdog"
 	"talent-rodeo/internal/smtp"
 	"talent-rodeo/internal/tasks"
 	th "talent-rodeo/internal/tasks/handlers"
+	"talent-rodeo/internal/transcript"
 	"talent-rodeo/internal/version"
 
 	scsfs "github.com/alexedwards/scs/firestore"
@@ -45,6 +44,36 @@ func main() {
 		logger.Error(err.Error(), "trace", trace)
 		os.Exit(1)
 	}
+}
+
+// loadTestUser loads a predefined user from Firestore for testing purposes.
+// This is used only when TESTING_MODE=true to provide an authenticated user
+// context for UI testing without requiring a login flow.
+func (app *application) loadTestUser() (*internal.User, error) {
+	// Set a consistent test user ID or use an environment variable if provided
+	testUserID := os.Getenv("LINKEDIN_USERNAME")
+
+	// If no test user ID is specified, try to find any user
+	if testUserID == "" {
+		return nil, fmt.Errorf("no test user ID specified in environment variable LINKEDIN_USERNAME")
+	}
+
+	// Load the user by ID
+	user, found, err := internal.GetUserByEmail(context.Background(), app.fs, testUserID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get test user: %w", err)
+	}
+
+	if !found {
+		return nil, fmt.Errorf("test user not found with ID: %s", testUserID)
+	}
+
+	app.logger.Info("loaded test user for testing mode",
+		"user_id", user.ID,
+		"email", user.Email,
+		"status", user.State.Status)
+
+	return user, nil
 }
 
 type config struct {
@@ -92,21 +121,24 @@ type config struct {
 }
 
 type application struct {
-	config         config
-	logger         *slog.Logger
-	fs             *internal.FirestoreClient
-	js             jetstream.JetStream
-	processor      *tasks.Processor
-	search         *search.Service
-	wg             sync.WaitGroup
-	natsShutdown   chan struct{}
-	mailer         *smtp.Mailer
-	pusher         *pusher.Client
-	sessionManager *scs.SessionManager
+	config          config
+	logger          *slog.Logger
+	fs              *internal.FirestoreClient
+	js              jetstream.JetStream
+	processor       *tasks.Processor
+	wg              sync.WaitGroup
+	natsShutdown    chan struct{}
+	mailer          *smtp.Mailer
+	pusher          *pusher.Client
+	sessionManager  *scs.SessionManager
+	searchProvider  *scrapingdog.Provider
+	searchScheduler *search.Scheduler
+	jobSink         *internal.JobSink
+	matchAnalyzer   *MatchAnalyzer
 }
 
 func run(logger *slog.Logger) error {
-	if err := checkEnv(); err != nil {
+	if err := checkEnv(logger); err != nil {
 		return err
 	}
 
@@ -174,6 +206,8 @@ func run(logger *slog.Logger) error {
 
 	flag.Parse()
 
+	logger.Info("Starting HTTP server", "port", cfg.httpPort)
+
 	if *showVersion {
 		fmt.Printf("version: %s\n", version.Get())
 		return nil
@@ -188,14 +222,14 @@ func run(logger *slog.Logger) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	firestoreClient, err := internal.NewFirestoreClient(ctx)
+	FirestoreClient, err := internal.NewFirestoreClient(ctx)
 	if err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"error_type": "firestore_client_new",
 		})
 		return err
 	}
-	defer firestoreClient.Close()
+	defer FirestoreClient.Close()
 
 	/*
 		var db *database.DB
@@ -220,27 +254,10 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
-	keyPairs := [][]byte{[]byte(cfg.session.secretKey), nil}
-	if cfg.session.oldSecretKey != "" {
-		keyPairs = append(keyPairs, []byte(cfg.session.oldSecretKey), nil)
+	sessionManager, err := setupSessionManager(cfg, FirestoreClient, logger)
+	if err != nil {
+		return err
 	}
-
-	if len(cfg.session.secretKey) < 32 {
-		internal.SentryReportError(ctx, fmt.Errorf("SESSION_SECRET must be at least 32 bytes long"), sentry.LevelError, map[string]string{
-			"error_type": "session_secret_too_short",
-		})
-		return fmt.Errorf("SESSION_SECRET must be at least 32 bytes long")
-	}
-
-	sessionManager := scs.New()
-	sessionManager.Store = scsfs.New(firestoreClient.Client)
-	sessionManager.Lifetime = 24 * time.Hour
-	sessionManager.Cookie.Secure = true
-	sessionManager.Cookie.HttpOnly = true
-	sessionManager.Cookie.SameSite = http.SameSiteLaxMode
-	sessionManager.Cookie.Name = "session"
-	sessionManager.Cookie.Persist = true
-	sessionManager.Cookie.Path = "/"
 
 	// Create and set our adapter as the gothic store
 	gothic.Store = auth.NewSCSAdapter(sessionManager)
@@ -290,37 +307,30 @@ func run(logger *slog.Logger) error {
 	pusherClient := setupPusher(logger)
 
 	// This is to schedule delivery of messages for scheduled phone calls
-	taskProcessor := tasks.NewProcessor(tasks.NewFirestoreTaskStorage(firestoreClient), logger)
+	taskProcessor := tasks.NewProcessor(tasks.NewFirestoreTaskStorage(FirestoreClient), logger)
 
 	// Setup scheduler
 	// scheduler, err := setupNATSHandler(cfg.nats.url, logger)
 	// if err != nil {
 	// 	return fmt.Errorf("error setting up NATS handler: %w", err)
 	// }
-	wh := th.NewWebhookScheduler(logger, firestoreClient)
+	wh := th.NewWebhookScheduler(logger, FirestoreClient)
 	// taskProcessor.RegisterHandler(scheduler)
 	taskProcessor.RegisterHandler(wh)
 
-	searchProvider := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"),
-		scrapingdog.WithFirestore(firestoreClient),
-	)
+	// jobSink := internal.NewJobSink(FirestoreClient, logger)
+	// searchProvider := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), scrapingdog.JobEventHandler(jobSink), logger)
+	// searchScheduler := search.NewSearchScheduler(FirestoreClient, logger, searchProvider, mailer, cfg.notifications.email)
 
-	// Start search workers for ScrapingDog provider
-	searchProvider.StartWorkers(ctx, 5) // Start 5 workers to process the search queue
+	// searchProvider.Start(ctx)
+	// if err := searchScheduler.Start(ctx); err != nil {
+	// 	return fmt.Errorf("failed to start search scheduler: %w", err)
+	// }
+	// if err := jobProcessor.Start(ctx); err != nil {
+	// 	return fmt.Errorf("failed to start job processor: %w", err)
+	// }
 
-	searchService := search.NewService(firestoreClient, logger, searchProvider, mailer, cfg.notifications.email, pusherClient)
-	if err := searchService.Start(); err != nil {
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"error_type": "search_service_start",
-		})
-		return fmt.Errorf("failed to start search service: %w", err)
-	}
-
-	searchProvider.StartWorkers(ctx, 5)
-
-	searchService.SetJobQueue(searchProvider)
-
-	if err := transcript.RecoverProcessingAppointments(sentry.CurrentHub(), firestoreClient, logger); err != nil {
+	if err := transcript.RecoverProcessingAppointments(sentry.CurrentHub(), FirestoreClient, logger); err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"error_type": "transcript_recovery",
 		})
@@ -329,7 +339,7 @@ func run(logger *slog.Logger) error {
 
 	app := &application{
 		config: cfg,
-		fs:     firestoreClient,
+		fs:     FirestoreClient,
 		logger: logger,
 		mailer: mailer,
 		pusher: pusherClient,
@@ -340,7 +350,10 @@ func run(logger *slog.Logger) error {
 		// natsScheduler: scheduler,
 		// handlers:       handlers,
 		sessionManager: sessionManager,
-		search:         searchService,
+		// search:          searchScheduler,
+		// searchProvider:  searchProvider,
+		// searchScheduler: searchScheduler,
+		// jobProcessor:    jobProcessor,
 	}
 
 	// Start the task processor
@@ -350,6 +363,10 @@ func run(logger *slog.Logger) error {
 			app.logger.Error("task processor error", "error", err)
 		}
 	}()
+
+	if err := app.startServices(ctx); err != nil {
+		return fmt.Errorf("failed to start services: %w", err)
+	}
 
 	if cfg.autoHTTPS.domain != "" {
 		return app.serveAutoHTTPS()
@@ -390,13 +407,13 @@ func setupNATSHandler(natsURL string, logger *slog.Logger) (*th.NATSMessageSched
 	return th.NewNATSMessageScheduler(js, logger), nil
 }
 
-func checkEnv() error {
+func checkEnv(logger *slog.Logger) error {
 	wd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("failed to get working directory: %w", err)
 	}
 
-	fmt.Println("checkEnv: working directory", internal.BGYellow(wd))
+	logger.Info("checkEnv: working directory: " + internal.Yellow(wd))
 
 	if err = godotenv.Overload(); err != nil {
 		fmt.Printf("checkEnv: Error loading .env file: %s\n", err.Error())
@@ -409,6 +426,10 @@ func checkEnv() error {
 		"TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER",
 
 		"FIREBASE_PROJECT_ID", "FIREBASE_CREDENTIALS",
+		//
+		// consider:
+		// OPENAI_DEFAULT_MODEL, LLM_DEFAULT_MODEL,
+		//
 		// "CLOUDFLARE_API_EMAIL", "CLOUDFLARE_API_TOKEN",
 		// "CLOUDFLARE_GLOBAL_API_KEY", "CLOUDFLARE_KV_NAMESPACE_ID", "SCRAPINGDOG_API_KEY",
 		"VAPI_API_KEY", "VAPI_ASSISTANT_ID", "VAPI_OUTBOUND_PHONE_ID",
@@ -444,6 +465,47 @@ func checkEnv() error {
 		return fmt.Errorf("failed to unmarshal FIREBASE_CREDENTIALS: %w", err)
 	}
 
-	slog.Info("All required environment variables are present")
+	logger.Info("All required environment variables are present")
+	return nil
+}
+
+// setupSessionManager initializes and returns a configured session manager.
+func setupSessionManager(cfg config, FirestoreClient *internal.FirestoreClient, logger *slog.Logger) (*scs.SessionManager, error) {
+	keyPairs := [][]byte{[]byte(cfg.session.secretKey), nil}
+	if cfg.session.oldSecretKey != "" {
+		keyPairs = append(keyPairs, []byte(cfg.session.oldSecretKey), nil)
+	}
+
+	if len(cfg.session.secretKey) < 32 {
+		return nil, fmt.Errorf("SESSION_SECRET must be at least 32 bytes long")
+	}
+
+	sessionManager := scs.New()
+	sessionManager.Store = scsfs.New(FirestoreClient.Client)
+	sessionManager.Lifetime = 24 * time.Hour
+	sessionManager.Cookie.Secure = true
+	sessionManager.Cookie.HttpOnly = true
+	sessionManager.Cookie.SameSite = http.SameSiteLaxMode
+	sessionManager.Cookie.Name = "session"
+	sessionManager.Cookie.Persist = true
+
+	return sessionManager, nil
+}
+
+func (app *application) startServices(ctx context.Context) error {
+	app.searchProvider = scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), app.logger)
+	app.searchScheduler = search.NewScheduler(app.fs, app.logger, app.searchProvider, app.mailer, app.config.notifications.email)
+	app.matchAnalyzer = NewMatchAnalyzer(app.fs, app.logger)
+
+	if err := app.searchProvider.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start search provider: %w", err)
+	}
+	if err := app.searchScheduler.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start search scheduler: %w", err)
+	}
+	if err := app.matchAnalyzer.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start job processor: %w", err)
+	}
+
 	return nil
 }

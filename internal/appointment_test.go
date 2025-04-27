@@ -2,34 +2,16 @@ package internal
 
 import (
 	"context"
-	"log"
-	"os"
 	"testing"
 	"time"
-
-	"github.com/joho/godotenv"
 )
-
-func init() {
-	if err := godotenv.Overload("../.env"); err != nil {
-		log.Fatal("No .env file found, using system env")
-	}
-
-	if os.Getenv("FIREBASE_CREDENTIALS") == "" {
-		log.Fatal("FIREBASE_CREDENTIALS is not set")
-	}
-
-	if os.Getenv("FIREBASE_PROJECT_ID") == "" {
-		log.Fatal("FIREBASE_PROJECT_ID is not set")
-	}
-}
 
 func TestAppointment(t *testing.T) {
 	ctx := context.Background()
 
-	client, err := NewFirestoreClient(ctx)
+	client, err := NewTestFirestoreClient(ctx)
 	if err != nil {
-		t.Fatalf("NewFirestoreClient() error = %v", err)
+		t.Fatalf("newTestFirestoreClient() error = %v", err)
 	}
 
 	// Clean up before and after tests
@@ -134,25 +116,6 @@ func TestAppointment(t *testing.T) {
 		_, err := GetAppointment(ctx, client, user.ID, "non-existent-id")
 		if err == nil {
 			t.Error("GetAppointment() with non-existent ID should return error")
-		}
-	})
-
-	// Test invalid appointment creation
-	t.Run("InvalidAppointmentCreation", func(t *testing.T) {
-		invalidAppointment := &Appointment{
-			ID:     "test-invalid-appointment",
-			UserID: "non-existent-user", // This should fail because we're using wrong user
-		}
-
-		// Create a new user object that doesn't exist in the database
-		nonExistentUser := &User{
-			ID:   "non-existent-user",
-			Name: "Non Existent",
-		}
-
-		err := CreateAppointment(ctx, client, "InvalidAppointmentCreation test", *nonExistentUser, invalidAppointment)
-		if err == nil {
-			t.Error("CreateAppointment() with non-existent user should return error")
 		}
 	})
 

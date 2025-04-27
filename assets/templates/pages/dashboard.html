@@ -36,37 +36,6 @@
         </div>
     </header>
 
-    {{if .TestMode}}
-    <!-- Test Mode Controls - TEMPORARY -->
-    <div class="test-mode-controls" style="background-color: #f8f8f8; padding: 10px; margin-bottom: 15px; border: 1px dashed #999;">
-        <strong>Test Mode Controls:</strong>
-        <div class="test-links">
-            <a href="/dashboard" class="button-small">Default</a>
-            <a href="/dashboard?test_mode=searching" class="button-small">Searching</a>
-            <a href="/dashboard?test_mode=scheduled_soon" class="button-small">Scheduled Soon</a>
-            <a href="/dashboard?test_mode=scheduled_future" class="button-small">Scheduled Future</a>
-            <a href="/dashboard?test_mode=no_schedule" class="button-small">No Schedule</a>
-            <a href="/dashboard?test_mode=search_error" class="button-small">Search Error</a>
-        </div>
-        <div class="current-state">
-            <small>
-                Current State: 
-                {{if .IsSearching}}
-                    <strong>Searching</strong>
-                {{else if eq .NextSearchTime.IsZero true}}
-                    <strong>No Schedule</strong>
-                {{else if .NextSearchTime.Before .CurrentTime}}
-                    <strong>Search Imminent</strong>
-                {{else}}
-                    <strong>Scheduled</strong> for {{.NextSearchTime.Format "Jan 02, 2006 at 3:04 PM"}}
-                {{end}}
-            </small>
-        </div>
-    </div>
-    {{end}}
-
-
-
     <!-- Status updates during job search -->
     {{if .SearchError}}
     <article id="search-error" class="notice error">

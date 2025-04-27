@@ -3,19 +3,34 @@ package scrapingdog
 import (
 	"context"
 	"fmt"
+	"log"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
 	"talent-rodeo/internal"
-	"talent-rodeo/internal/search"
 
-	"github.com/joho/godotenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) {
+	// Start emulator
+	if err := internal.StartEmulator(); err != nil {
+		log.Fatalf("Failed to start emulator: %v", err)
+	}
+
+	// Ensure emulator is stopped after tests
+	defer internal.StopEmulator()
+
+	// Run tests
+	code := m.Run()
+
+	os.Exit(code)
+}
 
 // Mock HTTP Server for API
 type MockScrapingDogServer struct {
@@ -160,9 +175,9 @@ func setupTestProvider(_ *testing.T) (*Provider, *MockScrapingDogServer, func())
 	// Create provider with mock server URL - ensure it has the correct full URL
 	provider := NewProvider(
 		"test-api-key",
+		slog.Default(),
 		WithBaseURL(mockServer.URL()), // This passes the full mock server URL
 		WithHTTPClient(httpClient),
-		WithProviderLogger(slog.Default()),
 	)
 
 	cleanup := func() {
@@ -174,64 +189,61 @@ func setupTestProvider(_ *testing.T) (*Provider, *MockScrapingDogServer, func())
 
 // Integration test with real Firestore client
 func TestProviderWithRealFirestore(t *testing.T) {
-	// Skip if running in CI environment without credentials
-	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
-	}
-
-	if err := godotenv.Load("../../../../.env"); err != nil {
-		t.Fatalf("Failed to load .env file: %v", err)
-	}
-
 	// Create mock server
 	mockServer := NewMockScrapingDogServer()
 	defer mockServer.Close()
 
-	// Get Firestore client
+	// Get Firestore client using emulator
 	ctx := context.Background()
-	fs, err := getFirestoreClient(t, ctx)
+	fs, err := internal.NewTestFirestoreClient(ctx)
 	if err != nil {
-		t.Skipf("Skipping test due to Firestore client error: %v", err)
-		return
+		t.Fatalf("Failed to get Firestore client: %v", err)
 	}
 	defer fs.Close()
 
 	// Create HTTP client
 	httpClient := &http.Client{Timeout: 5 * time.Second}
 
-	// Create event handler mock
-	mockHandler := &MockEventHandler{}
-
-	// Create provider with real Firestore
+	// Create provider with mock server URL
 	provider := NewProvider(
 		"test-api-key",
+		slog.Default(),
 		WithBaseURL(mockServer.URL()),
 		WithHTTPClient(httpClient),
-		WithFirestore(fs),
-		WithJobEventHandler(mockHandler),
-		WithProviderLogger(slog.Default()),
 	)
 
-	// Search for jobs
-	criteria := search.Criteria{
-		Query:    "golang",
-		Location: "remote",
-	}
+	// Test search functionality
+	t.Run("SearchJobs", func(t *testing.T) {
+		criteria := internal.SearchCriteria{
+			Query: "golang",
+			GeoID: "remote",
+		}
 
-	listings, err := provider.SearchJobListings(ctx, criteria)
-	require.NoError(t, err)
-	assert.Len(t, listings, 2, "Should have found 2 jobs")
+		jobs, err := provider.SearchJobListings(ctx, criteria, 1)
+		require.NoError(t, err)
+		require.NotNil(t, jobs)
+		assert.Len(t, jobs, 2)
 
-	// Get job details using the raw provider job ID
-	jobID := listings[0].ProviderJobID
-	details, err := provider.GetJobDetails(ctx, jobID)
-	require.NoError(t, err)
+		// Verify mock server was called
+		assert.Equal(t, 1, mockServer.searchesPerformed)
+	})
 
-	// The job detail ID should be scrapingdog-{raw_id}
-	expectedDetailID := CreateProviderJobID(jobID)
-	assert.Equal(t, expectedDetailID, details.ID)
-	assert.Equal(t, jobID, details.ProviderJobID)
-	assert.Equal(t, ProviderName, details.Provider)
+	// Test job details functionality
+	t.Run("GetJobDetails", func(t *testing.T) {
+		jobID := "test-job-1"
+		details, err := provider.GetJobDetails(ctx, jobID)
+		require.NoError(t, err)
+		require.NotNil(t, details)
+
+		assert.Equal(t, "scrapingdog:linkedin:test-job-1", details.ID)
+		assert.Equal(t, "Go Developer", details.Title)
+		assert.Equal(t, "Test Company", details.Company)
+		assert.Equal(t, "Remote", details.Location)
+
+		// Verify mock server was called
+		assert.Equal(t, jobID, mockServer.requestedJobID)
+		assert.Equal(t, 1, mockServer.detailsRetrieved)
+	})
 }
 
 // Test job search
@@ -241,33 +253,27 @@ func TestProviderSearchJobs(t *testing.T) {
 
 	// Search for jobs
 	ctx := context.Background()
-	criteria := search.Criteria{
-		Query:    "golang",
-		Location: "remote",
+	criteria := internal.SearchCriteria{
+		Query: "golang",
+		GeoID: "remote",
 	}
 
-	jobs, err := provider.SearchJobListings(ctx, criteria)
+	jobs, err := provider.SearchJobListings(ctx, criteria, 1)
 	require.NoError(t, err)
 	assert.Len(t, jobs, 2, "Should have found 2 jobs")
 	assert.Equal(t, "Go Developer", jobs[0].Title)
 	assert.Equal(t, "Test Company", jobs[0].Company)
 	assert.Equal(t, "Remote", jobs[0].Location)
-	assert.Equal(t, ProviderName, jobs[0].Provider)
+	assert.Equal(t, JobProviderName, jobs[0].Provider)
 
 	// Verify the search was performed
 	assert.Equal(t, 1, mockServer.searchesPerformed)
 }
 
 func TestProviderGetJobDetails(t *testing.T) {
-	// Use a custom logger for the test to capture output
-	testLogger := slog.Default().With("test", "TestProviderGetJobDetails")
-
-	// Setup the test provider with the custom logger
+	// Setup the test provider
 	provider, mockServer, cleanup := setupTestProvider(t)
 	defer cleanup()
-
-	// Override the provider's logger for this test
-	provider.logger = testLogger
 
 	// Get job details
 	ctx := context.Background()
@@ -281,11 +287,11 @@ func TestProviderGetJobDetails(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify details
-	assert.Equal(t, ProviderName, details.Provider)
+	assert.Equal(t, JobProviderName, details.Provider)
 	assert.Equal(t, "Go Developer", details.Title)
 	assert.Equal(t, "Test Company", details.Company)
 	assert.Equal(t, "Remote", details.Location)
-	assert.Equal(t, "This is a test job description", details.FullDescription)
+	assert.Equal(t, "This is a test job description", details.Description)
 
 	// Verify salary info was parsed
 	require.NotNil(t, details.SalaryInfo)
@@ -304,29 +310,16 @@ func TestQueueSearch(t *testing.T) {
 
 	// Start workers
 	ctx := context.Background()
-	provider.StartWorkers(ctx, 1)
-	defer provider.StopWorkers(ctx)
+	provider.Start(ctx)
+	defer provider.Close(ctx)
 
 	// Queue a search
-	err := provider.QueueSearch(ctx, "test-user", search.Criteria{
-		Query:    "golang",
-		Location: "remote",
+	err := provider.QueueSearch(ctx, internal.SearchTask{
+		Criteria: internal.SearchCriteria{
+			Query: "golang",
+			GeoID: "remote",
+		},
 	})
 
 	require.NoError(t, err)
-}
-
-// Helper function to get a real Firestore client
-func getFirestoreClient(t *testing.T, ctx context.Context) (*internal.FirestoreClient, error) {
-	t.Helper()
-
-	// Use the shared function from internal package
-	fs, err := internal.NewFirestoreClient(ctx)
-	if err != nil {
-		// Check if credentials are available
-		t.Logf("Failed to initialize Firestore client: %v", err)
-		return nil, err
-	}
-
-	return fs, nil
 }

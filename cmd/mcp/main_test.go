@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"os"
 	"talent-rodeo/internal"
 	"testing"
 
@@ -17,16 +18,34 @@ func init() {
 	}
 }
 
+func TestMain(m *testing.M) {
+	// Start emulator
+	if err := internal.StartEmulator(); err != nil {
+		log.Fatalf("Failed to start emulator: %v", err)
+	}
+
+	// Ensure emulator is stopped after tests
+	defer internal.StopEmulator()
+
+	// Run tests
+	code := m.Run()
+
+	os.Exit(code)
+}
+
 func TestListUsers(t *testing.T) {
 	ctx := context.Background()
 
 	// Test direct ListUsers function
-	t.Run("Direct ListUsers call", func(t *testing.T) {
-		fs, err := createFirestoreClient(ctx)
+	t.Run("ListUsers call", func(t *testing.T) {
+		fs, err := internal.NewFirestoreClient(ctx)
 		if err != nil {
 			t.Fatalf("Failed to create Firestore client: %v", err)
 		}
 		defer fs.Close()
+
+		// CreateTestUser(t *testing.T, client *internal.FirestoreClient, name string, email string, phone string, isSuperUser bool) *internal.User
+		internal.CreateTestUser(t, fs, "test", "test@example.com", "1234567890", true)
 
 		users, err := internal.ListUsers(ctx, fs, 0, 0)
 		if err != nil {

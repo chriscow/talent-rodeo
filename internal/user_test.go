@@ -3,70 +3,16 @@ package internal
 import (
 	"context"
 	"fmt"
-	"log"
-	"os"
 	"testing"
 	"time"
-
-	"github.com/joho/godotenv"
 )
-
-func init() {
-	if err := godotenv.Overload("../.env"); err != nil {
-		wd, _ := os.Getwd()
-		log.Printf("failed to load .env from %s: %v", wd, err)
-	}
-
-	/*
-		// Get the absolute path to the project root
-		wd, err := os.Getwd()
-		if err != nil {
-			log.Printf("error getting working directory: %v", err)
-			return
-		}
-		log.Printf("present working directory: %s", wd)
-
-		// The project root is one level up from the internal directory
-		projectRoot := filepath.Dir(wd)
-		envPath := filepath.Join(projectRoot, ".env")
-
-		log.Printf("attempting to load .env from: %s", envPath)
-		if err := godotenv.Overload(envPath); err != nil {
-			log.Printf("failed to load .env from %s: %v", envPath, err)
-			// Try loading from current directory as fallback
-			if err := godotenv.Overload(".env"); err != nil {
-				log.Printf("failed to load .env from current directory: %v", err)
-			}
-		} else {
-			log.Printf("successfully loaded .env from: %s", envPath)
-		}
-
-		// Log environment variables (without showing sensitive data)
-		projectID := os.Getenv("FIREBASE_PROJECT_ID")
-		credentials := os.Getenv("FIREBASE_CREDENTIALS")
-
-		log.Printf("FIREBASE_PROJECT_ID is %s", map[bool]string{true: "set", false: "not set"}[projectID != ""])
-		log.Printf("FIREBASE_CREDENTIALS is %s", map[bool]string{true: "set", false: "not set"}[credentials != ""])
-
-		if projectID == "" {
-			log.Fatal("FIREBASE_PROJECT_ID is not set")
-		}
-
-		if credentials == "" {
-			log.Fatal("FIREBASE_CREDENTIALS is not set")
-		}
-	*/
-}
 
 func TestUser(t *testing.T) {
 	ctx := context.Background()
 
-	client, err := NewFirestoreClient(ctx)
+	client, err := NewTestFirestoreClient(ctx)
 	if err != nil {
-		// Log the error and working directory
-		dir, _ := os.Getwd()
-		log.Printf("present working directory: %s", dir)
-		t.Fatalf("NewFirestoreClient() error = %v", err)
+		t.Fatalf("newTestFirestoreClient() error = %v", err)
 	}
 
 	// Clean up before and after tests
@@ -169,9 +115,9 @@ func TestUser(t *testing.T) {
 func TestUserStates(t *testing.T) {
 	ctx := context.Background()
 
-	client, err := NewFirestoreClient(ctx)
+	client, err := NewTestFirestoreClient(ctx)
 	if err != nil {
-		t.Fatalf("setupFirestoreClient() error = %v", err)
+		t.Fatalf("newTestFirestoreClient() error = %v", err)
 	}
 
 	// Clean up before running tests and after tests complete
@@ -284,11 +230,12 @@ func TestUserStates(t *testing.T) {
 }
 
 func TestUpdateUserStateWithError(t *testing.T) {
-	fs, err := NewFirestoreClient(context.Background())
+	ctx := context.Background()
+	client, err := NewTestFirestoreClient(ctx)
 	if err != nil {
-		t.Fatalf("NewFirestoreClient() error = %v", err)
+		t.Fatalf("newTestFirestoreClient() error = %v", err)
 	}
-	defer fs.Close()
+	defer client.Close()
 
 	tests := []struct {
 		name     string
@@ -327,16 +274,16 @@ func TestUpdateUserStateWithError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a test user
-			user := CreateTestUser(t, fs, "Test User", "test@example.com", "+14251234567", false)
+			user := CreateTestUser(t, client, "Test User", "test@example.com", "+14251234567", false)
 
 			// Update user state with error
-			err := UpdateUserStateWithError(context.Background(), fs, user, tt.errorMsg)
+			err := UpdateUserStateWithError(context.Background(), client, user, tt.errorMsg)
 			if err != nil {
 				t.Fatalf("UpdateUserStateWithError() error = %v", err)
 			}
 
 			// Get updated user
-			updated, found, err := GetUser(context.Background(), fs, user.ID)
+			updated, found, err := GetUser(context.Background(), client, user.ID)
 			if err != nil {
 				t.Fatalf("GetUser() error = %v", err)
 			}
