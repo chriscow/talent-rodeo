@@ -43,26 +43,35 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"testing"
 	"time"
 
 	"talent-rodeo/internal"
 
 	"cloud.google.com/go/firestore"
-	"github.com/joho/godotenv"
 )
 
-func init() {
-	if err := godotenv.Overload("../../.env"); err != nil {
-		log.Fatalf("Failed to load .env file: %v", err)
+func TestMain(m *testing.M) {
+	// Start emulator
+	if err := internal.StartEmulator(); err != nil {
+		log.Fatalf("Failed to start emulator: %v", err)
 	}
+
+	// Ensure emulator is stopped after tests
+	defer internal.StopEmulator()
+
+	// Run tests
+	code := m.Run()
+
+	os.Exit(code)
 }
 
 func setupTestStorage(t *testing.T) *FirestoreTaskStorage {
 	t.Helper()
 
 	ctx := context.Background()
-	client, err := internal.NewFirestoreClient(ctx)
+	client, err := internal.NewTestFirestoreClient(ctx)
 	if err != nil {
 		t.Fatalf("Failed to create test client: %v", err)
 	}

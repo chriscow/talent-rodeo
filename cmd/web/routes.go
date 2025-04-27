@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"os"
 
 	"talent-rodeo/assets"
 
@@ -98,8 +99,20 @@ func (app *application) routes() http.Handler {
 			mux.HandleFunc("/admin/tasks/partial", app.getTasksPartial, "GET")
 
 			mux.HandleFunc("/admin/voice", app.adminVoice, "GET", "POST")
+
+			// Register compare jobs admin page
+			mux.HandleFunc("/admin/compare-jobs", app.adminCompareJobs, "GET", "POST")
+
+			// Add new admin search-jobs route
+			mux.HandleFunc("/admin/search-jobs", app.adminSearchJobs, "GET", "POST")
 		})
 	})
+
+	// Testing routes - only enabled in test mode
+	if os.Getenv("TESTING_MODE") == "true" {
+		mux.HandleFunc("/testing/authenticate", app.handleTestingAuthenticate, "POST")
+		mux.HandleFunc("/testing/reset", app.handleTestingResetUserState, "POST")
+	}
 
 	return mux
 }

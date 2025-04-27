@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"talent-rodeo/cmd/web/transcript"
 	"talent-rodeo/internal"
+	"talent-rodeo/internal/transcript"
 	"time"
 
 	"github.com/chriscow/vapi-go"
@@ -42,7 +42,7 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 		return wrappedErr
 	}
 
-	report := env.Report
+	report := env.EndOfCallReport
 
 	// Update the appointment with the call result and report
 	appt.CallID = report.Call.ID
@@ -118,10 +118,22 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 			"end_reason", endReason)
 	}
 
-	app.backgroundTask(r, func() error {
-		hub := sentry.GetHubFromContext(r.Context())
-		return transcript.ProcessCompletedAppointment(hub, app.fs, app.logger, appt)
-	})
+	hub := sentry.GetHubFromContext(r.Context())
+
+	// This actually just starts a gorouting to process the appointment and
+	// doesn't return an error but we check anyway in case that changes
+	// in the future.
+	if err := transcript.ProcessCompletedAppointment(hub, app.fs, app.logger, appt); err != nil {
+		wrappedErr := fmt.Errorf("failed to process completed appointment: %w", err)
+		app.logger.Error("failed to process completed appointment", "error", err)
+
+		internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
+			"error_type":  "transcript_processing",
+			"entity_type": "appointment",
+		})
+
+		return wrappedErr
+	}
 
 	app.SendUserStateUpdate(user)
 	return nil

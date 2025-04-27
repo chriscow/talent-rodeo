@@ -29,7 +29,7 @@ func TestUnmarshalEndOfCallReports(t *testing.T) {
 	}))
 
 	// Get all end-of-call report files
-	webhookDir := "/workspaces/talent-rodeo/testdata/webhooks"
+	webhookDir := "testdata/webhooks"
 	if _, err := os.Stat(webhookDir); os.IsNotExist(err) {
 		webhookDir = "/Users/chris/dev/talent-rodeo/testdata/webhooks"
 		if _, err := os.Stat(webhookDir); os.IsNotExist(err) {
@@ -64,7 +64,7 @@ func TestUnmarshalEndOfCallReports(t *testing.T) {
 					t.Errorf("Failed to unmarshal %s: %v", file.Name(), err)
 				} else {
 					// Basic validation of the report
-					report := env.Report
+					report := env.EndOfCallReport
 					if report.Type == "" {
 						t.Errorf("Report type should not be empty")
 					}
@@ -106,7 +106,7 @@ func TestValidateEndOfCallReport(t *testing.T) {
 	}
 
 	// Get all end-of-call report files
-	webhookDir := "testdata/webhooks"
+	webhookDir := "../../testdata/webhooks"
 	files, err := os.ReadDir(webhookDir)
 	if err != nil {
 		t.Fatalf("Failed to read webhook test directory: %v", err)
@@ -134,7 +134,7 @@ func TestValidateEndOfCallReport(t *testing.T) {
 				if err != nil {
 					t.Errorf("Failed to validate %s: %v", file.Name(), err)
 				} else {
-					report := env.Report
+					report := env.EndOfCallReport
 					if report.Call != nil && report.Call.ID != nil {
 						t.Logf("Successfully validated file: %s", file.Name())
 					} else {

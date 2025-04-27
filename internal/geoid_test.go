@@ -1,17 +1,15 @@
 package internal
 
-/*
-func init() {
-	if err := godotenv.Overload("../.env"); err != nil {
-		log.Fatalf("Error loading .env file: %v", err)
-	}
-}
+import (
+	"context"
+	"testing"
+)
 
 func TestPopulateGeoIDs(t *testing.T) {
 	ctx := context.Background()
 
-	// Initialize Firestore client
-	client, err := NewFirestoreClient(ctx)
+	// Initialize Firestore client with emulator
+	client, err := NewTestFirestoreClient(ctx)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
@@ -64,7 +62,7 @@ func TestPopulateGeoIDs(t *testing.T) {
 	}
 
 	// Verify the data was written correctly
-	gotGeoIDs, err := ListGeoIDs(client)
+	gotGeoIDs, err := ListGeoIDs(ctx, client)
 	if err != nil {
 		t.Fatalf("Failed to list GeoIDs: %v", err)
 	}
@@ -87,4 +85,3 @@ func TestPopulateGeoIDs(t *testing.T) {
 		}
 	}
 }
-*/

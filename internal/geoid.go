@@ -6,42 +6,18 @@ import (
 	"google.golang.org/api/iterator"
 )
 
-/*
+const geoIDCollection = "geo-ids"
 
-var (
-	GeoIDMap = map[string]GeoID{
-		"Remote":                            "103644278",
-		"United States":                     "103644278",
-		"Greater New York Area":             "",
-		"Greater Los Angeles Area":          "",
-		"Greater Chicago Area":              "",
-		"Greater Dallas-Fort Worth Area":    "",
-		"Greater Houston Area":              "",
-		"Greater Washington DC Area":        "",
-		"Greater Philadelphia Area":         "",
-		"Greater San Francisco Area":        "",
-		"Greater Miami Area":                "",
-		"Greater Phoenix Area":              "",
-		"Greater Boston Area":               "",
-		"Greater Atlanta Area":              "",
-		"Greater Detroit Area":              "",
-		"Greater Seattle Area":              "",
-		"Greater Minneapolis-St. Paul Area": "",
-		"Greater San Diego Area":            "",
-		"Greater Tampa Area":                "",
-		"Greater Denver Area":               "",
-		"Greater Baltimore Area":            "",
-	}
-)
-*/
-
+// GeoID represents a geographic location identifier
+// Note: After the reversal operation, ID contains what was previously in Value field
+// and Value contains what was previously the document ID
 type GeoID struct {
-	ID    string `firestore:"id"`
-	Value string `firestore:"value"`
+	ID    string
+	Value string
 }
 
 func GetGeoID(ctx context.Context, fs *FirestoreClient, id string) (GeoID, error) {
-	doc, err := fs.Collection("geo_ids").Doc(id).Get(ctx)
+	doc, err := fs.Collection(geoIDCollection).Doc(id).Get(ctx)
 	if err != nil {
 		return GeoID{}, err
 	}
@@ -55,7 +31,7 @@ func GetGeoID(ctx context.Context, fs *FirestoreClient, id string) (GeoID, error
 
 func ListGeoIDs(ctx context.Context, fs *FirestoreClient) ([]GeoID, error) {
 	geoIDs := []GeoID{}
-	iter := fs.Collection("geo_ids").Documents(ctx)
+	iter := fs.Collection(geoIDCollection).Documents(ctx)
 
 	for {
 		doc, err := iter.Next()

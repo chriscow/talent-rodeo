@@ -34,7 +34,6 @@ func (app *application) resetOnboardingState(w http.ResponseWriter, r *http.Requ
 	}
 
 	user.State.Status = internal.UserStatusPendingResumeUpload
-	user.Search = nil
 
 	if err := internal.UpdateUser(context.Background(), app.fs, user.ID, map[string]any{
 		"State":  user.State,

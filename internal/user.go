@@ -3,12 +3,10 @@ package internal
 import (
 	"context"
 	"fmt"
-	"talent-rodeo/internal/funcs"
 	"time"
 
 	"cloud.google.com/go/firestore"
 	"github.com/google/uuid"
-	"github.com/patrickmn/go-cache"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -48,7 +46,7 @@ type User struct {
 
 	State UserState
 
-	Search *UserSearch
+	// Search *UserSearch
 
 	Tier            UserTier
 	CompletedAt     *time.Time
@@ -70,11 +68,11 @@ func CreateUser(ctx context.Context, fs *FirestoreClient, u *User) error {
 	}
 
 	if u.ID == "" {
-		u.ID = funcs.Slugify(fmt.Sprintf("%s %s", u.Name, uuid.New().String()))
+		u.ID = uuid.New().String()
 	}
 
 	if u.State.Status == UserStatusError || u.State.Status == UserStatusUnknown {
-		return fmt.Errorf("user state is invalid")
+		return fmt.Errorf("user state is invalid: %s", u.State.Status.String())
 	}
 
 	u.CreatedAt = time.Now()
@@ -102,14 +100,6 @@ func CreateUser(ctx context.Context, fs *FirestoreClient, u *User) error {
 
 // GetUser retrieves a user by ID
 func GetUser(ctx context.Context, fs *FirestoreClient, id string) (*User, bool, error) {
-	if fs.UsersCache != nil {
-		if obj, found := fs.UsersCache.Get(id); found {
-			if found {
-				return obj.(*User), true, nil
-			}
-		}
-	}
-
 	doc, err := fs.Collection(usersCollection).Doc(id).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -121,11 +111,6 @@ func GetUser(ctx context.Context, fs *FirestoreClient, id string) (*User, bool, 
 	var user User
 	if err := doc.DataTo(&user); err != nil {
 		return nil, false, fmt.Errorf("failed to unmarshal user data: %w", err)
-	}
-
-	// Cache the user in memory
-	if fs.UsersCache != nil {
-		fs.UsersCache.Set(id, &user, cache.NoExpiration)
 	}
 
 	return &user, true, nil
@@ -147,11 +132,6 @@ func GetUserByEmail(ctx context.Context, fs *FirestoreClient, email string) (*Us
 		return nil, false, fmt.Errorf("failed to unmarshal user data: %w", err)
 	}
 
-	// Cache the user in memory
-	if fs.UsersCache != nil {
-		fs.UsersCache.Set(user.ID, &user, cache.NoExpiration)
-	}
-
 	return &user, true, nil
 }
 
@@ -169,11 +149,6 @@ func GetUserByPhone(ctx context.Context, fs *FirestoreClient, phone string) (*Us
 	var user User
 	if err := doc.DataTo(&user); err != nil {
 		return nil, false, fmt.Errorf("failed to unmarshal user data: %w", err)
-	}
-
-	// Cache the user in memory
-	if fs.UsersCache != nil {
-		fs.UsersCache.Set(user.ID, &user, cache.NoExpiration)
 	}
 
 	return &user, true, nil
@@ -209,13 +184,6 @@ func UpdateUser(ctx context.Context, fs *FirestoreClient, id string, updates map
 		return fmt.Errorf("failed to update user: %w", err)
 	}
 
-	// Invalidate the user in memory cache
-	if fs.UsersCache != nil {
-		if _, found := fs.UsersCache.Get(id); found {
-			fs.UsersCache.Delete(id)
-		}
-	}
-
 	return nil
 }
 
@@ -234,7 +202,7 @@ func DeleteUser(ctx context.Context, fs *FirestoreClient, id string) error {
 		}
 
 		// Delete this subcollection using the generic DeleteCollection function
-		if err := fs.DeleteCollection(ctx, colRef.Path, 100, true); err != nil {
+		if err := DeleteCollection(ctx, fs, colRef.Path, 100, true); err != nil {
 			return fmt.Errorf("failed to delete subcollection %s: %w", colRef.Path, err)
 		}
 	}
@@ -245,31 +213,11 @@ func DeleteUser(ctx context.Context, fs *FirestoreClient, id string) error {
 		return fmt.Errorf("failed to delete user: %w", err)
 	}
 
-	// Invalidate the user in memory cache
-	if fs.UsersCache != nil {
-		if _, found := fs.UsersCache.Get(id); found {
-			fs.UsersCache.Delete(id)
-		}
-	}
-
 	return nil
 }
 
 // ListUsers retrieves all users with optional limit and offset
 func ListUsers(ctx context.Context, fs *FirestoreClient, limit int, offset int) ([]*User, error) {
-	// Get all users from the cache if available
-	if fs.UsersCache != nil {
-		usersMap := fs.UsersCache.Items()
-		if len(usersMap) > 0 {
-			users := make([]*User, 0, len(usersMap))
-			for _, user := range usersMap {
-				if u, ok := user.Object.(*User); ok {
-					users = append(users, u)
-				}
-			}
-			return users, nil
-		}
-	}
 
 	query := fs.Collection(usersCollection).OrderBy("CreatedAt", firestore.Asc)
 	if limit > 0 {
@@ -298,12 +246,19 @@ func ListUsers(ctx context.Context, fs *FirestoreClient, limit int, offset int) 
 		users = append(users, &user)
 	}
 
-	// Cache the users in memory
-	if fs.UsersCache != nil {
-		for _, user := range users {
-			fs.UsersCache.Set(user.ID, user, cache.NoExpiration)
-		}
+	return users, nil
+}
+
+// SaveUser saves or updates a user in Firestore
+func SaveUser(ctx context.Context, fs *FirestoreClient, user *User) error {
+	if user.ID == "" {
+		return fmt.Errorf("user ID cannot be empty")
 	}
 
-	return users, nil
+	_, err := fs.Collection("users").Doc(user.ID).Set(ctx, user)
+	if err != nil {
+		return fmt.Errorf("failed to save user: %w", err)
+	}
+
+	return nil
 }

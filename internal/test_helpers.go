@@ -25,7 +25,6 @@ func CreateTestUser(t *testing.T, client *FirestoreClient, name, email, phone st
 			Status:  UserStatusPendingResumeUpload,
 			Started: now,
 		},
-		Search: &UserSearch{}, // Initialize empty search
 	}
 
 	if err := CreateUser(context.Background(), client, user); err != nil {
@@ -35,20 +34,19 @@ func CreateTestUser(t *testing.T, client *FirestoreClient, name, email, phone st
 	return user
 }
 
-// CreateTestJob creates a test job for a given user.
-func CreateTestJob(t *testing.T, client *FirestoreClient, userID string, jobID string, status JobStatus, createdAt time.Time) *UserJob {
+// CreateTestUserJob creates a test job for a given user.
+func CreateTestUserJob(t *testing.T, client *FirestoreClient, userID string, jobID string, status JobStatus, createdAt time.Time) *UserJob {
 	t.Helper()
 
 	job := &UserJob{
-		ID:         jobID,
-		SearchHash: fmt.Sprintf("test-search-hash-%s", jobID),
-		JobRef:     client.Collection("job_details").Doc(jobID),
-		Status:     status,
-		CreatedAt:  createdAt,
-		UpdatedAt:  createdAt,
+		ID:        jobID,
+		JobRef:    client.Collection(JobDetailsCollection).Doc(jobID),
+		Status:    status,
+		CreatedAt: createdAt,
+		UpdatedAt: createdAt,
 	}
 
-	if err := CreateUserJob(context.Background(), client, userID, job); err != nil {
+	if err := SaveUserJob(context.Background(), client, userID, job); err != nil {
 		t.Fatalf("Failed to create test job: %v", err)
 	}
 
@@ -87,7 +85,7 @@ func CreateTestAppointment(t *testing.T, client *FirestoreClient, user *User) *A
 		UpdatedAt:     now.Round(time.Second),
 	}
 
-	if err := CreateAppointment(context.Background(), client, "test-appointment", *user, appointment); err != nil {
+	if err := CreateAppointment(context.Background(), client, user.ID, appointment); err != nil {
 		t.Fatalf("Failed to create test appointment: %v", err)
 	}
 
@@ -220,4 +218,144 @@ func DeleteTestAppointments(t *testing.T, client *FirestoreClient, userID string
 			t.Logf("Deleted test appointment %s", doc.Ref.ID)
 		}
 	}
+}
+
+func DeleteTestCriteria(t *testing.T, client *FirestoreClient, userID string) {
+	t.Helper()
+
+	ctx := context.Background()
+	iter := client.Collection(usersCollection).Doc(userID).Collection(userCriteriaCollection).Documents(ctx)
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			t.Logf("Failed to iterate over criteria: %v", err)
+			continue
+		}
+
+		if _, err := doc.Ref.Delete(ctx); err != nil {
+			t.Logf("Failed to delete criteria %s: %v", doc.Ref.ID, err)
+		} else {
+			t.Logf("Deleted test criteria %s", doc.Ref.ID)
+		}
+
+	}
+}
+
+// deleteTestUserCriteria deletes test user criteria records for cleanup
+func DeleteTestUserCriteria(ctx context.Context, t *testing.T, fs *FirestoreClient, userID string) {
+	t.Helper()
+
+	coll := fs.Collection(userCriteriaCollection)
+
+	// Query for user criteria with the specified userID
+	iter := coll.Where("UserID", "==", userID).Documents(ctx)
+	defer iter.Stop()
+
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			t.Logf("Failed to iterate through test user criteria: %v", err)
+			continue
+		}
+
+		_, err = doc.Ref.Delete(ctx)
+		if err != nil {
+			t.Logf("Failed to delete test user criteria %s: %v", doc.Ref.ID, err)
+		}
+	}
+}
+
+// deleteTestSearchCriteria deletes test search criteria for cleanup
+func DeleteTestSearchCriteria(ctx context.Context, t *testing.T, fs *FirestoreClient, prefix string) {
+	t.Helper()
+
+	coll := fs.Collection(searchCriteriaCollection)
+
+	// Query for criteria with ID starting with the prefix
+	iter := coll.Where("ID", ">=", prefix).Where("ID", "<=", prefix+"\uf8ff").Documents(ctx)
+	defer iter.Stop()
+
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			t.Logf("Failed to iterate through test criteria: %v", err)
+			continue
+		}
+
+		_, err = doc.Ref.Delete(ctx)
+		if err != nil {
+			t.Logf("Failed to delete test criteria %s: %v", doc.Ref.ID, err)
+		}
+	}
+}
+
+// DeleteTestUserCriteriaByPrefix deletes test user criteria records that match the given prefix
+func DeleteTestUserCriteriaByPrefix(ctx context.Context, t *testing.T, fs *FirestoreClient, prefix string) {
+	t.Helper()
+
+	coll := fs.Collection(userCriteriaCollection)
+
+	// Query for user criteria with IDs starting with the prefix
+	iter := coll.Where("ID", ">=", prefix).Where("ID", "<=", prefix+"\uf8ff").Documents(ctx)
+	defer iter.Stop()
+
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			t.Logf("Failed to iterate through test user criteria: %v", err)
+			continue
+		}
+
+		_, err = doc.Ref.Delete(ctx)
+		if err != nil {
+			t.Logf("Failed to delete test user criteria %s: %v", doc.Ref.ID, err)
+		}
+	}
+}
+
+// ResetUserState resets a user's state to UserStatusPendingResumeUpload and cleans up their data.
+// This is only meant to be used in testing scenarios.
+func ResetUserState(ctx context.Context, fs *FirestoreClient, user *User) error {
+	// Reset the user's state using the proper UpdateUserStatus function
+	if err := UpdateUserStatus(ctx, fs, user, UserStatusPendingResumeUpload); err != nil {
+		return fmt.Errorf("failed to reset user state: %w", err)
+	}
+
+	// Delete all appointments for the user
+	appointments, err := ListAppointments(ctx, fs, user.ID)
+	if err != nil {
+		return fmt.Errorf("failed to list appointments: %w", err)
+	}
+
+	for _, appointment := range appointments {
+		if err := DeleteAppointment(ctx, fs, user.ID, appointment.ID); err != nil {
+			return fmt.Errorf("failed to delete appointment: %w", err)
+		}
+	}
+
+	// Delete all resumes for the user
+	resumes, err := ListResumes(ctx, fs, user.ID)
+	if err != nil {
+		return fmt.Errorf("failed to list resumes: %w", err)
+	}
+
+	for _, resume := range resumes {
+		if err := DeleteResume(ctx, fs, user.ID, resume.ID); err != nil {
+			return fmt.Errorf("failed to delete resume: %w", err)
+		}
+	}
+
+	return nil
 }

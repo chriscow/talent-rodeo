@@ -24,6 +24,10 @@ Available operations:
 - List all jobs for a specific user
 - List or count job details
 - Get details for a specific job by ID
+- Search job details using semantic search with Pinecone
+- List or count search criteria
+- Get details for specific search criteria by ID
+- Get search criteria that need searching (not searched in 24h)
 - Test Firestore connection
 
 The data is read directly from Firestore and reflects the current state of the database.`),
@@ -36,6 +40,10 @@ The data is read directly from Firestore and reflects the current state of the d
 	s.AddTool(NewListUserJobsTool(), listUserJobsHandler)
 	s.AddTool(NewListJobDetailsTool(), listJobDetailsHandler)
 	s.AddTool(NewGetJobDetailTool(), getJobDetailHandler)
+	s.AddTool(NewSearchJobDetailsTool(), searchJobDetailsHandler)
+	s.AddTool(NewListSearchCriteriaTool(), listSearchCriteriaHandler)
+	s.AddTool(NewGetSearchCriteriaTool(), getSearchCriteriaHandler)
+	s.AddTool(NewGetSearchCriteriaNeedsSearchTool(), getSearchCriteriaNeedsSearchHandler)
 	s.AddTool(NewTestFirestoreConnectionTool(), testFirestoreConnectionHandler)
 
 	// Start server

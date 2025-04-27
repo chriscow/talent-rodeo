@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
+	"talent-rodeo/assets"
 	"talent-rodeo/internal/funcs"
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"github.com/chriscow/minds/tools"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -18,9 +21,10 @@ import (
 const (
 	resumeCollection               = "resumes"
 	resumeAnnotationPromptTemplate = "prompts/resume-annotation.001.txt"
+	resumeSearchAnalysisTemplate   = "prompts/resume-search-analysis.001.txt"
 )
 
-type resumeAnalysis struct {
+type annotatedResume struct {
 	Analysis    string
 	IsResume    bool
 	YAMLSummary *string
@@ -51,6 +55,9 @@ type Resume struct {
 
 	// Analysis is the LLM analysis of the resume.
 	Analysis *string
+
+	// This is the LLM's determination of the search terms
+	SearchAnalysis *string
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -96,6 +103,27 @@ func CreateResume(ctx context.Context, fs *FirestoreClient, user User, resume *R
 	return nil
 }
 
+func GetResume(ctx context.Context, fs *FirestoreClient, userID string, resumeID string) (*Resume, bool, error) {
+	if userID == "" {
+		return nil, false, fmt.Errorf("user ID for Firestore is required")
+	}
+	if resumeID == "" {
+		return nil, false, fmt.Errorf("resume ID for Firestore is required")
+	}
+
+	doc, err := fs.Collection(usersCollection).Doc(userID).Collection(resumeCollection).Doc(resumeID).Get(ctx)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to get resume: %w", err)
+	}
+
+	var resume Resume
+	if err := doc.DataTo(&resume); err != nil {
+		return nil, false, fmt.Errorf("failed to unmarshal resume data: %w", err)
+	}
+
+	return &resume, true, nil
+}
+
 func ListResumes(ctx context.Context, fs *FirestoreClient, userID string) ([]*Resume, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID for Firestore is required")
@@ -123,96 +151,57 @@ func ListResumes(ctx context.Context, fs *FirestoreClient, userID string) ([]*Re
 	return resumes, nil
 }
 
-// annotateResumeTestMode simulates resume annotation in test mode
-func annotateResumeTestMode(logger *slog.Logger, user *User, resume *Resume) error {
-	// Simulate processing delay
-	time.Sleep(2 * time.Second)
-
-	// Load test annotation data
-	testFile := "testdata/sample-resumes/chris-cowherd.resume.annotated.json"
-	data, err := os.ReadFile(testFile)
-	if err != nil {
-		return fmt.Errorf("failed to read test annotation data: %w", err)
-	}
-
-	// Parse the test data into resumeAnalysis struct
-	var result resumeAnalysis
-	if err := json.Unmarshal(data, &result); err != nil {
-		return fmt.Errorf("failed to unmarshal test data: %w", err)
-	}
-
-	// Update resume fields
-	resume.IsValid = result.IsResume
-	resume.Annotated = result.YAMLSummary
-	resume.Analysis = &result.Analysis
-	resume.UpdatedAt = time.Now()
-
-	logger.Debug("using test annotation data",
-		"file", testFile,
-		"user_id", user.ID,
-		"resume_id", resume.ID)
-
-	return nil
-}
-
 // AnnotateResume uses an LLM to annotate the resume text and output it as YAML.
 func AnnotateResume(ctx context.Context, fs *FirestoreClient, logger *slog.Logger, user *User, resume *Resume) error {
+	var analysis *annotatedResume
+	var searchAnalysis string
+	var err error
 	if os.Getenv("TESTING_MODE") == "true" {
 		logger.Debug("annotateResume: using test mode")
-		if err := annotateResumeTestMode(logger, user, resume); err != nil {
+		analysis, err = getResumeAnalysisTestMode(ctx, *resume)
+		if err != nil {
 			logger.Error("annotateResume: test mode failed", "error", err)
 			return fmt.Errorf("test mode annotation failed: %w", err)
 		}
 
-		// Update resume in Firestore and handle user state
-		if err := UpdateResume(ctx, fs, *resume); err != nil {
-			logger.Error("failed to update resume in Firestore", "error", err)
-			return fmt.Errorf("failed to update resume in Firestore: %w", err)
+		searchAnalysis, err = getResumeSearchAnalysisTestMode(ctx, *resume)
+		if err != nil {
+			logger.Error("annotateResume: test mode search analysis failed", "error", err)
+			return fmt.Errorf("test mode search analysis failed: %w", err)
+		}
+	} else {
+		analysis, err = getAnnotatedResume(ctx, *resume)
+		if err != nil {
+			return fmt.Errorf("failed to get resume analysis: %w", err)
 		}
 
-		if !resume.IsValid {
-			errorMsg := "Uploaded document is not a valid resume"
-			if err := UpdateUserStateWithError(ctx, fs, user, errorMsg); err != nil {
-				logger.Error("failed to update user state with error", "error", err)
-			}
-		} else {
-			if err := UpdateUserStatus(ctx, fs, user, UserStatusResumeUploaded); err != nil {
-				logger.Error("failed to update user state to ResumeUploaded", "error", err)
-			}
+		searchAnalysis, err = getResumeSearchAnalysis(ctx, *resume)
+		if err != nil {
+			return fmt.Errorf("failed to get resume search analysis: %w", err)
 		}
-
-		return nil
 	}
 
-	prompt, err := GeneratePrompt(resumeAnnotationPromptTemplate, nil)
-	if err != nil {
-		return fmt.Errorf("convertResume: failed to generate prompt: %w", err)
-	}
+	resume.IsValid = analysis.IsResume
+	resume.Annotated = analysis.YAMLSummary
+	resume.Analysis = &analysis.Analysis
+	resume.UpdatedAt = time.Now()
+	resume.SearchAnalysis = &searchAnalysis
 
-	result, err := StructuredAsk[resumeAnalysis](ctx, "resume-annotation", prompt)
-	if err != nil {
-		return fmt.Errorf("convertResume: failed to ask LLM: %w", err)
-	}
-
-	resume.IsValid = result.IsResume
-	resume.Annotated = result.YAMLSummary
-	resume.Analysis = &result.Analysis
-
-	err = UpdateResume(ctx, fs, *resume)
-	if err != nil {
+	if err := UpdateResume(ctx, fs, *resume); err != nil {
 		return fmt.Errorf("failed to update resume in Firestore: %w", err)
 	}
 
 	if !resume.IsValid {
 		errorMsg := "Uploaded document is not a valid resume"
-		err = UpdateUserStateWithError(ctx, fs, user, errorMsg)
-		if err != nil {
+		if resume.Analysis != nil && (strings.Contains(*resume.Analysis, "news article") || strings.Contains(*resume.Analysis, "jailbreak")) {
+			errorMsg = "The document you uploaded doesn't appear to be a valid resume. Please upload a proper resume document."
+		}
+		if err := UpdateUserStateWithError(ctx, fs, user, errorMsg); err != nil {
 			logger.Error("failed to update user state with error", "error", err)
 		}
 	} else {
 		// If the resume is valid, update the user state to ResumeUploaded
-		err = UpdateUserStatus(ctx, fs, user, UserStatusResumeUploaded)
-		if err != nil {
+		if err := UpdateUserStatus(ctx, fs, user, UserStatusResumeUploaded); err != nil {
 			logger.Error("failed to update user state to ResumeUploaded", "error", err)
 		}
 	}
@@ -291,4 +280,76 @@ func DeleteResume(ctx context.Context, fs *FirestoreClient, userID string, resum
 		return fmt.Errorf("failed to delete resume: %w", err)
 	}
 	return nil
+}
+
+func getAnnotatedResume(ctx context.Context, resume Resume) (*annotatedResume, error) {
+	tmpl, err := assets.EmbeddedFiles.ReadFile(resumeAnnotationPromptTemplate)
+	if err != nil {
+		return nil, fmt.Errorf("convertResume: failed to read resume annotation prompt template: %w", err)
+	}
+
+	prompt, err := tools.GeneratePrompt(tmpl, nil)
+	if err != nil {
+		return nil, fmt.Errorf("convertResume: failed to generate prompt: %w", err)
+	}
+
+	result, err := tools.StructuredAsk[annotatedResume](ctx, "resume-annotation", prompt)
+	if err != nil {
+		return nil, fmt.Errorf("convertResume: failed to ask LLM: %w", err)
+	}
+	return &result, nil
+}
+
+func getResumeSearchAnalysis(ctx context.Context, resume Resume) (string, error) {
+	tmpl, err := assets.EmbeddedFiles.ReadFile(resumeSearchAnalysisTemplate)
+	if err != nil {
+		return "", fmt.Errorf("convertResume: failed to read resume annotation prompt template: %w", err)
+	}
+
+	prompt, err := tools.GeneratePrompt(tmpl, map[string]any{
+		"Resume": resume.RawText,
+	})
+	if err != nil {
+		return "", fmt.Errorf("convertResume: failed to generate prompt: %w", err)
+	}
+
+	return tools.Ask(ctx, prompt)
+}
+
+// getResumeAnalysisTestMode simulates resume annotation in test mode
+func getResumeAnalysisTestMode(ctx context.Context, resume Resume) (*annotatedResume, error) {
+	// Simulate processing delay
+	time.Sleep(2 * time.Second)
+
+	// Load test annotation data
+	testFile := "testdata/sample-resumes/chris-cowherd.resume.annotated.json"
+	data, err := os.ReadFile(testFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read test annotation data: %w", err)
+	}
+
+	// Parse the test data into resumeAnalysis struct
+	var result annotatedResume
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal test data: %w", err)
+	}
+
+	return &result, nil
+}
+
+func getResumeSearchAnalysisTestMode(ctx context.Context, resume Resume) (string, error) {
+	// Simulate processing delay
+	time.Sleep(1 * time.Second)
+
+	// Load test search analysis data
+	testFile := "testdata/sample-resumes/chris-cowherd.resume.search-analysis.txt"
+	data, err := os.ReadFile(testFile)
+	if err != nil {
+		return "", fmt.Errorf("failed to read test search analysis data: %w", err)
+	}
+
+	// Parse the test data into a string
+	result := string(data)
+
+	return result, nil
 }

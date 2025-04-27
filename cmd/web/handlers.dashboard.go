@@ -7,7 +7,6 @@ import (
 	"strings"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
-	"talent-rodeo/internal/search"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -16,7 +15,7 @@ import (
 // JobWithDetails combines UserJob with the job details
 type JobWithDetails struct {
 	*internal.UserJob
-	*search.JobDetail
+	*internal.JobDetail
 }
 
 // CreatedAt returns when the job was added to the user's list
@@ -54,7 +53,7 @@ func (j *JobWithDetails) Summary() string {
 	}
 	// Fallback to full description if summary is not available
 	if j.JobDetail != nil {
-		return j.JobDetail.FullDescription
+		return j.JobDetail.Description
 	}
 	return ""
 }
@@ -145,39 +144,6 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 			app.showWaitingForCall(w, r, user)
 			return
 		}
-	}
-
-	// Get search status information
-	nextSearchTime, isSearching := app.search.GetNextSearchTime(user)
-
-	// TEMPORARY: For testing search states
-	testMode := r.URL.Query().Get("test_mode")
-	if testMode != "" {
-		switch testMode {
-		case "searching":
-			isSearching = true
-			app.logger.Info("TEST MODE: Setting isSearching to true")
-		case "scheduled_soon":
-			isSearching = false
-			nextSearchTime = time.Now().Add(2 * time.Minute)
-			app.logger.Info("TEST MODE: Setting nextSearchTime to 2 minutes from now", "time", nextSearchTime)
-		case "scheduled_future":
-			isSearching = false
-			nextSearchTime = time.Now().Add(24 * time.Hour)
-			app.logger.Info("TEST MODE: Setting nextSearchTime to 24 hours from now", "time", nextSearchTime)
-		case "no_schedule":
-			isSearching = false
-			nextSearchTime = time.Time{} // Zero time
-			app.logger.Info("TEST MODE: Setting nextSearchTime to zero time")
-		case "search_error":
-			isSearching = false
-			// Simulate a search error
-			data["SearchError"] = "Failed to connect to job search provider: connection timeout (This is a test error message)"
-			app.logger.Info("TEST MODE: Simulating a search error")
-		}
-
-		// Add test mode to template data for links
-		data["TestMode"] = testMode
 	}
 
 	// Use our helper function to parse and validate the status
@@ -271,7 +237,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		var jobDetail search.JobDetail
+		var jobDetail internal.JobDetail
 		if err := docSnap.DataTo(&jobDetail); err != nil {
 			wrappedErr := fmt.Errorf("showDashboard: failed to unmarshal job details: %w", err)
 			app.logger.Error("showDashboard: failed to unmarshal job details", "error", err)
@@ -301,8 +267,6 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 
 	// Add data to template
 	data["CurrentStatus"] = user.State.Status.Description()
-	data["IsSearching"] = isSearching
-	data["NextSearchTime"] = nextSearchTime
 	data["CurrentTime"] = time.Now()
 	data["HasJobs"] = len(jobsWithDetails) > 0 || statusJobCount > 0
 	data["ActiveStatus"] = string(status)
@@ -316,11 +280,6 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 	data["PusherKey"] = os.Getenv("PUSHER_KEY")
 	data["PusherCluster"] = os.Getenv("PUSHER_CLUSTER")
 	data["JobStatuses"] = internal.GetJobStatuses()
-
-	// Pass search error to the template if it exists
-	if user.Search != nil && user.Search.Error != "" {
-		data["SearchError"] = user.Search.Error
-	}
 
 	// Map for display names of job statuses
 	data["StatusDisplayNames"] = map[string]string{

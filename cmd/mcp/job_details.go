@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"talent-rodeo/internal"
-	"talent-rodeo/internal/search"
 
 	firestorepb "cloud.google.com/go/firestore/apiv1/firestorepb"
 	"github.com/chriscow/minds"
@@ -21,6 +21,10 @@ type ListJobDetailsParams struct {
 
 type GetJobDetailParams struct {
 	ID string `json:"id" description:"ID of the job detail to retrieve"`
+}
+
+type SearchJobDetailsParams struct {
+	Query string `json:"query" description:"The search query to find relevant job details"`
 }
 
 // NewListJobDetailsTool creates a new tool for listing job details
@@ -55,6 +59,24 @@ func NewGetJobDetailTool() mcp.Tool {
 
 	return mcp.NewToolWithRawSchema("firestore_get_job_detail",
 		"Gets details for a specific job from Firestore by its ID.",
+		schemaJSON,
+	)
+}
+
+// NewSearchJobDetailsTool creates a new tool for searching job details using Pinecone
+func NewSearchJobDetailsTool() mcp.Tool {
+	schema, err := minds.GenerateSchema(SearchJobDetailsParams{})
+	if err != nil {
+		panic("Could not generate schema from SearchJobDetailsParams")
+	}
+
+	schemaJSON, err := json.Marshal(schema)
+	if err != nil {
+		panic("Could not marshal schema to JSON")
+	}
+
+	return mcp.NewToolWithRawSchema("pinecone_jobdetails_similarity_search",
+		"Searches for job details using semantic search via Pinecone in the job-details namespace, returning job details with similarity scores.",
 		schemaJSON,
 	)
 }
@@ -197,7 +219,7 @@ func getJobDetailHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp
 		return createResult(result)
 	}
 
-	var jobDetail search.JobDetail
+	var jobDetail internal.JobDetail
 	if err := doc.DataTo(&jobDetail); err != nil {
 		result["status"] = "error"
 		logMsg(fmt.Sprintf("Failed to parse job detail data: %v", err))
@@ -207,6 +229,144 @@ func getJobDetailHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp
 	logMsg("Successfully retrieved job detail")
 	result["status"] = "success"
 	result["job_detail"] = jobDetail
+
+	return createResult(result)
+}
+
+func searchJobDetailsHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Setup logging and result
+	result := map[string]interface{}{
+		"status":  "checking",
+		"details": make([]string, 0),
+	}
+
+	// Log function for both stderr and result details
+	logMsg := func(msg string) {
+		fmt.Fprintf(os.Stderr, "DEBUG: %s\n", msg)
+		result["details"] = append(result["details"].([]string), msg)
+	}
+
+	logMsg("Processing search job details request...")
+	data, err := getJSONData(request.Params.Arguments)
+	if err != nil {
+		result["status"] = "error"
+		logMsg(fmt.Sprintf("Invalid parameters: %v", err))
+		return createResult(result)
+	}
+	logMsg(fmt.Sprintf("Received raw parameters: %s", string(data)))
+
+	var params SearchJobDetailsParams
+	if err := json.Unmarshal(data, &params); err != nil {
+		result["status"] = "error"
+		logMsg(fmt.Sprintf("Failed to parse parameters: %v", err))
+		return createResult(result)
+	}
+	logMsg(fmt.Sprintf("Parsed parameters - Query: %s", params.Query))
+
+	if params.Query == "" {
+		result["status"] = "error"
+		logMsg("Search query is required")
+		return createResult(result)
+	}
+
+	logMsg("Creating Firestore client...")
+	fs, err := createFirestoreClient(ctx)
+	if err != nil {
+		result["status"] = "error"
+		logMsg(fmt.Sprintf("Failed to create Firestore client: %v", err))
+		return createResult(result)
+	}
+	defer fs.Close()
+	logMsg("Firestore client created successfully")
+
+	// Create Pinecone client
+	logMsg("Creating Pinecone client...")
+	pineconeClient, err := internal.NewPineconeClient()
+	if err != nil {
+		result["status"] = "error"
+		logMsg(fmt.Sprintf("Failed to create Pinecone client: %v", err))
+		return createResult(result)
+	}
+	logMsg("Pinecone client created successfully")
+
+	// Get index host from environment or config
+	indexHost := os.Getenv("PINECONE_INDEX_HOST")
+	if indexHost == "" {
+		result["status"] = "error"
+		logMsg("PINECONE_INDEX_HOST environment variable not set")
+		return createResult(result)
+	}
+	logMsg(fmt.Sprintf("Using Pinecone index host: %s", indexHost))
+
+	// Search records in Pinecone
+	logMsg(fmt.Sprintf("Searching records with query: %s", params.Query))
+	searchResp, err := pineconeClient.SearchRecords(ctx, indexHost, internal.JobDetailNamespace, params.Query,
+		internal.WithTopK(10)) // Default to top 10 results
+	if err != nil {
+		result["status"] = "error"
+		logMsg(fmt.Sprintf("Failed to search records: %v", err))
+		return createResult(result)
+	}
+	logMsg(fmt.Sprintf("Found %d hits in Pinecone", len(searchResp.Result.Hits)))
+
+	// Extract job IDs and scores
+	var jobIDs []string
+	scoreMap := make(map[string]float32)
+
+	for _, hit := range searchResp.Result.Hits {
+		// Extract the job ID from hit fields
+		if id, ok := hit.Fields["ID"].(string); ok && id != "" {
+			jobIDs = append(jobIDs, id)
+			scoreMap[id] = hit.Score
+		} else if id, ok := hit.Id, true; ok && id != "" {
+			// Use the hit ID directly if Fields["ID"] is not available
+			jobIDs = append(jobIDs, id)
+			scoreMap[id] = hit.Score
+		}
+	}
+
+	if len(jobIDs) == 0 {
+		result["status"] = "success"
+		result["job_details"] = []interface{}{}
+		logMsg("No matching job details found")
+		return createResult(result)
+	}
+
+	// Fetch job details for the matching IDs
+	jobDetails, err := internal.GetJobDetailsByIDs(ctx, fs, jobIDs)
+	if err != nil {
+		result["status"] = "error"
+		logMsg(fmt.Sprintf("Failed to get job details: %v", err))
+		return createResult(result)
+	}
+	logMsg(fmt.Sprintf("Retrieved %d job details from Firestore", len(jobDetails)))
+
+	// Build search results with scores
+	type SearchResult struct {
+		JobDetail *internal.JobDetail `json:"job_detail"`
+		Score     float32             `json:"score"`
+	}
+
+	var searchResults []SearchResult
+	for _, job := range jobDetails {
+		score, ok := scoreMap[job.ID]
+		if !ok {
+			score = 0
+		}
+
+		searchResults = append(searchResults, SearchResult{
+			JobDetail: job,
+			Score:     score,
+		})
+	}
+
+	// Sort results by score in descending order
+	sort.Slice(searchResults, func(i, j int) bool {
+		return searchResults[i].Score > searchResults[j].Score
+	})
+
+	result["status"] = "success"
+	result["job_details"] = searchResults
 
 	return createResult(result)
 }
