@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/chriscow/vapi-go"
+	"github.com/getsentry/sentry-go"
 
 	"github.com/chriscow/minds"
 	"github.com/joho/godotenv"
@@ -390,4 +391,98 @@ func TestGetPromptResults(t *testing.T) {
 	}
 }
 
-// TestProcessorWithMockTranscript tests the processor using a mock transcript file instead of calling VAPI API
+func TestRecoverProcessingAppointments(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
+	hub := sentry.CurrentHub()
+
+	client, err := internal.NewFirestoreClient(ctx)
+	if err != nil {
+		t.Fatalf("internal.NewFirestoreClient() error = %v", err)
+	}
+
+	// Clean up test data
+	internal.DeleteTestData(t, client, "test-recovery-")
+	defer func() {
+		// Create a new context for cleanup since the original might be cancelled
+		cleanupCtx := context.Background()
+		cleanupClient, err := internal.NewFirestoreClient(cleanupCtx)
+		if err != nil {
+			t.Logf("Failed to create cleanup client: %v", err)
+			return
+		}
+		defer cleanupClient.Close()
+		internal.DeleteTestData(t, cleanupClient, "test-recovery-")
+	}()
+	defer client.Close()
+
+	// Create test user
+	user := internal.CreateTestUser(t, client, "Test Recovery", "test-recovery@example.com", "+14251234599", false)
+
+	// Create an appointment and mark it as processing
+	appointment := &internal.Appointment{
+		ID:            "test-recovery-appointment",
+		UserID:        user.ID,
+		Name:          "Test Recovery Appointment",
+		ScheduledTime: time.Now(),
+		Status:        internal.AppointmentStatusScheduled,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+
+	err = internal.CreateAppointment(ctx, client, appointment.Name, *user, appointment)
+	if err != nil {
+		t.Fatalf("internal.CreateAppointment() error = %v", err)
+	}
+
+	// Mark as processing - this adds to the processing collection
+	err = internal.MarkAppointmentAsProcessing(ctx, client, appointment)
+	if err != nil {
+		t.Fatalf("internal.MarkAppointmentAsProcessing() error = %v", err)
+	}
+
+	// Simulate server restart by checking for appointments needing processing
+	processingAppointments, err := internal.ListAppointmentsNeedingProcessing(ctx, client)
+	if err != nil {
+		t.Fatalf("internal.ListAppointmentsNeedingProcessing() error = %v", err)
+	}
+
+	// Verify our appointment is in the processing list
+	found := false
+	for _, a := range processingAppointments {
+		if a.ID == appointment.ID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("Appointment not found in processing list")
+	}
+
+	// Set a mock call ID and summary so the processor has data to work with
+	callID := "test-call-recovery"
+	appointment.CallID = &callID
+	summary := "This is a test summary for recovery"
+	appointment.Summary = &summary
+
+	// Update the appointment in Firestore with these changes
+	if err := internal.UpdateAppointment(ctx, client, appointment); err != nil {
+		t.Fatalf("internal.UpdateAppointment() error = %v", err)
+	}
+
+	// Run the recovery process - note that this would normally complete asynchronously
+	// so we're just testing that it starts the background job without errors
+	err = RecoverProcessingAppointments(hub, client, logger)
+	if err != nil {
+		t.Fatalf("RecoverProcessingAppointments() error = %v", err)
+	}
+
+	// In a real test, we might want to verify that the appointment is eventually completed
+	// This would require a way to wait for the async processing to finish
+	// For now, we'll just verify the recovery function didn't error
+	t.Log("Recovery process started successfully")
+}

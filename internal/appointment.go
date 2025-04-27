@@ -8,7 +8,6 @@ import (
 
 	"sort"
 
-	"cloud.google.com/go/firestore"
 	"google.golang.org/api/iterator"
 )
 
@@ -17,6 +16,8 @@ type AppointmentStatus string
 
 const (
 	appointmentsCollection = "appointments"
+	// top-level collection to track appointments needing processing
+	processingAppointmentsCollection = "processing_appointments"
 
 	AppointmentStatusScheduled  AppointmentStatus = "scheduled"
 	AppointmentStatusRunning    AppointmentStatus = "running"
@@ -189,10 +190,20 @@ func UpdateAppointment(ctx context.Context, fs *FirestoreClient, appointment *Ap
 }
 
 func CancelAppointment(ctx context.Context, fs *FirestoreClient, userID string, appointmentID string) error {
-	_, err := fs.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).Doc(appointmentID).Update(ctx, []firestore.Update{
-		{Path: "status", Value: AppointmentStatusCancelled},
-	})
+	// First get the appointment
+	appointment, err := GetAppointment(ctx, fs, userID, appointmentID)
 	if err != nil {
+		return fmt.Errorf("failed to get appointment for cancellation: %w", err)
+	}
+
+	// Update status and add a cancellation timestamp
+	appointment.Status = AppointmentStatusCancelled
+	now := time.Now()
+	appointment.CancelledAt = &now
+	appointment.UpdatedAt = now
+
+	// Update the full appointment
+	if err := UpdateAppointment(ctx, fs, appointment); err != nil {
 		return fmt.Errorf("failed to cancel appointment: %w", err)
 	}
 
@@ -248,43 +259,72 @@ func DeleteAppointment(ctx context.Context, fs *FirestoreClient, userID, appoint
 	return nil
 }
 
-// ListAppointmentsNeedingProcessing retrieves all appointments in the "processing" state
-// These are appointments that were interrupted during transcript processing
+// When an appointment enters processing state, add a reference to this collection
+func MarkAppointmentAsProcessing(ctx context.Context, fs *FirestoreClient, appointment *Appointment) error {
+	// Update the appointment as normal
+	appointment.Status = AppointmentStatusProcessing
+	appointment.UpdatedAt = time.Now()
+
+	if err := UpdateAppointment(ctx, fs, appointment); err != nil {
+		return err
+	}
+
+	// Add reference to the processing tracking collection
+	processingRef := map[string]interface{}{
+		"UserID":        appointment.UserID,
+		"AppointmentID": appointment.ID,
+		"StartedAt":     time.Now(),
+	}
+
+	_, err := fs.Collection(processingAppointmentsCollection).Doc(appointment.ID).Set(ctx, processingRef)
+	return err
+}
+
+// When processing is complete, remove from tracking collection
+func CompleteProcessing(ctx context.Context, fs *FirestoreClient, appointment *Appointment) error {
+	// Update appointment status
+	appointment.Status = AppointmentStatusCompleted
+	appointment.UpdatedAt = time.Now()
+	appointment.CompletedAt = &appointment.UpdatedAt
+
+	if err := UpdateAppointment(ctx, fs, appointment); err != nil {
+		return err
+	}
+
+	// Remove from processing tracking collection
+	_, err := fs.Collection(processingAppointmentsCollection).Doc(appointment.ID).Delete(ctx)
+	return err
+}
+
+// Replace ListAppointmentsNeedingProcessing with this more efficient version
 func ListAppointmentsNeedingProcessing(ctx context.Context, fs *FirestoreClient) ([]*Appointment, error) {
 	var appointments []*Appointment
 
-	// Query all users
-	usersIter := fs.Collection(usersCollection).Documents(ctx)
+	// Query the processing tracking collection directly
+	iter := fs.Collection(processingAppointmentsCollection).Documents(ctx)
 	for {
-		userDoc, err := usersIter.Next()
+		doc, err := iter.Next()
 		if err == iterator.Done {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("failed to iterate users: %w", err)
+			return nil, fmt.Errorf("failed to iterate processing appointments: %w", err)
 		}
 
-		// For each user, query their appointments in "processing" state
-		query := userDoc.Ref.Collection(appointmentsCollection).
-			Where("status", "==", AppointmentStatusProcessing)
+		// Extract user and appointment IDs
+		data := doc.Data()
+		userID, _ := data["UserID"].(string)
+		appointmentID, _ := data["AppointmentID"].(string)
 
-		apptIter := query.Documents(ctx)
-		for {
-			doc, err := apptIter.Next()
-			if err == iterator.Done {
-				break
-			}
-			if err != nil {
-				return nil, fmt.Errorf("failed to iterate appointments for user %s: %w", userDoc.Ref.ID, err)
-			}
-
-			var appointment Appointment
-			if err := doc.DataTo(&appointment); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal appointment: %w", err)
-			}
-
-			appointments = append(appointments, &appointment)
+		// Get the actual appointment
+		appointment, err := GetAppointment(ctx, fs, userID, appointmentID)
+		if err != nil {
+			// Log but continue if appointment not found or can't be retrieved
+			fmt.Printf("Warning: Processing appointment %s for user %s not found: %v\n", appointmentID, userID, err)
+			continue
 		}
+
+		appointments = append(appointments, appointment)
 	}
 
 	return appointments, nil
