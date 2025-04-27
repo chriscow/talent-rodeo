@@ -155,4 +155,77 @@ func TestAppointment(t *testing.T) {
 			t.Error("CreateAppointment() with non-existent user should return error")
 		}
 	})
+
+	// Test processing appointment tracking
+	t.Run("ProcessingAppointmentTracking", func(t *testing.T) {
+		ctx := context.Background()
+
+		// Create an appointment
+		appointment := CreateTestAppointment(t, client, user)
+
+		// Mark as processing
+		err := MarkAppointmentAsProcessing(ctx, client, appointment)
+		if err != nil {
+			t.Fatalf("MarkAppointmentAsProcessing() error = %v", err)
+		}
+
+		// Verify the appointment status was updated
+		updatedAppointment, err := GetAppointment(ctx, client, user.ID, appointment.ID)
+		if err != nil {
+			t.Fatalf("GetAppointment() error = %v", err)
+		}
+		if updatedAppointment.Status != AppointmentStatusProcessing {
+			t.Errorf("MarkAppointmentAsProcessing() didn't update status, got %v, want %v",
+				updatedAppointment.Status, AppointmentStatusProcessing)
+		}
+
+		// Verify it appears in the processing list
+		processingAppointments, err := ListAppointmentsNeedingProcessing(ctx, client)
+		if err != nil {
+			t.Fatalf("ListAppointmentsNeedingProcessing() error = %v", err)
+		}
+
+		found := false
+		for _, a := range processingAppointments {
+			if a.ID == appointment.ID {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			t.Error("Appointment not found in processing list after marking as processing")
+		}
+
+		// Test completing the processing
+		err = CompleteProcessing(ctx, client, appointment)
+		if err != nil {
+			t.Fatalf("CompleteProcessing() error = %v", err)
+		}
+
+		// Verify status was updated to completed
+		completedAppointment, err := GetAppointment(ctx, client, user.ID, appointment.ID)
+		if err != nil {
+			t.Fatalf("GetAppointment() error = %v", err)
+		}
+		if completedAppointment.Status != AppointmentStatusCompleted {
+			t.Errorf("CompleteProcessing() didn't update status, got %v, want %v",
+				completedAppointment.Status, AppointmentStatusCompleted)
+		}
+		if completedAppointment.CompletedAt == nil {
+			t.Error("CompleteProcessing() didn't set CompletedAt timestamp")
+		}
+
+		// Verify it was removed from the processing list
+		processingAppointments, err = ListAppointmentsNeedingProcessing(ctx, client)
+		if err != nil {
+			t.Fatalf("ListAppointmentsNeedingProcessing() error = %v", err)
+		}
+
+		for _, a := range processingAppointments {
+			if a.ID == appointment.ID {
+				t.Error("Appointment still found in processing list after completion")
+			}
+		}
+	})
 }
