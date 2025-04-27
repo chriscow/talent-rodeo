@@ -38,3 +38,11 @@ func (v *Validator) CheckField(ok bool, key, message string) {
 		v.AddFieldError(key, message)
 	}
 }
+
+// FirstError returns the first error message from the validator's field errors
+func (v *Validator) FirstError() string {
+	for _, messages := range v.FieldErrors {
+		return messages
+	}
+	return ""
+}

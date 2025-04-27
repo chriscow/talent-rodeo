@@ -1,0 +1,417 @@
+---
+name: "Resume Search Analysis"
+description: "Analyze a resume to determine the most effective job search strategy for the individual."
+---
+
+You are tasked with analyzing a resume to determine the most effective job search strategy for the individual. Your goal is to classify whether the person's career is best searched by specific skills or by job title, and to identify the most appropriate search term(s).
+
+First, carefully read and analyze the following resume:
+
+<resume>
+{{.Resume}}
+</resume>
+
+Based on the resume, follow these steps:
+
+1. Identify the primary career field of the individual.
+
+2. Determine if this career is typically best searched by specific skills or by job title. Consider the following guidelines:
+- Software development and highly technical fields are often best searched by specific skills.
+- Most other careers are typically best searched by job title.
+
+3. If the career is best searched by skills:
+a. Identify the individual's primary technical skill or tool (e.g., a programming language like Python, Java, or Go).
+b. Ensure this is a core skill, not an ancillary one like a database system or cloud provider.
+
+4. If the career is best searched by job title:
+a. Identify the most appropriate job title based on the individual's experience and qualifications.
+
+5. Provide your final classification and search recommendation in the following format:
+
+<classification>
+Justification: [Brief explanation of your reasoning]
+Search Type: [Skills-based / Job Title-based]
+Primary Search Term: [Primary skill or job title]
+</classification>
+
+<example-1>
+    <input>
+    ```markdown
+    # Chris Cowherd
+
+    ## Software Engineering Leader
+
+    **30 Years of Software Engineering Leadership**
+
+    - Extensive experience in a technical leadership role
+    - Engineering manager and hands-on contributor
+    - Thought leader, inventor, and implementer of protocol standards and systems
+    - Strategic, analytical, and highly personable, with a collaborative, inclusive leadership style
+    - Adept at seeing the big picture, building strong teams, and driving positive outcomes
+
+    **Core Values:** Transparent • Trustworthy • Inclusive • Accessible • Passionate
+
+    ### Core Competencies
+
+    - Software Development
+    - Risk Management
+    - Privacy Compliance
+    - IT Platform Development
+    - Cloud Native Expertise
+    - Team Building / Leadership
+    - Information Security
+    - AI & Data Analytics
+    - Technology Diligence & Audits
+    - Financial Integration
+    - Acquisition & Transition
+    - Strategic Planning
+    - Tooling & Automation
+    - Vendor Management
+
+    ## Professional Experience
+
+    ### Backend Software Engineer, Generative AI  
+    **BlestX Ventures, LLC** - Redmond, WA | 2023 - Present  
+    Private research integrating generative AI for manufacturing processes  
+    **Stack:** OpenAI, Python, Go, Flask, Google Cloud, Docker  
+
+    - Integrated OpenAI technology for advanced workflows
+    - Hand-crafted PDF parsing and ingestion
+    - Developed retrieval augmented generation (RAG) using Weaviate & Pinecone
+    - Conducted prompt engineering and reranked results with cross-encoders
+    - Expanded search surface area with synthesized data
+    - Coordinated distributed LLM agents and optimized function calling
+
+    ---
+
+    ### Chief Technology Officer  
+    **i2 Holdings dba Ambassador Software** - Seattle, WA | 2020 - 2022  
+    Private equity funded SaaS company executing roll-up strategy in marketing technology AI & Analytics  
+    **Stack:** Python, Go, PostgreSQL, Django, Google Cloud, AWS, Docker  
+
+    - Protected and advanced all company technology assets
+    - Led a team of 18 engineers across geographies
+    - Owned product roadmaps, lifecycle design, and execution
+    - Delivered reliable project execution through meticulous planning
+    - Mentored team for professional growth and career development
+
+    ---
+
+    ### Principal Software Engineer  
+    **Stahurricane LLC** - Bellevue, WA | 2018 - 2021  
+    **Stack:** Go, Python, C#, CUDA, HLSL Compute Shaders, Unity, Google Cloud, AWS, Docker  
+
+    - Developed systems for VR and complex mathematical research
+    - Built cloud-native systems for ML inference at scale
+    - Explored higher-dimension structures with GPUs and Unity applications
+
+    ---
+
+    ### Chief Technology Officer  
+    **Donuts Inc.** - Bellevue, WA | 2012 - 2018  
+    World’s largest top-level domain registry operator  
+    **Stack:** Python, Go, C#, PostgreSQL, Django, Google Cloud, AWS, Docker  
+
+    - Managed full lifecycle for Internet-critical systems
+    - Successfully launched and operated over 200 TLDs
+    - Scaled growth and maintained ICANN-mandated uptime
+    - Grew the company 600x; #1 on Deloitte Fast 500
+
+    ---
+
+    ### Senior Engineering Manager, R&D  
+    **Demand Media (RightSide / Leaf Group)** - Kirkland, WA | 2008 - 2012  
+    **Stack:** C#, SQL Server, Redis  
+
+    - Managed a team of 12 cross-discipline engineers
+    - Designed the world's largest domain name registry
+
+    ---
+
+    ### Software Engineering Manager  
+    **eNom, Inc** - Redmond, WA | 2000 - 2008  
+    **Stack:** C++, C#, SQL Server  
+
+    - Guided a team of 7 engineers as a manager and contributor
+    - Designed scalable, fault-tolerant systems for DNS and other protocols
+
+    ---
+
+    ### Software Design Engineer  
+    **Microsoft** - Redmond, WA | 1997 - 2000  
+
+    - Contributed to early stages of Internet Explorer, Windows, and Office
+
+    ---
+
+    ### Programmer / Analyst  
+    **Advanced Semiconductor** - Phoenix, AZ | 1994 - 1996  
+
+    - Developed tools for semiconductor engineering processes
+
+    ## Patents
+
+    - US11552923B2: Whitelist domain name registry
+    - US20160173440A1: Communication using DNS repurposing
+    - US20150100507A1: Domain Protected Marks List Service
+    - US20080273077: Virtual Video Message Answering Machine Platform
+    - US20080281676: Methods and Systems to Facilitate Keyword Bid Arbitrage
+
+    ## Education
+
+    **Glendale College** - Mathematics / Computer Science | 1996
+    ```
+    </input>
+    <output>
+    ```
+    <classification>
+    Justification: Chris Cowherd has a 30-year career in software engineering with extensive leadership experience, but his recent roles consistently highlight Go (Golang) as a primary programming language across multiple positions. His most recent roles at BlestX Ventures, Ambassador Software, and Stahurricane all feature Go prominently in their tech stacks, making it the most consistent and current technical skill for his job search.
+    Search Type: Skills-based
+    Primary Search Term: Go
+    </classification>
+    ```
+    </output>
+</example-1>
+
+<example-2>
+    <input>
+    ```markdown
+    key_facts:
+    name: "Vijaya Bhat"
+    current_position: "Head Operations & People"
+    citizenship: "Canadian"
+    location: "Vancouver"
+    years_of_experience: 12
+    soft_skills:
+    - skill: "Strategic People Management"
+        ai_comment: "Extensively developed, current role focuses on strategic HR leadership."
+    - skill: "Employee Engagement"
+        ai_comment: "Proven track record with significant achievements in current and previous roles."
+    - skill: "Organizational Development"
+        ai_comment: "Well-experienced with multiple success stories."
+    programming_languages: []
+    technology_stacks:
+    - stack: "HRIS"
+        tools: ["BambooHR", "ADP WFN", "Dayforce", "Workday"]
+        ai_comment: "Deep expertise, frequently utilized in HR capacities."
+    - stack: "Project Management"
+        tools: ["Asana", "Jira", "Monday"]
+        ai_comment: "Experienced using these tools for HR projects and strategy implementation."
+    - stack: "Collaboration"
+        tools: ["Slack", "Microsoft Office 365", "Google Suite"]
+        ai_comment: "Regularly used for facilitating communication and operational efficiency."
+    accomplishments:
+    - "Increased engagement by 50% and reduced attrition through targeted strategies."
+    - "Saved over $120,000 in social security benefits reconciliation."
+    - "Led a transformation of performance management systems with significant improvements in participation and eNPS."
+    education:
+    - degree: "MBA in Human Resources"
+        institution: "Not specified"
+        year: "Not specified"
+    - degree: "BS in Information Technology"
+        institution: "Not specified"
+        year: "Not specified"
+    other_information:
+    - "Expert in IPO and M&A projects."
+    - "Executed initiatives that reduced workplace injuries by 85%."
+    - "Implemented employee self-service app enhancing process efficiencies."
+    ```
+    </input>    
+    <output>
+    ```
+    <classification>
+    Search Type: Job Title-based
+    Primary Search Term: HR Director
+    Justification: Vijaya Bhat has 12 years of experience with a current role as "Head Operations & People" and strong accomplishments in strategic HR leadership, employee engagement, and organizational development. Her education includes an MBA in Human Resources, and she has expertise in HRIS systems and HR-related projects. While she has technical knowledge of various HR tools, her career is primarily centered on human resources leadership rather than specific technical skills.
+    </classification>
+    ```
+    </output>
+</example-2>
+<example-3>
+    <input>
+    ```markdown
+    # Sarah Johnson
+
+    ## Marketing Executive
+
+    **15+ Years of Digital Marketing Leadership**
+
+    - Proven track record in developing and executing successful marketing strategies
+    - Expert in data-driven decision making and performance analysis
+    - Strong team leader with excellent communication and interpersonal skills
+    - Adept at navigating complex stakeholder relationships and driving cross-functional collaboration
+
+    **Core Competencies:** Strategic Planning • Digital Marketing • Brand Management • Content Strategy • SEO/SEM • Social Media Marketing • Email Marketing • Marketing Analytics • Team Leadership • Budget Management
+
+    ## Professional Experience
+
+    ### Senior Director of Digital Marketing
+    **TechNova Solutions** - San Francisco, CA | 2018 - Present
+    Led digital marketing efforts for a fast-growing SaaS company, driving significant increases in user acquisition and retention.
+
+    - Developed and implemented comprehensive digital marketing strategies, resulting in a 150% increase in organic traffic and a 75% boost in lead generation
+    - Managed a team of 12 marketing professionals, fostering a culture of innovation and continuous improvement
+    - Oversaw a $5M annual marketing budget, consistently delivering ROI above industry benchmarks
+    - Spearheaded the adoption of AI-driven marketing tools, improving campaign efficiency by 40%
+
+    ### Marketing Manager
+    **Global Retail Brands** - New York, NY | 2014 - 2018
+    Managed marketing initiatives for a portfolio of consumer goods brands across multiple channels.
+
+    - Led the rebranding of a major product line, resulting in a 30% increase in sales within the first quarter
+    - Implemented an omnichannel marketing approach, integrating online and offline customer experiences
+    - Collaborated with product development teams to ensure marketing alignment with new product launches
+    - Developed and executed influencer marketing campaigns, achieving a 5x return on investment
+
+    ### Digital Marketing Specialist
+    **StartUp Accelerator** - Boston, MA | 2010 - 2014
+    Drove digital marketing efforts for a diverse portfolio of early-stage startups.
+
+    - Created and managed PPC campaigns across Google Ads and social media platforms, achieving an average CTR of 4.5%
+    - Implemented SEO best practices, resulting in first-page rankings for key terms across multiple client websites
+    - Developed content marketing strategies, increasing blog traffic by an average of 200% for client companies
+    - Conducted regular performance analyses and presented actionable insights to startup founders and investors
+
+    ## Education
+
+    **Master of Business Administration (MBA), Marketing Focus**
+    Harvard Business School - Boston, MA | 2008 - 2010
+
+    **Bachelor of Science in Marketing**
+    University of Pennsylvania - Philadelphia, PA | 2004 - 2008
+
+    ## Skills & Certifications
+
+    - Google Analytics Certified
+    - HubSpot Inbound Marketing Certified
+    - Proficient in marketing tools: Salesforce, Marketo, Hootsuite, SEMrush, Adobe Creative Suite
+    - Advanced knowledge of data visualization tools: Tableau, Power BI
+
+    ## Awards & Recognition
+
+    - MarTech Innovator of the Year, 2022
+    - Top 40 Under 40 in Marketing, AdAge, 2020
+    - Best-in-Class Email Marketing Campaign, Email Marketing Awards, 2019
+    ```
+    </input>
+    <output>
+    ```
+    <classification>
+    Justification: Sarah Johnson has 15+ years of progressive experience in digital marketing with a clear leadership trajectory, advancing from a Digital Marketing Specialist to her current role as Senior Director of Digital Marketing. While she possesses various marketing skills and certifications, her career is defined more by her leadership roles and comprehensive marketing strategy experience than by any single technical skill. Her resume emphasizes strategic planning, team leadership, and marketing management capabilities rather than specialized technical proficiency.
+    Search Type: Job Title-based
+    Primary Search Term: Digital Marketing Director
+    </classification>
+    ```
+    </output>
+</example-3>
+<example-4>
+    <input>
+    ```markdown
+        resume_type: founder_transition
+        candidate_name: Rachel Mitchell
+        contact:
+        email: rachel.mitchell@gmail.com
+        phone: (206) 555-0122
+        linkedin: linkedin.com/in/rmitchell-tech
+        location: Seattle, WA
+
+        summary: Technical Founder and Engineering Leader with proven track record of building and scaling B2B SaaS products. Successfully led startup from inception to acquisition. Expertise in modern cloud architecture, team building, and product development.
+
+        education:
+        institution: University of Washington
+        degree: BA Computer Science
+        graduation: 2012
+
+        experience:
+        - role: Founder & CTO
+            company: DataFlow Technologies (Acquired)
+            location: Seattle, WA
+            duration: 2020 - 2023
+            highlights:
+            - Founded and scaled B2B SaaS platform to $5M ARR
+            - Grew engineering team from 2 to 15 across 3 countries
+            - Architected scalable microservices platform using Go
+            - Led successful exit through strategic acquisition
+            - Managed product roadmap and technical strategy
+            - Built relationships with enterprise clients
+
+        - role: Lead Software Engineer
+            company: CloudScale Systems
+            location: Seattle, WA
+            duration: 2016 - 2020
+            highlights:
+            - Led development of cloud-native payment processing system
+            - Managed team of 6 engineers
+            - Reduced deployment cycle from weeks to days
+            - Implemented OAuth2/OIDC authentication system
+
+        - role: Full Stack Developer
+            company: TechStart Solutions
+            location: Seattle, WA
+            duration: 2012 - 2016
+            highlights:
+            - Developed customer-facing features for SaaS platform
+            - Improved test coverage from 40% to 90%
+            - Mentored junior developers
+
+        technical_skills:
+        frontend:
+            - React/Next.js
+            - TypeScript
+            - Cypress E2E testing
+            - Performance optimization
+
+        backend:
+            - Go microservices
+            - PostgreSQL
+            - Redis caching
+            - gRPC/Protocol Buffers
+
+        cloud:
+            - Google Cloud Platform
+            - Cloud Run
+            - Cloud SQL
+            - Pub/Sub
+            - Cloud Storage
+            - Infrastructure as Code
+            - CI/CD (GitHub Actions)
+
+        product:
+            - Stripe Integration
+            - OAuth2/OIDC
+            - Datadog monitoring
+            - API design
+
+        leadership:
+        - Built and led remote engineering team
+        - Managed $1M+ technical budget
+        - Established engineering processes
+        - Created technical hiring pipeline
+
+        speaking:
+        - GopherCon 2022: "Scaling Go Microservices"
+        - Women in Tech Summit 2023: "From Engineer to Founder"
+
+        patents:
+        - US11789012: Method for Distributed Data Processing
+
+        interests:
+        - Technical mentorship
+        - Open source contribution
+        - Product strategy
+        - Engineering culture
+    ```
+    </input>
+    <output>
+    ```
+<classification>
+Justification: Rachel Mitchell has progressed from technical individual contributor roles to leadership positions, with her most recent and significant experience being a Founder & CTO who successfully led a startup to acquisition. While she possesses strong technical skills (particularly in Go microservices), her career trajectory, executive leadership experience, and the resume's classification as "founder_transition" indicate she's likely seeking senior technical leadership roles rather than positions focused on a specific programming language.
+Search Type: Skill-based
+Primary Search Term: CTO
+</classification>
+    ```
+    </output>
+</example-4>
+
+
+Ensure that your final output contains only the <classification> section with the requested information. Do not include any additional analysis or commentary outside of these tags.

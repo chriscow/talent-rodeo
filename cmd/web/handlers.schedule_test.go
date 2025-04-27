@@ -1,27 +1,13 @@
 package main
 
 import (
-	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/joho/godotenv"
 )
-
-func init() {
-	if err := godotenv.Overload("../../.env"); err != nil {
-		log.Fatal("Error loading .env file")
-	}
-
-	// Set default VAPI webhook URL for tests if not already set
-	if os.Getenv("VAPI_START_CALL_PATH") == "" {
-		os.Setenv("VAPI_START_CALL_PATH", "https://api.vapi.ai/v1/call")
-	}
-}
 
 func TestScheduling(t *testing.T) {
 	ts := newTestServer(t, "test scheduling")

@@ -2,12 +2,20 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"regexp"
+	"talent-rodeo/assets"
 	"talent-rodeo/internal/funcs"
 	"time"
 
 	"sort"
 
+	"cloud.google.com/go/firestore"
+	"github.com/chriscow/minds/tools"
+	"github.com/chriscow/vapi-go"
+	"github.com/samber/lo"
+	"github.com/sashabaranov/go-openai"
 	"google.golang.org/api/iterator"
 )
 
@@ -56,40 +64,32 @@ type Appointment struct {
 }
 
 type ExtractedData struct {
-	TranscriptExtract   *string
-	ResolvedPreferences *string
-	WorkPreferences     *string
-	KeywordAnalysis     *string
-	UserStatement       *string
+	TranscriptExtract *string
+	WorkPreferences   *string
+	SearchQueries     []string
+	UserStatement     *string
+	JobDescription    *string
 }
 
-func CreateAppointment(ctx context.Context, fs *FirestoreClient, name string, user User, appointment *Appointment) error {
+func CreateAppointment(ctx context.Context, fs *FirestoreClient, userID string, appointment *Appointment) error {
 	// Validate user exists first
-	_, found, err := GetUser(ctx, fs, user.ID)
+	_, found, err := GetUser(ctx, fs, userID)
 	if err != nil {
 		return fmt.Errorf("failed to validate user: %w", err)
 	}
 	if !found {
-		return fmt.Errorf("user %s not found", user.ID)
-	}
-
-	if appointment.Name == "" {
-		appointment.Name = name
+		return fmt.Errorf("user %s not found", userID)
 	}
 
 	if appointment.ID == "" {
 		appointment.ID = funcs.Slugify(fmt.Sprintf("%s-%d", appointment.Name, time.Now().UnixNano()))
 	}
 
-	if user.Name == "" {
-		return fmt.Errorf("user name is required")
-	}
-
-	appointment.UserID = user.ID
+	appointment.UserID = userID
 	appointment.CreatedAt = time.Now()
 	appointment.UpdatedAt = appointment.CreatedAt
 
-	_, err = fs.Collection(usersCollection).Doc(user.ID).Collection(appointmentsCollection).Doc(appointment.ID).Set(ctx, appointment)
+	_, err = fs.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).Doc(appointment.ID).Set(ctx, appointment)
 	if err != nil {
 		return fmt.Errorf("failed to create appointment: %w", err)
 	}
@@ -109,6 +109,44 @@ func GetAppointment(ctx context.Context, fs *FirestoreClient, userID string, app
 	}
 
 	return &appointment, nil
+}
+
+func GetLatestAppointment(ctx context.Context, fs *FirestoreClient, userID string) (*Appointment, bool, error) {
+	iter := fs.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).OrderBy("CompletedAt", firestore.Desc).Limit(1).Documents(ctx)
+
+	doc, err := iter.Next()
+	if err != nil {
+		if err == iterator.Done {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("failed to get latest appointment: %w", err)
+	}
+
+	var appt Appointment
+	if err := doc.DataTo(&appt); err != nil {
+		return nil, false, fmt.Errorf("failed to unmarshal appointment data: %w", err)
+	}
+
+	return &appt, true, nil
+}
+
+func GetLatestCompletedAppointment(ctx context.Context, fs *FirestoreClient, userID string) (*Appointment, bool, error) {
+	iter := fs.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).Where("Status", "==", AppointmentStatusCompleted).OrderBy("CompletedAt", firestore.Desc).Limit(1).Documents(ctx)
+
+	doc, err := iter.Next()
+	if err != nil {
+		if err == iterator.Done {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("failed to get latest completed appointment: %w", err)
+	}
+
+	var appt Appointment
+	if err := doc.DataTo(&appt); err != nil {
+		return nil, false, fmt.Errorf("failed to unmarshal appointment data: %w", err)
+	}
+
+	return &appt, true, nil
 }
 
 func ListAppointments(ctx context.Context, fs *FirestoreClient, userID string) ([]*Appointment, error) {
@@ -259,6 +297,12 @@ func DeleteAppointment(ctx context.Context, fs *FirestoreClient, userID, appoint
 	return nil
 }
 
+type processingAppointment struct {
+	UserID        string
+	AppointmentID string
+	StartedAt     time.Time
+}
+
 // When an appointment enters processing state, add a reference to this collection
 func MarkAppointmentAsProcessing(ctx context.Context, fs *FirestoreClient, appointment *Appointment) error {
 	// Update the appointment as normal
@@ -270,10 +314,15 @@ func MarkAppointmentAsProcessing(ctx context.Context, fs *FirestoreClient, appoi
 	}
 
 	// Add reference to the processing tracking collection
-	processingRef := map[string]interface{}{
-		"UserID":        appointment.UserID,
-		"AppointmentID": appointment.ID,
-		"StartedAt":     time.Now(),
+	// processingRef := map[string]interface{}{
+	// 	"UserID":        appointment.UserID,
+	// 	"AppointmentID": appointment.ID,
+	// 	"StartedAt":     time.Now(),
+	// }
+	processingRef := processingAppointment{
+		UserID:        appointment.UserID,
+		AppointmentID: appointment.ID,
+		StartedAt:     time.Now(),
 	}
 
 	_, err := fs.Collection(processingAppointmentsCollection).Doc(appointment.ID).Set(ctx, processingRef)
@@ -282,27 +331,131 @@ func MarkAppointmentAsProcessing(ctx context.Context, fs *FirestoreClient, appoi
 
 // When processing is complete, remove from tracking collection
 func CompleteProcessing(ctx context.Context, fs *FirestoreClient, appointment *Appointment) error {
-	// Update appointment status
-	appointment.Status = AppointmentStatusCompleted
-	appointment.UpdatedAt = time.Now()
-	appointment.CompletedAt = &appointment.UpdatedAt
+	return fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		// Update appointment status
+		appointment.Status = AppointmentStatusCompleted
+		appointment.UpdatedAt = time.Now()
+		appointment.CompletedAt = &appointment.UpdatedAt
 
-	if err := UpdateAppointment(ctx, fs, appointment); err != nil {
-		return err
-	}
+		// Get references to both documents we need to update/delete
+		appointmentRef := fs.Collection(usersCollection).Doc(appointment.UserID).Collection(appointmentsCollection).Doc(appointment.ID)
+		processingRef := fs.Collection(processingAppointmentsCollection).Doc(appointment.ID)
 
-	// Remove from processing tracking collection
-	_, err := fs.Collection(processingAppointmentsCollection).Doc(appointment.ID).Delete(ctx)
-	return err
+		// Within the transaction, update the appointment and delete the processing reference
+		if err := tx.Set(appointmentRef, appointment); err != nil {
+			return fmt.Errorf("failed to update appointment in transaction: %w", err)
+		}
+
+		if err := tx.Delete(processingRef); err != nil {
+			return fmt.Errorf("failed to delete processing reference in transaction: %w", err)
+		}
+
+		return nil
+	})
 }
 
-// Replace ListAppointmentsNeedingProcessing with this more efficient version
+// GenerateJobDescription generates an idealized, halucinated job description for an appointment transcript and resume
+func GenerateJobDescription(ctx context.Context, resume Resume, appointment Appointment) (string, error) {
+	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/transcript-060-job-description.txt")
+	if err != nil {
+		return "", fmt.Errorf("failed to read job description prompt: %w", err)
+	}
+
+	if appointment.CallID == nil {
+		return "", fmt.Errorf("appointment call ID is nil")
+	}
+
+	call, err := vapi.GetCall(ctx, *appointment.CallID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get call: %w", err)
+	}
+
+	// remove any system messages
+	msgs := call.Artifact.MessagesOpenAIFormatted
+	msgs = lo.Filter(msgs, func(msg openai.ChatCompletionMessage, _ int) bool {
+		return msg.Role != openai.ChatMessageRoleSystem
+	})
+
+	if len(msgs) == 0 {
+		return "", fmt.Errorf("no messages found in call")
+	}
+
+	msgsJSON, err := json.Marshal(msgs)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal call messages: %w", err)
+	}
+
+	if resume.RawText == "" {
+		return "", fmt.Errorf("resume is empty")
+	}
+
+	prompt, err := tools.GeneratePrompt(tmpl, map[string]any{
+		"Resume":     resume.RawText,
+		"Transcript": string(msgsJSON),
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to generate prompt: %w", err)
+	}
+
+	desc, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat), tools.WithMaxTokens(3000))
+	if err != nil {
+		return "", fmt.Errorf("failed to generate job description: %w", err)
+	}
+
+	// get the text between <ideal_job_description> and </ideal_job_description> tags
+	// Use (?s) flag to make dot match newlines (DOTALL mode)
+	re := regexp.MustCompile(`(?s)<ideal_job_description>(.*?)</ideal_job_description>`)
+	matches := re.FindStringSubmatch(desc)
+	if len(matches) > 1 {
+		return matches[1], nil
+	}
+
+	return desc, nil
+}
+
+func GenerateSearchQueries(ctx context.Context, resume Resume, appointment Appointment) ([]string, error) {
+	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/transcript-040-search.txt")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read search prompt: %w", err)
+	}
+
+	prompt, err := tools.GeneratePrompt(tmpl, map[string]any{
+		"TranscriptExtract":     appointment.ExtractedData,
+		"InitialSearchAnalysis": resume.SearchAnalysis,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate prompt: %w", err)
+	}
+
+	result, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat))
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate search queries: %w", err)
+	}
+
+	type searchQueries struct {
+		Queries []string `json:"search-queries" description:"A list of search queries from the primary and additional queries to use for the job description search"`
+	}
+
+	queries, err := tools.StructuredAsk[searchQueries](ctx, "search-queries", `Extract a list of search queries from the following text: `+result, tools.WithModel(tools.GPT41Nano))
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate search queries: %w", err)
+	}
+
+	return queries.Queries, nil
+}
+
+// ListAppointmentsNeedingProcessing retrieves all appointments that are currently marked as processing
 func ListAppointmentsNeedingProcessing(ctx context.Context, fs *FirestoreClient) ([]*Appointment, error) {
 	var appointments []*Appointment
+	var orphanedRefs []string
+
+	println(Blue("Listing appointments needing processing"))
 
 	// Query the processing tracking collection directly
 	iter := fs.Collection(processingAppointmentsCollection).Documents(ctx)
 	for {
+		println(Blue("Processing appointment"))
+
 		doc, err := iter.Next()
 		if err == iterator.Done {
 			break
@@ -311,21 +464,56 @@ func ListAppointmentsNeedingProcessing(ctx context.Context, fs *FirestoreClient)
 			return nil, fmt.Errorf("failed to iterate processing appointments: %w", err)
 		}
 
-		// Extract user and appointment IDs
-		data := doc.Data()
-		userID, _ := data["UserID"].(string)
-		appointmentID, _ := data["AppointmentID"].(string)
-
-		// Get the actual appointment
-		appointment, err := GetAppointment(ctx, fs, userID, appointmentID)
-		if err != nil {
-			// Log but continue if appointment not found or can't be retrieved
-			fmt.Printf("Warning: Processing appointment %s for user %s not found: %v\n", appointmentID, userID, err)
+		println(Blue("Parsing processing reference"))
+		// Parse the processing reference using our struct
+		var procRef processingAppointment
+		if err := doc.DataTo(&procRef); err != nil {
+			fmt.Printf(BGYellow("WARNING: Failed to parse processing reference %s: %v\n"), doc.Ref.ID, err)
+			orphanedRefs = append(orphanedRefs, doc.Ref.ID)
 			continue
 		}
+
+		println(Blue("Getting appointment"))
+
+		// Get the actual appointment
+		appointment, err := GetAppointment(ctx, fs, procRef.UserID, procRef.AppointmentID)
+		if err != nil {
+			// Log the orphaned reference with more visibility
+			fmt.Printf(BGYellow("WARNING: Orphaned processing reference found: %s for user %s - %v\n"), procRef.AppointmentID, procRef.UserID, err)
+
+			// Add to list of orphaned references to clean up
+			orphanedRefs = append(orphanedRefs, doc.Ref.ID)
+			continue
+		}
+
+		println(Blue("Appointment found"))
 
 		appointments = append(appointments, appointment)
 	}
 
+	println(Blue("Cleaning up orphaned references"))
+
+	// Clean up orphaned references synchronously
+	if len(orphanedRefs) > 0 {
+		fmt.Printf("INFO: Found %d orphaned processing references that need cleanup\n", len(orphanedRefs))
+		cleanupOrphanedProcessingRefs(ctx, fs, orphanedRefs)
+	}
+
+	println(Blue("Returning appointments"))
+
 	return appointments, nil
+}
+
+// cleanupOrphanedProcessingRefs removes references to appointments that no longer exist
+func cleanupOrphanedProcessingRefs(ctx context.Context, fs *FirestoreClient, refIDs []string) {
+	for _, refID := range refIDs {
+		fmt.Printf("INFO: Cleaning up orphaned processing reference: %s\n", refID)
+		_, err := fs.Collection(processingAppointmentsCollection).Doc(refID).Delete(ctx)
+		if err != nil {
+			fmt.Printf("ERROR: Failed to clean up orphaned processing reference %s: %v\n", refID, err)
+		} else {
+			fmt.Printf("SUCCESS: Cleaned up orphaned processing reference: %s\n", refID)
+		}
+	}
+	fmt.Printf("INFO: Completed cleanup of %d orphaned processing references\n", len(refIDs))
 }

@@ -47,7 +47,7 @@ func main() {
     // Create a new provider
     provider := scrapingdog.NewScrapingDogProvider(
         "your-api-key",
-        scrapingdog.WithFirestore(firestoreClient),
+        scrapingdog.WithFirestore(FirestoreClient),
         scrapingdog.WithJobEventHandler(eventHandler),
         scrapingdog.WithProviderLogger(logger),
     )

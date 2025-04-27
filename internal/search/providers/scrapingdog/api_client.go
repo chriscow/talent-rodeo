@@ -88,6 +88,7 @@ func (c *APIClient) SearchJobListings(ctx context.Context, query string, locatio
 	q.Set("api_key", c.apiKey)
 	q.Set("field", query)
 	q.Set("geoid", location)
+	q.Set("sort_by", "day") // day (last 24 hours), week (last 7 days), month (last 30 days)
 	q.Set("page", strconv.Itoa(page))
 	baseURL.RawQuery = q.Encode()
 

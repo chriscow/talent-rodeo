@@ -2,6 +2,7 @@ package scrapingdog
 
 import (
 	"context"
+	"talent-rodeo/internal"
 	"testing"
 	"time"
 
@@ -18,28 +19,28 @@ func TestCreateProviderJobID(t *testing.T) {
 		{
 			name:          "Simple ID",
 			providerJobID: "12345",
-			expected:      "scrapingdog-12345",
+			expected:      "scrapingdog:linkedin:12345",
 		},
 		{
 			name:          "ID with special characters",
 			providerJobID: "job-id_123!@#",
-			expected:      "scrapingdog-job-id-123",
+			expected:      "scrapingdog:linkedin:job-id-123",
 		},
 		{
 			name:          "ID with spaces",
 			providerJobID: "job id 123",
-			expected:      "scrapingdog-job-id-123",
+			expected:      "scrapingdog:linkedin:job-id-123",
 		},
 		{
 			name:          "Empty ID",
 			providerJobID: "",
-			expected:      "scrapingdog",
+			expected:      "scrapingdog:linkedin:",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := CreateProviderJobID(tc.providerJobID)
+			result := createJobID(JobProviderName, tc.providerJobID)
 			assert.Equal(t, tc.expected, result)
 		})
 	}
@@ -116,7 +117,7 @@ func TestParseSalaryRange(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := ParseSalaryRange(ctx, tc.salary)
+			result, err := parseSalaryRange(ctx, tc.salary)
 
 			if tc.expectError {
 				assert.Error(t, err)
@@ -166,14 +167,20 @@ func TestConvertJobListings(t *testing.T) {
 		},
 	}
 
+	// Create test search criteria
+	criteria := &internal.SearchCriteria{
+		Query: "go developer",
+		GeoID: "remote",
+	}
+
 	// Convert job listings
-	result, err := ConvertJobListings(jobListings)
+	result, err := convertJobListings(JobProviderName, jobListings, criteria)
 	require.NoError(t, err)
 	require.Len(t, result, 2)
 
 	// Verify first job
-	assert.Equal(t, "scrapingdog-linkedin-1", result[0].ID)
-	assert.Equal(t, ProviderName, result[0].Provider)
+	assert.Equal(t, "scrapingdog:linkedin:linkedin-1", result[0].ID)
+	assert.Equal(t, JobProviderName, result[0].Provider)
 	assert.Equal(t, "linkedin-1", result[0].ProviderJobID)
 	assert.Equal(t, "Go Developer", result[0].Title)
 	assert.Equal(t, "Example Company", result[0].Company)
@@ -182,13 +189,15 @@ func TestConvertJobListings(t *testing.T) {
 	assert.Equal(t, "https://example.com/jobs/1", result[0].URL)
 	assert.Equal(t, "https://example.com/company/1", result[0].CompanyProfile)
 	assert.Equal(t, "https://example.com/logo.png", result[0].CompanyLogo)
+	assert.Equal(t, criteria.GetSearchHash(), result[0].SearchHash)
 
 	// Verify second job
-	assert.Equal(t, "scrapingdog-linkedin-2", result[1].ID)
+	assert.Equal(t, "scrapingdog:linkedin:linkedin-2", result[1].ID)
 	assert.Equal(t, "Senior Go Developer", result[1].Title)
 	assert.Equal(t, "Another Company", result[1].Company)
 	assert.Equal(t, "New York", result[1].Location)
 	assert.True(t, result[1].PostedDate.Before(now) || result[1].PostedDate.Equal(now), "PostedDate should be in the past or now")
+	assert.Equal(t, criteria.GetSearchHash(), result[1].SearchHash)
 }
 
 func TestConvertJobDetail(t *testing.T) {
@@ -238,18 +247,18 @@ func TestConvertJobDetail(t *testing.T) {
 	}
 
 	// Convert job detail
-	result, err := ConvertJobDetail(jobDetail)
+	result, err := convertJobDetail(jobDetail)
 	require.NoError(t, err)
 
 	// Verify basic fields
-	assert.Equal(t, "scrapingdog-detail-1", result.ID)
-	assert.Equal(t, ProviderName, result.Provider)
+	assert.Equal(t, "scrapingdog:linkedin:detail-1", result.ID)
+	assert.Equal(t, JobProviderName, result.Provider)
 	assert.Equal(t, "detail-1", result.ProviderJobID)
 	assert.Equal(t, "Senior Go Developer", result.Title)
 	assert.Equal(t, "Example Company", result.Company)
 	assert.Equal(t, "Remote", result.Location)
 	assert.True(t, result.PostedDate.Before(now) || result.PostedDate.Equal(now), "PostedDate should be in the past or now")
-	assert.Equal(t, "This is a test job description.", result.FullDescription)
+	assert.Equal(t, "This is a test job description.", result.Description)
 	assert.Equal(t, "Full-time", result.EmploymentType)
 	assert.Equal(t, "active", result.Status)
 	assert.Equal(t, "Senior", result.SeniorityLevel)

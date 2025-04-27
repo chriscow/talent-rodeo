@@ -9,25 +9,29 @@ import (
 	"strings"
 	"time"
 
+	"talent-rodeo/assets"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/funcs"
-	"talent-rodeo/internal/search"
+
+	"github.com/chriscow/minds/tools"
 )
 
-// CreateProviderJobID formats a provider job ID to ensure uniqueness across providers
-func CreateProviderJobID(providerJobID string) string {
-	if providerJobID == "" {
-		return ProviderName
+// createJobID formats a provider job ID to ensure uniqueness across providers
+// example: scrapingdog-linkedin:1234567890
+func createJobID(jobProviderName string, providerJobID string) string {
+	if providerJobID == "[empty]" {
+		return SearchProviderName
 	}
 	// First slugify the ID to handle spaces and basic special characters
 	id := funcs.Slugify(providerJobID)
 	// Then replace any remaining underscores with hyphens
 	id = strings.ReplaceAll(id, "_", "-")
-	return fmt.Sprintf("%s-%s", ProviderName, id)
+
+	return fmt.Sprintf("%s:%s:%s", SearchProviderName, jobProviderName, id)
 }
 
-// ParseSalaryRange parses a salary string into a structured SalaryRange object
-func ParseSalaryRange(ctx context.Context, basePay string) (*search.SalaryRange, error) {
+// parseSalaryRange parses a salary string into a structured SalaryRange object
+func parseSalaryRange(ctx context.Context, basePay string) (*internal.SalaryRange, error) {
 	if basePay == "" {
 		return nil, nil
 	}
@@ -38,14 +42,19 @@ func ParseSalaryRange(ctx context.Context, basePay string) (*search.SalaryRange,
 		return nil, fmt.Errorf("invalid salary format: %s", basePay)
 	}
 
-	prompt, err := internal.GeneratePrompt("prompts/match-000.salary.txt", map[string]any{
+	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/match-000.salary.txt")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read salary prompt: %w", err)
+	}
+
+	prompt, err := tools.GeneratePrompt(tmpl, map[string]any{
 		"BasePay": basePay,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate prompt: %w", err)
 	}
 
-	salary, err := internal.StructuredAsk[search.SalaryRange](ctx, "salary_data", prompt)
+	salary, err := tools.StructuredAsk[internal.SalaryRange](ctx, "salary_data", prompt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to ask: %w", err)
 	}
@@ -53,14 +62,11 @@ func ParseSalaryRange(ctx context.Context, basePay string) (*search.SalaryRange,
 	return &salary, nil
 }
 
-// ConvertJobListings converts provider-specific job listings to a common format
-func ConvertJobListings(jobListings []LinkedInJobListing) ([]search.JobListing, error) {
-	result := make([]search.JobListing, len(jobListings))
+// convertJobListings converts provider-specific job listings to a common format
+func convertJobListings(jobProviderName string, jobListings []LinkedInJobListing, criteria *internal.SearchCriteria) ([]internal.JobListing, error) {
+	result := make([]internal.JobListing, len(jobListings))
 
 	for i, job := range jobListings {
-		// Format provider job ID
-		providerJobID := CreateProviderJobID(job.LinkedInJobID)
-
 		// Parse posting date
 		var postedDate time.Time
 		var err error
@@ -74,9 +80,8 @@ func ConvertJobListings(jobListings []LinkedInJobListing) ([]search.JobListing, 
 			postedDate = time.Now()
 		}
 
-		result[i] = search.JobListing{
-			ID:             providerJobID,
-			Provider:       ProviderName,
+		result[i] = internal.JobListing{
+			Provider:       jobProviderName, // linkedin, etc.
 			ProviderJobID:  job.LinkedInJobID,
 			Title:          job.Position,
 			Company:        job.CompanyName,
@@ -85,18 +90,18 @@ func ConvertJobListings(jobListings []LinkedInJobListing) ([]search.JobListing, 
 			URL:            job.Link,
 			CompanyProfile: job.CompanyProfile,
 			CompanyLogo:    job.CompanyLogo,
-			FirstSeenAt:    time.Now(),
+			CreatedAt:      time.Now(),
 		}
+
+		result[i].ID = createJobID(jobProviderName, job.LinkedInJobID)
+		result[i].SearchHash = criteria.GetSearchHash()
 	}
 
 	return result, nil
 }
 
-// ConvertJobDetail converts provider-specific job details to a common format
-func ConvertJobDetail(detail LinkedInJobDetail) (search.JobDetail, error) {
-	// Use the raw ID from the detail
-	rawID := detail.ID
-
+// convertJobDetail converts provider-specific job details to a common format
+func convertJobDetail(detail LinkedInJobDetail) (*internal.JobDetail, error) {
 	// Parse posting date
 	var postedDate time.Time
 	var err error
@@ -110,15 +115,15 @@ func ConvertJobDetail(detail LinkedInJobDetail) (search.JobDetail, error) {
 	}
 
 	// Parse salary range
-	salaryRange, err := ParseSalaryRange(context.Background(), detail.BasePay)
+	salaryRange, err := parseSalaryRange(context.Background(), detail.BasePay)
 	if err != nil {
 		// noop - we don't want to fail the conversion
 	}
 
 	// Convert recruiters
-	recruiters := make([]search.Recruiter, len(detail.Recruiters))
+	recruiters := make([]internal.Recruiter, len(detail.Recruiters))
 	for i, r := range detail.Recruiters {
-		recruiters[i] = search.Recruiter{
+		recruiters[i] = internal.Recruiter{
 			Photo:      r.Photo,
 			Name:       r.Name,
 			Title:      r.Title,
@@ -127,9 +132,9 @@ func ConvertJobDetail(detail LinkedInJobDetail) (search.JobDetail, error) {
 	}
 
 	// Convert similar jobs
-	similarJobs := make([]search.RelatedJob, len(detail.SimilarJobs))
+	similarJobs := make([]internal.RelatedJob, len(detail.SimilarJobs))
 	for i, j := range detail.SimilarJobs {
-		similarJobs[i] = search.RelatedJob{
+		similarJobs[i] = internal.RelatedJob{
 			Title:       j.Position,
 			Company:     j.Company,
 			Location:    j.Location,
@@ -139,9 +144,9 @@ func ConvertJobDetail(detail LinkedInJobDetail) (search.JobDetail, error) {
 	}
 
 	// Convert people also viewed
-	peopleAlsoViewed := make([]search.RelatedJob, len(detail.PeopleAlsoViewed))
+	peopleAlsoViewed := make([]internal.RelatedJob, len(detail.PeopleAlsoViewed))
 	for i, j := range detail.PeopleAlsoViewed {
-		peopleAlsoViewed[i] = search.RelatedJob{
+		peopleAlsoViewed[i] = internal.RelatedJob{
 			Title:       j.Position,
 			Company:     j.Company,
 			Location:    j.Location,
@@ -150,16 +155,16 @@ func ConvertJobDetail(detail LinkedInJobDetail) (search.JobDetail, error) {
 		}
 	}
 
-	result := search.JobDetail{
-		ID:               CreateProviderJobID(rawID),
-		Provider:         ProviderName,
-		ProviderJobID:    rawID,
+	result := internal.JobDetail{
+		ID:               createJobID(JobProviderName, detail.ID), // linkedin-1234567890
+		Provider:         JobProviderName,
+		ProviderJobID:    detail.ID,
 		Title:            detail.Position,
 		Company:          detail.CompanyName,
 		Location:         detail.Location,
 		PostedDate:       postedDate,
 		URL:              "",
-		FullDescription:  detail.Description,
+		Description:      detail.Description,
 		SalaryInfo:       salaryRange,
 		EmploymentType:   detail.EmploymentType,
 		Status:           detail.Status,
@@ -172,25 +177,30 @@ func ConvertJobDetail(detail LinkedInJobDetail) (search.JobDetail, error) {
 		CreatedAt:        time.Now(),
 	}
 
-	return result, nil
+	return &result, nil
 }
 
 // SummarizeJobDetails uses LLM to create a job summary directly on the JobDetail
-func SummarizeJobDetails(ctx context.Context, jobDetail *search.JobDetail) error {
+func SummarizeJobDetails(ctx context.Context, jobDetail *internal.JobDetail) error {
 
 	jobJSON, err := json.MarshalIndent(jobDetail, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal job details: %w", err)
 	}
 
-	prompt, err := internal.GeneratePrompt("prompts/job-summary.001.txt", map[string]any{
+	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/job-summary.001.txt")
+	if err != nil {
+		return fmt.Errorf("failed to read job summary prompt: %w", err)
+	}
+
+	prompt, err := tools.GeneratePrompt(tmpl, map[string]any{
 		"JobDetail": string(jobJSON),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to generate prompt: %w", err)
 	}
 
-	summary, err := internal.StructuredAsk[search.ExtractedData](ctx, "job_summary", prompt)
+	summary, err := tools.StructuredAsk[internal.JobDetailExtractedData](ctx, "job_summary", prompt)
 	if err != nil {
 		return fmt.Errorf("failed to ask: %w", err)
 	}

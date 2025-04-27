@@ -1,5 +1,47 @@
 # F004: Job Matching (Refactored)
 
+## Implementation Status
+
+### Completed
+- ✅ Data Model: `search.Criteria` struct with `SubscriberCount` field in internal/search/types.go
+- ✅ User Criteria Subscription: Implementation of user subscription to search criteria
+  - `SubscribeUserToCriteria`: Creates a subscription and increments criteria subscriber count
+  - `UnsubscribeUserFromCriteria`: Removes subscription and decrements criteria subscriber count
+  - `GetUserCriteriaSubscriptions`: Retrieves all criteria a user is subscribed to
+- ✅ Basic Criteria Management: CRUD operations for search criteria
+  - `CreateSearchCriteria`, `GetSearchCriteria`, `UpdateSearchCriteria`, `DeleteSearchCriteria`
+- ✅ Job-Criteria Links: Functions to link jobs to criteria
+  - `GetJobIDsForCriteria`: Retrieves all job IDs linked to a criteria
+  - `LinkJobToCriteria`: Creates a link between a job and criteria
+- ✅ Search Scheduling: Using criteria with SubscriberCount > 0 instead of individual users
+  - Scheduler now identifies and processes criteria with subscribers
+- ✅ Job Store: Implementation of job store to receive and process jobs from search providers
+  - Links jobs to criteria and notifies processor for each user subscribed to criteria
+- ✅ Job Processor: Implementation of job processor to analyze job matches for users
+  - Uses LLM-based analysis to compare job requirements with user profiles
+  - Stores analyzed results in user job records
+
+### In Progress / Partially Completed
+- 🔄 Basic LLM Match Assessment: Qualitative assessment of job matches for users
+  - Basic implementation exists but needs enhancement for better matching accuracy
+- 🔄 Result Storage: Implementing storage for job match results
+  - Basic functionality to store analysis exists but many-to-many relationships need refinement
+
+### Remaining
+- ❌ TTL for JobDetail: Implementing 30-day expiration for job detail documents
+- ❌ Feature Extraction & Embedding: Adding LLM extraction of job features and vector embeddings
+- ❌ User Statement Embedding: Implementation of user job preference statement with vector embedding
+- ❌ Preliminary Matching: Fast vector and keyword matching between user statements and job features
+- ❌ Enhanced Result Storage: Improving many-to-many relationships for results
+- ❌ UI for User Experience: Frontend for criteria subscription and job results
+
+### Next Steps (Priority Order)
+1. Implement TTL for JobDetail documents (~30 days)
+2. Enhance job analysis with better feature extraction using LLM
+3. Implement basic keyword matching for preliminary filtering
+4. Add vector embedding support (via Pinecone) for more sophisticated matching
+5. Develop UI components for criteria subscription and result display
+
 ## IMPORTANT - this is an MVP. Do not over-engineer this feature. 
 
 ## Overview

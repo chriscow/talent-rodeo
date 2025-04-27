@@ -2,11 +2,6 @@ You will be analyzing a transcript of an interview between a job candidate and
 an AI job search specialist. Your task is to extract the candidate's preferences
 and create a structured database of relevant statements from the transcript.
 
-Here is the transcript:
-<transcript>
-{{.Transcript}}
-</transcript>
-
 Carefully read through the transcript and extract information related to the following categories:
 
 1. Work location preferences (remote, specific locations)
@@ -55,3 +50,8 @@ Here's an example of how your output should be structured:
 </preference>
 
 Begin your analysis now, and present all extracted preferences using the format described above.
+
+Here is the transcript:
+<transcript>
+{{.Transcript}}
+</transcript>

@@ -1,13 +1,12 @@
 package scrapingdog
 
 import (
-	"context"
-	"talent-rodeo/internal/search"
 	"time"
 )
 
 const (
-	ProviderName       = "scrapingdog"
+	SearchProviderName = "scrapingdog"
+	JobProviderName    = "linkedin"
 	DefaultBaseURL     = "https://api.scrapingdog.com/linkedinjobs"
 	MaxRetries         = 3
 	RetryDelay         = 5 * time.Second
@@ -21,43 +20,6 @@ type GeoID string
 const (
 	RemoteGeoID GeoID = "103644278"
 )
-
-// QueuedSearch represents a search job in the queue
-type QueuedSearch struct {
-	UserID   string
-	Criteria search.Criteria
-}
-
-// JobProvider interface defines methods that must be implemented by all job providers
-type JobProvider interface {
-	Name() string
-	Validate(ctx context.Context) error
-	SearchJobListings(ctx context.Context, criteria search.Criteria) ([]search.JobListing, error)
-	GetJobDetails(ctx context.Context, jobID string) (*search.JobDetail, error)
-}
-
-// JobQueue interface defines methods for queuing and managing job searches
-type JobQueue interface {
-	QueueSearch(ctx context.Context, userID string, criteria search.Criteria) error
-	GetQueueDepth(ctx context.Context) (int, error)
-}
-
-// JobEventHandler interface defines methods for handling job-related events
-type JobEventHandler interface {
-	OnNewJob(userID string, criteria search.Criteria, jobID string, details search.JobDetail) error
-	OnSearchCompleted(userID string, criteria search.Criteria, totalJobs int, errors []error) error
-}
-
-// JobStore interface defines methods for job data persistence
-type JobStore interface {
-	GetCachedJobs(ctx context.Context, criteria search.Criteria) ([]search.JobListing, error)
-	SaveJobs(ctx context.Context, criteria search.Criteria, jobs []search.JobListing) error
-	GetJobDetails(ctx context.Context, jobID string) (*search.JobDetail, error)
-	SaveJobDetails(ctx context.Context, jobDetail search.JobDetail) error
-	// CreateUserJob(ctx context.Context, userID string, searchHash string, job search.JobListing, details *search.JobDetail) error
-}
-
-// API Response Types
 
 // LinkedInJobListing represents a job listing from the ScrapingDog API
 type LinkedInJobListing struct {

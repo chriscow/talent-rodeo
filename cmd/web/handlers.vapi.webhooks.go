@@ -228,7 +228,7 @@ func handleEndOfCallReport(r *http.Request, app *application, msg []byte) error 
 		return fmt.Errorf("failed to validate end-of-call report: %w", err)
 	}
 
-	report := envelope.Report
+	report := envelope.EndOfCallReport
 
 	appointmentID := *report.Call.Name
 
@@ -253,7 +253,7 @@ func validateEndOfCallReport(webhookMsg []byte) (*vapi.EndOfCallReportEnvelope, 
 	// call.customer.name is the customer ID
 
 	// Validate required fields
-	report := env.Report
+	report := env.EndOfCallReport
 	if report.Call == nil {
 		return nil, fmt.Errorf("missing call object in end of call report")
 	}

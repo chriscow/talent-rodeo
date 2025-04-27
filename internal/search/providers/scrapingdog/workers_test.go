@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"talent-rodeo/internal/search"
+	"talent-rodeo/internal"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -16,23 +16,23 @@ import (
 type MockSearchProvider struct {
 	searchJobsCalled    bool
 	getJobDetailsCalled bool
-	mockJobs            []search.JobListing
-	mockJobDetail       search.JobDetail
+	mockJobs            []internal.JobListing
+	mockJobDetail       *internal.JobDetail
 	searchJobsError     error
 	getJobDetailsError  error
-	searchJobsFunc      func(ctx context.Context, criteria search.Criteria) ([]search.JobListing, error)
-	getJobDetailsFunc   func(ctx context.Context, jobID string) (search.JobDetail, error)
+	searchJobsFunc      func(ctx context.Context, criteria internal.SearchCriteria, page int) ([]internal.JobListing, error)
+	getJobDetailsFunc   func(ctx context.Context, jobID string) (*internal.JobDetail, error)
 }
 
-func (m *MockSearchProvider) SearchJobListings(ctx context.Context, criteria search.Criteria) ([]search.JobListing, error) {
+func (m *MockSearchProvider) SearchJobListings(ctx context.Context, criteria internal.SearchCriteria, page int) ([]internal.JobListing, error) {
 	m.searchJobsCalled = true
 	if m.searchJobsFunc != nil {
-		return m.searchJobsFunc(ctx, criteria)
+		return m.searchJobsFunc(ctx, criteria, page)
 	}
 	return m.mockJobs, m.searchJobsError
 }
 
-func (m *MockSearchProvider) GetJobDetails(ctx context.Context, jobID string) (search.JobDetail, error) {
+func (m *MockSearchProvider) GetJobDetails(ctx context.Context, jobID string) (*internal.JobDetail, error) {
 	m.getJobDetailsCalled = true
 	if m.getJobDetailsFunc != nil {
 		return m.getJobDetailsFunc(ctx, jobID)
@@ -40,63 +40,40 @@ func (m *MockSearchProvider) GetJobDetails(ctx context.Context, jobID string) (s
 	return m.mockJobDetail, m.getJobDetailsError
 }
 
-// MockJobStore implements the JobStore interface for testing
-type MockJobStore struct {
-	getCachedJobsCalled  bool
-	saveJobsCalled       bool
-	getJobDetailsCalled  bool
-	saveJobDetailsCalled bool
-	mockCachedJobs       []search.JobListing
-	mockJobDetails       *search.JobDetail
-	getCachedJobsError   error
-	saveJobsError        error
-	getJobDetailsError   error
-	saveJobDetailsError  error
-}
-
-func (m *MockJobStore) GetCachedJobs(ctx context.Context, criteria search.Criteria) ([]search.JobListing, error) {
-	m.getCachedJobsCalled = true
-	return m.mockCachedJobs, m.getCachedJobsError
-}
-
-func (m *MockJobStore) SaveJobs(ctx context.Context, criteria search.Criteria, jobs []search.JobListing) error {
-	m.saveJobsCalled = true
-	return m.saveJobsError
-}
-
-func (m *MockJobStore) GetJobDetails(ctx context.Context, jobID string) (*search.JobDetail, error) {
-	m.getJobDetailsCalled = true
-	return m.mockJobDetails, m.getJobDetailsError
-}
-
-func (m *MockJobStore) SaveJobDetails(ctx context.Context, jobDetail search.JobDetail) error {
-	m.saveJobDetailsCalled = true
-	return m.saveJobDetailsError
-}
-
 // MockEventHandler implements the JobEventHandler interface for testing
 type MockEventHandler struct {
+	onJobListingCalled      bool
 	onNewJobCalled          bool
 	onSearchCompletedCalled bool
-	onNewJobError           error
-	onSearchCompletedError  error
+	onSearchStartedCalled   bool
 	jobsReceived            []string
 	mutex                   sync.Mutex
 }
 
-func (m *MockEventHandler) OnNewJob(userID string, criteria search.Criteria, jobID string, details search.JobDetail) error {
+func (m *MockEventHandler) OnSearchStarted(task internal.SearchTask) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	m.onSearchStartedCalled = true
+}
+
+func (m *MockEventHandler) OnJobListing(search internal.SearchTask, listing internal.JobListing) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	m.onJobListingCalled = true
+	m.jobsReceived = append(m.jobsReceived, listing.ID)
+}
+
+func (m *MockEventHandler) OnJobDetail(search internal.SearchTask, details internal.JobDetail) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.onNewJobCalled = true
-	m.jobsReceived = append(m.jobsReceived, jobID)
-	return m.onNewJobError
+	m.jobsReceived = append(m.jobsReceived, details.ID)
 }
 
-func (m *MockEventHandler) OnSearchCompleted(userID string, criteria search.Criteria, totalJobs int, errors []error) error {
+func (m *MockEventHandler) OnSearchCompleted(search internal.SearchTask, totalJobs int, errors []error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.onSearchCompletedCalled = true
-	return m.onSearchCompletedError
 }
 
 func TestNewWorkerManager(t *testing.T) {
@@ -114,20 +91,17 @@ func TestNewWorkerManager(t *testing.T) {
 
 func TestWorkerManagerWithOptions(t *testing.T) {
 	mockSearchProvider := &MockSearchProvider{}
-	mockStore := &MockJobStore{}
 	mockHandler := &MockEventHandler{}
 	mockLogger := slog.Default()
 
 	wm := NewWorkerManager(
 		mockSearchProvider, 3, 5,
-		WithWorkerLogger(mockLogger),
-		WithJobStore(mockStore),
-		WithEventHandler(mockHandler),
+		withWorkerLogger(mockLogger),
+		withEventHandler(mockHandler),
 	)
 
 	assert.NotNil(t, wm)
 	assert.Equal(t, mockSearchProvider, wm.provider)
-	assert.Equal(t, mockStore, wm.store)
 	assert.Equal(t, mockHandler, wm.eventHandler)
 	assert.Equal(t, mockLogger, wm.logger)
 }
@@ -141,30 +115,30 @@ func TestQueueSearchAndGetQueueDepth(t *testing.T) {
 
 	// Add a search to the queue
 	ctx := context.Background()
-	err := wm.QueueSearch(ctx, "user123", search.Criteria{Query: "golang"})
+	err := wm.QueueSearch(ctx, internal.SearchTask{Criteria: internal.SearchCriteria{Query: "golang"}})
 	assert.NoError(t, err)
 	assert.Equal(t, 1, wm.GetQueueDepth())
 
 	// Add another search
-	err = wm.QueueSearch(ctx, "user456", search.Criteria{Query: "python"})
+	err = wm.QueueSearch(ctx, internal.SearchTask{Criteria: internal.SearchCriteria{Query: "python"}})
 	assert.NoError(t, err)
 	assert.Equal(t, 2, wm.GetQueueDepth())
 }
 
 func TestWorkerManagerStartAndShutdown(t *testing.T) {
 	mockSearchProvider := &MockSearchProvider{
-		mockJobs: []search.JobListing{
+		mockJobs: []internal.JobListing{
 			{ID: "job1", Title: "Job 1"},
 			{ID: "job2", Title: "Job 2"},
 		},
-		mockJobDetail: search.JobDetail{ID: "job1", Title: "Job 1 Detail"},
+		mockJobDetail: &internal.JobDetail{ID: "job1", Title: "Job 1 Detail"},
 	}
 
 	mockHandler := &MockEventHandler{}
 
 	wm := NewWorkerManager(
 		mockSearchProvider, 3, 5,
-		WithEventHandler(mockHandler),
+		withEventHandler(mockHandler),
 	)
 
 	assert.NotNil(t, wm.eventHandler)
@@ -174,7 +148,7 @@ func TestWorkerManagerStartAndShutdown(t *testing.T) {
 	wm.Start(ctx, 2)
 
 	// Queue a search
-	err := wm.QueueSearch(ctx, "user123", search.Criteria{Query: "golang"})
+	err := wm.QueueSearch(ctx, internal.SearchTask{Criteria: internal.SearchCriteria{Query: "golang"}})
 	assert.NoError(t, err)
 
 	// Give workers time to process
@@ -190,23 +164,23 @@ func TestWorkerManagerStartAndShutdown(t *testing.T) {
 
 func TestProcessQueuedSearch(t *testing.T) {
 	// Create mock jobs
-	mockJobs := []search.JobListing{
+	mockJobs := []internal.JobListing{
 		{ID: "job1", Title: "Job 1", ProviderJobID: "prov-job1"},
 		{ID: "job2", Title: "Job 2", ProviderJobID: "prov-job2"},
 	}
 
-	mockJobDetail := search.JobDetail{ID: "job1", Title: "Job 1 Detail"}
+	mockJobDetail := internal.JobDetail{ID: "job1", Title: "Job 1 Detail"}
 
 	mockSearchProvider := &MockSearchProvider{
 		mockJobs:      mockJobs,
-		mockJobDetail: mockJobDetail,
+		mockJobDetail: &mockJobDetail,
 	}
 
 	// Set up a custom searchJobsFunc that only returns jobs on the first call
 	var searchCalled bool
-	mockSearchProvider.searchJobsFunc = func(ctx context.Context, criteria search.Criteria) ([]search.JobListing, error) {
+	mockSearchProvider.searchJobsFunc = func(ctx context.Context, criteria internal.SearchCriteria, page int) ([]internal.JobListing, error) {
 		if searchCalled {
-			return []search.JobListing{}, nil
+			return []internal.JobListing{}, nil
 		}
 		searchCalled = true
 		return mockJobs, nil
@@ -214,9 +188,9 @@ func TestProcessQueuedSearch(t *testing.T) {
 
 	// Set up getJobDetailsFunc to track calls for each job
 	jobDetailsCalled := make(map[string]bool)
-	mockSearchProvider.getJobDetailsFunc = func(ctx context.Context, jobID string) (search.JobDetail, error) {
+	mockSearchProvider.getJobDetailsFunc = func(ctx context.Context, jobID string) (*internal.JobDetail, error) {
 		jobDetailsCalled[jobID] = true
-		return search.JobDetail{ID: jobID, Title: "Details for " + jobID}, nil
+		return &internal.JobDetail{ID: jobID, Title: "Details for " + jobID}, nil
 	}
 
 	// Create a mock event handler to track callbacks
@@ -225,21 +199,18 @@ func TestProcessQueuedSearch(t *testing.T) {
 	// Create a worker manager with our mocks
 	wm := NewWorkerManager(
 		mockSearchProvider, 3, 5,
-		WithEventHandler(mockHandler),
+		withEventHandler(mockHandler),
 	)
 
 	// Create test criteria
-	criteria := search.Criteria{
-		Query:    "golang",
-		Location: "remote",
+	criteria := internal.SearchCriteria{
+		Query: "golang",
+		GeoID: "remote",
 	}
 
 	// Process a search
 	ctx := context.Background()
-	err := wm.processQueuedSearch(ctx, QueuedSearch{
-		UserID:   "user123",
-		Criteria: criteria,
-	})
+	err := wm.processQueuedSearch(ctx, 1, internal.SearchTask{Criteria: criteria})
 
 	// Check that the process completed without error
 	assert.NoError(t, err)
@@ -266,14 +237,11 @@ func TestProcessQueuedSearchWithErrors(t *testing.T) {
 
 	wm := NewWorkerManager(
 		mockSearchProvider, 3, 5,
-		WithEventHandler(mockHandler),
+		withEventHandler(mockHandler),
 	)
 
 	ctx := context.Background()
-	err := wm.processQueuedSearch(ctx, QueuedSearch{
-		UserID:   "user123",
-		Criteria: search.Criteria{Query: "golang"},
-	})
+	err := wm.processQueuedSearch(ctx, 1, internal.SearchTask{Criteria: internal.SearchCriteria{Query: "golang"}})
 
 	assert.NoError(t, err, "Process should complete even with search errors")
 	assert.True(t, mockSearchProvider.searchJobsCalled, "SearchJobs should have been called")
@@ -289,7 +257,7 @@ func TestQueueSearchWhenShuttingDown(t *testing.T) {
 
 	// Try to queue a search
 	ctx := context.Background()
-	err := wm.QueueSearch(ctx, "user123", search.Criteria{Query: "golang"})
+	err := wm.QueueSearch(ctx, internal.SearchTask{Criteria: internal.SearchCriteria{Query: "golang"}})
 
 	// Should return an error
 	assert.Error(t, err)
@@ -304,14 +272,14 @@ func TestQueueSearchWhenQueueIsFull(t *testing.T) {
 
 	// Fill the queue
 	ctx := context.Background()
-	err := wm.QueueSearch(ctx, "user123", search.Criteria{Query: "golang"})
+	err := wm.QueueSearch(ctx, internal.SearchTask{Criteria: internal.SearchCriteria{Query: "golang"}})
 	assert.NoError(t, err)
 
 	// Try to add another search to the full queue with a timeout context
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 	defer cancel()
 
-	err = wm.QueueSearch(ctxWithTimeout, "user456", search.Criteria{Query: "python"})
+	err = wm.QueueSearch(ctxWithTimeout, internal.SearchTask{Criteria: internal.SearchCriteria{Query: "python"}})
 
 	// Should return an error
 	assert.Error(t, err)

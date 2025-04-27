@@ -2,29 +2,25 @@ package internal
 
 import (
 	"context"
-	"log"
+	"encoding/json"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/joho/godotenv"
+	"github.com/chriscow/minds/tools"
 )
 
-func init() {
-	if err := godotenv.Overload("../.env"); err != nil {
-		log.Fatal("No .env file found, using system env")
-	}
+// Helper function to reset mock LLM values
+func resetMockLLM() {
+	tools.MockLLMResponse = ""
+	tools.MockLLMError = nil
 }
 
 func TestResumeValidation(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
-
-	fs, err := NewFirestoreClient(context.Background())
+	fs, err := NewTestFirestoreClient(context.Background())
 	if err != nil {
-		t.Fatalf("NewFirestoreClient() error = %v", err)
+		t.Fatalf("newTestFirestoreClient() error = %v", err)
 	}
 	defer func() {
 		DeleteTestData(t, fs, "test-user")
@@ -37,6 +33,21 @@ func TestResumeValidation(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	t.Run("valid resume", func(t *testing.T) {
+		// Reset mock LLM for this test
+		defer resetMockLLM()
+
+		// Create valid resume mock response
+		mockResponse := annotatedResume{
+			Analysis:    "This is a valid resume for a software engineer with extensive experience.",
+			IsResume:    true,
+			YAMLSummary: stringPtr("name: Chris Cowherd\ntitle: Software Engineering Leader\n"),
+		}
+		responseJSON, err := json.Marshal(mockResponse)
+		if err != nil {
+			t.Fatalf("Failed to marshal mock response: %v", err)
+		}
+		tools.MockLLMResponse = string(responseJSON)
+
 		// Create test user
 		user := CreateTestUser(t, fs, "test-user", "test@example.com", "+1234567890", false)
 
@@ -94,6 +105,21 @@ func TestResumeValidation(t *testing.T) {
 	})
 
 	t.Run("not a resume - easy", func(t *testing.T) {
+		// Reset mock LLM for this test
+		defer resetMockLLM()
+
+		// Create invalid resume mock response
+		mockResponse := annotatedResume{
+			Analysis:    "This is not a resume but appears to be random text.",
+			IsResume:    false,
+			YAMLSummary: nil,
+		}
+		responseJSON, err := json.Marshal(mockResponse)
+		if err != nil {
+			t.Fatalf("Failed to marshal mock response: %v", err)
+		}
+		tools.MockLLMResponse = string(responseJSON)
+
 		// Create test user
 		user := CreateTestUser(t, fs, "test-user", "test@example.com", "+1234567890", false)
 
@@ -154,12 +180,31 @@ func TestResumeValidation(t *testing.T) {
 			t.Errorf("User.State.Error is nil, want %v", wantErrorMsg)
 		}
 
-		if *updated.State.Error != wantErrorMsg {
-			t.Errorf("User.State.Error = %v, want %v", *updated.State.Error, wantErrorMsg)
+		if updated.State.Error == nil || *updated.State.Error != wantErrorMsg {
+			errValue := "<nil>"
+			if updated.State.Error != nil {
+				errValue = *updated.State.Error
+			}
+			t.Errorf("User.State.Error = %v, want %v", errValue, wantErrorMsg)
 		}
 	})
 
 	t.Run("not a resume - medium", func(t *testing.T) {
+		// Reset mock LLM for this test
+		defer resetMockLLM()
+
+		// Create invalid resume mock response
+		mockResponse := annotatedResume{
+			Analysis:    "This document appears to be a news article, not a resume.",
+			IsResume:    false,
+			YAMLSummary: nil,
+		}
+		responseJSON, err := json.Marshal(mockResponse)
+		if err != nil {
+			t.Fatalf("Failed to marshal mock response: %v", err)
+		}
+		tools.MockLLMResponse = string(responseJSON)
+
 		// Create test user
 		user := CreateTestUser(t, fs, "test-user", "test@example.com", "+1234567890", false)
 
@@ -213,11 +258,30 @@ func TestResumeValidation(t *testing.T) {
 			t.Errorf("User.State.Status = %v, want %v", updated.State.Status, UserStatusError)
 		}
 		if updated.State.Error == nil || *updated.State.Error != wantErrorMsg {
-			t.Errorf("User.State.Error = %v, want %v", updated.State.Error, wantErrorMsg)
+			errValue := "<nil>"
+			if updated.State.Error != nil {
+				errValue = *updated.State.Error
+			}
+			t.Errorf("User.State.Error = %v, want %v", errValue, wantErrorMsg)
 		}
 	})
 
 	t.Run("jailbreak attempt", func(t *testing.T) {
+		// Reset mock LLM for this test
+		defer resetMockLLM()
+
+		// Create invalid resume mock response for jailbreak attempt
+		mockResponse := annotatedResume{
+			Analysis:    "This appears to be an attempt to jailbreak or influence the system, not a resume.",
+			IsResume:    false,
+			YAMLSummary: nil,
+		}
+		responseJSON, err := json.Marshal(mockResponse)
+		if err != nil {
+			t.Fatalf("Failed to marshal mock response: %v", err)
+		}
+		tools.MockLLMResponse = string(responseJSON)
+
 		// Create test user
 		user := CreateTestUser(t, fs, "test-user", "test@example.com", "+1234567890", false)
 
@@ -271,7 +335,11 @@ func TestResumeValidation(t *testing.T) {
 			t.Errorf("User.State.Status = %v, want %v", updated.State.Status, UserStatusError)
 		}
 		if updated.State.Error == nil || *updated.State.Error != wantErrorMsg {
-			t.Errorf("User.State.Error = %v, want %v", updated.State.Error, wantErrorMsg)
+			errValue := "<nil>"
+			if updated.State.Error != nil {
+				errValue = *updated.State.Error
+			}
+			t.Errorf("User.State.Error = %v, want %v", errValue, wantErrorMsg)
 		}
 	})
 }

@@ -148,12 +148,13 @@ func (app *application) createAppointment(w http.ResponseWriter, r *http.Request
 	// Create appointment
 	appointment := &internal.Appointment{
 		UserID:        user.ID,
+		Name:          "initial-call",
 		ScheduledTime: scheduledTime.UTC(),
 		Timezone:      timezone,
 		Status:        internal.AppointmentStatusScheduled,
 	}
 
-	err = internal.CreateAppointment(r.Context(), app.fs, "initial-call", *user, appointment)
+	err = internal.CreateAppointment(r.Context(), app.fs, user.ID, appointment)
 	if err != nil {
 		app.logger.Error("Failed to create appointment", "error", err)
 		http.Error(w, fmt.Sprintf("Failed to create appointment: %v", err), http.StatusInternalServerError)
@@ -341,12 +342,13 @@ func (app *application) callNow(w http.ResponseWriter, r *http.Request) {
 	// Create appointment
 	appointment := &internal.Appointment{
 		UserID:        user.ID,
+		Name:          "initial-call",
 		ScheduledTime: scheduledTime,
 		Timezone:      "UTC", // Immediate calls don't need specific timezone
 		Status:        internal.AppointmentStatusScheduled,
 	}
 
-	err := internal.CreateAppointment(r.Context(), app.fs, "initial-call", *user, appointment)
+	err := internal.CreateAppointment(r.Context(), app.fs, user.ID, appointment)
 	if err != nil {
 		app.logger.Error("Failed to create appointment", "error", err)
 		app.serverError(w, r, fmt.Errorf("failed to create appointment: %w", err))

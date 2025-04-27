@@ -1,0 +1,92 @@
+{{define "title"}}Search Jobs - Admin{{end}}
+
+{{define "page-css"}}
+<style>
+    .score-badge {
+        display: inline-block;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-weight: bold;
+        margin-right: 0.5rem;
+        background: var(--pico-primary-background);
+        color: var(--pico-primary-inverse);
+    }
+    
+    .search-results {
+        margin-top: 2rem;
+    }
+    
+    .search-results article {
+        margin-bottom: 1rem;
+        position: relative;
+    }
+    
+    .search-results hgroup {
+        margin-bottom: 0.5rem;
+    }
+    
+    .search-results h4 {
+        margin-bottom: 0;
+    }
+    
+    .search-query {
+        background: var(--pico-card-background-color);
+        padding: 1rem;
+        margin-bottom: 1rem;
+        border-radius: 0.5rem;
+        font-family: monospace;
+    }
+</style>
+{{end}}
+
+{{define "page:main"}}
+<main class="container">
+    <h1>Search Job Descriptions</h1>
+    <p>Search for jobs using semantic similarity to free-form text.</p>
+    
+    {{if .Error}}
+    <article class="error">Error: {{.Error}}</article>
+    {{end}}
+    
+    <form method="POST" autocomplete="off">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <label for="search_query">Search Query</label>
+        <textarea name="search_query" id="search_query" rows="5" placeholder="Enter job description, skills, or requirements to search for similar jobs...">{{.SearchQuery}}</textarea>
+        
+        <div class="grid">
+            <div>
+                <label for="top_k">Results Limit</label>
+                <input type="number" name="top_k" id="top_k" value="{{if .TopK}}{{.TopK}}{{else}}10{{end}}" min="1" max="100">
+            </div>
+            <div>
+                <label>&nbsp;</label>
+                <button type="submit">Search</button>
+            </div>
+        </div>
+    </form>
+    
+    {{if .SearchResults}}
+    <section class="search-results">
+        <h2>Search Results ({{len .SearchResults}})</h2>
+        {{if .SearchQuery}}
+        <div class="search-query">
+            <strong>Query:</strong> {{.SearchQuery}}
+        </div>
+        {{end}}
+        
+        {{range .SearchResults}}
+        <article>
+            <span class="score-badge">{{printf "%.4f" .Score}}</span>
+            <hgroup>
+                <h4>{{.JobDetail.Title}}</h4>
+                <p>{{.JobDetail.Company}} - {{.JobDetail.Location}}</p>
+            </hgroup>
+            <div>{{.JobDetail.Description}}</div>
+        </article>
+        {{end}}
+    </section>
+    {{else if .SearchQuery}}
+    <p>No results found for your search query.</p>
+    {{end}}
+</main>
+{{end}} 

@@ -7,7 +7,9 @@
                 "GOPATH": "/usr/local/go/bin/go",
                 "GOMODCACHE": "/Users/chris/go/pkg/mod",
                 "FIREBASE_PROJECT_ID": "talent-rodeo-dev",
-                "FIREBASE_CREDENTIALS_FILE": "/Users/chris/dev/talent-rodeo/.secrets/talent-rodeo-dev-firebase-adminsdk-fbsvc-847b5213c4.json"
+                "FIREBASE_CREDENTIALS_FILE": "/Users/chris/dev/talent-rodeo/.secrets/talent-rodeo-dev-firebase-adminsdk-fbsvc-847b5213c4.json",
+                "PINECONE_API_KEY": "d89aeb1c-4441-4280-a04c-e8d3cac1edf5",
+                "PINECONE_INDEX_HOST": "talent-rodeo-dev-4d488ab.svc.aped-4627-b74a.pinecone.io"
             }
         }
     }

@@ -14,7 +14,7 @@ import (
 
 const (
 	defaultAssistantModel          = "gpt-4.1"
-	defaultAssistantPromptTemplate = "prompts/shirely.general.001.txt"
+	defaultAssistantPromptTemplate = "prompts/shirely.general.002.txt"
 )
 
 func GetAssistantID(userID string) string {
@@ -89,11 +89,13 @@ func BuildAssistantOverrides(ctx context.Context, user *User, resume *Resume, fs
 		FirstName          string
 		FullName           string
 		Resume             string
+		SearchStrategy     string
 		PreviousDiscussion []previousDiscussion
 	}{
 		FirstName:          firstName,
 		FullName:           fullName,
 		Resume:             resumeText,
+		SearchStrategy:     *resume.SearchAnalysis,
 		PreviousDiscussion: previousDiscussions,
 	}
 
