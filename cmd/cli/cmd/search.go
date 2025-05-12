@@ -21,7 +21,6 @@ var (
 	searchWorkTypeFlag   string
 	searchMaxPagesFlag   int
 	searchCriteriaIDFlag string
-	searchUpsertFlag     bool
 )
 
 type jobSinkForwarder struct {
@@ -103,7 +102,6 @@ Common GeoIDs:
 	queueCmd.Flags().StringVarP(&searchWorkTypeFlag, "work-type", "w", "", "Work type (at_work,remote,hybrid)")
 	queueCmd.Flags().IntVarP(&searchMaxPagesFlag, "max-pages", "p", 1, "Maximum number of pages to search")
 	queueCmd.Flags().StringVarP(&searchCriteriaIDFlag, "criteria-id", "c", "", "ID of saved search criteria to use")
-	queueCmd.Flags().BoolVarP(&searchUpsertFlag, "upsert", "u", true, "Upsert job details to Pinecone")
 
 	// Add subcommands to search command
 	searchCmd.AddCommand(queueCmd)
@@ -115,14 +113,6 @@ Common GeoIDs:
 func runSearch(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	logger := slog.New(tint.NewHandler(os.Stdout, &tint.Options{Level: slog.LevelDebug}))
-
-	// Check and clean up upsert host if provided
-	if searchUpsertFlag {
-		host := os.Getenv("PINECONE_INDEX_HOST")
-		if host == "" {
-			return fmt.Errorf("PINECONE_INDEX_HOST environment variable is required when upsert is true")
-		}
-	}
 
 	// Create search criteria
 	var criteria internal.SearchCriteria

@@ -116,7 +116,7 @@ If a job with the provider's job id already exists, we update our copy of the jo
 
 ### IDEAS
 
-- Vector embeddings
+- Vector embeddings (dense and sparse DONE)
 - Rewrite in standard form
 - Extract structured data
 - We can do subscriber specific processing `OnSearchCompleted` (use SearchJob record)
