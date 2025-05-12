@@ -31,6 +31,7 @@ type SearchCriteria struct {
 	SubscriberCount int
 	LastSearchedAt  *time.Time
 	LastSearchJobID string
+	LastPublishedAt *time.Time
 }
 
 func (c SearchCriteria) GetSearchHash() string {
@@ -161,6 +162,25 @@ func ListSearchCriteria(fs *FirestoreClient) ([]SearchCriteria, error) {
 
 func GetJobIDsForCriteria(fs *FirestoreClient, criteriaID string) ([]string, error) {
 	iter := fs.Collection(JobCriteriaLinkCollection).WhereEntity(firestore.PropertyFilter{Path: "CriteriaID", Operator: "==", Value: criteriaID}).Documents(context.Background())
+	defer iter.Stop()
+
+	var jobs []string
+	for {
+		doc, err := iter.Next()
+		if err != nil {
+			if err == iterator.Done {
+				break // End of results
+			}
+			return nil, fmt.Errorf("failed iterating job_criteria_links: %w", err)
+		}
+		jobs = append(jobs, doc.Data()["JobID"].(string))
+	}
+
+	return jobs, nil
+}
+
+func GetJobIDsForCriteriaCreatedAfter(fs *FirestoreClient, criteriaID string, createdAfter time.Time) ([]string, error) {
+	iter := fs.Collection(JobCriteriaLinkCollection).WhereEntity(firestore.PropertyFilter{Path: "CriteriaID", Operator: "==", Value: criteriaID}).WhereEntity(firestore.PropertyFilter{Path: "CreatedAt", Operator: ">", Value: createdAfter}).Documents(context.Background())
 	defer iter.Stop()
 
 	var jobs []string

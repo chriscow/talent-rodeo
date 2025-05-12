@@ -64,16 +64,12 @@ var testDataCmd = &cobra.Command{
 			for j := range numJobs {
 				jobID := fmt.Sprintf("%s-job-%d", userID, j+1)
 
-				// Create job
-				job := &internal.UserJob{
-					ID:     jobID,
-					Status: internal.JobStatusViewed,
-					Notes:  fmt.Sprintf("Test job %d for user %s", j+1, userID),
-				}
-
-				if err := internal.SaveUserJob(ctx, fs, userID, job); err != nil {
+				job, err := internal.CreateUserJob(ctx, fs, userID, jobID)
+				if err != nil {
 					return fmt.Errorf("failed to create test job %s for user %s: %w", jobID, userID, err)
 				}
+
+				fmt.Printf("Created job: %s\n", job.ID)
 			}
 			fmt.Printf("Created %d jobs for user: %s\n", numJobs, userID)
 		}

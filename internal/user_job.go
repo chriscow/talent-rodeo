@@ -66,18 +66,13 @@ type UserJob struct {
 	JobRef *firestore.DocumentRef
 
 	// Job metadata for display
-	CompanyName string
-	CompanyLogo string
-
-	Summary  Summary
-	Analysis *JobAnalysis
+	// CompanyName string
+	// CompanyLogo string
 
 	// Search context
 	// SearchHash string
 	CreatedAt time.Time
 	UpdatedAt time.Time
-
-	// Criteria   SearchCriteria // Search criteria that found this job
 
 	// Whether the job is recommended (has a Yes rating)
 	IsRecommended bool
@@ -106,45 +101,31 @@ type FinalJudgment struct {
 	Rating      string `enum:"Definitely Yes,Strong Yes,Yes,Maybe,No"` // One of: "Definitely Yes", "Strong Yes", "Yes", "Maybe", "No"
 }
 
-// SaveUserJob saves a job reference for a user
-func SaveUserJob(ctx context.Context, fs *FirestoreClient, userID string, job *UserJob) error {
+// CreateUserJob saves a job reference for a user
+func CreateUserJob(ctx context.Context, fs *FirestoreClient, userID, jobRefID string) (*UserJob, error) {
 	if userID == "" {
-		return fmt.Errorf("user ID is required")
+		return nil, fmt.Errorf("user ID is required")
 	}
-	if job.ID == "" {
-		return fmt.Errorf("job ID is required")
-	}
-
-	// Set timestamps
-	now := time.Now()
-	if job.CreatedAt.IsZero() {
-		job.CreatedAt = now
-	}
-	job.UpdatedAt = now
-
-	// Set default status if not provided
-	if job.Status == "" {
-		job.Status = JobStatusUnprocessed
+	if jobRefID == "" {
+		return nil, fmt.Errorf("job ID is required")
 	}
 
-	// Create reference to job_details document if not set
-	if job.JobRef == nil {
-		job.JobRef = fs.Collection(JobDetailsCollection).Doc(job.ID)
-	}
-
-	// Set IsRecommended based on rating if analysis exists
-	if job.Analysis != nil && job.Analysis.FinalJudgment.Rating != "" {
-		job.IsRecommended = isYesRating(job.Analysis.FinalJudgment.Rating)
+	job := &UserJob{
+		ID:        jobRefID,
+		JobRef:    fs.Collection(JobDetailsCollection).Doc(jobRefID),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Status:    JobStatusUnprocessed,
 	}
 
 	// Save to user's jobs subcollection
 	// Using job.ID as document ID ensures deduplication
 	_, err := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Doc(job.ID).Set(ctx, job)
 	if err != nil {
-		return fmt.Errorf("failed to save user job: %w", err)
+		return nil, fmt.Errorf("failed to save user job: %w", err)
 	}
 
-	return nil
+	return job, nil
 }
 
 func GetUserJob(ctx context.Context, fs *FirestoreClient, userID, jobID string) (*UserJob, bool, error) {

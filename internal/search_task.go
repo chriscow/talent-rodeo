@@ -74,14 +74,21 @@ func GetIncompleteSearchTasks(ctx context.Context, fs *FirestoreClient) ([]*Sear
 }
 
 func SetSearchTaskStatus(ctx context.Context, fs *FirestoreClient, id string, status SearchTaskStatus) error {
+	println("SetSearchTaskStatus", id, status)
+
+	now := time.Now().UTC()
 	fsUpdates := []firestore.Update{
 		{
 			Path:  "Status",
 			Value: status,
 		},
+		{
+			Path:  "UpdatedAt",
+			Value: now,
+		},
 	}
 
-	_, err := fs.Collection(SearchTaskCollection).Doc(id).Set(ctx, fsUpdates)
+	_, err := fs.Collection(SearchTaskCollection).Doc(id).Update(ctx, fsUpdates)
 	return err
 }
 
