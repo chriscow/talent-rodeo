@@ -149,7 +149,7 @@ func (s *JobSink) OnSearchCompleted(ctx context.Context, jobSearch SearchTask, t
 		return
 	}
 
-	count, err := s.EmbedJobDetails(ctx, jobDetails)
+	count, err := s.EmbedJobDetails(ctx, jobSearch.Criteria.ID, jobDetails)
 	if err != nil {
 		s.logger.Error("JobSink: failed to embed job details", "error", err)
 	}
@@ -158,15 +158,20 @@ func (s *JobSink) OnSearchCompleted(ctx context.Context, jobSearch SearchTask, t
 	// s.processSubscriptions(ctx, jobSearch)
 }
 
-func (s *JobSink) EmbedJobDetails(ctx context.Context, jobDetails []JobDetail) (int, error) {
+func (s *JobSink) EmbedJobDetails(ctx context.Context, criteriaID string, jobDetails []JobDetail) (int, error) {
 	client, err := NewPineconeClient()
 	if err != nil {
 		return 0, fmt.Errorf("failed to create pinecone client: %w", err)
 	}
 
-	upsertHost := os.Getenv("PINECONE_INDEX_HOST")
-	if upsertHost == "" {
-		return 0, fmt.Errorf("PINECONE_INDEX_HOST is not set, skipping job detail embedding")
+	denseIndex := os.Getenv("PINECONE_DENSE_INDEX_HOST")
+	if denseIndex == "" {
+		return 0, fmt.Errorf("PINECONE_DENSE_INDEX_HOST is not set, skipping job detail embedding")
+	}
+
+	sparseIndex := os.Getenv("PINECONE_SPARSE_INDEX_HOST")
+	if sparseIndex == "" {
+		return 0, fmt.Errorf("PINECONE_SPARSE_INDEX_HOST is not set, skipping job detail embedding")
 	}
 
 	if len(jobDetails) == 0 {
@@ -177,15 +182,24 @@ func (s *JobSink) EmbedJobDetails(ctx context.Context, jobDetails []JobDetail) (
 	for i, detail := range jobDetails {
 		records[i] = &pinecone.IntegratedRecord{
 			"_id":        detail.ID,
+			"criteriaID": criteriaID,
 			"text":       detail.Description, //  this is what gets embedded
 			"postedDate": detail.PostedDate,
 		}
 	}
 
-	count, err := client.UpsertRecords(context.Background(), upsertHost, JobDetailNamespace, records, false)
+	denseCount, err := client.UpsertRecords(context.Background(), denseIndex, JobDetailNamespace, records, false)
 	if err != nil {
 		return 0, fmt.Errorf("failed to upsert records to Pinecone: %w", err)
 	}
+
+	sparseCount, err := client.UpsertRecords(context.Background(), sparseIndex, JobDetailNamespace, records, true)
+	if err != nil {
+		return 0, fmt.Errorf("failed to upsert records to Pinecone: %w", err)
+	}
+
+	count := denseCount + sparseCount
+
 	return count, nil
 }
 

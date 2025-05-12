@@ -171,10 +171,10 @@ func (app *application) adminCompareJobs(w http.ResponseWriter, r *http.Request)
 						data["Error"] = "Failed to initialize Pinecone: " + err.Error()
 					} else {
 						// Get index host from environment or config
-						indexHost := os.Getenv("PINECONE_INDEX_HOST")
+						indexHost := os.Getenv("PINECONE_DENSE_INDEX_HOST")
 						if indexHost == "" {
-							app.logger.Error("PINECONE_INDEX_HOST environment variable not set")
-							data["Error"] = "PINECONE_INDEX_HOST environment variable not set"
+							app.logger.Error("PINECONE_DENSE_INDEX_HOST environment variable not set")
+							data["Error"] = "PINECONE_DENSE_INDEX_HOST environment variable not set"
 						} else {
 							// Fetch vectors for both jobs
 							jobIDs := []string{leftJobID, rightJobID}
@@ -314,10 +314,10 @@ func (app *application) adminSearchJobs(w http.ResponseWriter, r *http.Request) 
 				data["Error"] = "Failed to initialize Pinecone: " + err.Error()
 			} else {
 				// Get index host from environment
-				indexHost := os.Getenv("PINECONE_INDEX_HOST")
+				indexHost := os.Getenv("PINECONE_DENSE_INDEX_HOST")
 				if indexHost == "" {
-					app.logger.Error("PINECONE_INDEX_HOST environment variable not set")
-					data["Error"] = "PINECONE_INDEX_HOST environment variable not set"
+					app.logger.Error("PINECONE_DENSE_INDEX_HOST environment variable not set")
+					data["Error"] = "PINECONE_DENSE_INDEX_HOST environment variable not set"
 				} else {
 					app.logger.Info("searching records in Pinecone",
 						"index_host", indexHost,
@@ -326,7 +326,7 @@ func (app *application) adminSearchJobs(w http.ResponseWriter, r *http.Request) 
 
 					// Call SearchRecords with the text query
 					searchResp, err := pineconeClient.SearchRecords(ctx, indexHost, internal.JobDetailNamespace, searchQuery,
-						internal.WithTopK(topK))
+						internal.WithTopK(topK), internal.WithFilter(map[string]any{"criteriaID": criteriaID}))
 
 					if err != nil {
 						app.logger.Error("failed to search records", "error", err)

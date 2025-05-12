@@ -82,14 +82,6 @@ var listJobsCmd = &cobra.Command{
 		userID, _ := cmd.Flags().GetString("user")
 		ctx := context.Background()
 
-		// Check and clean up upsert host if provided
-		if jobsUpsertFlag {
-			host := os.Getenv("PINECONE_INDEX_HOST")
-			if host == "" {
-				return fmt.Errorf("PINECONE_INDEX_HOST environment variable is required when upsert is true")
-			}
-		}
-
 		fs, err := internal.NewFirestoreClient(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to create Firestore client: %w", err)
@@ -134,12 +126,14 @@ var listJobsCmd = &cobra.Command{
 
 			// Handle upsert if host is specified
 			if jobsUpsertFlag && pineconeClient != nil {
-				host := os.Getenv("PINECONE_INDEX_HOST")
-				if host == "" {
-					return fmt.Errorf("PINECONE_INDEX_HOST environment variable is required when upsert is true")
+				denseIndex := os.Getenv("PINECONE_DENSE_INDEX_HOST")
+				if denseIndex == "" {
+					return fmt.Errorf("PINECONE_DENSE_INDEX_HOST environment variable is required when upsert is true")
 				}
-
-				fmt.Printf("Upserting job details to Pinecone host %s...\n", host)
+				sparseIndex := os.Getenv("PINECONE_SPARSE_INDEX_HOST")
+				if sparseIndex == "" {
+					return fmt.Errorf("PINECONE_SPARSE_INDEX_HOST environment variable is required when upsert is true")
+				}
 
 				// Convert details to IntegratedRecords for Pinecone
 				records := make([]*pinecone.IntegratedRecord, len(details))
@@ -176,12 +170,19 @@ var listJobsCmd = &cobra.Command{
 
 				if len(filteredRecords) > 0 {
 					namespace := "job-details"
-					host = strings.TrimPrefix(host, "https://")
-					count, err := pineconeClient.UpsertRecords(ctx, host, namespace, filteredRecords, false)
+					denseIndex = strings.TrimPrefix(denseIndex, "https://")
+					count, err := pineconeClient.UpsertRecords(ctx, denseIndex, namespace, filteredRecords, false)
 					if err != nil {
 						return fmt.Errorf("failed to upsert records to Pinecone: %w", err)
 					}
-					fmt.Printf("Successfully upserted %d records to Pinecone\n", count)
+					fmt.Printf("Successfully upserted %d records to Pinecone dense index %s\n", count, denseIndex)
+
+					sparseIndex = strings.TrimPrefix(sparseIndex, "https://")
+					count, err = pineconeClient.UpsertRecords(ctx, sparseIndex, namespace, filteredRecords, true)
+					if err != nil {
+						return fmt.Errorf("failed to upsert records to Pinecone: %w", err)
+					}
+					fmt.Printf("Successfully upserted %d records to Pinecone sparse index %s\n", count, sparseIndex)
 				}
 			}
 

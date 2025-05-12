@@ -290,10 +290,10 @@ func searchJobDetailsHandler(ctx context.Context, request mcp.CallToolRequest) (
 	logMsg("Pinecone client created successfully")
 
 	// Get index host from environment or config
-	indexHost := os.Getenv("PINECONE_INDEX_HOST")
+	indexHost := os.Getenv("PINECONE_DENSE_INDEX_HOST")
 	if indexHost == "" {
 		result["status"] = "error"
-		logMsg("PINECONE_INDEX_HOST environment variable not set")
+		logMsg("PINECONE_DENSE_INDEX_HOST environment variable not set")
 		return createResult(result)
 	}
 	logMsg(fmt.Sprintf("Using Pinecone index host: %s", indexHost))
