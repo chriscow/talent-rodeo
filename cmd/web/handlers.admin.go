@@ -16,11 +16,6 @@ import (
 	"github.com/pinecone-io/go-pinecone/v3/pinecone"
 )
 
-type JobSearchResult struct {
-	JobDetail *internal.JobDetail
-	Score     float32
-}
-
 func (app *application) adminVoice(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	adminUser := contextGetAuthenticatedUser(r)

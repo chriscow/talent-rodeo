@@ -37,12 +37,7 @@ func (j *JobWithDetails) Title() string {
 func (j *JobWithDetails) CompanyName() string {
 	// Use UserJob company name if available,
 	// otherwise fallback to JobDetail company
-	if j.UserJob.CompanyName != "" {
-		return j.UserJob.CompanyName
-	}
-	if j.JobDetail != nil && j.JobDetail.Company != "" {
-		return j.JobDetail.Company
-	}
+
 	return ""
 }
 

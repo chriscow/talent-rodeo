@@ -46,7 +46,7 @@ type User struct {
 
 	State UserState
 
-	// Search *UserSearch
+	SteeringQuery *SteeringQuery
 
 	Tier            UserTier
 	CompletedAt     *time.Time
@@ -152,6 +152,25 @@ func GetUserByPhone(ctx context.Context, fs *FirestoreClient, phone string) (*Us
 	}
 
 	return &user, true, nil
+}
+
+func GetUsersByIDs(ctx context.Context, fs *FirestoreClient, ids []string) ([]*User, error) {
+	iter := fs.Collection(usersCollection).Where("ID", "in", ids).Documents(ctx)
+	docs, err := iter.GetAll()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get users by IDs: %w", err)
+	}
+
+	users := make([]*User, len(docs))
+	for i, doc := range docs {
+		var user User
+		if err := doc.DataTo(&user); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal user data: %w", err)
+		}
+		users[i] = &user
+	}
+
+	return users, nil
 }
 
 // UpdateUser updates an existing user document

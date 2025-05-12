@@ -24,21 +24,21 @@ type Pinecone struct {
 	*pinecone.Client
 }
 
-type queryOptions struct {
+type PineconeQueryOptions struct {
 	topK   int
 	fields *[]string
 	filter *map[string]any
 	rerank *pinecone.SearchRecordsRerank
 }
 
-func WithTopK(topK int) func(*queryOptions) {
-	return func(q *queryOptions) {
+func WithTopK(topK int) func(*PineconeQueryOptions) {
+	return func(q *PineconeQueryOptions) {
 		q.topK = topK
 	}
 }
 
-func WithFields(fields []string) func(*queryOptions) {
-	return func(q *queryOptions) {
+func WithFields(fields []string) func(*PineconeQueryOptions) {
+	return func(q *PineconeQueryOptions) {
 		q.fields = &fields
 	}
 }
@@ -53,14 +53,14 @@ result = index.query(vector=xq, top_k=5, filter={'tokens': {
 }})
 */
 // WithFilter allows you to filter the results based on metadata.
-func WithFilter(filter map[string]any) func(*queryOptions) {
-	return func(q *queryOptions) {
+func WithFilter(filter map[string]any) func(*PineconeQueryOptions) {
+	return func(q *PineconeQueryOptions) {
 		q.filter = &filter
 	}
 }
 
-func WithRerank(topN int, rankFields []string) func(*queryOptions) {
-	return func(q *queryOptions) {
+func WithRerank(topN int, rankFields []string) func(*PineconeQueryOptions) {
+	return func(q *PineconeQueryOptions) {
 		topNInt := int32(topN)
 
 		q.rerank = &pinecone.SearchRecordsRerank{
@@ -172,13 +172,13 @@ func (p *Pinecone) Upsert(ctx context.Context, indexHost, namespace string, vect
 	return len(vectors), nil
 }
 
-func (p *Pinecone) QueryByVector(ctx context.Context, indexHost, namespace string, queryVector []float32, opts ...func(*queryOptions)) (*pinecone.QueryVectorsResponse, error) {
+func (p *Pinecone) QueryByVector(ctx context.Context, indexHost, namespace string, queryVector []float32, opts ...func(*PineconeQueryOptions)) (*pinecone.QueryVectorsResponse, error) {
 	index, err := p.Index(pinecone.NewIndexConnParams{Host: indexHost, Namespace: namespace})
 	if err != nil {
 		return nil, fmt.Errorf("create IndexConnection for Host: %v: %v", indexHost, err)
 	}
 
-	options := &queryOptions{
+	options := &PineconeQueryOptions{
 		topK: 1000,
 	}
 
@@ -198,13 +198,13 @@ func (p *Pinecone) QueryByVector(ctx context.Context, indexHost, namespace strin
 	return res, nil
 }
 
-func (p *Pinecone) SearchRecords(ctx context.Context, indexHost, namespace string, query string, opts ...func(*queryOptions)) (*pinecone.SearchRecordsResponse, error) {
+func (p *Pinecone) SearchRecords(ctx context.Context, indexHost, namespace string, query string, opts ...func(*PineconeQueryOptions)) (*pinecone.SearchRecordsResponse, error) {
 	index, err := p.Index(pinecone.NewIndexConnParams{Host: indexHost, Namespace: namespace})
 	if err != nil {
 		return nil, fmt.Errorf("create IndexConnection for Host: %v: %v", indexHost, err)
 	}
 
-	options := &queryOptions{
+	options := &PineconeQueryOptions{
 		topK: 2,
 	}
 
@@ -240,56 +240,6 @@ func (p *Pinecone) FetchVectors(ctx context.Context, indexHost, namespace string
 	}
 
 	return res, nil
-}
-
-// GetSteeringVector calculates a vector steered toward and away from specific concepts
-func (p *Pinecone) GetSteeringVector(ctx context.Context,
-	query string, // Main query concept
-	moveToward string, // Concept to move results toward
-	moveAway string, // Concept to move results away from
-	forceToward float64, // How strongly to move toward (0.0-1.0)
-	forceAway float64, // How strongly to move away (0.0-1.0)
-	model PineconeEmbedModel, // Embedding model to use
-) ([]float32, error) {
-	// Create embeddings for all three concepts in one call
-	embedResp, err := p.CreateEmbeddings(ctx, []string{query, moveToward, moveAway}, model)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create embeddings: %w", err)
-	}
-
-	embeddings := embedResp.Data
-
-	if len(embeddings) < 3 {
-		return nil, fmt.Errorf("expected 3 embeddings, got %d", len(embeddings))
-	}
-
-	// Extract the vectors
-	queryVector := *embeddings[0].Values
-	towardVector := *embeddings[1].Values
-	awayVector := *embeddings[2].Values
-
-	// Apply the vector manipulations (semantic steering)
-	modifiedVector := make([]float32, len(queryVector))
-
-	// 1. Start with the query vector
-	copy(modifiedVector, queryVector)
-
-	// 2. Move toward the target concept
-	for i := range modifiedVector {
-		// Add a portion of the difference between toward vector and query vector
-		modifiedVector[i] += float32(forceToward) * (towardVector[i] - queryVector[i])
-	}
-
-	// 3. Move away from the concept to avoid
-	for i := range modifiedVector {
-		// Subtract a portion of the difference between away vector and query vector
-		modifiedVector[i] -= float32(forceAway) * (awayVector[i] - queryVector[i])
-	}
-
-	// 4. Normalize the modified vector to unit length (important for cosine similarity)
-	modifiedVector = normalizeVector(modifiedVector)
-
-	return modifiedVector, nil
 }
 
 // normalizeVector normalizes a vector to unit length

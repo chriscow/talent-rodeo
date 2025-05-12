@@ -38,15 +38,8 @@ func CreateTestUser(t *testing.T, client *FirestoreClient, name, email, phone st
 func CreateTestUserJob(t *testing.T, client *FirestoreClient, userID string, jobID string, status JobStatus, createdAt time.Time) *UserJob {
 	t.Helper()
 
-	job := &UserJob{
-		ID:        jobID,
-		JobRef:    client.Collection(JobDetailsCollection).Doc(jobID),
-		Status:    status,
-		CreatedAt: createdAt,
-		UpdatedAt: createdAt,
-	}
-
-	if err := SaveUserJob(context.Background(), client, userID, job); err != nil {
+	job, err := CreateUserJob(context.Background(), client, userID, jobID)
+	if err != nil {
 		t.Fatalf("Failed to create test job: %v", err)
 	}
 

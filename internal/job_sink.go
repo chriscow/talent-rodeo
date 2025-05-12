@@ -170,6 +170,7 @@ func (s *JobSink) UpsertJobDetailEmbeddings(ctx context.Context, criteriaID stri
 			"title":      detail.Title,
 			"company":    detail.Company,
 			"location":   detail.Location,
+			"url":        detail.URL,
 		}
 	}
 

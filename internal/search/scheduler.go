@@ -51,11 +51,16 @@ func NewScheduler(fs *internal.FirestoreClient, logger *slog.Logger, queue JobQu
 	// }
 	logger = logger.With("service", "SearchScheduler")
 
+	if queue == nil {
+		panic("NewScheduler: queue is nil")
+	}
+
 	return &Scheduler{
 		fs:        fs,
 		logger:    logger,
 		mailer:    mailer,
 		recipient: recipient,
+		queue:     queue,
 		ticker:    time.NewTicker(defaultSearchTickInterval),
 		wg:        sync.WaitGroup{},
 		done:      make(chan struct{}),
@@ -69,6 +74,10 @@ func (s *Scheduler) Start(ctx context.Context) error {
 	s.logger.Info("starting search scheduler")
 	if s.ticker == nil {
 		s.ticker = time.NewTicker(defaultSearchTickInterval)
+	}
+
+	if s.queue == nil {
+		panic("NewScheduler::Start: queue is nil")
 	}
 
 	// Then requeue any users that were previously queued but not completed

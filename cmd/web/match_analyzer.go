@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/utils"
@@ -186,74 +185,74 @@ func (m *MatchAnalyzer) processQueuedJob(ctx context.Context, workerID int, user
 		return ctx.Err()
 	}
 
-	userJob := &internal.UserJob{
-		ID:     jobID,
-		JobRef: m.fs.Collection(internal.JobDetailsCollection).Doc(jobID),
-		Status: internal.JobStatusUnprocessed,
-	}
+	// userJob := &internal.UserJob{
+	// 	ID:     jobID,
+	// 	JobRef: m.fs.Collection(internal.JobDetailsCollection).Doc(jobID),
+	// 	Status: internal.JobStatusUnprocessed,
+	// }
 
-	// 1. Save the user job
-	if err := internal.SaveUserJob(ctx, m.fs, userID, userJob); err != nil {
-		return fmt.Errorf("failed to save user job: %w", err)
-	}
+	// // 1. Save the user job
+	// if err := internal.CreateUserJob(ctx, m.fs, userID, userJob); err != nil {
+	// 	return fmt.Errorf("failed to save user job: %w", err)
+	// }
 
-	// We need to check if the job has already been processed
-	if userJob.Analysis != nil {
-		m.logger.Warn(internal.Yellow("job already processed"),
-			"user_id", userID,
-			"job_id", jobID)
+	// // We need to check if the job has already been processed
+	// if userJob.Analysis != nil {
+	// 	m.logger.Warn(internal.Yellow("job already processed"),
+	// 		"user_id", userID,
+	// 		"job_id", jobID)
 
-		userJob.Status = internal.JobStatusNew
-		if err := internal.SaveUserJob(ctx, m.fs, userID, userJob); err != nil {
-			return fmt.Errorf("failed to save user job: %w", err)
-		}
-		return nil
-	}
+	// 	userJob.Status = internal.JobStatusNew
+	// 	if err := internal.CreateUserJob(ctx, m.fs, userID, userJob); err != nil {
+	// 		return fmt.Errorf("failed to save user job: %w", err)
+	// 	}
+	// 	return nil
+	// }
 
-	// 2. Load the job details from Firestore
-	jobDetail, err := m.loadJobDetail(ctx, jobID)
-	if err != nil {
-		return fmt.Errorf("failed to load job details: %w", err)
-	}
+	// // 2. Load the job details from Firestore
+	// jobDetail, err := m.loadJobDetail(ctx, jobID)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to load job details: %w", err)
+	// }
 
-	user, found, err := internal.GetUser(ctx, m.fs, userID)
-	if err != nil {
-		return fmt.Errorf("failed to get user: %w", err)
-	}
-	if !found {
-		return fmt.Errorf("user not found: %s", userID)
-	}
+	// user, found, err := internal.GetUser(ctx, m.fs, userID)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to get user: %w", err)
+	// }
+	// if !found {
+	// 	return fmt.Errorf("user not found: %s", userID)
+	// }
 
-	// 3. Analyze the job match
-	analysis, err := m.analyzeJobMatch(ctx, user, userJob, *jobDetail)
-	if err != nil {
-		return fmt.Errorf("failed to analyze job match: %w", err)
-	}
+	// // 3. Analyze the job match
+	// analysis, err := m.analyzeJobMatch(ctx, user, userJob, *jobDetail)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to analyze job match: %w", err)
+	// }
 
-	if err := m.extractJobMatch(ctx, user.ID, userJob, analysis); err != nil {
-		return fmt.Errorf("failed to extract job match: %w", err)
-	}
+	// if err := m.extractJobMatch(ctx, user.ID, userJob, analysis); err != nil {
+	// 	return fmt.Errorf("failed to extract job match: %w", err)
+	// }
 
-	userJob.Status = internal.JobStatusNew
+	// userJob.Status = internal.JobStatusNew
 
-	// 5. Check if job is a match and update progress
-	rating := strings.ToLower(userJob.Analysis.FinalJudgment.Rating)
-	isMatch := strings.Contains(rating, "yes")
+	// // 5. Check if job is a match and update progress
+	// rating := strings.ToLower(userJob.Analysis.FinalJudgment.Rating)
+	// isMatch := strings.Contains(rating, "yes")
 
-	// Set the IsRecommended field based on the rating
-	userJob.IsRecommended = isMatch
+	// // Set the IsRecommended field based on the rating
+	// userJob.IsRecommended = isMatch
 
-	// 4. Save the job analysis to the UserJob document
-	if err := internal.SaveUserJob(ctx, m.fs, userID, userJob); err != nil {
-		return fmt.Errorf("failed to save user job: %w", err)
-	}
+	// // 4. Save the job analysis to the UserJob document
+	// if err := internal.CreateUserJob(ctx, m.fs, userID, userJob); err != nil {
+	// 	return fmt.Errorf("failed to save user job: %w", err)
+	// }
 
-	// Send a notification only if it's a good match
-	if isMatch {
-		// if err := m.notifyUser(ctx, job.UserID, job.JobID); err != nil {
-		// 	return fmt.Errorf("failed to notify user: %w", err)
-		// }
-	}
+	// // Send a notification only if it's a good match
+	// if isMatch {
+	// 	// if err := m.notifyUser(ctx, job.UserID, job.JobID); err != nil {
+	// 	// 	return fmt.Errorf("failed to notify user: %w", err)
+	// 	// }
+	// }
 
 	return nil
 }
@@ -381,15 +380,15 @@ func (m *MatchAnalyzer) analyzeJobMatch(ctx context.Context, user *internal.User
 func (m *MatchAnalyzer) extractJobMatch(ctx context.Context, userID string, job *internal.UserJob, analysis string) error {
 	m.logger.Debug("extracting job match to JSON", "user_id", userID)
 
-	prompt := `Given the following job analysis, extract the job match in JSON format: ` + analysis
+	// prompt := `Given the following job analysis, extract the job match in JSON format: ` + analysis
 
-	// Use configured model
-	jobAnalysis, err := tools.StructuredAsk[internal.JobAnalysis](ctx, "job_analysis", prompt, tools.WithModel(m.model))
-	if err != nil {
-		return fmt.Errorf("failed to generate content: %w", err)
-	}
+	// // Use configured model
+	// jobAnalysis, err := tools.StructuredAsk[internal.JobAnalysis](ctx, "job_analysis", prompt, tools.WithModel(m.model))
+	// if err != nil {
+	// 	return fmt.Errorf("failed to generate content: %w", err)
+	// }
 
-	job.Analysis = &jobAnalysis
+	// job.Analysis = &jobAnalysis
 
 	return nil
 }
