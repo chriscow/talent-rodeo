@@ -10,6 +10,7 @@ import (
 	"github.com/cheggaaa/pb"
 	"github.com/pinecone-io/go-pinecone/v3/pinecone"
 	"github.com/sashabaranov/go-openai"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type PineconeEmbedModel string
@@ -215,6 +216,7 @@ func (p *Pinecone) SearchRecords(ctx context.Context, indexHost, namespace strin
 		Query: pinecone.SearchRecordsQuery{
 			TopK:   int32(options.topK),
 			Inputs: &map[string]any{"text": query},
+			Filter: options.filter,
 		},
 		Fields: options.fields,
 		Rerank: options.rerank,
@@ -355,4 +357,39 @@ func CosineSimilarityDense(v1, v2 []float32) (float64, error) {
 	}
 
 	return dotProduct / (math.Sqrt(norm1) * math.Sqrt(norm2)), nil
+}
+
+func (p *Pinecone) UpdateMetadata(ctx context.Context, indexHost, namespace string, id string, metadata map[string]any) error {
+	index, err := p.Client.Index(pinecone.NewIndexConnParams{Host: indexHost, Namespace: namespace})
+	if err != nil {
+		return fmt.Errorf("failed to create IndexConnection for Host: %v", err)
+	}
+
+	metadataFilter, err := structpb.NewStruct(metadata)
+	if err != nil {
+		return fmt.Errorf("failed to create metadata map: %v", err)
+	}
+
+	return index.UpdateVector(ctx, &pinecone.UpdateVectorRequest{
+		Id:       id,
+		Metadata: metadataFilter,
+	})
+}
+
+func (p *Pinecone) DeleteRecords(ctx context.Context, indexHost, namespace string, ids []string) error {
+	index, err := p.Client.Index(pinecone.NewIndexConnParams{Host: indexHost, Namespace: namespace})
+	if err != nil {
+		return fmt.Errorf("failed to create IndexConnection for Host: %v", err)
+	}
+
+	return index.DeleteVectorsById(ctx, ids)
+}
+
+func (p *Pinecone) DeleteAllRecords(ctx context.Context, indexHost, namespace string) error {
+	index, err := p.Client.Index(pinecone.NewIndexConnParams{Host: indexHost, Namespace: namespace})
+	if err != nil {
+		return fmt.Errorf("failed to create IndexConnection for Host: %v", err)
+	}
+
+	return index.DeleteAllVectorsInNamespace(ctx)
 }

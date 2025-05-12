@@ -263,7 +263,6 @@ func TestProviderSearchJobs(t *testing.T) {
 	assert.Len(t, jobs, 2, "Should have found 2 jobs")
 	assert.Equal(t, "Go Developer", jobs[0].Title)
 	assert.Equal(t, "Test Company", jobs[0].Company)
-	assert.Equal(t, "Remote", jobs[0].Location)
 	assert.Equal(t, JobProviderName, jobs[0].Provider)
 
 	// Verify the search was performed

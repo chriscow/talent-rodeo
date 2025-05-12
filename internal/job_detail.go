@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	"talent-rodeo/internal/utils"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -31,7 +32,9 @@ type JobDetail struct {
 	URL           string
 
 	// Detailed information
-	Description    string   // Complete job description
+	Description    string // Complete job description
+	DescriptionSHA string // SHA256 hash of the description for deduplication
+
 	Requirements   []string // List of job requirements
 	Qualifications []string // Required qualifications
 	Benefits       []string // List of benefits
@@ -121,7 +124,7 @@ func (j *JobDetail) GetCacheKey() string {
 	return fmt.Sprintf("%s:%s", j.Provider, j.ProviderJobID)
 }
 
-func initJobDetail(job *JobDetail) {
+func initJobDetail(ctx context.Context, fs *FirestoreClient, jobSearchID string, job *JobDetail) {
 	if job == nil {
 		return
 	}
@@ -142,10 +145,18 @@ func initJobDetail(job *JobDetail) {
 	if job.SearchJobIDs == nil {
 		job.SearchJobIDs = []string{}
 	}
+
+	job.CreatedAt = time.Now().UTC()
+
+	sha, err := utils.SHA256Hash([]byte(job.Description))
+	if err != nil {
+		return
+	}
+	job.DescriptionSHA = sha
 }
 
-func SaveJobDetail(ctx context.Context, fs *FirestoreClient, job *JobDetail) error {
-	initJobDetail(job)
+func SaveJobDetail(ctx context.Context, fs *FirestoreClient, jobSearchID string, job *JobDetail) error {
+	initJobDetail(ctx, fs, jobSearchID, job)
 
 	_, err := fs.Collection(JobDetailsCollection).Doc(job.ID).Set(ctx, job)
 	if err != nil {
@@ -156,8 +167,8 @@ func SaveJobDetail(ctx context.Context, fs *FirestoreClient, job *JobDetail) err
 	return nil
 }
 
-func SaveJobDetailTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, job *JobDetail) error {
-	initJobDetail(job)
+func SaveJobDetailTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, jobSearchID string, job *JobDetail) error {
+	initJobDetail(ctx, fs, jobSearchID, job)
 
 	if err := tx.Set(fs.Collection(JobDetailsCollection).Doc(job.ID), job); err != nil {
 		return err

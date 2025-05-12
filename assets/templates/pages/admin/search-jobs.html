@@ -50,6 +50,13 @@
     
     <form method="POST" autocomplete="off">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <label for="criteria_id">Search Criteria</label>
+        <select name="criteria_id" id="criteria_id">
+            <option value="">-- Any Criteria --</option>
+            {{range .SearchCriteriaList}}
+                <option value="{{.ID}}" {{if eq $.SelectedCriteriaID .ID}}selected{{end}}>{{.Query}}</option>
+            {{end}}
+        </select>
         <label for="search_query">Search Query</label>
         <textarea name="search_query" id="search_query" rows="5" placeholder="Enter job description, skills, or requirements to search for similar jobs...">{{.SearchQuery}}</textarea>
         
@@ -78,10 +85,10 @@
         <article>
             <span class="score-badge">{{printf "%.4f" .Score}}</span>
             <hgroup>
-                <h4>{{.JobDetail.Title}}</h4>
-                <p>{{.JobDetail.Company}} - {{.JobDetail.Location}}</p>
+                <h4>{{.Document.Title}}</h4>
+                <p>{{.Document.Company}} - {{.Document.Location}}</p>
             </hgroup>
-            <div>{{.JobDetail.Description}}</div>
+            <div>{{.Document.Text}}</div>
         </article>
         {{end}}
     </section>
