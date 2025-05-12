@@ -62,24 +62,6 @@ func (s *JobSink) OnJobDetail(ctx context.Context, jobSearch SearchTask, job Job
 	// TODO: Do we care if the same job detail was found multiple times?
 	//
 
-	existingJob, found, err := GetJobDetail(ctx, s.fs, job.ID)
-	if err != nil {
-		s.logger.Error("JobSink: failed to get job detail", "error", err)
-		return
-	}
-
-	if found {
-		//
-		// Job already exists, update the existing job with new details
-		//
-		job.CreatedAt = existingJob.CreatedAt
-		job.SearchJobIDs = existingJob.SearchJobIDs
-		job.SearchJobIDs = append(job.SearchJobIDs, jobSearch.ID)
-		job.ID = existingJob.ID
-		nowUTC := time.Now().UTC()
-		job.UpdatedAt = &nowUTC
-	}
-
 	// Check if link already exists before the transaction
 	linkID := fmt.Sprintf("%s_%s", jobSearch.Criteria.ID, job.ID)
 	linkRef := s.fs.Collection(JobCriteriaLinkCollection).Doc(linkID)
@@ -89,7 +71,7 @@ func (s *JobSink) OnJobDetail(ctx context.Context, jobSearch SearchTask, job Job
 	// Transaction for data operations only
 	err = s.fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		// 1. Save the job detail
-		if err := SaveJobDetailTx(ctx, s.fs, tx, &job); err != nil {
+		if err := SaveJobDetailTx(ctx, s.fs, tx, jobSearch.ID, &job); err != nil {
 			return fmt.Errorf("failed to save job detail: %w", err)
 		}
 
@@ -185,6 +167,9 @@ func (s *JobSink) EmbedJobDetails(ctx context.Context, criteriaID string, jobDet
 			"criteriaID": criteriaID,
 			"text":       detail.Description, //  this is what gets embedded
 			"postedDate": detail.PostedDate,
+			"title":      detail.Title,
+			"company":    detail.Company,
+			"location":   detail.Location,
 		}
 	}
 
