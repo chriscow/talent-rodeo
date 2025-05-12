@@ -1,17 +1,25 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/funcs"
 	"talent-rodeo/internal/response"
+	"talent-rodeo/internal/utils"
 	"time"
+
+	"github.com/pinecone-io/go-pinecone/v3/pinecone"
 )
+
+type JobSearchResult struct {
+	JobDetail *internal.JobDetail
+	Score     float32
+}
 
 func (app *application) adminVoice(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -278,10 +286,15 @@ func (app *application) adminSearchJobs(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 	data := app.newTemplateData(r)
 
-	type SearchResult struct {
-		JobDetail *internal.JobDetail
-		Score     float32
+	// Fetch all search criteria for the dropdown
+	criteriaList, err := internal.ListSearchCriteria(app.fs)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
 	}
+	data["SearchCriteriaList"] = criteriaList
+
+	selectedCriteriaID := ""
 
 	if r.Method == http.MethodPost {
 		if err := r.ParseForm(); err != nil {
@@ -291,6 +304,9 @@ func (app *application) adminSearchJobs(w http.ResponseWriter, r *http.Request) 
 
 		searchQuery := r.PostForm.Get("search_query")
 		topKStr := r.PostForm.Get("top_k")
+		selectedCriteriaID = r.PostForm.Get("criteria_id")
+		data["SelectedCriteriaID"] = selectedCriteriaID
+		app.logger.Debug("adminSearchJobs", "selectedCriteriaID", selectedCriteriaID)
 
 		// Set default value if not provided
 		topK := 10
@@ -307,82 +323,13 @@ func (app *application) adminSearchJobs(w http.ResponseWriter, r *http.Request) 
 		data["TopK"] = topK
 
 		if searchQuery != "" {
-			// Get Pinecone client
-			pineconeClient, err := internal.NewPineconeClient()
+
+			reranked, err := app.semanticSearchJobs(ctx, searchQuery, topK, selectedCriteriaID)
 			if err != nil {
-				app.logger.Error("failed to create Pinecone client", "error", err)
-				data["Error"] = "Failed to initialize Pinecone: " + err.Error()
+				app.logger.Error("failed to search jobs", "error", err)
+				data["Error"] = "Failed to 	search jobs: " + err.Error()
 			} else {
-				// Get index host from environment
-				indexHost := os.Getenv("PINECONE_DENSE_INDEX_HOST")
-				if indexHost == "" {
-					app.logger.Error("PINECONE_DENSE_INDEX_HOST environment variable not set")
-					data["Error"] = "PINECONE_DENSE_INDEX_HOST environment variable not set"
-				} else {
-					app.logger.Info("searching records in Pinecone",
-						"index_host", indexHost,
-						"namespace", internal.JobDetailNamespace,
-						"query", searchQuery)
-
-					// Call SearchRecords with the text query
-					searchResp, err := pineconeClient.SearchRecords(ctx, indexHost, internal.JobDetailNamespace, searchQuery,
-						internal.WithTopK(topK), internal.WithFilter(map[string]any{"criteriaID": criteriaID}))
-
-					if err != nil {
-						app.logger.Error("failed to search records", "error", err)
-						data["Error"] = "Failed to search job records: " + err.Error()
-					} else {
-						// Get hit IDs and scores
-						var jobIDs []string
-						scoreMap := make(map[string]float32)
-
-						for _, hit := range searchResp.Result.Hits {
-							// Extract the job ID from hit fields
-							if id, ok := hit.Fields["ID"].(string); ok && id != "" {
-								jobIDs = append(jobIDs, id)
-								scoreMap[id] = hit.Score
-							} else if id, ok := hit.Id, true; ok && id != "" {
-								// Use the hit ID directly if Fields["ID"] is not available
-								jobIDs = append(jobIDs, id)
-								scoreMap[id] = hit.Score
-							}
-						}
-
-						app.logger.Info("found matches in Pinecone",
-							"hits_count", len(searchResp.Result.Hits),
-							"job_ids", jobIDs)
-
-						if len(jobIDs) > 0 {
-							// Fetch the job details for the matching IDs
-							jobDetails, err := internal.GetJobDetailsByIDs(ctx, app.fs, jobIDs)
-							if err != nil {
-								app.logger.Error("failed to get job details", "error", err)
-								data["Error"] = "Failed to get job details: " + err.Error()
-							} else {
-								// Build search results with scores
-								var searchResults []SearchResult
-								for _, job := range jobDetails {
-									score, ok := scoreMap[job.ID]
-									if !ok {
-										score = 0
-									}
-
-									searchResults = append(searchResults, SearchResult{
-										JobDetail: job,
-										Score:     score,
-									})
-								}
-
-								// Sort results by score in descending order
-								sort.Slice(searchResults, func(i, j int) bool {
-									return searchResults[i].Score > searchResults[j].Score
-								})
-
-								data["SearchResults"] = searchResults
-							}
-						}
-					}
-				}
+				data["SearchResults"] = reranked.Data
 			}
 		}
 	}
@@ -390,4 +337,97 @@ func (app *application) adminSearchJobs(w http.ResponseWriter, r *http.Request) 
 	if err := response.Page(w, http.StatusOK, data, "pages/admin/search-jobs.html"); err != nil {
 		app.serverError(w, r, err)
 	}
+}
+
+func (app *application) semanticSearchJobs(ctx context.Context, searchQuery string, topK int, selectedCriteriaID string) (*pinecone.RerankResponse, error) {
+
+	client, err := internal.NewPineconeClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Pinecone client: %w", err)
+	}
+	// Build filter map
+	filter := map[string]any{}
+	if selectedCriteriaID != "" {
+		filter["criteriaID"] = map[string]any{
+			"$eq": selectedCriteriaID,
+		}
+	}
+
+	denseIndex := os.Getenv("PINECONE_DENSE_INDEX_HOST")
+	if denseIndex == "" {
+		return nil, fmt.Errorf("PINECONE_DENSE_INDEX_HOST environment variable not set")
+	}
+	denseResults, err := client.SearchRecords(ctx, denseIndex, internal.JobDetailNamespace, searchQuery,
+		internal.WithTopK(topK*2), internal.WithFilter(filter))
+	if err != nil {
+		return nil, fmt.Errorf("failed to search dense index: %w", err)
+	}
+
+	sparseIndex := os.Getenv("PINECONE_SPARSE_INDEX_HOST")
+	if sparseIndex == "" {
+		return nil, fmt.Errorf("PINECONE_SPARSE_INDEX_HOST environment variable not set")
+	}
+	sparseResults, err := client.SearchRecords(ctx, sparseIndex, internal.JobDetailNamespace, searchQuery,
+		internal.WithTopK(topK*2), internal.WithFilter(filter))
+	if err != nil {
+		return nil, fmt.Errorf("failed to search sparse index: %w", err)
+	}
+
+	merged := make(map[string]pinecone.Document)
+	for _, hit := range denseResults.Result.Hits {
+		text, ok := hit.Fields["text"].(string)
+		if !ok || text == "" {
+			continue // skip if not a valid string
+		}
+		merged[hit.Id] = pinecone.Document{
+			"ID":       hit.Id,
+			"Score":    hit.Score,
+			"Text":     hit.Fields["text"],
+			"Title":    hit.Fields["title"],
+			"Company":  hit.Fields["company"],
+			"Location": hit.Fields["location"],
+		}
+	}
+	for _, hit := range sparseResults.Result.Hits {
+		text, ok := hit.Fields["text"].(string)
+		if !ok || text == "" {
+			continue // skip if not a valid string
+		}
+		merged[hit.Id] = pinecone.Document{
+			"ID":       hit.Id,
+			"Score":    hit.Score,
+			"Text":     hit.Fields["text"],
+			"Title":    hit.Fields["title"],
+			"Company":  hit.Fields["company"],
+			"Location": hit.Fields["location"],
+		}
+	}
+
+	// deduplicate documents by hash
+	deduplicated := make(map[string]pinecone.Document)
+	for _, doc := range merged {
+		hash, err := utils.SHA256Hash([]byte(doc["Text"].(string)))
+		if err != nil {
+			return nil, fmt.Errorf("failed to hash job detail: %w", err)
+		}
+		deduplicated[hash] = doc
+	}
+
+	documents := make([]pinecone.Document, 0, len(deduplicated))
+	for _, doc := range deduplicated {
+		documents = append(documents, doc)
+	}
+
+	params := map[string]any{
+		"truncate": "END",
+	}
+
+	return client.Inference.Rerank(ctx, &pinecone.RerankRequest{
+		Model:      "bge-reranker-v2-m3",
+		Query:      searchQuery,
+		Documents:  documents,
+		RankFields: &[]string{"Text"},
+		TopN:       &topK,
+		Parameters: &params,
+	})
 }
