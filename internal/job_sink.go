@@ -71,7 +71,7 @@ func (s *JobSink) OnJobDetail(ctx context.Context, jobSearch SearchTask, job Job
 	// Transaction for data operations only
 	err = s.fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		// 1. Save the job detail
-		if err := SaveJobDetailTx(ctx, s.fs, tx, jobSearch.ID, &job); err != nil {
+		if err := SaveJobDetailTx(ctx, s.fs, tx, &job); err != nil {
 			return fmt.Errorf("failed to save job detail: %w", err)
 		}
 
@@ -131,7 +131,7 @@ func (s *JobSink) OnSearchCompleted(ctx context.Context, jobSearch SearchTask, t
 		return
 	}
 
-	count, err := s.EmbedJobDetails(ctx, jobSearch.Criteria.ID, jobDetails)
+	count, err := s.UpsertJobDetailEmbeddings(ctx, jobSearch.Criteria.ID, jobDetails)
 	if err != nil {
 		s.logger.Error("JobSink: failed to embed job details", "error", err)
 	}
@@ -140,7 +140,7 @@ func (s *JobSink) OnSearchCompleted(ctx context.Context, jobSearch SearchTask, t
 	// s.processSubscriptions(ctx, jobSearch)
 }
 
-func (s *JobSink) EmbedJobDetails(ctx context.Context, criteriaID string, jobDetails []JobDetail) (int, error) {
+func (s *JobSink) UpsertJobDetailEmbeddings(ctx context.Context, criteriaID string, jobDetails []JobDetail) (int, error) {
 	client, err := NewPineconeClient()
 	if err != nil {
 		return 0, fmt.Errorf("failed to create pinecone client: %w", err)
