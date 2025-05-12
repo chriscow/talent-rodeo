@@ -20,8 +20,8 @@ import (
 
 const userCriteriaCollection = "user_criteria"
 
-// UserCriteriaSubscription represents a user's subscription to a search criteria
-type UserCriteriaSubscription struct {
+// SearchCriteriaSubscription represents a user's subscription to a search criteria
+type SearchCriteriaSubscription struct {
 	UserID       string
 	CriteriaID   string
 	SubscribedAt time.Time
@@ -29,8 +29,8 @@ type UserCriteriaSubscription struct {
 	DisplayName  string
 }
 
-// SubscribeUserToCriteria creates a subscription for a user to a search criteria
-func SubscribeUserToCriteria(ctx context.Context, fs *FirestoreClient, userID, criteriaID, displayName string) error {
+// SubscribeToCriteria creates a subscription for a user to a search criteria
+func SubscribeToCriteria(ctx context.Context, fs *FirestoreClient, userID, criteriaID, displayName string) error {
 	// Validate inputs
 	if userID == "" {
 		return fmt.Errorf("user ID is required")
@@ -52,7 +52,7 @@ func SubscribeUserToCriteria(ctx context.Context, fs *FirestoreClient, userID, c
 	subscriptionID := funcs.Slugify(fmt.Sprintf("%s_%s", userID, criteriaID))
 
 	// Create the subscription
-	subscription := UserCriteriaSubscription{
+	subscription := SearchCriteriaSubscription{
 		UserID:       userID,
 		CriteriaID:   criteriaID,
 		SubscribedAt: time.Now(),
@@ -83,8 +83,8 @@ func SubscribeUserToCriteria(ctx context.Context, fs *FirestoreClient, userID, c
 	return err
 }
 
-// UnsubscribeUserFromCriteria removes a user's subscription to a criteria
-func UnsubscribeUserFromCriteria(fs *FirestoreClient, userID, criteriaID string) error {
+// UnsubscribeFromCriteria removes a user's subscription to a criteria
+func UnsubscribeFromCriteria(fs *FirestoreClient, userID, criteriaID string) error {
 	ctx := context.Background()
 
 	// Validate inputs
@@ -137,8 +137,8 @@ func UnsubscribeUserFromCriteria(fs *FirestoreClient, userID, criteriaID string)
 	return err
 }
 
-// GetUserCriteriaSubscriptions retrieves all criteria a user is subscribed to
-func GetUserCriteriaSubscriptions(fs *FirestoreClient, userID string) ([]UserCriteriaSubscription, error) {
+// GetSubscriptionsForUser retrieves all criteria a user is subscribed to
+func GetSubscriptionsForUser(fs *FirestoreClient, userID string) ([]SearchCriteriaSubscription, error) {
 	ctx := context.Background()
 
 	// Validate input
@@ -151,7 +151,7 @@ func GetUserCriteriaSubscriptions(fs *FirestoreClient, userID string) ([]UserCri
 	iter := query.Documents(ctx)
 	defer iter.Stop()
 
-	var subscriptions []UserCriteriaSubscription
+	var subscriptions []SearchCriteriaSubscription
 	for {
 		doc, err := iter.Next()
 		if err == iterator.Done {
@@ -161,7 +161,7 @@ func GetUserCriteriaSubscriptions(fs *FirestoreClient, userID string) ([]UserCri
 			return nil, fmt.Errorf("error iterating user criteria: %w", err)
 		}
 
-		var subscription UserCriteriaSubscription
+		var subscription SearchCriteriaSubscription
 		if err := doc.DataTo(&subscription); err != nil {
 			return nil, fmt.Errorf("error parsing subscription data: %w", err)
 		}
@@ -173,7 +173,7 @@ func GetUserCriteriaSubscriptions(fs *FirestoreClient, userID string) ([]UserCri
 }
 
 // GetCriteriaSubscribers retrieves all users subscribed to a specific criteria
-func GetCriteriaSubscribers(fs *FirestoreClient, criteriaID string) ([]UserCriteriaSubscription, error) {
+func GetCriteriaSubscribers(fs *FirestoreClient, criteriaID string) ([]SearchCriteriaSubscription, error) {
 	ctx := context.Background()
 
 	// Validate input
@@ -186,7 +186,7 @@ func GetCriteriaSubscribers(fs *FirestoreClient, criteriaID string) ([]UserCrite
 	iter := query.Documents(ctx)
 	defer iter.Stop()
 
-	var subscribers []UserCriteriaSubscription
+	var subscribers []SearchCriteriaSubscription
 	for {
 		doc, err := iter.Next()
 		if err == iterator.Done {
@@ -196,7 +196,7 @@ func GetCriteriaSubscribers(fs *FirestoreClient, criteriaID string) ([]UserCrite
 			return nil, fmt.Errorf("error iterating user criteria: %w", err)
 		}
 
-		var subscription UserCriteriaSubscription
+		var subscription SearchCriteriaSubscription
 		if err := doc.DataTo(&subscription); err != nil {
 			return nil, fmt.Errorf("error parsing subscription data: %w", err)
 		}

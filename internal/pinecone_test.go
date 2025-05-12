@@ -53,8 +53,10 @@ func TestGetSteeringVector(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := p.GetSteeringVector(ctx, tt.query, tt.moveToward, tt.moveAway,
-				tt.forceToward, tt.forceAway, tt.model)
+
+			got := NewSteeringQuery(tt.query, tt.model,
+				WithMoveToward(tt.moveToward, tt.forceToward),
+				WithMoveAway(tt.moveAway, tt.forceAway))
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetSteeringVector() error = %v, wantErr %v", err, tt.wantErr)
@@ -69,14 +71,19 @@ func TestGetSteeringVector(t *testing.T) {
 				}
 
 				// Check vector length (should be non-zero)
-				if len(got) == 0 {
+				vector, err := got.GetVector(ctx, p)
+				if err != nil {
+					t.Errorf("GetSteeringVector() returned error: %v", err)
+					return
+				}
+				if len(vector) == 0 {
 					t.Errorf("GetSteeringVector() returned empty vector")
 					return
 				}
 
 				// Check normalization (length should be close to 1.0)
 				var sumSquares float64
-				for _, v := range got {
+				for _, v := range vector {
 					sumSquares += float64(v * v)
 				}
 

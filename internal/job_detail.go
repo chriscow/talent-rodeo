@@ -3,9 +3,12 @@ package internal
 import (
 	"context"
 	"fmt"
+	"os"
+	"talent-rodeo/internal/utils"
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"github.com/pinecone-io/go-pinecone/v3/pinecone"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -56,6 +59,11 @@ type JobDetail struct {
 	CreatedAt    time.Time
 	UpdatedAt    *time.Time
 	SearchJobIDs []string
+}
+
+type ScoredJobDetail struct {
+	JobDetail JobDetail
+	Score     float32
 }
 
 type JobDetailCriteriaLink struct {
@@ -330,4 +338,133 @@ func GetJobDetailsByIDs(ctx context.Context, fs *FirestoreClient, ids []string) 
 	}
 
 	return result, nil
+}
+
+func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, criteriaID string, topK int) ([]ScoredJobDetail, error) {
+
+	client, err := NewPineconeClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Pinecone client: %w", err)
+	}
+	// Build filter map
+	filter := map[string]any{}
+	if criteriaID != "" {
+		filter["criteriaID"] = map[string]any{
+			"$eq": criteriaID,
+		}
+	}
+
+	queryVector, err := steeringQuery.GetVector(ctx, client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get steering vector: %w", err)
+	}
+
+	denseIndex := os.Getenv("PINECONE_DENSE_INDEX_HOST")
+	if denseIndex == "" {
+		return nil, fmt.Errorf("PINECONE_DENSE_INDEX_HOST environment variable not set")
+	}
+
+	denseResults, err := client.QueryByVector(ctx, denseIndex, JobDetailNamespace, queryVector,
+		WithTopK(topK*2), WithFilter(filter))
+	if err != nil {
+		return nil, fmt.Errorf("failed to search dense index: %w", err)
+	}
+
+	sparseIndex := os.Getenv("PINECONE_SPARSE_INDEX_HOST")
+	if sparseIndex == "" {
+		return nil, fmt.Errorf("PINECONE_SPARSE_INDEX_HOST environment variable not set")
+	}
+	sparseResults, err := client.QueryByVector(ctx, sparseIndex, JobDetailNamespace, queryVector,
+		WithTopK(topK*2), WithFilter(filter))
+	if err != nil {
+		return nil, fmt.Errorf("failed to search sparse index: %w", err)
+	}
+
+	merged := make(map[string]pinecone.Document)
+
+	for _, hit := range denseResults.Matches {
+		meta := hit.Vector.Metadata
+		if meta == nil {
+			continue // skip if no metadata
+		}
+
+		merged[hit.Vector.Id] = pinecone.Document{
+			"ID":       hit.Vector.Id,
+			"Score":    hit.Score,
+			"Text":     meta.Fields["text"].GetStringValue(),
+			"Title":    meta.Fields["title"].GetStringValue(),
+			"Company":  meta.Fields["company"].GetStringValue(),
+			"Location": meta.Fields["location"].GetStringValue(),
+			"URL":      meta.Fields["url"].GetStringValue(),
+		}
+	}
+	for _, hit := range sparseResults.Matches {
+		meta := hit.Vector.Metadata
+		if meta == nil {
+			continue // skip if no metadata
+		}
+		merged[hit.Vector.Id] = pinecone.Document{
+			"ID":       hit.Vector.Id,
+			"Score":    hit.Score,
+			"Text":     meta.Fields["text"].GetStringValue(),
+			"Title":    meta.Fields["title"].GetStringValue(),
+			"Company":  meta.Fields["company"].GetStringValue(),
+			"Location": meta.Fields["location"].GetStringValue(),
+			"URL":      meta.Fields["url"].GetStringValue(),
+		}
+	}
+
+	// deduplicate documents by hash
+	deduplicated := make(map[string]pinecone.Document)
+	for _, doc := range merged {
+		hash, err := utils.SHA256Hash([]byte(doc["Text"].(string)))
+		if err != nil {
+			return nil, fmt.Errorf("failed to hash job detail: %w", err)
+		}
+		deduplicated[hash] = doc
+	}
+
+	documents := make([]pinecone.Document, 0, len(deduplicated))
+	for _, doc := range deduplicated {
+		documents = append(documents, doc)
+	}
+
+	params := map[string]any{
+		"truncate": "END",
+	}
+
+	rerankResponse, err := client.Inference.Rerank(ctx, &pinecone.RerankRequest{
+		Model:      "bge-reranker-v2-m3",
+		Query:      steeringQuery.Query,
+		Documents:  documents,
+		RankFields: &[]string{"Text"},
+		TopN:       &topK,
+		Parameters: &params,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to rerank jobs: %w", err)
+	}
+
+	results := make([]ScoredJobDetail, 0, len(rerankResponse.Data))
+	for _, result := range rerankResponse.Data {
+		doc := *result.Document // Document is a map[string]any
+		postedDate, err := time.Parse(time.RFC3339, doc["PostedDate"].(string))
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse posted date: %w", err)
+		}
+		results = append(results, ScoredJobDetail{
+			JobDetail: JobDetail{
+				ID:          doc["ID"].(string),
+				Title:       doc["Title"].(string),
+				Company:     doc["Company"].(string),
+				Location:    doc["Location"].(string),
+				Description: doc["Text"].(string),
+				URL:         doc["URL"].(string),
+				PostedDate:  postedDate,
+			},
+			Score: result.Score,
+		})
+	}
+
+	return results, nil
 }
