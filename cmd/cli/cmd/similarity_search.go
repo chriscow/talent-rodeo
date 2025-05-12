@@ -62,9 +62,9 @@ var similaritySearchCmd = &cobra.Command{
 			return fmt.Errorf("no job description found for user: %s", userID)
 		}
 
-		indexHost := os.Getenv("PINECONE_INDEX_HOST")
+		indexHost := os.Getenv("PINECONE_DENSE_INDEX_HOST")
 		if indexHost == "" {
-			return fmt.Errorf("PINECONE_INDEX_HOST is not set")
+			return fmt.Errorf("PINECONE_DENSE_INDEX_HOST is not set")
 		}
 
 		if namespace == "" {
