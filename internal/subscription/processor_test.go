@@ -2,15 +2,16 @@ package subscription
 
 import (
 	"context"
+	"log/slog"
+	"os"
 	"testing"
 	"time"
 
 	"talent-rodeo/internal"
 )
 
-func TestProcessor(t *testing.T) {
+func TestProcessorBasic(t *testing.T) {
 	// This is a minimal test to verify the processor can be created and initialized
-	// For a full integration test, we would need a mock Firestore client
 	ctx := context.Background()
 
 	// Create a test Firestore client
@@ -20,8 +21,10 @@ func TestProcessor(t *testing.T) {
 	}
 	defer fs.Close()
 
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
 	// Create processor with a short interval for testing
-	processor := NewProcessor(fs).WithInterval(100 * time.Millisecond)
+	processor := NewProcessor(fs, logger).WithInterval(100 * time.Millisecond)
 
 	// Test that we can start and stop the processor
 	err = processor.Start(ctx)
@@ -40,9 +43,3 @@ func TestProcessor(t *testing.T) {
 		t.Errorf("Processor should not be running after Stop")
 	}
 }
-
-// For a full integration test, you would add:
-// - Mock data for search criteria
-// - Mock subscriptions
-// - Mock users with steering queries
-// - Verification of job creation
