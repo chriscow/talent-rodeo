@@ -282,7 +282,7 @@ func (app *application) adminSearchJobs(w http.ResponseWriter, r *http.Request) 
 	data := app.newTemplateData(r)
 
 	// Fetch all search criteria for the dropdown
-	criteriaList, err := internal.ListSearchCriteria(app.fs)
+	criteriaList, err := internal.ListSearchCriteria(r.Context(), app.fs)
 	if err != nil {
 		app.serverError(w, r, err)
 		return

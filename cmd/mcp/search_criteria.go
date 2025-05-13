@@ -121,7 +121,7 @@ func listSearchCriteriaHandler(ctx context.Context, request mcp.CallToolRequest)
 
 	if params.Count {
 		// Get all criteria to count them
-		criteria, err := internal.ListSearchCriteria(fs)
+		criteria, err := internal.ListSearchCriteria(ctx, fs)
 		if err != nil {
 			result["status"] = "error"
 			logMsg(fmt.Sprintf("Failed to get search criteria count: %v", err))
@@ -134,7 +134,7 @@ func listSearchCriteriaHandler(ctx context.Context, request mcp.CallToolRequest)
 		result["count"] = count
 	} else {
 		// Get all criteria first (since we don't have a paginated version in internal package)
-		allCriteria, err := internal.ListSearchCriteria(fs)
+		allCriteria, err := internal.ListSearchCriteria(ctx, fs)
 		if err != nil {
 			result["status"] = "error"
 			logMsg(fmt.Sprintf("Failed to list search criteria: %v", err))
@@ -205,7 +205,7 @@ func getSearchCriteriaHandler(ctx context.Context, request mcp.CallToolRequest) 
 	logMsg("Firestore client created successfully")
 
 	// Get the search criteria
-	criteria, exists, err := internal.GetSearchCriteria(fs, params.ID)
+	criteria, exists, err := internal.GetSearchCriteria(ctx, fs, params.ID)
 	if err != nil {
 		result["status"] = "error"
 		logMsg(fmt.Sprintf("Failed to get search criteria: %v", err))
@@ -251,7 +251,7 @@ func getSearchCriteriaNeedsSearchHandler(ctx context.Context, request mcp.CallTo
 	logMsg("Firestore client created successfully")
 
 	// Get the search criteria that need searching
-	criteria, err := internal.GetSearchCriteriaNeedsSearch(fs)
+	criteria, err := internal.GetSearchCriteriaNeedsSearch(ctx, fs)
 	if err != nil {
 		result["status"] = "error"
 		logMsg(fmt.Sprintf("Failed to get search criteria that need searching: %v", err))
