@@ -117,22 +117,20 @@ If a job with the provider's job id already exists, we update our copy of the jo
 ### IDEAS
 
 - Vector embeddings (dense and sparse DONE)
+- Vector steering (dense and sparse DONE)
 - Rewrite in standard form
 - Extract structured data
 - We can do subscriber specific processing `OnSearchCompleted` (use SearchJob record)
 - Similarity search against users Pinecone namespace?
 
+
+
 ## Subscription Processor
-
-Should the subscription processor be tied into the job search flow?
-
-Should it just run independently on a schedule?  
-- What if a subscription has nothing new?
-- We should look at the associated `SearchJob` from the last search of a criteria and it will say how many jobs were returned. Note: they could all be the same jobs we already have in the database.
-
 
 How do we keep from re-analyzing jobs for a user that have already been analyzed?
 (maybe look at the `user_jobs` and just analyze jobs not in their set)
+
+see `internal/subscription/processor` and `internal/subscription/README.md`
 
 
 

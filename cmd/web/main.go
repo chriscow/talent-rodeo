@@ -18,6 +18,7 @@ import (
 	"talent-rodeo/internal/search"
 	"talent-rodeo/internal/search/providers/scrapingdog"
 	"talent-rodeo/internal/smtp"
+	"talent-rodeo/internal/subscription"
 	"talent-rodeo/internal/tasks"
 	th "talent-rodeo/internal/tasks/handlers"
 	"talent-rodeo/internal/transcript"
@@ -121,20 +122,21 @@ type config struct {
 }
 
 type application struct {
-	config          config
-	logger          *slog.Logger
-	fs              *internal.FirestoreClient
-	js              jetstream.JetStream
-	processor       *tasks.Processor
-	wg              sync.WaitGroup
-	natsShutdown    chan struct{}
-	mailer          *smtp.Mailer
-	pusher          *pusher.Client
-	sessionManager  *scs.SessionManager
-	searchProvider  *scrapingdog.Provider
-	searchScheduler *search.Scheduler
-	jobSink         *internal.JobSink
-	matchAnalyzer   *MatchAnalyzer
+	config                config
+	logger                *slog.Logger
+	fs                    *internal.FirestoreClient
+	js                    jetstream.JetStream
+	processor             *tasks.Processor
+	wg                    sync.WaitGroup
+	natsShutdown          chan struct{}
+	mailer                *smtp.Mailer
+	pusher                *pusher.Client
+	sessionManager        *scs.SessionManager
+	searchProvider        *scrapingdog.Provider
+	searchScheduler       *search.Scheduler
+	subscriptionProcessor *subscription.Processor
+	jobSink               *internal.JobSink
+	matchAnalyzer         *MatchAnalyzer
 }
 
 func run(logger *slog.Logger) error {
@@ -495,10 +497,14 @@ func setupSessionManager(cfg config, FirestoreClient *internal.FirestoreClient, 
 }
 
 func (app *application) startServices(ctx context.Context) error {
+	app.subscriptionProcessor = subscription.NewProcessor(app.fs, app.logger)
 	app.searchProvider = scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), app.logger)
 	app.searchScheduler = search.NewScheduler(app.fs, app.logger, app.searchProvider, app.mailer, app.config.notifications.email)
 	app.matchAnalyzer = NewMatchAnalyzer(app.fs, app.logger)
 
+	if err := app.subscriptionProcessor.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start subscription processor: %w", err)
+	}
 	if err := app.searchProvider.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start search provider: %w", err)
 	}

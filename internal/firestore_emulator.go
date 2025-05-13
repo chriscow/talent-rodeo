@@ -31,6 +31,8 @@ func NewTestFirestoreClient(ctx context.Context) (*FirestoreClient, error) {
 		return nil, fmt.Errorf("FIRESTORE_EMULATOR_HOST not set")
 	}
 
+	println("Using Firestore emulator at", os.Getenv(firestoreEmulatorHost))
+
 	client, err := firestore.NewClient(ctx, testProjectID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create test firestore client: %w", err)

@@ -145,10 +145,10 @@ func GetUserJob(ctx context.Context, fs *FirestoreClient, userID, jobID string) 
 	return &job, true, nil
 }
 
-// GetUserJobs retrieves all jobs for a user
-func GetUserJobs(ctx context.Context, fs *FirestoreClient, userID string) ([]*UserJob, error) {
+// ListUserJobs retrieves all jobs for a user
+func ListUserJobs(ctx context.Context, fs *FirestoreClient, userID string) ([]UserJob, error) {
 	iter := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Documents(ctx)
-	var jobs []*UserJob
+	var jobs []UserJob
 
 	for {
 		doc, err := iter.Next()
@@ -163,7 +163,7 @@ func GetUserJobs(ctx context.Context, fs *FirestoreClient, userID string) ([]*Us
 		if err := doc.DataTo(&job); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal user job: %w", err)
 		}
-		jobs = append(jobs, &job)
+		jobs = append(jobs, job)
 	}
 
 	return jobs, nil

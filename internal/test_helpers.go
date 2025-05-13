@@ -116,8 +116,6 @@ func DeleteTestData(t *testing.T, client *FirestoreClient, prefix string) {
 
 			if _, err := appointmentDoc.Ref.Delete(ctx); err != nil {
 				t.Logf("Failed to delete appointment %s for user %s: %v", appointmentDoc.Ref.ID, doc.Ref.ID, err)
-			} else {
-				t.Logf("Deleted test appointment %s for user %s", appointmentDoc.Ref.ID, doc.Ref.ID)
 			}
 		}
 
@@ -135,8 +133,6 @@ func DeleteTestData(t *testing.T, client *FirestoreClient, prefix string) {
 
 			if _, err := resumeDoc.Ref.Delete(ctx); err != nil {
 				t.Logf("Failed to delete resume %s for user %s: %v", resumeDoc.Ref.ID, doc.Ref.ID, err)
-			} else {
-				t.Logf("Deleted test resume %s for user %s", resumeDoc.Ref.ID, doc.Ref.ID)
 			}
 		}
 
@@ -154,16 +150,12 @@ func DeleteTestData(t *testing.T, client *FirestoreClient, prefix string) {
 
 			if _, err := jobDoc.Ref.Delete(ctx); err != nil {
 				t.Logf("Failed to delete job %s for user %s: %v", jobDoc.Ref.ID, doc.Ref.ID, err)
-			} else {
-				t.Logf("Deleted test job %s for user %s", jobDoc.Ref.ID, doc.Ref.ID)
 			}
 		}
 
 		// Finally delete the user document
 		if _, err := doc.Ref.Delete(ctx); err != nil {
 			t.Logf("Failed to delete user document %s: %v", doc.Ref.ID, err)
-		} else {
-			t.Logf("Deleted test user %s", doc.Ref.ID)
 		}
 	}
 
@@ -182,8 +174,6 @@ func DeleteTestData(t *testing.T, client *FirestoreClient, prefix string) {
 
 			if _, err := doc.Ref.Delete(ctx); err != nil {
 				t.Logf("Failed to delete document %s from collection %s: %v", doc.Ref.ID, collection, err)
-			} else {
-				t.Logf("Deleted test document %s from collection %s", doc.Ref.ID, collection)
 			}
 		}
 	}

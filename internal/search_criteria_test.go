@@ -31,7 +31,7 @@ func TestSearchCriteria(t *testing.T) {
 		maxPages := 5
 
 		// Create search criteria
-		created, err := CreateSearchCriteria(client, query, geoID, maxPages)
+		created, err := CreateSearchCriteria(ctx, client, query, geoID, maxPages)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() error = %v", err)
 		}
@@ -51,7 +51,7 @@ func TestSearchCriteria(t *testing.T) {
 		}
 
 		// Get created criteria by ID
-		got, found, err := GetSearchCriteria(client, created.ID)
+		got, found, err := GetSearchCriteria(ctx, client, created.ID)
 		if err != nil {
 			t.Fatalf("GetSearchCriteria() error = %v", err)
 		}
@@ -82,7 +82,7 @@ func TestSearchCriteria(t *testing.T) {
 		maxPages := 3
 
 		// Create search criteria
-		created, err := CreateSearchCriteria(client, query, geoID, maxPages)
+		created, err := CreateSearchCriteria(ctx, client, query, geoID, maxPages)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() error = %v", err)
 		}
@@ -91,13 +91,13 @@ func TestSearchCriteria(t *testing.T) {
 		now := time.Now()
 		created.LastSearchedAt = &now
 
-		err = UpdateSearchCriteria(client, created)
+		err = UpdateSearchCriteria(ctx, client, created)
 		if err != nil {
 			t.Fatalf("UpdateSearchCriteria() error = %v", err)
 		}
 
 		// Get updated criteria
-		updated, found, err := GetSearchCriteria(client, created.ID)
+		updated, found, err := GetSearchCriteria(ctx, client, created.ID)
 		if err != nil {
 			t.Fatalf("GetSearchCriteria() after update error = %v", err)
 		}
@@ -121,20 +121,20 @@ func TestSearchCriteria(t *testing.T) {
 		// Create criteria that needs search (never searched) with subscribers
 		timestamp := time.Now().UnixNano()
 		query1 := fmt.Sprintf("%s-never-searched-%d", testPrefix, timestamp)
-		created1, err := CreateSearchCriteria(client, query1, "us-ny-newyork", 2)
+		created1, err := CreateSearchCriteria(ctx, client, query1, "us-ny-newyork", 2)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() never searched error = %v", err)
 		}
 		// Set subscriber count to 1
 		created1.SubscriberCount = 1
-		err = UpdateSearchCriteria(client, created1)
+		err = UpdateSearchCriteria(ctx, client, created1)
 		if err != nil {
 			t.Fatalf("UpdateSearchCriteria() subscriber count error = %v", err)
 		}
 
 		// Create criteria searched more than 24 hours ago with subscribers
 		query2 := fmt.Sprintf("%s-old-search-%d", testPrefix, timestamp)
-		created2, err := CreateSearchCriteria(client, query2, "us-tx-austin", 2)
+		created2, err := CreateSearchCriteria(ctx, client, query2, "us-tx-austin", 2)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() old search error = %v", err)
 		}
@@ -142,14 +142,14 @@ func TestSearchCriteria(t *testing.T) {
 		oldTime := time.Now().Add(-25 * time.Hour)
 		created2.LastSearchedAt = &oldTime
 		created2.SubscriberCount = 2
-		err = UpdateSearchCriteria(client, created2)
+		err = UpdateSearchCriteria(ctx, client, created2)
 		if err != nil {
 			t.Fatalf("UpdateSearchCriteria() old search error = %v", err)
 		}
 
 		// Create criteria searched recently (should not need search) with subscribers
 		query3 := fmt.Sprintf("%s-recent-search-%d", testPrefix, timestamp)
-		created3, err := CreateSearchCriteria(client, query3, "us-fl-miami", 2)
+		created3, err := CreateSearchCriteria(ctx, client, query3, "us-fl-miami", 2)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() recent search error = %v", err)
 		}
@@ -157,27 +157,27 @@ func TestSearchCriteria(t *testing.T) {
 		recentTime := time.Now().Add(-1 * time.Hour)
 		created3.LastSearchedAt = &recentTime
 		created3.SubscriberCount = 3
-		err = UpdateSearchCriteria(client, created3)
+		err = UpdateSearchCriteria(ctx, client, created3)
 		if err != nil {
 			t.Fatalf("UpdateSearchCriteria() recent search error = %v", err)
 		}
 
 		// Create criteria that needs search (never searched) with NO subscribers
 		query4 := fmt.Sprintf("%s-never-searched-no-subs-%d", testPrefix, timestamp)
-		created4, err := CreateSearchCriteria(client, query4, "us-il-chicago", 2)
+		created4, err := CreateSearchCriteria(ctx, client, query4, "us-il-chicago", 2)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() no subscribers error = %v", err)
 		}
 		// Explicitly set subscriber count to 0 (should be 0 by default, but being explicit)
 		created4.SubscriberCount = 0
-		err = UpdateSearchCriteria(client, created4)
+		err = UpdateSearchCriteria(ctx, client, created4)
 		if err != nil {
 			t.Fatalf("UpdateSearchCriteria() no subscribers error = %v", err)
 		}
 
 		// Create criteria searched more than 24 hours ago with NO subscribers
 		query5 := fmt.Sprintf("%s-old-search-no-subs-%d", testPrefix, timestamp)
-		created5, err := CreateSearchCriteria(client, query5, "us-ga-atlanta", 2)
+		created5, err := CreateSearchCriteria(ctx, client, query5, "us-ga-atlanta", 2)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() old search no subscribers error = %v", err)
 		}
@@ -185,13 +185,13 @@ func TestSearchCriteria(t *testing.T) {
 		oldTime = time.Now().Add(-25 * time.Hour)
 		created5.LastSearchedAt = &oldTime
 		created5.SubscriberCount = 0
-		err = UpdateSearchCriteria(client, created5)
+		err = UpdateSearchCriteria(ctx, client, created5)
 		if err != nil {
 			t.Fatalf("UpdateSearchCriteria() old search no subscribers error = %v", err)
 		}
 
 		// Get criteria that needs search
-		needsSearch, err := GetSearchCriteriaNeedsSearch(client)
+		needsSearch, err := GetSearchCriteriaNeedsSearch(ctx, client)
 		if err != nil {
 			t.Fatalf("GetSearchCriteriaNeedsSearch() error = %v", err)
 		}
@@ -292,7 +292,7 @@ func TestSearchCriteria(t *testing.T) {
 	})
 
 	t.Run("GetNonExistentSearchCriteria", func(t *testing.T) {
-		_, found, err := GetSearchCriteria(client, "non-existent-id")
+		_, found, err := GetSearchCriteria(ctx, client, "non-existent-id")
 		if err != nil {
 			t.Fatalf("GetSearchCriteria() error = %v", err)
 		}
@@ -307,20 +307,20 @@ func TestSearchCriteria(t *testing.T) {
 
 		// Create first criteria
 		query1 := fmt.Sprintf("%s-all-1-%d", testPrefix, timestamp)
-		created1, err := CreateSearchCriteria(client, query1, "us-wa-seattle", 3)
+		created1, err := CreateSearchCriteria(ctx, client, query1, "us-wa-seattle", 3)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() for GetAll test error = %v", err)
 		}
 
 		// Create second criteria
 		query2 := fmt.Sprintf("%s-all-2-%d", testPrefix, timestamp)
-		created2, err := CreateSearchCriteria(client, query2, "us-ca-sanfrancisco", 4)
+		created2, err := CreateSearchCriteria(ctx, client, query2, "us-ca-sanfrancisco", 4)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() for GetAll test error = %v", err)
 		}
 
 		// Get all criteria
-		allCriteria, err := ListSearchCriteria(client)
+		allCriteria, err := ListSearchCriteria(ctx, client)
 		if err != nil {
 			t.Fatalf("GetAllSearchCriteria() error = %v", err)
 		}
@@ -344,13 +344,13 @@ func TestSearchCriteria(t *testing.T) {
 		// Create a criteria to delete
 		timestamp := time.Now().UnixNano()
 		query := fmt.Sprintf("%s-delete-%d", testPrefix, timestamp)
-		created, err := CreateSearchCriteria(client, query, "us-co-denver", 5)
+		created, err := CreateSearchCriteria(ctx, client, query, "us-co-denver", 5)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() for DeleteSearchCriteria test error = %v", err)
 		}
 
 		// Verify it exists
-		_, found, err := GetSearchCriteria(client, created.ID)
+		_, found, err := GetSearchCriteria(ctx, client, created.ID)
 		if err != nil {
 			t.Fatalf("GetSearchCriteria() before delete error = %v", err)
 		}
@@ -359,13 +359,13 @@ func TestSearchCriteria(t *testing.T) {
 		}
 
 		// Delete the criteria
-		err = DeleteSearchCriteria(client, created.ID)
+		err = DeleteSearchCriteria(ctx, client, created.ID)
 		if err != nil {
 			t.Fatalf("DeleteSearchCriteria() error = %v", err)
 		}
 
 		// Verify it's gone
-		_, found, err = GetSearchCriteria(client, created.ID)
+		_, found, err = GetSearchCriteria(ctx, client, created.ID)
 		if err != nil {
 			t.Fatalf("GetSearchCriteria() after delete error = %v", err)
 		}
@@ -374,7 +374,7 @@ func TestSearchCriteria(t *testing.T) {
 		}
 
 		// Attempt to delete non-existent criteria (should not error)
-		err = DeleteSearchCriteria(client, "non-existent-id")
+		err = DeleteSearchCriteria(ctx, client, "non-existent-id")
 		if err != nil {
 			t.Errorf("DeleteSearchCriteria() with non-existent ID returned error = %v, want nil", err)
 		}
@@ -387,7 +387,7 @@ func TestSearchCriteria(t *testing.T) {
 		geoID := "us-co-denver"
 		maxPages := 2
 
-		criteria, err := CreateSearchCriteria(client, query, geoID, maxPages)
+		criteria, err := CreateSearchCriteria(ctx, client, query, geoID, maxPages)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() error = %v", err)
 		}
@@ -423,7 +423,7 @@ func TestSearchCriteria(t *testing.T) {
 		})
 
 		// Get job IDs for criteria
-		jobIDs, err := GetJobIDsForCriteria(client, criteria.ID)
+		jobIDs, err := GetJobIDsForCriteria(ctx, client, criteria.ID)
 		if err != nil {
 			t.Fatalf("GetJobIDsForCriteria() error = %v", err)
 		}

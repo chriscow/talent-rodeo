@@ -43,7 +43,7 @@ func (c SearchCriteria) GetSearchHash() string {
 	return fmt.Sprintf("%x", sha256.Sum256(json))
 }
 
-func CreateSearchCriteria(fs *FirestoreClient, query string, geoID string, maxPages int) (*SearchCriteria, error) {
+func CreateSearchCriteria(ctx context.Context, fs *FirestoreClient, query string, geoID string, maxPages int) (*SearchCriteria, error) {
 	criteria := &SearchCriteria{
 		ID:       funcs.Slugify(fmt.Sprintf("%s-%s", query, geoID)),
 		Query:    query,
@@ -51,7 +51,7 @@ func CreateSearchCriteria(fs *FirestoreClient, query string, geoID string, maxPa
 		MaxPages: maxPages,
 	}
 
-	_, err := fs.Collection(searchCriteriaCollection).Doc(criteria.ID).Create(context.Background(), criteria)
+	_, err := fs.Collection(searchCriteriaCollection).Doc(criteria.ID).Create(ctx, criteria)
 	if err != nil {
 		return nil, err
 	}
@@ -59,10 +59,10 @@ func CreateSearchCriteria(fs *FirestoreClient, query string, geoID string, maxPa
 	return criteria, nil
 }
 
-func GetSearchCriteria(fs *FirestoreClient, id string) (*SearchCriteria, bool, error) {
+func GetSearchCriteria(ctx context.Context, fs *FirestoreClient, id string) (*SearchCriteria, bool, error) {
 	criteria := &SearchCriteria{}
 
-	doc, err := fs.Collection(searchCriteriaCollection).Doc(id).Get(context.Background())
+	doc, err := fs.Collection(searchCriteriaCollection).Doc(id).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return nil, false, nil
@@ -81,8 +81,7 @@ func GetSearchCriteria(fs *FirestoreClient, id string) (*SearchCriteria, bool, e
 // GetSearchCriteriaNeedsSearch retrieves all search criteria from Firestore
 // that either have never been searched (LastSearchedAt is nil) or haven't
 // been searched in the last 24 hours.
-func GetSearchCriteriaNeedsSearch(fs *FirestoreClient) ([]SearchCriteria, error) {
-	ctx := context.Background()
+func GetSearchCriteriaNeedsSearch(ctx context.Context, fs *FirestoreClient) ([]SearchCriteria, error) {
 	coll := fs.Collection(searchCriteriaCollection)
 
 	// Calculate 24 hours ago
@@ -129,8 +128,7 @@ func GetSearchCriteriaNeedsSearch(fs *FirestoreClient) ([]SearchCriteria, error)
 }
 
 // ListSearchCriteria retrieves all search criteria from Firestore
-func ListSearchCriteria(fs *FirestoreClient) ([]SearchCriteria, error) {
-	ctx := context.Background()
+func ListSearchCriteria(ctx context.Context, fs *FirestoreClient) ([]SearchCriteria, error) {
 	coll := fs.Collection(searchCriteriaCollection)
 
 	// Query all documents in the collection
@@ -160,8 +158,8 @@ func ListSearchCriteria(fs *FirestoreClient) ([]SearchCriteria, error) {
 	return items, nil
 }
 
-func GetJobIDsForCriteria(fs *FirestoreClient, criteriaID string) ([]string, error) {
-	iter := fs.Collection(JobCriteriaLinkCollection).WhereEntity(firestore.PropertyFilter{Path: "CriteriaID", Operator: "==", Value: criteriaID}).Documents(context.Background())
+func GetJobIDsForCriteria(ctx context.Context, fs *FirestoreClient, criteriaID string) ([]string, error) {
+	iter := fs.Collection(JobCriteriaLinkCollection).WhereEntity(firestore.PropertyFilter{Path: "CriteriaID", Operator: "==", Value: criteriaID}).Documents(ctx)
 	defer iter.Stop()
 
 	var jobs []string
@@ -179,8 +177,8 @@ func GetJobIDsForCriteria(fs *FirestoreClient, criteriaID string) ([]string, err
 	return jobs, nil
 }
 
-func GetJobIDsForCriteriaCreatedAfter(fs *FirestoreClient, criteriaID string, createdAfter time.Time) ([]string, error) {
-	iter := fs.Collection(JobCriteriaLinkCollection).WhereEntity(firestore.PropertyFilter{Path: "CriteriaID", Operator: "==", Value: criteriaID}).WhereEntity(firestore.PropertyFilter{Path: "CreatedAt", Operator: ">", Value: createdAfter}).Documents(context.Background())
+func GetJobIDsForCriteriaCreatedAfter(ctx context.Context, fs *FirestoreClient, criteriaID string, createdAfter time.Time) ([]string, error) {
+	iter := fs.Collection(JobCriteriaLinkCollection).WhereEntity(firestore.PropertyFilter{Path: "CriteriaID", Operator: "==", Value: criteriaID}).WhereEntity(firestore.PropertyFilter{Path: "CreatedAt", Operator: ">", Value: createdAfter}).Documents(ctx)
 	defer iter.Stop()
 
 	var jobs []string
@@ -198,16 +196,16 @@ func GetJobIDsForCriteriaCreatedAfter(fs *FirestoreClient, criteriaID string, cr
 	return jobs, nil
 }
 
-func UpdateSearchCriteria(fs *FirestoreClient, criteria *SearchCriteria) error {
-	_, err := fs.Collection(searchCriteriaCollection).Doc(criteria.ID).Set(context.Background(), criteria)
+func UpdateSearchCriteria(ctx context.Context, fs *FirestoreClient, criteria *SearchCriteria) error {
+	_, err := fs.Collection(searchCriteriaCollection).Doc(criteria.ID).Set(ctx, criteria)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func DeleteSearchCriteria(fs *FirestoreClient, id string) error {
-	_, err := fs.Collection(searchCriteriaCollection).Doc(id).Delete(context.Background())
+func DeleteSearchCriteria(ctx context.Context, fs *FirestoreClient, id string) error {
+	_, err := fs.Collection(searchCriteriaCollection).Doc(id).Delete(ctx)
 	if err != nil {
 		return err
 	}

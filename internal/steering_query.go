@@ -30,6 +30,9 @@ type SteeringQuery struct {
 
 // Validate checks if the steering query parameters are valid
 func (sq SteeringQuery) Validate() error {
+	if sq.Model == "" {
+		return fmt.Errorf("model cannot be empty")
+	}
 	if sq.Query == "" {
 		return fmt.Errorf("query cannot be empty")
 	}
@@ -51,7 +54,15 @@ func (sq SteeringQuery) Validate() error {
 type SteeringOption func(*SteeringQuery)
 
 // NewSteeringQuery creates a new steering query with the given query and options
-func NewSteeringQuery(query string, model PineconeEmbedModel, opts ...SteeringOption) *SteeringQuery {
+func NewSteeringQuery(query string, model PineconeEmbedModel, opts ...SteeringOption) (*SteeringQuery, error) {
+	if model == "" {
+		return nil, fmt.Errorf("model cannot be empty")
+	}
+
+	if query == "" {
+		return nil, fmt.Errorf("query cannot be empty")
+	}
+
 	sq := &SteeringQuery{
 		Query: query,
 		Model: model,
@@ -61,7 +72,7 @@ func NewSteeringQuery(query string, model PineconeEmbedModel, opts ...SteeringOp
 		opt(sq)
 	}
 
-	return sq
+	return sq, nil
 }
 
 // WithMoveToward sets the concept to move toward

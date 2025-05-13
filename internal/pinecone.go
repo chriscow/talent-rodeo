@@ -90,6 +90,12 @@ func NewPineconeClient() (*Pinecone, error) {
 }
 
 func (p *Pinecone) CreateEmbeddings(ctx context.Context, input []string, model PineconeEmbedModel) (*pinecone.EmbedResponse, error) {
+	if model == "" {
+		return nil, fmt.Errorf("embedding model is not set")
+	}
+	if len(input) == 0 {
+		return nil, fmt.Errorf("input is empty")
+	}
 	return p.Client.Inference.Embed(ctx, &pinecone.EmbedRequest{
 		Model:      string(model),
 		TextInputs: input,

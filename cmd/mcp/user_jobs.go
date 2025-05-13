@@ -82,7 +82,7 @@ func listUserJobsHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp
 	logMsg("Firestore client created successfully")
 
 	logMsg(fmt.Sprintf("Fetching jobs for user ID: %s", params.UserID))
-	jobs, err := internal.GetUserJobs(ctx, fs, params.UserID)
+	jobs, err := internal.ListUserJobs(ctx, fs, params.UserID)
 	if err != nil {
 		result["status"] = "error"
 		logMsg(fmt.Sprintf("Failed to get user jobs: %v", err))
