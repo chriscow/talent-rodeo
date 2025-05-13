@@ -92,7 +92,7 @@ func runListCriteria(cmd *cobra.Command, args []string) error {
 	defer fs.Close()
 
 	// Get all criteria
-	criteria, err := internal.ListSearchCriteria(fs)
+	criteria, err := internal.ListSearchCriteria(ctx, fs)
 	if err != nil {
 		return fmt.Errorf("failed to get search criteria: %w", err)
 	}
@@ -112,7 +112,7 @@ func runNeedsSearchCriteria(cmd *cobra.Command, args []string) error {
 	defer fs.Close()
 
 	// Get criteria that need search
-	criteria, err := internal.GetSearchCriteriaNeedsSearch(fs)
+	criteria, err := internal.GetSearchCriteriaNeedsSearch(ctx, fs)
 	if err != nil {
 		return fmt.Errorf("failed to get criteria that need search: %w", err)
 	}
@@ -137,7 +137,7 @@ func runCreateCriteria(cmd *cobra.Command, args []string) error {
 	// }
 
 	// Create search criteria
-	criteria, err := internal.CreateSearchCriteria(fs, criteriaQueryFlag, criteriaGeoIDFlag, criteriaMaxPagesFlag)
+	criteria, err := internal.CreateSearchCriteria(ctx, fs, criteriaQueryFlag, criteriaGeoIDFlag, criteriaMaxPagesFlag)
 	if err != nil {
 		return fmt.Errorf("failed to create search criteria: %w", err)
 	}
@@ -160,7 +160,7 @@ func runDeleteCriteria(cmd *cobra.Command, args []string) error {
 	id := args[0]
 
 	// Delete search criteria
-	err = internal.DeleteSearchCriteria(fs, id)
+	err = internal.DeleteSearchCriteria(ctx, fs, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete search criteria: %w", err)
 	}
