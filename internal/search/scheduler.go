@@ -145,7 +145,7 @@ func (s *Scheduler) processSearches(ctx context.Context) {
 		return
 	}
 
-	items, err := internal.GetSearchCriteriaNeedsSearch(s.fs)
+	items, err := internal.GetSearchCriteriaNeedsSearch(ctx, s.fs)
 	if err != nil {
 		s.logger.Error("error getting search criteria", "error", err)
 		return

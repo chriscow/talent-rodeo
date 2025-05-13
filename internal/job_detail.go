@@ -200,6 +200,33 @@ func GetJobDetail(ctx context.Context, fs *FirestoreClient, id string) (*JobDeta
 	return &jobDetail, false, nil
 }
 
+func LinkJobDetailToCriteria(ctx context.Context, fs *FirestoreClient, criteriaID, jobID string) error {
+	if criteriaID == "" || jobID == "" {
+		return fmt.Errorf("criteriaID and jobID cannot be empty")
+	}
+
+	linkID := fmt.Sprintf("%s_%s", criteriaID, jobID)
+
+	linkRef := fs.Collection(JobCriteriaLinkCollection).Doc(linkID)
+
+	// Check if the link already exists
+	doc, err := linkRef.Get(ctx)
+	if err == nil && doc.Exists() {
+		// Link already exists, skip creation
+		return nil
+	}
+
+	// Create the link
+	link := JobDetailCriteriaLink{
+		CriteriaID: criteriaID,
+		JobID:      jobID,
+		CreatedAt:  time.Now(),
+	}
+
+	_, err = linkRef.Set(ctx, link)
+	return err
+}
+
 // linkJobToCriteria creates a link between a job and criteria
 func LinkJobDetailToCriteriaTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, criteriaID, jobID string) error {
 	if criteriaID == "" || jobID == "" {

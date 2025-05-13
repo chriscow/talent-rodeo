@@ -190,7 +190,7 @@ var listJobsCmd = &cobra.Command{
 		}
 
 		// User ID provided, list jobs for that user
-		jobs, err := internal.GetUserJobs(ctx, fs, userID)
+		jobs, err := internal.ListUserJobs(ctx, fs, userID)
 		if err != nil {
 			return fmt.Errorf("failed to get user jobs: %w", err)
 		}
@@ -303,7 +303,7 @@ var deleteJobCmd = &cobra.Command{
 
 		if prefix != "" {
 			// Delete all jobs with prefix
-			jobs, err := internal.GetUserJobs(ctx, fs, userID)
+			jobs, err := internal.ListUserJobs(ctx, fs, userID)
 			if err != nil {
 				return fmt.Errorf("failed to get user jobs: %w", err)
 			}
@@ -496,7 +496,7 @@ var deleteAllUserJobsCmd = &cobra.Command{
 
 		totalDeleted := 0
 		for _, user := range users {
-			jobs, err := internal.GetUserJobs(ctx, fs, user.ID)
+			jobs, err := internal.ListUserJobs(ctx, fs, user.ID)
 			if err != nil {
 				return fmt.Errorf("failed to get jobs for user %s: %w", user.ID, err)
 			}
