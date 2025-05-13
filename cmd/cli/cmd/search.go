@@ -127,7 +127,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		defer fs.Close()
 
 		// Get the criteria by ID
-		savedCriteria, found, err := internal.GetSearchCriteria(fs, searchCriteriaIDFlag)
+		savedCriteria, found, err := internal.GetSearchCriteria(ctx, fs, searchCriteriaIDFlag)
 		if err != nil {
 			return fmt.Errorf("failed to get saved criteria with ID %s: %w", searchCriteriaIDFlag, err)
 		}
