@@ -40,7 +40,7 @@ func SubscribeToCriteria(ctx context.Context, fs *FirestoreClient, userID, crite
 	}
 
 	// Check if the criteria exists
-	_, found, err := GetSearchCriteria(fs, criteriaID)
+	_, found, err := GetSearchCriteria(ctx, fs, criteriaID)
 	if err != nil {
 		return fmt.Errorf("criteria not found: %w", err)
 	}
@@ -84,8 +84,7 @@ func SubscribeToCriteria(ctx context.Context, fs *FirestoreClient, userID, crite
 }
 
 // UnsubscribeFromCriteria removes a user's subscription to a criteria
-func UnsubscribeFromCriteria(fs *FirestoreClient, userID, criteriaID string) error {
-	ctx := context.Background()
+func UnsubscribeFromCriteria(ctx context.Context, fs *FirestoreClient, userID, criteriaID string) error {
 
 	// Validate inputs
 	if userID == "" {
@@ -138,8 +137,7 @@ func UnsubscribeFromCriteria(fs *FirestoreClient, userID, criteriaID string) err
 }
 
 // GetSubscriptionsForUser retrieves all criteria a user is subscribed to
-func GetSubscriptionsForUser(fs *FirestoreClient, userID string) ([]SearchCriteriaSubscription, error) {
-	ctx := context.Background()
+func GetSubscriptionsForUser(ctx context.Context, fs *FirestoreClient, userID string) ([]SearchCriteriaSubscription, error) {
 
 	// Validate input
 	if userID == "" {
@@ -173,8 +171,7 @@ func GetSubscriptionsForUser(fs *FirestoreClient, userID string) ([]SearchCriter
 }
 
 // GetCriteriaSubscribers retrieves all users subscribed to a specific criteria
-func GetCriteriaSubscribers(fs *FirestoreClient, criteriaID string) ([]SearchCriteriaSubscription, error) {
-	ctx := context.Background()
+func GetCriteriaSubscribers(ctx context.Context, fs *FirestoreClient, criteriaID string) ([]SearchCriteriaSubscription, error) {
 
 	// Validate input
 	if criteriaID == "" {

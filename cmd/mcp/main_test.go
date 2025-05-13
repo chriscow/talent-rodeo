@@ -160,15 +160,15 @@ func TestListUserJobs(t *testing.T) {
 		t.Logf("Using test user ID: %s", testUserID)
 
 		// Test direct GetUserJobs function
-		jobs, err := internal.GetUserJobs(ctx, fs, testUserID)
+		jobs, err := internal.ListUserJobs(ctx, fs, testUserID)
 		if err != nil {
-			t.Fatalf("GetUserJobs failed: %v", err)
+			t.Fatalf("ListUserJobs failed: %v", err)
 		}
 
 		t.Logf("Direct call found %d jobs for user", len(jobs))
 		for i, job := range jobs {
 			if i < 5 { // Only log first 5 jobs to avoid excessive output
-				t.Logf("Job %d: ID=%s, Status=%s, Company=%s", i, job.ID, job.Status, job.CompanyName)
+				t.Logf("Job %d: ID=%s, Status=%s", i, job.ID, job.Status)
 			}
 		}
 

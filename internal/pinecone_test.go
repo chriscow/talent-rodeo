@@ -54,12 +54,12 @@ func TestGetSteeringVector(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 
-			got := NewSteeringQuery(tt.query, tt.model,
+			got, err := NewSteeringQuery(tt.query, tt.model,
 				WithMoveToward(tt.moveToward, tt.forceToward),
 				WithMoveAway(tt.moveAway, tt.forceAway))
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("GetSteeringVector() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("NewSteeringQuery() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 

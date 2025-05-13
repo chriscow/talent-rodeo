@@ -121,7 +121,7 @@ func TestUserCriteriaSubscription(t *testing.T) {
 
 	t.Run("GetUserCriteriaSubscriptions", func(t *testing.T) {
 		// Get subscriptions for the user
-		subscriptions, err := GetSubscriptionsForUser(fs, testUser.ID)
+		subscriptions, err := GetSubscriptionsForUser(ctx, fs, testUser.ID)
 		if err != nil {
 			t.Fatalf("GetUserCriteriaSubscriptions() error = %v", err)
 		}
@@ -154,21 +154,21 @@ func TestUserCriteriaSubscription(t *testing.T) {
 	})
 
 	t.Run("GetUserCriteriaSubscriptions_EmptyUserID", func(t *testing.T) {
-		_, err := GetSubscriptionsForUser(fs, "")
+		_, err := GetSubscriptionsForUser(ctx, fs, "")
 		if err == nil {
 			t.Fatal("GetUserCriteriaSubscriptions() with empty userID should return error")
 		}
 	})
 
 	t.Run("UnsubscribeFromCriteria_EmptyUserID", func(t *testing.T) {
-		err := UnsubscribeFromCriteria(fs, "", testCriteria.ID)
+		err := UnsubscribeFromCriteria(ctx, fs, "", testCriteria.ID)
 		if err == nil {
 			t.Fatal("UnsubscribeFromCriteria() with empty userID should return error")
 		}
 	})
 
 	t.Run("UnsubscribeUserFromCriteria_EmptyCriteriaID", func(t *testing.T) {
-		err := UnsubscribeFromCriteria(fs, testUser.ID, "")
+		err := UnsubscribeFromCriteria(ctx, fs, testUser.ID, "")
 		if err == nil {
 			t.Fatal("UnsubscribeFromCriteria() with empty criteriaID should return error")
 		}
@@ -232,7 +232,7 @@ func TestUserCriteriaUnsubscribe(t *testing.T) {
 		}
 
 		// Then unsubscribe
-		err = UnsubscribeFromCriteria(fs, testUser.ID, testCriteria.ID)
+		err = UnsubscribeFromCriteria(ctx, fs, testUser.ID, testCriteria.ID)
 		if err != nil {
 			t.Fatalf("UnsubscribeUserFromCriteria() error = %v", err)
 		}

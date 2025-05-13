@@ -123,7 +123,7 @@ func (s *JobSink) OnSearchCompleted(ctx context.Context, jobSearch SearchTask, t
 	nowUTC := time.Now().UTC()
 	criteria.LastSearchedAt = &nowUTC
 	criteria.LastSearchJobID = jobSearch.ID
-	UpdateSearchCriteria(s.fs, &criteria)
+	UpdateSearchCriteria(ctx, s.fs, &criteria)
 
 	jobDetails, err := GetJobDetailsForSearchTask(ctx, s.fs, jobSearch.ID)
 	if err != nil {
