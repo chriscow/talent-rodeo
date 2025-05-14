@@ -120,20 +120,10 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 
 	hub := sentry.GetHubFromContext(r.Context())
 
-	// This actually just starts a gorouting to process the appointment and
+	// This actually just starts a goroutine to process the appointment and
 	// doesn't return an error but we check anyway in case that changes
 	// in the future.
-	if err := transcript.ProcessCompletedAppointment(hub, app.fs, app.logger, appt); err != nil {
-		wrappedErr := fmt.Errorf("failed to process completed appointment: %w", err)
-		app.logger.Error("failed to process completed appointment", "error", err)
-
-		internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
-			"error_type":  "transcript_processing",
-			"entity_type": "appointment",
-		})
-
-		return wrappedErr
-	}
+	go transcript.ProcessCompletedAppointment(hub, app.fs, app.logger, appt)
 
 	app.SendUserStateUpdate(user)
 	return nil

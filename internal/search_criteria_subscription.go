@@ -30,7 +30,7 @@ type SearchCriteriaSubscription struct {
 }
 
 // SubscribeToCriteria creates a subscription for a user to a search criteria
-func SubscribeToCriteria(ctx context.Context, fs *FirestoreClient, userID, criteriaID, displayName string) error {
+func SubscribeToCriteria(ctx context.Context, fs *FirestoreClient, userID, criteriaID string) error {
 	// Validate inputs
 	if userID == "" {
 		return fmt.Errorf("user ID is required")
@@ -56,7 +56,6 @@ func SubscribeToCriteria(ctx context.Context, fs *FirestoreClient, userID, crite
 		UserID:       userID,
 		CriteriaID:   criteriaID,
 		SubscribedAt: time.Now(),
-		DisplayName:  displayName,
 	}
 
 	// Use a transaction to update both the subscription and increment the subscriber count

@@ -50,7 +50,7 @@ func TestUserCriteriaSubscription(t *testing.T) {
 	// Run tests
 	t.Run("SubscribeUserToCriteria", func(t *testing.T) {
 		// Test with valid inputs
-		err := SubscribeToCriteria(ctx, fs, testUser.ID, testCriteria.ID, "My Job Search")
+		err := SubscribeToCriteria(ctx, fs, testUser.ID, testCriteria.ID)
 		if err != nil {
 			t.Fatalf("SubscribeUserToCriteria() error = %v", err)
 		}
@@ -74,9 +74,6 @@ func TestUserCriteriaSubscription(t *testing.T) {
 		if subscription.CriteriaID != testCriteria.ID {
 			t.Errorf("CriteriaID = %v, want %v", subscription.CriteriaID, testCriteria.ID)
 		}
-		if subscription.DisplayName != "My Job Search" {
-			t.Errorf("DisplayName = %v, want %v", subscription.DisplayName, "My Job Search")
-		}
 		if subscription.SubscribedAt.IsZero() {
 			t.Error("SubscribedAt should not be zero")
 		}
@@ -99,21 +96,21 @@ func TestUserCriteriaSubscription(t *testing.T) {
 	})
 
 	t.Run("SubscribeUserToCriteria_EmptyUserID", func(t *testing.T) {
-		err := SubscribeToCriteria(ctx, fs, "", testCriteria.ID, "Display Name")
+		err := SubscribeToCriteria(ctx, fs, "", testCriteria.ID)
 		if err == nil {
 			t.Fatal("SubscribeUserToCriteria() with empty userID should return error")
 		}
 	})
 
 	t.Run("SubscribeUserToCriteria_EmptyCriteriaID", func(t *testing.T) {
-		err := SubscribeToCriteria(ctx, fs, testUser.ID, "", "Display Name")
+		err := SubscribeToCriteria(ctx, fs, testUser.ID, "")
 		if err == nil {
 			t.Fatal("SubscribeUserToCriteria() with empty criteriaID should return error")
 		}
 	})
 
 	t.Run("SubscribeUserToCriteria_NonExistentCriteria", func(t *testing.T) {
-		err := SubscribeToCriteria(ctx, fs, testUser.ID, "non-existent-criteria", "Display Name")
+		err := SubscribeToCriteria(ctx, fs, testUser.ID, "non-existent-criteria")
 		if err == nil {
 			t.Fatal("SubscribeUserToCriteria() with non-existent criteria should return error")
 		}
@@ -138,9 +135,6 @@ func TestUserCriteriaSubscription(t *testing.T) {
 				found = true
 				if sub.UserID != testUser.ID {
 					t.Errorf("UserID = %v, want %v", sub.UserID, testUser.ID)
-				}
-				if sub.DisplayName != "My Job Search" {
-					t.Errorf("DisplayName = %v, want %v", sub.DisplayName, "My Job Search")
 				}
 				if sub.SubscribedAt.IsZero() {
 					t.Error("SubscribedAt should not be zero")
@@ -226,7 +220,7 @@ func TestUserCriteriaUnsubscribe(t *testing.T) {
 	// Test unsubscribe functionality
 	t.Run("UnsubscribeUserFromCriteria", func(t *testing.T) {
 		// First subscribe the user
-		err := SubscribeToCriteria(ctx, fs, testUser.ID, testCriteria.ID, "Test Search")
+		err := SubscribeToCriteria(ctx, fs, testUser.ID, testCriteria.ID)
 		if err != nil {
 			t.Fatalf("Failed to subscribe user: %v", err)
 		}

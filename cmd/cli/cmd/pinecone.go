@@ -175,7 +175,7 @@ var similaritySearchCmd = &cobra.Command{
 			return fmt.Errorf("user ID is required")
 		}
 
-		_, found, err := internal.GetUser(ctx, fs, userID)
+		user, found, err := internal.GetUser(ctx, fs, userID)
 		if err != nil {
 			return fmt.Errorf("failed to get user: %w", err)
 		}
@@ -183,18 +183,16 @@ var similaritySearchCmd = &cobra.Command{
 			return fmt.Errorf("user not found: %s", userID)
 		}
 
-		appt, found, err := internal.GetLatestCompletedAppointment(ctx, fs, userID)
+		subscriptions, err := internal.GetSubscriptionsForUser(ctx, fs, user.ID)
 		if err != nil {
-			return fmt.Errorf("failed to get latest completed appointment: %w", err)
-		}
-		if !found {
-			return fmt.Errorf("no completed appointment found for user: %s", userID)
+			return fmt.Errorf("failed to get subscriptions: %w", err)
 		}
 
-		jobDesc := appt.ExtractedData.JobDescription
-		if jobDesc == nil || *jobDesc == "" {
-			return fmt.Errorf("no job description found for user: %s", userID)
+		if len(subscriptions) == 0 {
+			return fmt.Errorf("no subscriptions found for user: %s", userID)
 		}
+
+		sub := subscriptions[0]
 
 		// Validate flags
 		if !denseIndex && !sparseIndex && indexHost == "" {
@@ -212,24 +210,42 @@ var similaritySearchCmd = &cobra.Command{
 
 		// Determine which index host to use
 		var host string
+		var vector []float32
 		if indexHost != "" {
 			// Use the explicitly provided host
 			host = indexHost
+			vector, err = user.SteeringQuery.GetVector(ctx, client, internal.PineconeEmbedDense)
+			if err != nil {
+				return fmt.Errorf("failed to get vector: %w", err)
+			}
 		} else if denseIndex {
 			// Use dense index from environment
 			host = os.Getenv("PINECONE_DENSE_INDEX_HOST")
 			if host == "" {
 				return fmt.Errorf("PINECONE_DENSE_INDEX_HOST is not set")
 			}
+			vector, err = user.SteeringQuery.GetVector(ctx, client, internal.PineconeEmbedDense)
+			if err != nil {
+				return fmt.Errorf("failed to get vector: %w", err)
+			}
+
 		} else if sparseIndex {
 			// Use sparse index from environment
 			host = os.Getenv("PINECONE_SPARSE_INDEX_HOST")
 			if host == "" {
 				return fmt.Errorf("PINECONE_SPARSE_INDEX_HOST is not set")
 			}
+			vector, err = user.SteeringQuery.GetVector(ctx, client, internal.PineconeEmbedSparse)
+			if err != nil {
+				return fmt.Errorf("failed to get vector: %w", err)
+			}
 		}
 
-		res, err := client.SearchRecords(ctx, host, namespace, *jobDesc, internal.WithTopK(topK))
+		filter := map[string]any{
+			"criteriaID": sub.CriteriaID,
+		}
+
+		res, err := client.QueryByVector(ctx, host, namespace, vector, internal.WithFilter(filter), internal.WithTopK(topK))
 		if err != nil {
 			return fmt.Errorf("search failed: %w", err)
 		}

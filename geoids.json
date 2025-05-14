@@ -1,0 +1,78 @@
+[
+  {
+    "Value": "United States",
+    "id": "103644278"
+  },
+  {
+    "Value": "Greater Boston Area",
+    "id": "90000007"
+  },
+  {
+    "Value": "Greater Chicago Area",
+    "id": "90000014"
+  },
+  {
+    "Value": "Greater Dallas-Fort Worth Area",
+    "id": "90000031"
+  },
+  {
+    "Value": "Greater Denver Area",
+    "id": "90000034"
+  },
+  {
+    "Value": "Greater Detroit Area",
+    "id": "90000035"
+  },
+  {
+    "Value": "Greater Houston Area",
+    "id": "90000042"
+  },
+  {
+    "Value": "Greater Los Angeles Area",
+    "id": "90000049"
+  },
+  {
+    "Value": "Greater Atlanta Area",
+    "id": "90000052"
+  },
+  {
+    "Value": "Greater Miami Area",
+    "id": "90000056"
+  },
+  {
+    "Value": "Greater New York Area",
+    "id": "90000070"
+  },
+  {
+    "Value": "Greater Philadelphia Area",
+    "id": "90000077"
+  },
+  {
+    "Value": "Greater San Francisco Area",
+    "id": "90000084"
+  },
+  {
+    "Value": "Greater Seattle Area",
+    "id": "90000091"
+  },
+  {
+    "Value": "Greater Baltimore Area",
+    "id": "90000097"
+  },
+  {
+    "Value": "Greater Minneapolis-St. Paul Area",
+    "id": "90000512"
+  },
+  {
+    "Value": "Greater Phoenix Area",
+    "id": "90000620"
+  },
+  {
+    "Value": "Greater Tampa Area",
+    "id": "90000828"
+  },
+  {
+    "Value": "Greater San Diego Area",
+    "id": "90010472"
+  }
+]

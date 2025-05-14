@@ -2,7 +2,13 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
+	"talent-rodeo/assets"
+
+	"github.com/chriscow/minds/tools"
+	"github.com/getsentry/sentry-go"
 )
 
 // SteeringQuery encapsulates all parameters needed for semantic steering of queries
@@ -23,16 +29,10 @@ type SteeringQuery struct {
 	// ForceAway determines how strongly to move away from the avoid concept (0.0-1.0)
 	// Only used if MoveAway is set
 	ForceAway float64
-
-	// Model is the embedding model to use for vectorization
-	Model PineconeEmbedModel
 }
 
 // Validate checks if the steering query parameters are valid
 func (sq SteeringQuery) Validate() error {
-	if sq.Model == "" {
-		return fmt.Errorf("model cannot be empty")
-	}
 	if sq.Query == "" {
 		return fmt.Errorf("query cannot be empty")
 	}
@@ -65,7 +65,6 @@ func NewSteeringQuery(query string, model PineconeEmbedModel, opts ...SteeringOp
 
 	sq := &SteeringQuery{
 		Query: query,
-		Model: model,
 	}
 
 	for _, opt := range opts {
@@ -91,15 +90,8 @@ func WithMoveAway(concept string, force float64) SteeringOption {
 	}
 }
 
-// WithModel sets the embedding model
-func WithModel(model PineconeEmbedModel) SteeringOption {
-	return func(sq *SteeringQuery) {
-		sq.Model = model
-	}
-}
-
 // Updated GetSteeringVector method to use SteeringQuery with optional fields
-func (q *SteeringQuery) GetVector(ctx context.Context, p *Pinecone) ([]float32, error) {
+func (q *SteeringQuery) GetVector(ctx context.Context, p *Pinecone, model PineconeEmbedModel) ([]float32, error) {
 	// Validate the query
 	if err := q.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid steering query: %w", err)
@@ -115,7 +107,7 @@ func (q *SteeringQuery) GetVector(ctx context.Context, p *Pinecone) ([]float32, 
 	}
 
 	// Create embeddings for all concepts in one call
-	embedResp, err := p.CreateEmbeddings(ctx, texts, q.Model)
+	embedResp, err := p.CreateEmbeddings(ctx, texts, model)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create embeddings: %w", err)
 	}
@@ -156,73 +148,61 @@ func (q *SteeringQuery) GetVector(ctx context.Context, p *Pinecone) ([]float32, 
 	return modifiedVector, nil
 }
 
-// Example usage:
-/*
-func example(p *Pinecone, ctx context.Context) {
-	// Basic query without any steering
-	query0 := NewSteeringQuery(
-		"machine learning",
-		PineconeEmbedModel3Small,
-	)
-
-	vector0, err := p.GetSteeringVector(ctx, query0)
+func GenerateSteeringQuery(ctx context.Context, transcript *Transcript, opts ...tools.Option) (*SteeringQuery, error) {
+	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/transcript-010-steering-query.txt")
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("failed to read steering query prompt: %w", err)
 	}
 
-	// Only moving toward
-	query1 := NewSteeringQuery(
-		"python programming",
-		PineconeEmbedModel3Small,
-		WithMoveToward("web development", 0.5),
-	)
+	prompt := `<transcript>` + transcript.String() + `</transcript>`
 
-	vector1, err := p.GetSteeringVector(ctx, query1)
+	options := []tools.Option{
+		tools.WithSystemMessage(string(tmpl)),
+		tools.WithModel(tools.DeepSeekChat),
+		tools.WithMaxTokens(2000),
+	}
+
+	if len(opts) > 0 {
+		options = append(options, opts...)
+	}
+
+	data, err := tools.Ask(ctx, prompt, options...)
 	if err != nil {
-		log.Fatal(err)
+		SentryReportError(ctx, err, sentry.LevelError, nil)
+		return nil, fmt.Errorf("failed to ask LLM: %w", err)
 	}
 
-	// Only moving away
-	query2 := NewSteeringQuery(
-		"restaurants",
-		PineconeEmbedModel3Small,
-		WithMoveAway("fast food", 0.7),
-	)
-
-	vector2, err := p.GetSteeringVector(ctx, query2)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Both directions
-	query3 := NewSteeringQuery(
-		"programming tutorials",
-		PineconeEmbedModel3Small,
-		WithMoveToward("beginner friendly", 0.6),
-		WithMoveAway("advanced topics", 0.4),
-	)
-
-	vector3, err := p.GetSteeringVector(ctx, query3)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Manual creation with only one direction
-	query4 := &SteeringQuery{
-		Query:       "cooking recipes",
-		MoveToward:  StringPtr("healthy eating"),
-		ForceToward: 0.8,
-		Model:       PineconeEmbedModel3Small,
-	}
-
-	vector4, err := p.GetSteeringVector(ctx, query4)
-	if err != nil {
-		log.Fatal(err)
-	}
+	return extractSteeringQuery(ctx, data)
 }
 
-// Helper function if you don't have one
-func StringPtr(s string) *string {
-	return &s
+func extractSteeringQuery(ctx context.Context, data string) (*SteeringQuery, error) {
+	if strings.Contains(data, "<answer>") && strings.Contains(data, "</answer>") {
+		// Extract the string between the <answer> tags
+		// and remove the tags
+		start := strings.Index(data, "<answer>")
+		if start == -1 {
+			return nil, fmt.Errorf("failed to generate steering query: <answer> tag not found")
+		}
+		end := strings.Index(data, "</answer>")
+		if end == -1 {
+			return nil, fmt.Errorf("failed to generate steering query: </answer> tag not found")
+		}
+		if end < start {
+			return nil, fmt.Errorf("failed to generate steering query: </answer> tag is before <answer> tag")
+		}
+		// Extract the JSON data between the tags
+		data = data[start+len("<answer>") : end]
+	}
+
+	var query SteeringQuery
+	err := json.Unmarshal([]byte(data), &query)
+	if err != nil {
+		query, err = tools.StructuredAsk[SteeringQuery](ctx, "steering-query", "extract the data into this JSON structure\r\n"+string(data), tools.WithModel(tools.GPT41Nano))
+		if err != nil {
+			SentryReportError(ctx, err, sentry.LevelError, nil)
+			return nil, fmt.Errorf("failed to parse steering query: %w", err)
+		}
+	}
+
+	return &query, nil
 }
-*/

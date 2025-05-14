@@ -71,7 +71,7 @@ func TestGetSteeringVector(t *testing.T) {
 				}
 
 				// Check vector length (should be non-zero)
-				vector, err := got.GetVector(ctx, p)
+				vector, err := got.GetVector(ctx, p, tt.model)
 				if err != nil {
 					t.Errorf("GetSteeringVector() returned error: %v", err)
 					return

@@ -5,6 +5,26 @@ import (
 	"testing"
 )
 
+func TestExtractGeoID(t *testing.T) {
+	ctx := context.Background()
+
+	client, err := NewFirestoreClient(ctx)
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+	defer client.Close()
+
+	got, err := ExtractGeoID(ctx, client, "I'm looking for a job in San Francisco")
+	if err != nil {
+		t.Fatalf("Failed to extract geo ID: %v", err)
+	}
+
+	want := "90000084"
+	if got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+}
+
 func TestPopulateGeoIDs(t *testing.T) {
 	ctx := context.Background()
 

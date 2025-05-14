@@ -2,11 +2,14 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
+	"github.com/chriscow/minds/tools"
 	"google.golang.org/api/iterator"
 )
 
-const geoIDCollection = "geo-ids"
+const geoIDCollection = "geo_ids"
 
 // GeoID represents a geographic location identifier
 // Note: After the reversal operation, ID contains what was previously in Value field
@@ -61,4 +64,41 @@ func GetGeoIDKeys(ctx context.Context, fs *FirestoreClient) ([]string, error) {
 		keys = append(keys, geoID.ID)
 	}
 	return keys, nil
+}
+
+func ExtractGeoID(ctx context.Context, fs *FirestoreClient, data string) (string, error) {
+	geoids, err := ListGeoIDs(ctx, fs)
+	if err != nil {
+		return "", err
+	}
+
+	if len(geoids) == 0 {
+		return "", fmt.Errorf("no geoids found")
+	}
+
+	geoidJSON, err := json.Marshal(geoids)
+	if err != nil {
+		return "", err
+	}
+
+	type result struct {
+		ID string `json:"id"`
+	}
+
+	prompt := `Evaaluate the following statement and determine the ID of the location
+	closest and most relevant to the statement. If you cannot determine the location,
+	select ID "103644278" which is "Remote" or "United States"
+
+	Geoids:
+	%s
+
+	Statement: %s
+	`
+
+	res, err := tools.StructuredAsk[result](ctx, "location-id", fmt.Sprintf(prompt, string(geoidJSON), data), tools.WithModel(tools.GPT41Nano))
+	if err != nil {
+		return "", err
+	}
+
+	return res.ID, nil
 }
