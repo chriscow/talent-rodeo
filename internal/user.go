@@ -201,7 +201,8 @@ func SetUserSteeringQuery(ctx context.Context, fs *FirestoreClient, id string, s
 func SetUserWorkPreferences(ctx context.Context, fs *FirestoreClient, id string, wp string) error {
 	// if the work preferences is not valid, return an error
 	if len(wp) > 1000 {
-		return fmt.Errorf("work preferences is too long")
+		println("work preferences is too long", len(wp))
+		println(wp)
 	}
 
 	fsUpdates := []firestore.Update{

@@ -13,10 +13,6 @@ import (
 const (
 	// defaultSearchTickInterval = 15 * time.Minute
 	defaultSearchTickInterval = 5 * time.Second
-
-	FreeTierFrequency       = 72 * time.Hour // 3 days
-	ProTierFrequency        = 24 * time.Hour // 1 day
-	EnterpriseTierFrequency = 4 * time.Hour  // 4 hours
 )
 
 // Mailer interface for sending notifications
