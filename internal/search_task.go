@@ -33,6 +33,27 @@ type SearchTask struct {
 }
 
 func CreateSearchTask(ctx context.Context, fs *FirestoreClient, criteria SearchCriteria, provider string) (*SearchTask, error) {
+	// Check for existing active tasks for this criteria
+	activeTasks := fs.Collection(SearchTaskCollection).
+		Where("Criteria.ID", "==", criteria.ID).
+		Where("Status", "in", []SearchTaskStatus{SearchTaskStatusQueued, SearchTaskStatusProcessing})
+
+	iter := activeTasks.Documents(ctx)
+	defer iter.Stop()
+
+	// If we find any document, there's already an active task
+	if doc, err := iter.Next(); err != iterator.Done {
+		if err != nil {
+			return nil, fmt.Errorf("error checking for existing tasks: %w", err)
+		}
+		// Task already exists, return it instead of creating a new one
+		existingTask := &SearchTask{}
+		if err := doc.DataTo(existingTask); err != nil {
+			return nil, fmt.Errorf("error parsing existing task: %w", err)
+		}
+		return existingTask, nil
+	}
+
 	nowUTC := time.Now().UTC()
 	jobSearch := &SearchTask{
 		ID:        uuid.New().String(),
@@ -74,8 +95,6 @@ func GetIncompleteSearchTasks(ctx context.Context, fs *FirestoreClient) ([]*Sear
 }
 
 func SetSearchTaskStatus(ctx context.Context, fs *FirestoreClient, id string, status SearchTaskStatus) error {
-	println("SetSearchTaskStatus", id, status)
-
 	now := time.Now().UTC()
 	fsUpdates := []firestore.Update{
 		{
