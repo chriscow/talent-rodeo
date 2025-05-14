@@ -19,15 +19,16 @@ import (
 )
 
 const (
-	resumeCollection               = "resumes"
-	resumeAnnotationPromptTemplate = "prompts/resume-annotation.001.txt"
-	resumeSearchAnalysisTemplate   = "prompts/resume-search-analysis.001.txt"
+	resumeCollection             = "resumes"
+	resumeAnalysisPrompt         = "prompts/resume-analysis.txt"
+	resumeAnalysisExamples       = "prompts/resume-analysis.examples.txt"
+	resumeSearchAnalysisTemplate = "prompts/resume-search-analysis.001.txt"
 )
 
 type annotatedResume struct {
-	Analysis    string
-	IsResume    bool
-	YAMLSummary *string
+	Analysis string
+	IsResume bool
+	Summary  *string
 }
 
 type ErrResumeExists struct {
@@ -182,7 +183,7 @@ func AnnotateResume(ctx context.Context, fs *FirestoreClient, logger *slog.Logge
 	}
 
 	resume.IsValid = analysis.IsResume
-	resume.Annotated = analysis.YAMLSummary
+	resume.Annotated = analysis.Summary
 	resume.Analysis = &analysis.Analysis
 	resume.UpdatedAt = time.Now()
 	resume.SearchAnalysis = &searchAnalysis
@@ -283,21 +284,113 @@ func DeleteResume(ctx context.Context, fs *FirestoreClient, userID string, resum
 }
 
 func getAnnotatedResume(ctx context.Context, resume Resume) (*annotatedResume, error) {
-	tmpl, err := assets.EmbeddedFiles.ReadFile(resumeAnnotationPromptTemplate)
+	sysPrompt, err := assets.EmbeddedFiles.ReadFile(resumeAnalysisPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("convertResume: failed to read resume annotation prompt template: %w", err)
 	}
 
-	prompt, err := tools.GeneratePrompt(tmpl, nil)
+	examples, err := assets.EmbeddedFiles.ReadFile(resumeAnalysisExamples)
 	if err != nil {
-		return nil, fmt.Errorf("convertResume: failed to generate prompt: %w", err)
+		return nil, fmt.Errorf("convertResume: failed to read resume analysis examples: %w", err)
 	}
 
-	result, err := tools.StructuredAsk[annotatedResume](ctx, "resume-annotation", prompt)
+	sysPrompt = append(sysPrompt, examples...)
+
+	analysis, err := tools.Ask(ctx, resume.RawText, tools.WithSystemMessage(string(sysPrompt)), tools.WithModel(tools.DeepSeekChat), tools.WithMaxTokens(4096))
 	if err != nil {
 		return nil, fmt.Errorf("convertResume: failed to ask LLM: %w", err)
 	}
-	return &result, nil
+
+	extract, err := extractResumeAnalysis(analysis)
+	if err != nil {
+		return extractResumeAnalysisLLM(ctx, analysis)
+	}
+
+	return extract, nil
+}
+
+func extractResumeAnalysisLLM(ctx context.Context, analysis string) (*annotatedResume, error) {
+	prompt := "Extract the resume analysis from the following text: " + analysis
+
+	res, err := tools.StructuredAsk[annotatedResume](ctx, "resume_analysis", prompt, tools.WithModel(tools.GPT41Nano), tools.WithMaxTokens(4096))
+	if err != nil {
+		return nil, fmt.Errorf("convertResume: failed to ask LLM: %w", err)
+	}
+
+	return &res, nil
+}
+
+func extractResumeAnalysis(analysis string) (*annotatedResume, error) {
+	var isValidResume string
+	var resumeBreakdown string
+	var summary string
+
+	if strings.Contains(analysis, "<resume_analysis>") && strings.Contains(analysis, "</resume_analysis>") {
+		// Extract the string between the <resume_analysis> tags
+		// and remove the tags
+		start := strings.Index(analysis, "<resume_analysis>")
+		if start == -1 {
+			return nil, fmt.Errorf("failed to extract resume analysis: <resume_analysis> tag not found")
+		}
+		end := strings.Index(analysis, "</resume_analysis>")
+		if end == -1 {
+			return nil, fmt.Errorf("failed to extract resume analysis: </resume_analysis> tag not found")
+		}
+		if end < start {
+			return nil, fmt.Errorf("failed to extract resume analysis: </resume_analysis> tag is before <resume_analysis> tag")
+		}
+		analysis = analysis[start+len("<resume_analysis>") : end]
+
+		if strings.Contains(analysis, "<is_valid_resume>") && strings.Contains(analysis, "</is_valid_resume>") {
+			start = strings.Index(analysis, "<is_valid_resume>")
+			if start == -1 {
+				return nil, fmt.Errorf("failed to extract resume analysis: <is_valid_resume> tag not found")
+			}
+			end = strings.Index(analysis, "</is_valid_resume>")
+			if end == -1 {
+				return nil, fmt.Errorf("failed to extract resume analysis: </is_valid_resume> tag not found")
+			}
+			if end < start {
+				return nil, fmt.Errorf("failed to extract resume analysis: </is_valid_resume> tag is before <is_valid_resume> tag")
+			}
+			isValidResume = analysis[start+len("<is_valid_resume>") : end]
+		}
+
+		if strings.Contains(analysis, "<resume_breakdown>") && strings.Contains(analysis, "</resume_breakdown>") {
+			start = strings.Index(analysis, "<resume_breakdown>")
+			if start == -1 {
+				return nil, fmt.Errorf("failed to extract resume analysis: <resume_breakdown> tag not found")
+			}
+			end = strings.Index(analysis, "</resume_breakdown>")
+			if end == -1 {
+				return nil, fmt.Errorf("failed to extract resume analysis: </resume_breakdown> tag not found")
+			}
+			if end < start {
+				return nil, fmt.Errorf("failed to extract resume analysis: </resume_breakdown> tag is before <resume_breakdown> tag")
+			}
+			resumeBreakdown = analysis[start+len("<resume_breakdown>") : end]
+		}
+
+		if strings.Contains(analysis, "<summary>") && strings.Contains(analysis, "</summary>") {
+			start = strings.Index(analysis, "<summary>")
+			if start == -1 {
+				return nil, fmt.Errorf("failed to extract resume analysis: <summary> tag not found")
+			}
+			end = strings.Index(analysis, "</summary>")
+			if end == -1 {
+				return nil, fmt.Errorf("failed to extract resume analysis: </summary> tag not found")
+			}
+			summary = analysis[start+len("<summary>") : end]
+		}
+
+		return &annotatedResume{
+			IsResume: isValidResume == "true",
+			Analysis: resumeBreakdown,
+			Summary:  &summary,
+		}, nil
+	}
+
+	return nil, fmt.Errorf("failed to extract resume analysis: <resume_analysis> tag not found")
 }
 
 func getResumeSearchAnalysis(ctx context.Context, resume Resume) (string, error) {
@@ -313,11 +406,11 @@ func getResumeSearchAnalysis(ctx context.Context, resume Resume) (string, error)
 		return "", fmt.Errorf("convertResume: failed to generate prompt: %w", err)
 	}
 
-	return tools.Ask(ctx, prompt)
+	return tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat))
 }
 
 // getResumeAnalysisTestMode simulates resume annotation in test mode
-func getResumeAnalysisTestMode(ctx context.Context, resume Resume) (*annotatedResume, error) {
+func getResumeAnalysisTestMode(_ context.Context, _ Resume) (*annotatedResume, error) {
 	// Simulate processing delay
 	time.Sleep(2 * time.Second)
 

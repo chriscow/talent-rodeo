@@ -55,7 +55,7 @@ explicitly stated or strongly implied by the candidate's words.
 First, review the following transcript of the conversation:
 
 <extracted_data>
-{{.TranscriptExtract}}
+{{.Transcript}}
 </extracted_data>
 
 Now, review the list of U.S. metropolitan areas:

@@ -209,9 +209,7 @@ var reprocessCmd = &cobra.Command{
 		}
 
 		// Process the appointment
-		if err := transcript.ProcessCompletedAppointment(hub, fs, logger, appointment); err != nil {
-			return fmt.Errorf("failed to process appointment: %w", err)
-		}
+		transcript.ProcessCompletedAppointment(hub, fs, logger, appointment)
 
 		fmt.Printf("Started reprocessing appointment %s\n", appointmentID)
 

@@ -188,7 +188,9 @@ func (p *Processor) process(ctx context.Context) error {
 		eligibleCriteria = append(eligibleCriteria, criteria)
 	}
 
-	p.logger.Info("Found eligible criteria for processing", "count", len(eligibleCriteria))
+	if len(eligibleCriteria) > 0 {
+		p.logger.Info("found eligible criteria for processing", "count", len(eligibleCriteria))
+	}
 
 	// Process each eligible criterion
 	for _, criteria := range eligibleCriteria {

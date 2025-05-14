@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"talent-rodeo/assets"
 	"talent-rodeo/internal/funcs"
@@ -60,16 +61,16 @@ type Appointment struct {
 	Notes       *string
 
 	// New fields for storing promptLLM responses
-	ExtractedData *ExtractedData
+	// ExtractedData *ExtractedData
 }
 
-type ExtractedData struct {
-	TranscriptExtract *string
-	WorkPreferences   *string
-	SearchQueries     []string
-	UserStatement     *string
-	JobDescription    *string
-}
+// type ExtractedData struct {
+// 	TranscriptExtract *string
+// 	WorkPreferences   *string
+// 	SearchQueries     []string
+// 	UserStatement     *string
+// 	JobDescription    *string
+// }
 
 func CreateAppointment(ctx context.Context, fs *FirestoreClient, userID string, appointment *Appointment) error {
 	// Validate user exists first
@@ -248,6 +249,21 @@ func CancelAppointment(ctx context.Context, fs *FirestoreClient, userID string, 
 	return nil
 }
 
+func GetAppointmentTranscript(ctx context.Context, fs *FirestoreClient, appointment Appointment) (*Transcript, error) {
+	// Check if the appointment has a call ID
+	if appointment.CallID == nil {
+		return nil, fmt.Errorf("appointment does not have a call ID")
+	}
+
+	// Get the call from VAPI
+	call, err := vapi.GetCall(ctx, *appointment.CallID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get call from VAPI: %w", err)
+	}
+
+	return NewTranscriptFromCallResult(*call), nil
+}
+
 // MapVapiEndReasonToAppointmentStatus maps a VAPI call end reason to our appointment status
 // and returns both the status and whether the reason should be stored in OtherStatus
 func MapVapiEndReasonToAppointmentStatus(endReason string) (string, bool) {
@@ -330,7 +346,7 @@ func MarkAppointmentAsProcessing(ctx context.Context, fs *FirestoreClient, appoi
 }
 
 // When processing is complete, remove from tracking collection
-func CompleteProcessing(ctx context.Context, fs *FirestoreClient, appointment *Appointment) error {
+func ProcessAppointmentComplete(ctx context.Context, fs *FirestoreClient, appointment *Appointment) error {
 	return fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		// Update appointment status
 		appointment.Status = AppointmentStatusCompleted
@@ -348,6 +364,37 @@ func CompleteProcessing(ctx context.Context, fs *FirestoreClient, appointment *A
 
 		if err := tx.Delete(processingRef); err != nil {
 			return fmt.Errorf("failed to delete processing reference in transaction: %w", err)
+		}
+
+		return nil
+	})
+}
+
+func ProcessAppointmentFailed(ctx context.Context, fs *FirestoreClient, user *User, appointment *Appointment, err error) error {
+	return fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		// Update appointment status
+		appointment.Status = AppointmentStatusFailed
+		appointment.UpdatedAt = time.Now()
+		appointment.FailedAt = &appointment.UpdatedAt
+
+		// Get references to both documents we need to update/delete
+		appointmentRef := fs.Collection(usersCollection).Doc(appointment.UserID).Collection(appointmentsCollection).Doc(appointment.ID)
+		processingRef := fs.Collection(processingAppointmentsCollection).Doc(appointment.ID)
+		userRef := fs.Collection(usersCollection).Doc(user.ID)
+
+		// Within the transaction, update the appointment and delete the processing reference
+		if err := tx.Set(appointmentRef, appointment); err != nil {
+			return fmt.Errorf("failed to update appointment in transaction: %w", err)
+		}
+
+		if err := tx.Delete(processingRef); err != nil {
+			return fmt.Errorf("failed to delete processing reference in transaction: %w", err)
+		}
+
+		err := err.Error()
+		user.State.Error = &err
+		if err := tx.Set(userRef, user); err != nil {
+			return fmt.Errorf("failed to update user state with error: %w", err)
 		}
 
 		return nil
@@ -413,49 +460,45 @@ func GenerateJobDescription(ctx context.Context, resume Resume, appointment Appo
 	return desc, nil
 }
 
-func GenerateSearchQueries(ctx context.Context, resume Resume, appointment Appointment) ([]string, error) {
-	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/transcript-040-search.txt")
-	if err != nil {
-		return nil, fmt.Errorf("failed to read search prompt: %w", err)
-	}
+// func GenerateSearchQueries(ctx context.Context, resume Resume, appointment Appointment) ([]string, error) {
+// 	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/transcript-040-search.txt")
+// 	if err != nil {
+// 		return nil, fmt.Errorf("failed to read search prompt: %w", err)
+// 	}
 
-	prompt, err := tools.GeneratePrompt(tmpl, map[string]any{
-		"TranscriptExtract":     appointment.ExtractedData,
-		"InitialSearchAnalysis": resume.SearchAnalysis,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate prompt: %w", err)
-	}
+// 	prompt, err := tools.GeneratePrompt(tmpl, map[string]any{
+// 		"TranscriptExtract":     appointment.ExtractedData,
+// 		"InitialSearchAnalysis": resume.SearchAnalysis,
+// 	})
+// 	if err != nil {
+// 		return nil, fmt.Errorf("failed to generate prompt: %w", err)
+// 	}
 
-	result, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat))
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate search queries: %w", err)
-	}
+// 	result, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat))
+// 	if err != nil {
+// 		return nil, fmt.Errorf("failed to generate search queries: %w", err)
+// 	}
 
-	type searchQueries struct {
-		Queries []string `json:"search-queries" description:"A list of search queries from the primary and additional queries to use for the job description search"`
-	}
+// 	type searchQueries struct {
+// 		Queries []string `json:"search-queries" description:"A list of search queries from the primary and additional queries to use for the job description search"`
+// 	}
 
-	queries, err := tools.StructuredAsk[searchQueries](ctx, "search-queries", `Extract a list of search queries from the following text: `+result, tools.WithModel(tools.GPT41Nano))
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate search queries: %w", err)
-	}
+// 	queries, err := tools.StructuredAsk[searchQueries](ctx, "search-queries", `Extract a list of search queries from the following text: `+result, tools.WithModel(tools.GPT41Nano))
+// 	if err != nil {
+// 		return nil, fmt.Errorf("failed to generate search queries: %w", err)
+// 	}
 
-	return queries.Queries, nil
-}
+// 	return queries.Queries, nil
+// }
 
 // ListAppointmentsNeedingProcessing retrieves all appointments that are currently marked as processing
-func ListAppointmentsNeedingProcessing(ctx context.Context, fs *FirestoreClient) ([]*Appointment, error) {
+func ListAppointmentsNeedingProcessing(ctx context.Context, fs *FirestoreClient, logger *slog.Logger) ([]*Appointment, error) {
 	var appointments []*Appointment
 	var orphanedRefs []string
-
-	println(Blue("Listing appointments needing processing"))
 
 	// Query the processing tracking collection directly
 	iter := fs.Collection(processingAppointmentsCollection).Documents(ctx)
 	for {
-		println(Blue("Processing appointment"))
-
 		doc, err := iter.Next()
 		if err == iterator.Done {
 			break
@@ -464,11 +507,10 @@ func ListAppointmentsNeedingProcessing(ctx context.Context, fs *FirestoreClient)
 			return nil, fmt.Errorf("failed to iterate processing appointments: %w", err)
 		}
 
-		println(Blue("Parsing processing reference"))
 		// Parse the processing reference using our struct
 		var procRef processingAppointment
 		if err := doc.DataTo(&procRef); err != nil {
-			fmt.Printf(BGYellow("WARNING: Failed to parse processing reference %s: %v\n"), doc.Ref.ID, err)
+			logger.Warn(BGYellow("failed to parse processing reference %s: %v\n"), doc.Ref.ID, err)
 			orphanedRefs = append(orphanedRefs, doc.Ref.ID)
 			continue
 		}
@@ -479,41 +521,31 @@ func ListAppointmentsNeedingProcessing(ctx context.Context, fs *FirestoreClient)
 		appointment, err := GetAppointment(ctx, fs, procRef.UserID, procRef.AppointmentID)
 		if err != nil {
 			// Log the orphaned reference with more visibility
-			fmt.Printf(BGYellow("WARNING: Orphaned processing reference found: %s for user %s - %v\n"), procRef.AppointmentID, procRef.UserID, err)
+			logger.Warn(BGYellow("orphaned processing reference found"), "appointmentID", procRef.AppointmentID, "userID", procRef.UserID, "error", err)
 
 			// Add to list of orphaned references to clean up
 			orphanedRefs = append(orphanedRefs, doc.Ref.ID)
 			continue
 		}
 
-		println(Blue("Appointment found"))
-
 		appointments = append(appointments, appointment)
 	}
 
-	println(Blue("Cleaning up orphaned references"))
-
 	// Clean up orphaned references synchronously
 	if len(orphanedRefs) > 0 {
-		fmt.Printf("INFO: Found %d orphaned processing references that need cleanup\n", len(orphanedRefs))
-		cleanupOrphanedProcessingRefs(ctx, fs, orphanedRefs)
+		logger.Warn("found orphaned processing references that need cleanup", "count", len(orphanedRefs))
+		cleanupOrphanedProcessingRefs(ctx, fs, logger, orphanedRefs)
 	}
-
-	println(Blue("Returning appointments"))
 
 	return appointments, nil
 }
 
 // cleanupOrphanedProcessingRefs removes references to appointments that no longer exist
-func cleanupOrphanedProcessingRefs(ctx context.Context, fs *FirestoreClient, refIDs []string) {
+func cleanupOrphanedProcessingRefs(ctx context.Context, fs *FirestoreClient, logger *slog.Logger, refIDs []string) {
 	for _, refID := range refIDs {
-		fmt.Printf("INFO: Cleaning up orphaned processing reference: %s\n", refID)
 		_, err := fs.Collection(processingAppointmentsCollection).Doc(refID).Delete(ctx)
 		if err != nil {
-			fmt.Printf("ERROR: Failed to clean up orphaned processing reference %s: %v\n", refID, err)
-		} else {
-			fmt.Printf("SUCCESS: Cleaned up orphaned processing reference: %s\n", refID)
+			logger.Error("failed to clean up orphaned processing reference", "refID", refID, "error", err)
 		}
 	}
-	fmt.Printf("INFO: Completed cleanup of %d orphaned processing references\n", len(refIDs))
 }

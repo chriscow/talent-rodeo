@@ -234,9 +234,7 @@ func handleEndOfCallReport(r *http.Request, app *application, msg []byte) error 
 
 	customerID := report.Call.Customer.Name
 
-	if err := app.processCompletedAppointment(r, customerID, appointmentID, *envelope); err != nil {
-		return fmt.Errorf("failed to process completed appointment: %w", err)
-	}
+	app.processCompletedAppointment(r, customerID, appointmentID, *envelope)
 
 	app.logger.Debug("processed end-of-call report", "appointment_id", appointmentID, "customer_id", customerID)
 

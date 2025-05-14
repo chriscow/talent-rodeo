@@ -111,7 +111,7 @@ func TestProcessorIntegration(t *testing.T) {
 		}
 
 		// Subscribe the test user to the criteria
-		err = internal.SubscribeToCriteria(ctx, fs, testUser.ID, criteria.ID, "Test Subscription")
+		err = internal.SubscribeToCriteria(ctx, fs, testUser.ID, criteria.ID)
 		if err != nil {
 			t.Fatalf("Failed to subscribe user to criteria: %v", err)
 		}
@@ -247,7 +247,7 @@ func TestProcessorIntegration(t *testing.T) {
 		}
 
 		// Subscribe the user to the criteria
-		err = internal.SubscribeToCriteria(ctx, fs, testUser.ID, criteria.ID, "Test Subscription")
+		err = internal.SubscribeToCriteria(ctx, fs, testUser.ID, criteria.ID)
 		if err != nil {
 			t.Fatalf("Failed to subscribe user to criteria: %v", err)
 		}
