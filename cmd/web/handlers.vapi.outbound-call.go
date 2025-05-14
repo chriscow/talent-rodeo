@@ -208,16 +208,16 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 		},
 	}
 
-	configJSON, err := json.MarshalIndent(callConfig, "", "  ")
-	if err != nil {
-		apptErr = fmt.Errorf("failed to marshal call config: %w", err)
-		app.logger.Error("Failed to marshal call config", "error", apptErr)
-		app.reportServerError(r, apptErr)
-		// This is likely our problem, so we don't want to retry
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-	app.logger.Debug("handleVapiCall: call config", "call_config", string(configJSON))
+	// configJSON, err := json.MarshalIndent(callConfig, "", "  ")
+	// if err != nil {
+	// 	apptErr = fmt.Errorf("failed to marshal call config: %w", err)
+	// 	app.logger.Error("Failed to marshal call config", "error", apptErr)
+	// 	app.reportServerError(r, apptErr)
+	// 	// This is likely our problem, so we don't want to retry
+	// 	w.WriteHeader(http.StatusOK)
+	// 	return
+	// }
+	// app.logger.Debug("handleVapiCall: call config", "call_config", string(configJSON))
 
 	// Create the call
 	result, err := vapi.CreateCall(r.Context(), callConfig)

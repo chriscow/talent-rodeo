@@ -246,6 +246,7 @@ func (p *processor) process(ctx context.Context, user *internal.User, appointmen
 		return nil
 	}
 
+	// TODO: If this is a new criteria, we need to enqueue a search
 	criteria, err := getOrCreateSearchCriteria(ctx, p.fs, user)
 	if err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
@@ -381,20 +382,18 @@ func (p *processor) generateSteeringQuery(ctx context.Context, user *internal.Us
 // }
 
 func extractWorkPreferences(_ context.Context, data string) (*string, error) {
-	if strings.Contains(data, "<work_preferences_analysis>") && strings.Contains(data, "</work_preferences_analysis>") {
-		start := strings.Index(data, "<work_preferences_analysis>")
+	if strings.Contains(data, "<final_determinations>") {
+		start := strings.Index(data, "<final_determinations>")
 		if start == -1 {
-			return nil, fmt.Errorf("failed to generate work preferences: <work_preferences_analysis> tag not found")
+			return nil, fmt.Errorf("failed to generate work preferences: <final_determinations> tag not found")
 		}
-		end := strings.Index(data, "</work_preferences_analysis>")
+		end := strings.Index(data, "</final_determinations>")
 		if end == -1 {
-			return nil, fmt.Errorf("failed to generate work preferences: </work_preferences_analysis> tag not found")
+			return nil, fmt.Errorf("failed to generate work preferences: </final_determinations> tag not found")
 		}
-		if end < start {
-			return nil, fmt.Errorf("failed to generate work preferences: </work_preferences_analysis> tag is before <work_preferences_analysis> tag")
-		}
-		// Extract the JSON data between the tags
-		data = data[start+len("<work_preferences_analysis>") : end]
+		data = data[start+len("<final_determinations>") : end]
+	} else {
+		return nil, fmt.Errorf("failed to generate work preferences: <final_determinations> tag not found")
 	}
 
 	return &data, nil

@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	DefaultMaxPages          = 10
+	DefaultMaxPages          = 5
 	searchCriteriaCollection = "search_criteria"
 )
 
