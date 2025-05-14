@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"talent-rodeo/internal"
@@ -98,12 +99,6 @@ Note: The appointment must have status 'completed'.`,
 			log.Fatalf("Error generating job description: %v", err)
 		}
 
-		appointment.ExtractedData.JobDescription = &jobDesc
-		err = internal.UpdateAppointment(ctx, fs, appointment)
-		if err != nil {
-			log.Fatalf("Error updating appointment: %v", err)
-		}
-
 		fmt.Println(jobDesc)
 	},
 }
@@ -134,27 +129,20 @@ var genSearchQueriesCmd = &cobra.Command{
 			log.Fatalf("Appointment is not completed: %s", appointmentID)
 		}
 
-		resume, found, err := internal.GetLatestResume(ctx, fs, userID)
+		transcript, err := internal.GetAppointmentTranscript(ctx, fs, *appointment)
 		if err != nil {
-			log.Fatalf("Error getting resume: %v", err)
-		}
-		if !found {
-			log.Fatalf("Resume not found: %s", resumeID)
+			log.Fatalf("Error getting appointment transcript: %v", err)
 		}
 
-		queries, err := internal.GenerateSearchQueries(ctx, *resume, *appointment)
+		q, err := internal.GenerateSteeringQuery(ctx, transcript)
 		if err != nil {
 			log.Fatalf("Error generating search queries: %v", err)
 		}
 
-		appointment.ExtractedData.SearchQueries = queries
-		err = internal.UpdateAppointment(ctx, fs, appointment)
+		qJSON, err := json.MarshalIndent(q, "", "  ")
 		if err != nil {
-			log.Fatalf("Error updating appointment: %v", err)
+			log.Fatalf("Error marshalling search queries to JSON: %v", err)
 		}
-
-		for _, query := range queries {
-			fmt.Println(query)
-		}
+		fmt.Println(string(qJSON))
 	},
 }

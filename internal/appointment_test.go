@@ -2,6 +2,8 @@ package internal
 
 import (
 	"context"
+	"log/slog"
+	"os"
 	"testing"
 	"time"
 )
@@ -143,7 +145,8 @@ func TestAppointment(t *testing.T) {
 		}
 
 		// Verify it appears in the processing list
-		processingAppointments, err := ListAppointmentsNeedingProcessing(ctx, client)
+		logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+		processingAppointments, err := ListAppointmentsNeedingProcessing(ctx, client, logger)
 		if err != nil {
 			t.Fatalf("ListAppointmentsNeedingProcessing() error = %v", err)
 		}
@@ -161,7 +164,7 @@ func TestAppointment(t *testing.T) {
 		}
 
 		// Test completing the processing
-		err = CompleteProcessing(ctx, client, appointment)
+		err = ProcessAppointmentComplete(ctx, client, appointment)
 		if err != nil {
 			t.Fatalf("CompleteProcessing() error = %v", err)
 		}
@@ -180,7 +183,8 @@ func TestAppointment(t *testing.T) {
 		}
 
 		// Verify it was removed from the processing list
-		processingAppointments, err = ListAppointmentsNeedingProcessing(ctx, client)
+
+		processingAppointments, err = ListAppointmentsNeedingProcessing(ctx, client, logger)
 		if err != nil {
 			t.Fatalf("ListAppointmentsNeedingProcessing() error = %v", err)
 		}

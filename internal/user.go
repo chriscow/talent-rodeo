@@ -46,7 +46,8 @@ type User struct {
 
 	State UserState
 
-	SteeringQuery *SteeringQuery
+	SteeringQuery   *SteeringQuery
+	WorkPreferences *string
 
 	Tier            UserTier
 	CompletedAt     *time.Time
@@ -171,6 +172,52 @@ func GetUsersByIDs(ctx context.Context, fs *FirestoreClient, ids []string) ([]*U
 	}
 
 	return users, nil
+}
+
+func SetUserSteeringQuery(ctx context.Context, fs *FirestoreClient, id string, sq SteeringQuery) error {
+	// if the steering query is not valid, return an error
+	if err := sq.Validate(); err != nil {
+		return fmt.Errorf("invalid steering query: %w", err)
+	}
+
+	fsUpdates := []firestore.Update{
+		{
+			Path:  "SteeringQuery",
+			Value: sq,
+		},
+	}
+
+	_, err := fs.Collection(usersCollection).Doc(id).Update(ctx, fsUpdates)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return fmt.Errorf("user not found")
+		}
+		return fmt.Errorf("failed to update steering query: %w", err)
+	}
+
+	return nil
+}
+
+func SetUserWorkPreferences(ctx context.Context, fs *FirestoreClient, id string, wp string) error {
+	// if the work preferences is not valid, return an error
+	if len(wp) > 1000 {
+		return fmt.Errorf("work preferences is too long")
+	}
+
+	fsUpdates := []firestore.Update{
+		{
+			Path:  "WorkPreferences",
+			Value: wp,
+		},
+	}
+	_, err := fs.Collection(usersCollection).Doc(id).Update(ctx, fsUpdates)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return fmt.Errorf("user not found")
+		}
+		return fmt.Errorf("failed to update work preferences: %w", err)
+	}
+	return nil
 }
 
 // UpdateUser updates an existing user document

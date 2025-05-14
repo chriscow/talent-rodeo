@@ -14,7 +14,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const searchCriteriaCollection = "search_criteria"
+const (
+	DefaultMaxPages          = 10
+	searchCriteriaCollection = "search_criteria"
+)
 
 // SearchCriteria defines the parameters used to search for jobs.
 // This struct is designed to be provider-agnostic, allowing each provider
@@ -43,9 +46,13 @@ func (c SearchCriteria) GetSearchHash() string {
 	return fmt.Sprintf("%x", sha256.Sum256(json))
 }
 
+func MakeSearchCriteriaID(query string, geoID string) string {
+	return funcs.Slugify(fmt.Sprintf("%s-%s", query, geoID))
+}
+
 func CreateSearchCriteria(ctx context.Context, fs *FirestoreClient, query string, geoID string, maxPages int) (*SearchCriteria, error) {
 	criteria := &SearchCriteria{
-		ID:       funcs.Slugify(fmt.Sprintf("%s-%s", query, geoID)),
+		ID:       MakeSearchCriteriaID(query, geoID),
 		Query:    query,
 		GeoID:    geoID,
 		MaxPages: maxPages,

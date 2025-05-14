@@ -87,12 +87,12 @@ func (s *Scheduler) Start(ctx context.Context) error {
 
 	// Start the background processing
 	go func() {
-		s.logger.Info("search: Starting initial search processing")
+		s.logger.Info("checking for past-due searches")
 		// Process searches immediately on start
 		s.wg.Add(1)
 		s.processSearches(ctx)
 		s.wg.Done()
-		s.logger.Info("search: completed startup search processing")
+		s.logger.Info("completed past-due searches")
 
 		// Then continue with regular interval processing
 		s.run(ctx)
@@ -103,7 +103,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 
 // Close gracefully shuts down the search service
 func (s *Scheduler) Close(_ context.Context) error {
-	s.logger.Info("search: Stopping search service")
+	s.logger.Info("stopping search service")
 	if s.ticker != nil {
 		s.ticker.Stop()
 	}
@@ -113,7 +113,7 @@ func (s *Scheduler) Close(_ context.Context) error {
 
 	// Wait for any in-progress processing to complete
 	s.wg.Wait()
-	s.logger.Info("search: Search service stopped")
+	s.logger.Info("search service stopped")
 
 	return nil
 }
@@ -123,14 +123,14 @@ func (s *Scheduler) run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			s.logger.Info("search: Background processing stopped due to context cancellation")
+			s.logger.Info("background processing stopped due to context cancellation")
 			return
 		case <-s.ticker.C:
 			s.wg.Add(1)
 			s.processSearches(ctx)
 			s.wg.Done()
 		case <-s.done:
-			s.logger.Info("search: Background processing stopped")
+			s.logger.Info("background processing stopped")
 			return
 		}
 	}
@@ -140,7 +140,7 @@ func (s *Scheduler) run(ctx context.Context) {
 func (s *Scheduler) processSearches(ctx context.Context) {
 	if os.Getenv("DISABLE_SEARCH_SCHEDULING") == "true" {
 		s.disableSearchSchedulingLogOnce.Do(func() {
-			s.logger.Info(internal.BGYellow("search: search scheduling disabled"))
+			s.logger.Info(internal.BGYellow("search scheduling disabled"))
 		})
 		return
 	}
@@ -164,7 +164,7 @@ func (s *Scheduler) processSearches(ctx context.Context) {
 		if err != nil {
 			s.logger.Error("error getting queue depth", "error", err)
 		}
-		s.logger.Info("search: newly enqueued", "new", processedCount, "queue_depth", depth)
+		s.logger.Info("newly enqueued", "new", processedCount, "queue_depth", depth)
 	}
 }
 
@@ -174,7 +174,7 @@ func (s *Scheduler) enqueueSearch(ctx context.Context, criteria internal.SearchC
 		return fmt.Errorf("nil search")
 	}
 
-	s.logger.Info("search: enqueueSearch", "criteria", criteria)
+	s.logger.Info("enqueueSearch", "criteria", criteria)
 
 	jobSearch, err := internal.CreateSearchTask(ctx, s.fs, criteria, "scrapingdog")
 	if err != nil {

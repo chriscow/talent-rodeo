@@ -381,7 +381,11 @@ func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, crite
 		}
 	}
 
-	queryVector, err := steeringQuery.GetVector(ctx, client)
+	denseVector, err := steeringQuery.GetVector(ctx, client, PineconeEmbedDense)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get steering vector: %w", err)
+	}
+	sparseVector, err := steeringQuery.GetVector(ctx, client, PineconeEmbedSparse)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get steering vector: %w", err)
 	}
@@ -391,7 +395,7 @@ func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, crite
 		return nil, fmt.Errorf("PINECONE_DENSE_INDEX_HOST environment variable not set")
 	}
 
-	denseResults, err := client.QueryByVector(ctx, denseIndex, JobDetailNamespace, queryVector,
+	denseResults, err := client.QueryByVector(ctx, denseIndex, JobDetailNamespace, denseVector,
 		WithTopK(topK*2), WithFilter(filter))
 	if err != nil {
 		return nil, fmt.Errorf("failed to search dense index: %w", err)
@@ -401,7 +405,7 @@ func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, crite
 	if sparseIndex == "" {
 		return nil, fmt.Errorf("PINECONE_SPARSE_INDEX_HOST environment variable not set")
 	}
-	sparseResults, err := client.QueryByVector(ctx, sparseIndex, JobDetailNamespace, queryVector,
+	sparseResults, err := client.QueryByVector(ctx, sparseIndex, JobDetailNamespace, sparseVector,
 		WithTopK(topK*2), WithFilter(filter))
 	if err != nil {
 		return nil, fmt.Errorf("failed to search sparse index: %w", err)

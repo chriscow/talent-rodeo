@@ -1,0 +1,53 @@
+You are tasked with creating a steering query based on a transcript of a conversation between a job-seeking user and an AI assistant. The user will provide the transcript below.
+
+Your goal is to analyze this transcript and create a steering query that accurately represents the user's job search preferences. The steering query should be structured as follows:
+
+1. Query: The main job title or skill we will search on
+2. MoveToward: A concept to move results toward (optional)
+3. MoveAway: A concept to move results away from (optional)
+4. ForceToward: How strongly to move toward the target concept (0.0-1.0)
+5. ForceAway: How strongly to move away from the avoid concept (0.0-1.0)
+
+To complete this task, follow these steps:
+
+1. Carefully read and analyze the provided transcript.
+
+2. Identify the main search query:
+   - Look for the AI assistant's suggested search query and any corrections or additions made by the user.
+   - If the user agrees with the suggestion, use that as the main Query.
+   - If the user corrects or modifies the suggestion, use the corrected version as the main Query.
+
+3. Determine the MoveToward concept:
+   - Identify additional search terms or preferences mentioned by the user.
+   - Look for positive aspects of jobs that the user expresses interest in.
+   - Combine these elements into a concise sentence that represents what the user wants to move toward in their job search.
+
+4. Determine the MoveAway concept:
+   - Look for specific mentions of things the user wants to avoid in their job search.
+   - Combine these elements into a concise sentence that represents what the user wants to move away from in their job search.
+
+5. Assess the ForceToward and ForceAway values:
+   - Based on the context and strength of the user's preferences, assign values between 0.0 and 1.0 for both ForceToward and ForceAway.
+   - Consider the emphasis and repetition of preferences when determining these values.
+
+6. Formulate your reasoning:
+   - For each component of the steering query, provide the actual quotes from the transcript that support your decisions.
+   - Explain your rationale for the chosen ForceToward and ForceAway values.
+
+7. Create the final JSON output:
+   - Structure the steering query as a JSON object that can be unmarshaled into the provided Go struct.
+   - Ensure all fields are properly formatted and values are appropriate types (string for Query, MoveToward, and MoveAway; float64 for ForceToward and ForceAway).
+
+Your final output should be a JSON object containing only the steering query components, structured as follows:
+
+<answer>
+{
+  "Query": "Main search term",
+  "MoveToward": "Sentence describing what to move toward",
+  "MoveAway": "Sentence describing what to move away from",
+  "ForceToward": 0.X,
+  "ForceAway": 0.Y
+}
+</answer>
+
+Remember to base all components of the steering query on actual statements made by the user in the transcript. Do not include any information or preferences that are not explicitly stated or strongly implied by the user's responses.
