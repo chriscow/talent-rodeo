@@ -11,7 +11,40 @@ import (
 	"time"
 )
 
-const maxPages = 5
+/*
+# ScrapingDog Points to Remember
+
+  - Each request will be retried until it can be successfully completed (up to 60
+    seconds). Remember to set your timeout to 60 seconds to ensure this process
+    goes smoothly. In cases where every request fails in 60 seconds, our API will
+    return a 410 error, you may retry the request and you will not be charged for
+    the unsuccessful request (you are only charged for successful requests, 200
+    and 404 status codes). Make sure to catch these errors! They will occur on
+    roughly 1-2% of requests for hard-to-scrape websites.
+
+  - There is no overage allowed on the free plan, if you exceed 1000 requests per
+    month on the free plan, you will receive a 403 error.
+
+  - Each request will return a string containing the raw HTML from the page
+    requested, along with any headers and cookies.
+
+  - If you exceed your plan concurrent connection limit, the API will respond with
+    a 429 status code, this can be solved by slowing down your request rate or
+    upgrading to a bigger plan.
+
+# Error Codes
+
+| Code | Description |
+|------|-------------|
+| 200 | Successfull Request |
+| 410 | Request timeout |
+| 404 | URL is wrong |
+| 202 | Your request is accepted and the scraping is still going on. | **This status code only appears in the LinkedIn Scraping API**
+| 403 | Request Limit Reached. |
+| 429 | Concurrent connection limit reached. |
+| 401 | API Key is wrong. |
+| 400 | Request failed. |
+*/
 
 // Forward declaration to avoid circular dependencies
 type SearchProvider interface {
@@ -129,7 +162,7 @@ func (wm *WorkerManager) QueueSearch(ctx context.Context, searchJob internal.Sea
 	// Try to add to the queue
 	select {
 	case wm.searchQueue <- searchJob:
-		wm.logger.InfoContext(ctx, "Search queued successfully",
+		wm.logger.InfoContext(ctx, "search queued successfully",
 			"query", searchJob.Criteria.Query,
 			"geoID", searchJob.Criteria.GeoID,
 			"maxPages", searchJob.Criteria.MaxPages)
@@ -243,7 +276,7 @@ func (wm *WorkerManager) processQueuedSearch(ctx context.Context, workerID int, 
 	var allJobs []internal.JobListing
 
 	if searchJob.Criteria.MaxPages == 0 {
-		searchJob.Criteria.MaxPages = maxPages
+		searchJob.Criteria.MaxPages = internal.DefaultMaxPages
 	}
 
 	for page := 1; page <= searchJob.Criteria.MaxPages; page++ {

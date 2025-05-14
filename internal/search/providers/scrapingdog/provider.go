@@ -10,6 +10,41 @@ import (
 	"talent-rodeo/internal/search"
 )
 
+/*
+# ScrapingDog Points to Remember
+
+  - Each request will be retried until it can be successfully completed (up to 60
+    seconds). Remember to set your timeout to 60 seconds to ensure this process
+    goes smoothly. In cases where every request fails in 60 seconds, our API will
+    return a 410 error, you may retry the request and you will not be charged for
+    the unsuccessful request (you are only charged for successful requests, 200
+    and 404 status codes). Make sure to catch these errors! They will occur on
+    roughly 1-2% of requests for hard-to-scrape websites.
+
+  - There is no overage allowed on the free plan, if you exceed 1000 requests per
+    month on the free plan, you will receive a 403 error.
+
+  - Each request will return a string containing the raw HTML from the page
+    requested, along with any headers and cookies.
+
+  - If you exceed your plan concurrent connection limit, the API will respond with
+    a 429 status code, this can be solved by slowing down your request rate or
+    upgrading to a bigger plan.
+
+# Error Codes
+
+| Code | Description |
+|------|-------------|
+| 200 | Successfull Request |
+| 410 | Request timeout |
+| 404 | URL is wrong |
+| 202 | Your request is accepted and the scraping is still going on. | **This status code only appears in the LinkedIn Scraping API**
+| 403 | Request Limit Reached. |
+| 429 | Concurrent connection limit reached. |
+| 401 | API Key is wrong. |
+| 400 | Request failed. |
+*/
+
 // Provider implements the search.JobProvider and search.JobQueue interfaces
 type Provider struct {
 	apiClient     *APIClient
@@ -64,6 +99,8 @@ func WithWorkerCount(count int) ProviderOption {
 
 // NewProvider creates a new ScrapingDog provider
 func NewProvider(apiKey string, logger *slog.Logger, opts ...ProviderOption) *Provider {
+	logger = logger.With("pkg", "scrapingdog")
+
 	// Create provider with required configuration
 	provider := &Provider{
 		logger: logger,
@@ -135,7 +172,7 @@ func (p *Provider) Close(ctx context.Context) error {
 
 // SearchJobListings searches for jobs matching the given criteria
 func (p *Provider) SearchJobListings(ctx context.Context, criteria internal.SearchCriteria, page int) ([]internal.JobListing, error) {
-	p.logger.InfoContext(ctx, "Searching for jobs",
+	p.logger.InfoContext(ctx, "searching for job listings",
 		"keywords", criteria.Query,
 		"location", criteria.GeoID)
 
@@ -143,13 +180,10 @@ func (p *Provider) SearchJobListings(ctx context.Context, criteria internal.Sear
 	if p.cache != nil {
 		cachedJobs, found := p.cache.GetJobListings(ctx, criteria.GetSearchHash())
 		if found {
-			p.logger.InfoContext(ctx, "Using cached job results", "count", len(cachedJobs))
+			p.logger.InfoContext(ctx, "using cached job results", "count", len(cachedJobs))
 			return cachedJobs, nil
 		}
 	}
-
-	// Perform live search
-	p.logger.InfoContext(ctx, "Performing live search")
 
 	// Call the API
 	jobListings, err := p.apiClient.SearchJobListings(ctx, criteria.Query, criteria.GeoID, page)
@@ -196,7 +230,7 @@ func (p *Provider) GetJobDetails(ctx context.Context, jobID string) (*internal.J
 
 // QueueSearch adds a search to the background processing queue
 func (p *Provider) QueueSearch(ctx context.Context, searchJob internal.SearchTask) error {
-	p.logger.InfoContext(ctx, "Queueing search",
+	p.logger.InfoContext(ctx, "queueing search",
 		"query", searchJob.Criteria.Query,
 		"geoID", searchJob.Criteria.GeoID,
 		"maxPages", searchJob.Criteria.MaxPages)
