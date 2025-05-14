@@ -64,6 +64,8 @@ func NewAPIClient(apiKey string, opts ...APIOption) *APIClient {
 		opt(client)
 	}
 
+	client.logger = client.logger.With("svc", "api_client")
+
 	// Trim trailing slash from baseURL to avoid issues with endpoint path construction
 	client.baseURL = strings.TrimSuffix(client.baseURL, "/")
 
@@ -72,7 +74,7 @@ func NewAPIClient(apiKey string, opts ...APIOption) *APIClient {
 
 // SearchJobListings searches for jobs with the given criteria
 func (c *APIClient) SearchJobListings(ctx context.Context, query string, location string, page int) ([]LinkedInJobListing, error) {
-	c.logger.InfoContext(ctx, "Searching for jobs",
+	c.logger.InfoContext(ctx, "searching for jobs",
 		"query", query,
 		"location", location,
 		"page", page)
@@ -92,7 +94,7 @@ func (c *APIClient) SearchJobListings(ctx context.Context, query string, locatio
 	q.Set("page", strconv.Itoa(page))
 	baseURL.RawQuery = q.Encode()
 
-	fmt.Printf("SearchJobListings URL: %s\n", baseURL.String())
+	c.logger.Debug("URL", "url", baseURL.String())
 
 	// Create request
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL.String(), nil)
@@ -100,17 +102,18 @@ func (c *APIClient) SearchJobListings(ctx context.Context, query string, locatio
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Send request
-	resp, err := c.client.Do(req)
+	// Use retry mechanism
+	resp, err := c.doRequestWithRetry(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	// Check status code
+	// Check for API errors (this will handle specific error types)
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+		apiErr := HandleAPIError(resp.StatusCode)
+		return nil, fmt.Errorf("API request failed with status %d: %s: %w", resp.StatusCode, string(body), apiErr)
 	}
 
 	// Parse response
@@ -215,10 +218,12 @@ func (c *APIClient) GetJobDetails(ctx context.Context, jobID string) (LinkedInJo
 	return jobDetail, nil
 }
 
-// doRequestWithRetry executes an HTTP request with retry logic
+// doRequestWithRetry executes an HTTP request with retry logic and exponential backoff
 func (c *APIClient) doRequestWithRetry(ctx context.Context, req *http.Request) (*http.Response, error) {
 	var resp *http.Response
 	var err error
+	var backoffDelay time.Duration = RetryDelay
+	var statusCode int
 
 	for i := 0; i < MaxRetries; i++ {
 		// Log retry attempt
@@ -226,31 +231,87 @@ func (c *APIClient) doRequestWithRetry(ctx context.Context, req *http.Request) (
 			c.logger.InfoContext(ctx, "Retrying request",
 				"attempt", i+1,
 				"max_retries", MaxRetries,
+				"backoff", backoffDelay,
 				"url", req.URL.String())
 		}
 
 		// Execute the request
 		resp, err = c.client.Do(req)
 
-		// If no error, return the response
-		if err == nil {
-			return resp, nil
+		// If we encountered a network error, apply exponential backoff
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+
+			// Wait before retrying with exponential backoff
+			select {
+			case <-time.After(backoffDelay):
+				// Double the backoff for next retry (exponential)
+				backoffDelay *= 2
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+			continue
 		}
 
-		// If context is canceled, return immediately
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
+		// Check if it's a retryable status code (429, 410, 500+)
+		statusCode = resp.StatusCode
+		if statusCode == http.StatusTooManyRequests {
+			// This is a 429 error - rate limiting
+			body, bodyErr := io.ReadAll(resp.Body)
+			resp.Body.Close() // Important: close this response before retrying
+
+			c.logger.WarnContext(ctx, "Rate limit (429) encountered, backing off",
+				"attempt", i+1,
+				"backoff", backoffDelay,
+				"response", string(body))
+
+			// Apply exponential backoff for rate limiting
+			select {
+			case <-time.After(backoffDelay):
+				// Increase backoff duration for next retry
+				backoffDelay *= 2
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+
+			// Log body error if we had trouble reading it
+			if bodyErr != nil {
+				c.logger.WarnContext(ctx, "Failed to read error response body", "error", bodyErr)
+			}
+
+			continue
+		} else if statusCode == http.StatusRequestTimeout || statusCode == http.StatusGone || statusCode >= 500 {
+			// This is a 410 (request timeout) or 500+ (server-side) error - retry
+			resp.Body.Close() // Important: close this response before retrying
+
+			c.logger.WarnContext(ctx, "Retryable status code encountered",
+				"status", statusCode,
+				"attempt", i+1,
+				"backoff", backoffDelay)
+
+			// Apply backoff for server errors
+			select {
+			case <-time.After(backoffDelay):
+				// Increase backoff duration for next retry, but less aggressively
+				backoffDelay = backoffDelay + (RetryDelay / 2)
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+
+			continue
 		}
 
-		// Wait before retrying
-		select {
-		case <-time.After(RetryDelay):
-			// Continue with retry
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
+		// For all other status codes (success or non-retryable errors), return the response
+		return resp, nil
 	}
 
 	// If we've exhausted all retries, return the last error
-	return nil, fmt.Errorf("exhausted all retries (%d): %w", MaxRetries, err)
+	if err != nil {
+		return nil, fmt.Errorf("exhausted all retries (%d): %w", MaxRetries, err)
+	}
+
+	// If we reach here, we've exhausted retries due to status codes
+	return nil, fmt.Errorf("exhausted all retries (%d): last status code: %d", MaxRetries, statusCode)
 }
