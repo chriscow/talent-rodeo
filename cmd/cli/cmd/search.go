@@ -34,7 +34,7 @@ func (f *jobSinkForwarder) OnSearchStarted(task internal.SearchTask) {
 		"searchID", task.ID,
 		"criteria", task.Criteria)
 	// Forward to JobSink with context
-	f.jobSink.OnSearchStarted(context.Background(), task)
+	f.jobSink.OnSearchStarted(task)
 }
 
 func (f *jobSinkForwarder) OnJobListing(task internal.SearchTask, listing internal.JobListing) {
@@ -43,7 +43,7 @@ func (f *jobSinkForwarder) OnJobListing(task internal.SearchTask, listing intern
 		"title", listing.Title,
 		"company", listing.Company,
 		"location", listing.Location)
-	f.jobSink.OnJobListing(context.Background(), task, listing)
+	f.jobSink.OnJobListing(task, listing)
 }
 
 func (f *jobSinkForwarder) OnJobDetail(task internal.SearchTask, details internal.JobDetail) {
@@ -52,7 +52,7 @@ func (f *jobSinkForwarder) OnJobDetail(task internal.SearchTask, details interna
 		"title", details.Title,
 		"company", details.Company,
 		"location", details.Location)
-	f.jobSink.OnJobDetail(context.Background(), task, details)
+	f.jobSink.OnJobDetail(task, details)
 }
 
 func (f *jobSinkForwarder) OnSearchCompleted(task internal.SearchTask, totalJobs int, errors []error) {
@@ -64,7 +64,7 @@ func (f *jobSinkForwarder) OnSearchCompleted(task internal.SearchTask, totalJobs
 		f.logger.Info(internal.BGGreen("Search completed successfully"),
 			"totalJobs", totalJobs)
 	}
-	f.jobSink.OnSearchCompleted(context.Background(), task, totalJobs, errors)
+	f.jobSink.OnSearchCompleted(task, totalJobs, errors)
 	close(f.done) // Signal completion
 }
 
@@ -166,7 +166,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	defer fs.Close()
 
 	// Create JobSink (no JobProcessor for MVP)
-	jobSink := internal.NewJobSink(fs, logger, nil)
+	jobSink := internal.NewJobSink(fs, logger)
 	// Wrap with forwarder for logging
 	eventHandler := &jobSinkForwarder{
 		logger:  logger,
