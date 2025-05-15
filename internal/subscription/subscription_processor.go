@@ -47,7 +47,7 @@ func NewProcessor(fs *internal.FirestoreClient, logger *slog.Logger) *Processor 
 		panic("Firestore client cannot be nil")
 	}
 
-	logger = logger.With("component", "subscription.Processor")
+	logger = logger.With("pkg", "subscription.Processor")
 	return &Processor{
 		fs:       fs,
 		logger:   logger,
@@ -154,7 +154,7 @@ func (p *Processor) Stop() {
 // Errors during processing of individual criteria are logged and reported to Sentry,
 // but do not stop the processing of other criteria.
 func (p *Processor) process(ctx context.Context) error {
-	p.logger.Info("Processing search criteria subscriptions...")
+	p.logger.Info("processing search criteria subscriptions...")
 
 	// Get all criteria
 	allCriteria, err := internal.ListSearchCriteria(ctx, p.fs)

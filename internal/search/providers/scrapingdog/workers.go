@@ -100,6 +100,8 @@ func NewWorkerManager(provider SearchProvider, maxConcurrent int, queueSize int,
 		opt(wm)
 	}
 
+	wm.logger = wm.logger.With("pkg", "scrapingdog.WorkerManager")
+
 	return wm
 }
 
@@ -301,14 +303,14 @@ func (wm *WorkerManager) processQueuedSearch(ctx context.Context, workerID int, 
 
 		// If we got no results, stop pagination
 		if len(jobs) == 0 {
-			logger.Info("no more results found", "page", page)
+			logger.Debug("no more results found", "page", page)
 			break
 		}
 
 		// Add jobs to the list
 		allJobs = append(allJobs, jobs...)
 
-		wm.logger.Info("found jobs on page",
+		wm.logger.Debug("found jobs",
 			"page", page,
 			"count", len(jobs),
 			"totalSoFar", len(allJobs))
