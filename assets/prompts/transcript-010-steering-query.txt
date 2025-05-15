@@ -30,11 +30,14 @@ To complete this task, follow these steps:
    - Based on the context and strength of the user's preferences, assign values between 0.0 and 1.0 for both ForceToward and ForceAway.
    - Consider the emphasis and repetition of preferences when determining these values.
 
-6. Formulate your reasoning:
+6. Create the Reranking Query
+   - Combine Query, MoveToward concept and MoveAway concept into a concise query in sentence form to use for a reranking transformer to rerank the results.
+
+7. Formulate your reasoning:
    - For each component of the steering query, provide the actual quotes from the transcript that support your decisions.
    - Explain your rationale for the chosen ForceToward and ForceAway values.
 
-7. Create the final JSON output:
+8. Create the final JSON output:
    - Structure the steering query as a JSON object that can be unmarshaled into the provided Go struct.
    - Ensure all fields are properly formatted and values are appropriate types (string for Query, MoveToward, and MoveAway; float64 for ForceToward and ForceAway).
 
@@ -47,6 +50,7 @@ Your final output should be a JSON object containing only the steering query com
   "MoveAway": "Sentence describing what to move away from",
   "ForceToward": 0.X,
   "ForceAway": 0.Y
+  "RerankingQuery": "Sentence that combines the concepts of Query, MoveToward and MoveAway"
 }
 </answer>
 

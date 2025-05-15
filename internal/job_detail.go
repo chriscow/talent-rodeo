@@ -381,11 +381,11 @@ func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, crite
 		}
 	}
 
-	denseVector, err := steeringQuery.GetVector(ctx, client, PineconeEmbedDense)
+	denseVector, err := steeringQuery.GetDenseVector(ctx, client, PineconeEmbedDense)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get steering vector: %w", err)
 	}
-	sparseVector, err := steeringQuery.GetVector(ctx, client, PineconeEmbedSparse)
+	sparseVector, err := steeringQuery.GetSparseVector(ctx, client, PineconeEmbedSparse)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get steering vector: %w", err)
 	}
