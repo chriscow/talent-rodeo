@@ -17,9 +17,6 @@ import (
 const (
 	// DefaultTickInterval is the default interval for processing subscriptions (24 hours)
 	DefaultTickInterval = 24 * time.Hour
-
-	// DefaultTopK is the number of top jobs to return from semantic search
-	DefaultTopK = 100
 )
 
 // Processor handles the periodic checking and publishing of search criteria subscriptions.
@@ -256,7 +253,7 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 	}
 
 	for _, user := range users {
-		if err := p.processUserJobs(ctx, user, criteria); err != nil {
+		if err := internal.RefreshUserJobs(ctx, p.fs, user, criteria); err != nil {
 			// Log error but continue with other users
 			p.logger.Error("Error processing jobs for user", "user-id", user.ID, "error", err)
 			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
@@ -276,58 +273,5 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 	}
 
 	p.logger.Info("Successfully processed criteria", "id", criteria.ID)
-	return nil
-}
-
-// processUserJobs handles the semantic search and job creation for a single user.
-// It performs semantic search using the user's steering query against jobs matching the criteria,
-// and creates user-job links for jobs that the user doesn't already have.
-//
-// The function skips users without a steering query.
-// If no matching jobs are found for the user, it logs this and returns without error.
-func (p *Processor) processUserJobs(ctx context.Context, user *internal.User, criteria internal.SearchCriteria) error {
-	// Skip users without a steering query
-	if user.SteeringQuery == nil {
-		p.logger.Info("User has no steering query, skipping", "user-id", user.ID)
-		return nil
-	}
-
-	// Search for jobs using the user's steering query and the criteria ID
-	scoredJobs, err := internal.SemanticSearchJobs(ctx, user.SteeringQuery, criteria.ID, DefaultTopK)
-	if err != nil {
-		return fmt.Errorf("failed to search jobs for user %s: %w", user.ID, err)
-	}
-
-	if len(scoredJobs) == 0 {
-		p.logger.Info("No matching jobs found for user %s and criteria %s", user.ID, criteria.ID)
-		return nil
-	}
-
-	p.logger.Info("Found matching jobs for user", "jobs-count", len(scoredJobs), "user-id", user.ID)
-
-	// Create a user job for each matching job
-	for _, scoredJob := range scoredJobs {
-		jobID := scoredJob.JobDetail.ID
-
-		// Check if the user already has this job
-		_, exists, err := internal.GetUserJob(ctx, p.fs, user.ID, jobID)
-		if err != nil {
-			return fmt.Errorf("failed to check if user already has job %s: %w", jobID, err)
-		}
-
-		if exists {
-			// Skip this job if the user already has it
-			continue
-		}
-
-		// Create the user job
-		_, err = internal.CreateUserJob(ctx, p.fs, user.ID, jobID)
-		if err != nil {
-			return fmt.Errorf("failed to create user job for user %s and job %s: %w", user.ID, jobID, err)
-		}
-
-		p.logger.Info("Created job for user", "job-id", jobID, "user-id", user.ID)
-	}
-
 	return nil
 }
