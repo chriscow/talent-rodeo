@@ -28,6 +28,9 @@ const (
 	JobStatusSaved       JobStatus = "saved"
 	JobStatusApplied     JobStatus = "applied"
 	JobStatusRejected    JobStatus = "rejected"
+
+	// DefaultUserJobsTopK is the number of top jobs to return from semantic search
+	DefaultUserJobsTopK = 100
 )
 
 // ParseJobStatus converts a string to a JobStatus with validation.
@@ -128,6 +131,43 @@ func CreateUserJob(ctx context.Context, fs *FirestoreClient, userID, jobRefID st
 	return job, nil
 }
 
+func CreateUserJobsBatch(ctx context.Context, fs *FirestoreClient, userID string, jobRefs []string) ([]*UserJob, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID is required")
+	}
+	if len(jobRefs) == 0 {
+		return nil, fmt.Errorf("job references are required")
+	}
+
+	jobs := make([]*UserJob, len(jobRefs))
+
+	// Use Transaction instead of the deprecated Batch
+	err := fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		for i, jobRefID := range jobRefs {
+			job := &UserJob{
+				ID:        jobRefID,
+				JobRef:    fs.Collection(JobDetailsCollection).Doc(jobRefID),
+				CreatedAt: time.Now(),
+				UpdatedAt: time.Now(),
+				Status:    JobStatusUnprocessed,
+			}
+			jobs[i] = job
+
+			docRef := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Doc(job.ID)
+			if err := tx.Set(docRef, job); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return jobs, nil
+}
+
 func GetUserJob(ctx context.Context, fs *FirestoreClient, userID, jobID string) (*UserJob, bool, error) {
 	doc, err := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Doc(jobID).Get(ctx)
 	if err != nil {
@@ -145,7 +185,10 @@ func GetUserJob(ctx context.Context, fs *FirestoreClient, userID, jobID string) 
 	return &job, true, nil
 }
 
-// ListUserJobs retrieves all jobs for a user
+// ListUserJobs retrieves all jobs for a user. Firebase counts as one read for
+// each query, it doesn't matter if your collection has 500 docs or 5000 doc. A
+// single query counts as one read, even if it had to go through 500 docs
+// searching for it in the cloud firestore.
 func ListUserJobs(ctx context.Context, fs *FirestoreClient, userID string) ([]UserJob, error) {
 	iter := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Documents(ctx)
 	var jobs []UserJob
@@ -451,6 +494,65 @@ func DeleteAllUserJobsByPrefix(ctx context.Context, fs *FirestoreClient, prefix 
 	}
 
 	return deleted, nil
+}
+
+// RefreshUserJobs handles the semantic search and job creation for a single user.
+// It performs semantic search using the user's steering query against jobs matching the criteria,
+// and creates user-job links for jobs that the user doesn't already have.
+//
+// The function skips users without a steering query.
+// If no matching jobs are found for the user, it logs this and returns without error.
+func RefreshUserJobs(ctx context.Context, fs *FirestoreClient, user *User, criteria SearchCriteria) error {
+	// Skip users without a steering query
+	if user.SteeringQuery == nil {
+		return fmt.Errorf("user %s has no steering query", user.ID)
+	}
+
+	// Search for jobs using the user's steering query and the criteria ID
+	scoredJobs, err := SemanticSearchJobs(ctx, user.SteeringQuery, criteria.ID, DefaultUserJobsTopK)
+	if err != nil {
+		return fmt.Errorf("failed to search jobs for user %s: %w", user.ID, err)
+	}
+
+	if len(scoredJobs) == 0 {
+		return nil
+	}
+
+	// This only counts as one read.
+	jobs, err := ListUserJobs(ctx, fs, user.ID)
+	if err != nil {
+		return fmt.Errorf("failed to list user jobs for user %s: %w", user.ID, err)
+	}
+
+	// Create a map of existing job IDs for quick lookup
+	existingJobIDs := make(map[string]UserJob, len(jobs))
+	for _, job := range jobs {
+		existingJobIDs[job.ID] = job
+	}
+
+	jobRefs := []string{}
+
+	// Create a user job for each matching job
+	for _, scoredJob := range scoredJobs {
+		jobID := scoredJob.JobDetail.ID
+
+		// Check if the user already has this job
+		if _, exists := existingJobIDs[jobID]; exists {
+			continue // Skip if the job already exists
+		}
+
+		jobRefs = append(jobRefs, jobID)
+	}
+
+	// Create user jobs in batch
+	if len(jobRefs) > 0 {
+		_, err := CreateUserJobsBatch(ctx, fs, user.ID, jobRefs)
+		if err != nil {
+			return fmt.Errorf("failed to create user jobs in batch for user %s: %w", user.ID, err)
+		}
+	}
+
+	return nil
 }
 
 // isYesRating checks if a rating contains "yes" (case insensitive)

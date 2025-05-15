@@ -149,6 +149,7 @@ func (s *Scheduler) processSearches(ctx context.Context) {
 	}
 
 	processedCount := 0
+	s.logger.Debug("processing search criteria", "count", len(items))
 	for _, criteria := range items {
 		if err := s.enqueueSearch(ctx, criteria); err != nil {
 			criteria.Error = err.Error()

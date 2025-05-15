@@ -26,36 +26,36 @@ type JobProcessor interface {
 // It is responsible for handling job listings and job details returned from a search.
 // It saves the job listings and job details to Firestore and links them to the search criteria.
 type JobSink struct {
-	fs        *FirestoreClient
-	logger    *slog.Logger
-	processor JobProcessor
+	fs     *FirestoreClient
+	logger *slog.Logger
 }
 
-func NewJobSink(fs *FirestoreClient, logger *slog.Logger, processor JobProcessor) *JobSink {
+func NewJobSink(fs *FirestoreClient, logger *slog.Logger) *JobSink {
 	return &JobSink{
-		fs:        fs,
-		logger:    logger,
-		processor: processor,
+		fs:     fs,
+		logger: logger,
 	}
 }
 
-func (s *JobSink) OnSearchStarted(ctx context.Context, jobSearch SearchTask) {
+func (s *JobSink) OnSearchStarted(jobSearch SearchTask) {
 	s.logger.Info("JobSink: on search started", "criteria", jobSearch.Criteria.GetSearchHash())
+	ctx := context.Background()
 	if err := UpdateSearchTask(ctx, s.fs, &jobSearch); err != nil {
 		s.logger.Error("JobSink: failed to update search task", "error", err)
 	}
 }
 
 // search.JobEventHandler implementation
-func (s *JobSink) OnJobListing(ctx context.Context, jobSearch SearchTask, job JobListing) {
+func (s *JobSink) OnJobListing(jobSearch SearchTask, job JobListing) {
 	s.logger.Info("JobSink: on job listing", "job", job.ProviderJobID)
 
+	ctx := context.Background()
 	if err := SaveJobListing(ctx, s.fs, jobSearch, &job); err != nil {
 		s.logger.Error("JobSink: failed to create job listing", "error", err)
 	}
 }
 
-func (s *JobSink) OnJobDetail(ctx context.Context, jobSearch SearchTask, job JobDetail) {
+func (s *JobSink) OnJobDetail(jobSearch SearchTask, job JobDetail) {
 	s.logger.Info("JobSink: on job detail", "job", job.ProviderJobID)
 
 	//
@@ -63,6 +63,7 @@ func (s *JobSink) OnJobDetail(ctx context.Context, jobSearch SearchTask, job Job
 	//
 
 	// Check if link already exists before the transaction
+	ctx := context.Background()
 	linkID := fmt.Sprintf("%s_%s", jobSearch.Criteria.ID, job.ID)
 	linkRef := s.fs.Collection(JobCriteriaLinkCollection).Doc(linkID)
 	linkDoc, err := linkRef.Get(ctx)
@@ -101,7 +102,7 @@ func (s *JobSink) OnJobDetail(ctx context.Context, jobSearch SearchTask, job Job
 	}
 }
 
-func (s *JobSink) OnSearchCompleted(ctx context.Context, jobSearch SearchTask, totalJobs int, errors []error) {
+func (s *JobSink) OnSearchCompleted(jobSearch SearchTask, totalJobs int, errors []error) {
 	s.logger.Info("JobSink: on search completed", "criteria", jobSearch.Criteria.GetSearchHash(), "total_jobs", totalJobs, "errors", errors)
 
 	// TODO: Do this in a transaction
@@ -115,6 +116,7 @@ func (s *JobSink) OnSearchCompleted(ctx context.Context, jobSearch SearchTask, t
 		jobSearch.Error = &allErrors
 	}
 
+	ctx := context.Background()
 	if err := UpdateSearchTask(ctx, s.fs, &jobSearch); err != nil {
 		s.logger.Error("JobSink: failed to update search task", "error", err)
 	}
