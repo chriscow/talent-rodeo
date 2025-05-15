@@ -2,6 +2,7 @@ package search
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -45,7 +46,7 @@ func NewScheduler(fs *internal.FirestoreClient, logger *slog.Logger, queue JobQu
 	// 	logger.Error("failed to initialize progress cache", "error", err)
 	// 	// Continue with nil cache, will fallback to map-based implementation
 	// }
-	logger = logger.With("service", "SearchScheduler")
+	logger = logger.With("pkg", "search.Scheduler")
 
 	if queue == nil {
 		panic("NewScheduler: queue is nil")
@@ -170,14 +171,17 @@ func (s *Scheduler) enqueueSearch(ctx context.Context, criteria internal.SearchC
 		return fmt.Errorf("nil search")
 	}
 
-	s.logger.Info("enqueueSearch", "criteria", criteria)
-
 	jobSearch, err := internal.CreateSearchTask(ctx, s.fs, criteria, "scrapingdog")
 	if err != nil {
+		if errors.Is(err, internal.ErrSearchTaskExists) {
+			s.logger.Debug("search task already exists", "criteria", criteria)
+			return nil
+		}
 		return fmt.Errorf("failed to save job search: %w", err)
 	}
 
 	// Queue the search with the provider
+	s.logger.Info("enqueueSearch", "criteria", criteria)
 	if err := s.queue.QueueSearch(ctx, *jobSearch); err != nil {
 		return fmt.Errorf("failed to queue search: %w", err)
 	}
