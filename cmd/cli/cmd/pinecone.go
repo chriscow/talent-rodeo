@@ -214,7 +214,7 @@ var similaritySearchCmd = &cobra.Command{
 		if indexHost != "" {
 			// Use the explicitly provided host
 			host = indexHost
-			vector, err = user.SteeringQuery.GetVector(ctx, client, internal.PineconeEmbedDense)
+			vector, err = user.SteeringQuery.GetDenseVector(ctx, client, internal.PineconeEmbedDense)
 			if err != nil {
 				return fmt.Errorf("failed to get vector: %w", err)
 			}
@@ -224,7 +224,7 @@ var similaritySearchCmd = &cobra.Command{
 			if host == "" {
 				return fmt.Errorf("PINECONE_DENSE_INDEX_HOST is not set")
 			}
-			vector, err = user.SteeringQuery.GetVector(ctx, client, internal.PineconeEmbedDense)
+			vector, err = user.SteeringQuery.GetDenseVector(ctx, client, internal.PineconeEmbedDense)
 			if err != nil {
 				return fmt.Errorf("failed to get vector: %w", err)
 			}
@@ -235,7 +235,7 @@ var similaritySearchCmd = &cobra.Command{
 			if host == "" {
 				return fmt.Errorf("PINECONE_SPARSE_INDEX_HOST is not set")
 			}
-			vector, err = user.SteeringQuery.GetVector(ctx, client, internal.PineconeEmbedSparse)
+			vector, err = user.SteeringQuery.GetDenseVector(ctx, client, internal.PineconeEmbedSparse)
 			if err != nil {
 				return fmt.Errorf("failed to get vector: %w", err)
 			}
