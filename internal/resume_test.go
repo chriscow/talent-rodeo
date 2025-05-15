@@ -27,10 +27,10 @@ func setupResumeTest(t *testing.T) (*FirestoreClient, *slog.Logger, func()) {
 	if err != nil {
 		t.Fatalf("newTestFirestoreClient() error = %v", err)
 	}
-	
+
 	// Create a test logger
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	
+
 	// Return cleanup function
 	cleanup := func() {
 		DeleteTestData(t, fs, "test-user")
@@ -38,14 +38,14 @@ func setupResumeTest(t *testing.T) (*FirestoreClient, *slog.Logger, func()) {
 			t.Fatalf("Failed to close firestore client: %v", err)
 		}
 	}
-	
+
 	return fs, logger, cleanup
 }
 
 func TestValidResume(t *testing.T) {
 	fs, logger, cleanup := setupResumeTest(t)
 	defer cleanup()
-	
+
 	// Reset mock LLM for this test
 	defer resetMockLLM()
 
@@ -120,7 +120,7 @@ func TestValidResume(t *testing.T) {
 func TestNotAResumeEasy(t *testing.T) {
 	fs, logger, cleanup := setupResumeTest(t)
 	defer cleanup()
-	
+
 	// Reset mock LLM for this test
 	defer resetMockLLM()
 
@@ -208,7 +208,7 @@ func TestNotAResumeEasy(t *testing.T) {
 func TestNotAResumeMedium(t *testing.T) {
 	fs, logger, cleanup := setupResumeTest(t)
 	defer cleanup()
-	
+
 	// Reset mock LLM for this test
 	defer resetMockLLM()
 
@@ -288,7 +288,7 @@ func TestNotAResumeMedium(t *testing.T) {
 func TestJailbreakAttempt(t *testing.T) {
 	fs, logger, cleanup := setupResumeTest(t)
 	defer cleanup()
-	
+
 	// Reset mock LLM for this test
 	defer resetMockLLM()
 

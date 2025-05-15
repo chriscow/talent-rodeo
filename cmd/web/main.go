@@ -135,8 +135,6 @@ type application struct {
 	searchProvider        *scrapingdog.Provider
 	searchScheduler       *search.Scheduler
 	subscriptionProcessor *subscription.Processor
-	jobSink               *internal.JobSink
-	matchAnalyzer         *MatchAnalyzer
 }
 
 func run(logger *slog.Logger) error {
@@ -498,9 +496,10 @@ func setupSessionManager(cfg config, FirestoreClient *internal.FirestoreClient, 
 
 func (app *application) startServices(ctx context.Context) error {
 	app.subscriptionProcessor = subscription.NewProcessor(app.fs, app.logger)
-	app.searchProvider = scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), app.logger)
+
+	jobSink := internal.NewJobSink(app.fs, app.logger)
+	app.searchProvider = scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), app.logger, scrapingdog.WithJobEventHandler(jobSink))
 	app.searchScheduler = search.NewScheduler(app.fs, app.logger, app.searchProvider, app.mailer, app.config.notifications.email)
-	app.matchAnalyzer = NewMatchAnalyzer(app.fs, app.logger)
 
 	if err := app.subscriptionProcessor.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start subscription processor: %w", err)
@@ -510,9 +509,6 @@ func (app *application) startServices(ctx context.Context) error {
 	}
 	if err := app.searchScheduler.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start search scheduler: %w", err)
-	}
-	if err := app.matchAnalyzer.Start(ctx); err != nil {
-		return fmt.Errorf("failed to start job processor: %w", err)
 	}
 
 	return nil

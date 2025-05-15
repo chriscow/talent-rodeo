@@ -160,9 +160,6 @@ func (app *application) serve(srv *http.Server) error {
 		if err := app.searchScheduler.Close(ctx); err != nil {
 			app.logger.Error("error stopping search scheduler", "error", err)
 		}
-		if err := app.matchAnalyzer.Close(ctx); err != nil {
-			app.logger.Error("error stopping job processor", "error", err)
-		}
 		if err := app.searchProvider.Close(ctx); err != nil {
 			app.logger.Error("error stopping search provider", "error", err)
 		}
