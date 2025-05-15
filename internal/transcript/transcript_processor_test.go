@@ -45,11 +45,8 @@ func TestTranscriptProcessor(t *testing.T) {
 	// Create test user
 	user := internal.CreateTestUser(t, client, "Test User", "test@example.com", "+14251234567", false)
 
-	// Create test processor
-	processor, err := newProcessor(client, logger)
-	if err != nil {
-		t.Fatalf("NewTranscriptProcessor() error = %v", err)
-	}
+	// Create Sentry hub for testing
+	hub := sentry.CurrentHub()
 
 	t.Run("ProcessCompletedAppointment", func(t *testing.T) {
 		// Set up mock responses for each prompt
@@ -66,12 +63,14 @@ func TestTranscriptProcessor(t *testing.T) {
 				"experienceLevel": "Senior",
 				"locations": ["US-WA-SEA", "US-CA-SF"]
 			}`,
-			// Mock response for work preferences
-			`{
-				"remotePreference": "Hybrid",
-				"salaryRange": "$150,000 - $200,000",
-				"industryPreferences": ["Technology", "Finance"]
-			}`,
+			// Mock response for work preferences with final_determinations tags
+			`<final_determinations>
+				{
+					"remotePreference": "Hybrid",
+					"salaryRange": "$150,000 - $200,000",
+					"industryPreferences": ["Technology", "Finance"]
+				}
+			</final_determinations>`,
 			// Mock response for keyword analysis
 			`{
 				"keywords": ["golang", "distributed systems", "cloud architecture"],
@@ -111,9 +110,40 @@ func TestTranscriptProcessor(t *testing.T) {
 		summary := "Candidate has 5 years of Go experience and is looking for senior engineering roles"
 		appointment.Summary = &summary
 
-		if err := processor.process(ctx, user, appointment); err != nil {
-			t.Fatalf("ProcessCompletedAppointment() error = %v", err)
+		// Create a mock transcript for testing
+		transcript := &internal.Transcript{
+			Messages: []minds.Message{
+				{
+					Role:    minds.RoleSystem,
+					Content: "System message",
+				},
+				{
+					Role:    minds.RoleUser,
+					Content: summary,
+				},
+			},
 		}
+
+		// Test the direct function calls that replaced processor methods
+		if err := getWorkPreferences(ctx, client, transcript, []string{"US-WA-SEA", "US-CA-SF"}, user); err != nil {
+			t.Fatalf("getWorkPreferences() error = %v", err)
+		}
+
+		if err := generateSteeringQuery(ctx, client, user, transcript); err != nil {
+			t.Fatalf("generateSteeringQuery() error = %v", err)
+		}
+
+		criteria, err := getOrCreateSearchCriteria(ctx, client, user)
+		if err != nil {
+			t.Fatalf("getOrCreateSearchCriteria() error = %v", err)
+		}
+
+		if err := internal.SubscribeToCriteria(ctx, client, user.ID, criteria.ID); err != nil {
+			t.Fatalf("internal.SubscribeToCriteria() error = %v", err)
+		}
+
+		// Test ProcessCompletedAppointment function as an integration test
+		go ProcessCompletedAppointment(hub, client, logger, appointment)
 
 		// Wait for all mock responses to be used
 		<-done
@@ -144,37 +174,6 @@ func TestTranscriptProcessor(t *testing.T) {
 		if len(subs) != 1 {
 			t.Errorf("ProcessCompletedAppointment() created %d subscriptions, want 1", len(subs))
 		}
-
-		// Get the updated appointment to verify all prompt results were saved
-		// updatedAppointment, err := internal.GetAppointment(ctx, client, user.ID, appointment.ID)
-		// if err != nil {
-		// 	t.Fatalf("internal.GetAppointment() error = %v", err)
-		// }
-
-		// Verify each prompt result field was saved in the ExtractedData struct
-		// if updatedAppointment.ExtractedData == nil {
-		// 	t.Error("ProcessCompletedAppointment() did not save ExtractedData")
-		// } else {
-		// 	if updatedAppointment.ExtractedData.TranscriptExtract == nil {
-		// 		t.Error("ProcessCompletedAppointment() did not save TranscriptExtract")
-		// 	}
-
-		// 	// if updatedAppointment.ExtractedData.ResolvedPreferences == nil {
-		// 	// 	t.Error("ProcessCompletedAppointment() did not save ResolvedPreferences")
-		// 	// }
-
-		// 	if updatedAppointment.ExtractedData.WorkPreferences == nil {
-		// 		t.Error("ProcessCompletedAppointment() did not save WorkPreferences")
-		// 	}
-
-		// 	if updatedAppointment.ExtractedData.SearchQueries == nil {
-		// 		t.Error("ProcessCompletedAppointment() did not save SearchQueries")
-		// 	}
-
-		// 	if updatedAppointment.ExtractedData.UserStatement == nil {
-		// 		t.Error("ProcessCompletedAppointment() did not save UserStatement")
-		// 	}
-		// }
 	})
 }
 

@@ -274,9 +274,6 @@ func TestProcessorIntegration(t *testing.T) {
 	})
 
 	t.Run("TestProcessUserJobs_NoSteeringQuery", func(t *testing.T) {
-		// Create a processor (not started)
-		processor := NewProcessor(fs, logger)
-
 		// Create a test user without steering query
 		userEmail := fmt.Sprintf("%s-nosteering@example.com", testPrefix)
 		userPhone := "+12345678902"
@@ -290,9 +287,9 @@ func TestProcessorIntegration(t *testing.T) {
 		}
 
 		// Process user jobs - should skip due to no steering query
-		err = processor.processUserJobs(ctx, testUser, *criteria)
-		if err != nil {
-			t.Fatalf("processUserJobs returned error: %v", err)
+		err = internal.RefreshUserJobs(ctx, fs, testUser, *criteria)
+		if err == nil {
+			t.Fatalf("RefreshUserJobs should return an error for user without steering query")
 		}
 
 		// Verify no user jobs were created
