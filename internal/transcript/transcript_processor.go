@@ -103,6 +103,8 @@ func checkErr(logger *slog.Logger, msg string, err error) error {
 func RecoverProcessingAppointments(hub *sentry.Hub, fs *internal.FirestoreClient, logger *slog.Logger) error {
 	ctx := context.Background()
 
+	logger = logger.With("pkg", "transcript.RecoverProcessingAppointments")
+
 	logger.Info("recovering processing appointments")
 
 	appointments, err := internal.ListAppointmentsNeedingProcessing(ctx, fs, logger)
@@ -138,6 +140,8 @@ func newProcessor(fs *internal.FirestoreClient, logger *slog.Logger) (*processor
 	if err != nil {
 		return nil, fmt.Errorf("failed to create openai provider: %w", err)
 	}
+
+	logger = logger.With("pkg", "transcript.Processor")
 
 	return &processor{
 		fs:     fs,

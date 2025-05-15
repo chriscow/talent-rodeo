@@ -64,7 +64,7 @@ func NewAPIClient(apiKey string, opts ...APIOption) *APIClient {
 		opt(client)
 	}
 
-	client.logger = client.logger.With("svc", "api_client")
+	client.logger = client.logger.With("pkg", "scrapingdog.APIClient")
 
 	// Trim trailing slash from baseURL to avoid issues with endpoint path construction
 	client.baseURL = strings.TrimSuffix(client.baseURL, "/")
@@ -74,7 +74,7 @@ func NewAPIClient(apiKey string, opts ...APIOption) *APIClient {
 
 // SearchJobListings searches for jobs with the given criteria
 func (c *APIClient) SearchJobListings(ctx context.Context, query string, location string, page int) ([]LinkedInJobListing, error) {
-	c.logger.InfoContext(ctx, "searching for jobs",
+	c.logger.Info("searching for job listings",
 		"query", query,
 		"location", location,
 		"page", page)
@@ -122,18 +122,12 @@ func (c *APIClient) SearchJobListings(ctx context.Context, query string, locatio
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	c.logger.InfoContext(ctx, "Search completed",
-		"query", query,
-		"location", location,
-		"page", page,
-		"jobs_found", len(jobs))
-
 	return jobs, nil
 }
 
 // GetJobDetails retrieves detailed information for a specific job
 func (c *APIClient) GetJobDetails(ctx context.Context, jobID string) (LinkedInJobDetail, error) {
-	c.logger.InfoContext(ctx, "Getting job details", "jobID", jobID)
+	c.logger.Debug("getting job details", "jobID", jobID)
 
 	// Construct URL with jobid parameter
 	baseURL, err := url.Parse(c.baseURL)
@@ -151,7 +145,7 @@ func (c *APIClient) GetJobDetails(ctx context.Context, jobID string) (LinkedInJo
 	baseURL.RawQuery = params.Encode()
 
 	// Log constructed URL at info level so it's visible in test output
-	c.logger.InfoContext(ctx, "Constructed URL for job details",
+	c.logger.Debug("constructed URL for job details",
 		"job_id", jobID,
 		"url", baseURL.String())
 
@@ -176,7 +170,7 @@ func (c *APIClient) GetJobDetails(ctx context.Context, jobID string) (LinkedInJo
 	// Check content type for debugging
 	contentType := resp.Header.Get("Content-Type")
 	if !strings.Contains(contentType, "application/json") {
-		c.logger.WarnContext(ctx, "Unexpected content type in response",
+		c.logger.Warn("unexpected content type in response",
 			"content-type", contentType,
 			"jobID", jobID)
 	}
@@ -194,7 +188,7 @@ func (c *APIClient) GetJobDetails(ctx context.Context, jobID string) (LinkedInJo
 		if len(preview) > 200 {
 			preview = preview[:200] + "..."
 		}
-		c.logger.ErrorContext(ctx, "Received HTML instead of JSON",
+		c.logger.Error("received HTML instead of JSON",
 			"jobID", jobID,
 			"preview", preview)
 		return LinkedInJobDetail{}, fmt.Errorf("received HTML response instead of JSON")
@@ -211,7 +205,7 @@ func (c *APIClient) GetJobDetails(ctx context.Context, jobID string) (LinkedInJo
 	// Set the ID from the input parameter
 	jobDetail.ID = jobID
 
-	c.logger.InfoContext(ctx, "Successfully fetched job details",
+	c.logger.Debug("successfully fetched job details",
 		"jobID", jobID,
 		"title", jobDetail.Position)
 
@@ -228,7 +222,7 @@ func (c *APIClient) doRequestWithRetry(ctx context.Context, req *http.Request) (
 	for i := 0; i < MaxRetries; i++ {
 		// Log retry attempt
 		if i > 0 {
-			c.logger.InfoContext(ctx, "Retrying request",
+			c.logger.Info("retrying request",
 				"attempt", i+1,
 				"max_retries", MaxRetries,
 				"backoff", backoffDelay,
@@ -262,7 +256,7 @@ func (c *APIClient) doRequestWithRetry(ctx context.Context, req *http.Request) (
 			body, bodyErr := io.ReadAll(resp.Body)
 			resp.Body.Close() // Important: close this response before retrying
 
-			c.logger.WarnContext(ctx, "Rate limit (429) encountered, backing off",
+			c.logger.Warn("rate limit (429) encountered, backing off",
 				"attempt", i+1,
 				"backoff", backoffDelay,
 				"response", string(body))
@@ -278,7 +272,7 @@ func (c *APIClient) doRequestWithRetry(ctx context.Context, req *http.Request) (
 
 			// Log body error if we had trouble reading it
 			if bodyErr != nil {
-				c.logger.WarnContext(ctx, "Failed to read error response body", "error", bodyErr)
+				c.logger.Warn("failed to read error response body", "error", bodyErr)
 			}
 
 			continue
@@ -286,7 +280,7 @@ func (c *APIClient) doRequestWithRetry(ctx context.Context, req *http.Request) (
 			// This is a 410 (request timeout) or 500+ (server-side) error - retry
 			resp.Body.Close() // Important: close this response before retrying
 
-			c.logger.WarnContext(ctx, "Retryable status code encountered",
+			c.logger.Warn("retryable status code encountered",
 				"status", statusCode,
 				"attempt", i+1,
 				"backoff", backoffDelay)

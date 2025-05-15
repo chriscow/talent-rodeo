@@ -99,7 +99,7 @@ func WithWorkerCount(count int) ProviderOption {
 
 // NewProvider creates a new ScrapingDog provider
 func NewProvider(apiKey string, logger *slog.Logger, opts ...ProviderOption) *Provider {
-	logger = logger.With("pkg", "scrapingdog")
+	logger = logger.With("pkg", "scrapingdog.Provider")
 
 	// Create provider with required configuration
 	provider := &Provider{
@@ -143,7 +143,7 @@ func (p *Provider) Name() string {
 
 // Validate checks if the provider is properly configured
 func (p *Provider) Validate(ctx context.Context) error {
-	p.logger.InfoContext(ctx, "Validating ScrapingDog provider")
+	p.logger.Info("validating ScrapingDog provider")
 
 	// Try a test search with minimal parameters
 	criteria := internal.SearchCriteria{
@@ -156,7 +156,7 @@ func (p *Provider) Validate(ctx context.Context) error {
 		return fmt.Errorf("validation failed: %w", err)
 	}
 
-	p.logger.InfoContext(ctx, "ScrapingDog provider validation successful")
+	p.logger.Info("ScrapingDog provider validation successful")
 	return nil
 }
 
@@ -172,7 +172,7 @@ func (p *Provider) Close(ctx context.Context) error {
 
 // SearchJobListings searches for jobs matching the given criteria
 func (p *Provider) SearchJobListings(ctx context.Context, criteria internal.SearchCriteria, page int) ([]internal.JobListing, error) {
-	p.logger.InfoContext(ctx, "searching for job listings",
+	p.logger.Debug("searching for job listings",
 		"keywords", criteria.Query,
 		"location", criteria.GeoID)
 
@@ -180,7 +180,7 @@ func (p *Provider) SearchJobListings(ctx context.Context, criteria internal.Sear
 	if p.cache != nil {
 		cachedJobs, found := p.cache.GetJobListings(ctx, criteria.GetSearchHash())
 		if found {
-			p.logger.InfoContext(ctx, "using cached job results", "count", len(cachedJobs))
+			p.logger.Debug("using cached job results", "count", len(cachedJobs))
 			return cachedJobs, nil
 		}
 	}
@@ -197,19 +197,19 @@ func (p *Provider) SearchJobListings(ctx context.Context, criteria internal.Sear
 		return nil, fmt.Errorf("failed to convert job listings: %w", err)
 	}
 
-	p.logger.InfoContext(ctx, "Search completed", "count", len(jobs))
+	p.logger.Info("search completed", "count", len(jobs))
 	return jobs, nil
 }
 
 // GetJobDetails retrieves detailed information for a job
 func (p *Provider) GetJobDetails(ctx context.Context, jobID string) (*internal.JobDetail, error) {
-	p.logger.InfoContext(ctx, "Getting job details", "jobID", jobID)
+	p.logger.Debug("getting job details", "jobID", jobID)
 
 	// Check if we have cached results
 	if p.cache != nil {
 		cachedDetails, found := p.cache.GetJobDetail(ctx, jobID)
 		if found {
-			p.logger.InfoContext(ctx, "Using cached job details", "jobID", jobID)
+			p.logger.Debug("using cached job details", "jobID", jobID)
 			return cachedDetails, nil
 		}
 	}
@@ -230,7 +230,7 @@ func (p *Provider) GetJobDetails(ctx context.Context, jobID string) (*internal.J
 
 // QueueSearch adds a search to the background processing queue
 func (p *Provider) QueueSearch(ctx context.Context, searchJob internal.SearchTask) error {
-	p.logger.InfoContext(ctx, "queueing search",
+	p.logger.Info("queueing search",
 		"query", searchJob.Criteria.Query,
 		"geoID", searchJob.Criteria.GeoID,
 		"maxPages", searchJob.Criteria.MaxPages)
