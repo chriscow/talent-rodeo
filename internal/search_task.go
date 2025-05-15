@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"errors"
+
 	"cloud.google.com/go/firestore"
 	"github.com/google/uuid"
 	"google.golang.org/api/iterator"
@@ -32,6 +34,8 @@ type SearchTask struct {
 	UpdatedAt *time.Time
 }
 
+var ErrSearchTaskExists = errors.New("search task already exists")
+
 func CreateSearchTask(ctx context.Context, fs *FirestoreClient, criteria SearchCriteria, provider string) (*SearchTask, error) {
 	// Check for existing active tasks for this criteria
 	activeTasks := fs.Collection(SearchTaskCollection).
@@ -51,7 +55,7 @@ func CreateSearchTask(ctx context.Context, fs *FirestoreClient, criteria SearchC
 		if err := doc.DataTo(existingTask); err != nil {
 			return nil, fmt.Errorf("error parsing existing task: %w", err)
 		}
-		return existingTask, nil
+		return existingTask, ErrSearchTaskExists
 	}
 
 	nowUTC := time.Now().UTC()
