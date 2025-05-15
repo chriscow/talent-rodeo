@@ -509,7 +509,8 @@ func RefreshUserJobs(ctx context.Context, fs *FirestoreClient, user *User, crite
 	}
 
 	// Search for jobs using the user's steering query and the criteria ID
-	scoredJobs, err := SemanticSearchJobs(ctx, user.SteeringQuery, criteria.ID, DefaultUserJobsTopK)
+	params := DefaultHybridSearchParams()
+	scoredJobs, err := SemanticSearchJobs(ctx, user.SteeringQuery, criteria.ID, DefaultUserJobsTopK, params)
 	if err != nil {
 		return fmt.Errorf("failed to search jobs for user %s: %w", user.ID, err)
 	}
