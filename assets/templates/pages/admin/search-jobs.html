@@ -66,11 +66,60 @@
                 <input type="number" name="top_k" id="top_k" value="{{if .TopK}}{{.TopK}}{{else}}10{{end}}" min="1" max="100">
             </div>
             <div>
+                <label for="dense_weight">Dense Weight</label>
+                <input type="number" step="0.01" min="0" max="1" name="dense_weight" id="dense_weight" value="{{with .HybridParams}}{{printf "%.2f" .DenseWeight}}{{else}}0.70{{end}}">
+            </div>
+            <div>
+                <label for="sparse_weight">Sparse Weight</label>
+                <input type="number" step="0.01" min="0" max="1" name="sparse_weight" id="sparse_weight" value="{{with .HybridParams}}{{printf "%.2f" .SparseWeight}}{{else}}0.30{{end}}">
+            </div>
+            <div>
+                <label for="score_fusion">Score Fusion</label>
+                <select name="score_fusion" id="score_fusion">
+                    {{ $cur := "linear" }}
+                    {{with .HybridParams}}{{$cur = .ScoreFusion}}{{end}}
+                    <option value="linear" {{if eq $cur "linear"}}selected{{end}}>Linear</option>
+                    <option value="max" {{if eq $cur "max"}}selected{{end}}>Max</option>
+                    <option value="min" {{if eq $cur "min"}}selected{{end}}>Min</option>
+                    <option value="harmonic" {{if eq $cur "harmonic"}}selected{{end}}>Harmonic</option>
+                    <option value="reciprocal_rank_fusion" {{if eq $cur "reciprocal_rank_fusion"}}selected{{end}}>Reciprocal Rank Fusion</option>
+                    <option value="rerank" {{if eq $cur "rerank"}}selected{{end}}>Rerank (LLM)</option>
+                </select>
+            </div>
+            <div>
+                <label for="recency_weight">Recency Weight</label>
+                <input type="number" step="0.01" min="0" max="1" name="recency_weight" id="recency_weight" value="{{with .HybridParams}}{{printf "%.2f" .RecencyWeight}}{{else}}0.20{{end}}">
+            </div>
+            <div>
+                <label for="recency_half_life">Recency Half-Life (days)</label>
+                <input type="number" step="1" min="1" max="365" name="recency_half_life" id="recency_half_life" value="{{with .HybridParams}}{{printf "%.0f" .RecencyHalfLife}}{{else}}30{{end}}">
+            </div>
+            <div>
+                <label for="rerank_model">Rerank Model</label>
+                <input type="text" name="rerank_model" id="rerank_model" value="{{with .HybridParams}}{{.RerankModel}}{{else}}bge-reranker-v2-m3{{end}}">
+            </div>
+            <div>
                 <label>&nbsp;</label>
                 <button type="submit">Search</button>
             </div>
         </div>
     </form>
+    
+    {{if .HybridParams}}
+    <section style="margin-top:1rem;">
+        <details open>
+            <summary><strong>Current Hybrid Search Parameters</strong></summary>
+            <ul>
+                <li><strong>Dense Weight:</strong> {{printf "%.2f" .HybridParams.DenseWeight}}</li>
+                <li><strong>Sparse Weight:</strong> {{printf "%.2f" .HybridParams.SparseWeight}}</li>
+                <li><strong>Score Fusion:</strong> {{.HybridParams.ScoreFusion}}</li>
+                <li><strong>Recency Weight:</strong> {{printf "%.2f" .HybridParams.RecencyWeight}}</li>
+                <li><strong>Recency Half-Life:</strong> {{printf "%.0f" .HybridParams.RecencyHalfLife}} days</li>
+                <li><strong>Rerank Model:</strong> {{.HybridParams.RerankModel}}</li>
+            </ul>
+        </details>
+    </section>
+    {{end}}
     
     {{if .SearchResults}}
     <section class="search-results">
