@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"runtime"
 	"sort"
+	"strings"
 	"talent-rodeo/internal/utils"
 	"time"
 
@@ -14,13 +16,11 @@ import (
 
 // HybridSearchParams provides configuration options for hybrid semantic search
 type HybridSearchParams struct {
-	DenseWeight     float64             // Weight for dense results (0.0-1.0)
-	SparseWeight    float64             // Weight for sparse results (0.0-1.0)
-	ScoreFusion     string              // "linear", "max", "min", "harmonic", "reciprocal_rank_fusion", "rerank"
-	RecencyWeight   float64             // Weight to apply to recency boosting (0.0-1.0)
-	RecencyHalfLife float64             // Half-life in days for recency decay
-	EnableReranking bool                // Whether to use the reranker as a final step
-	RerankModel     PineconeRerankModel // Model to use for reranking, defaults to "bge-reranker-v2-m3"
+	DenseWeight     float64 // Weight for dense results (0.0-1.0)
+	SparseWeight    float64 // Weight for sparse results (0.0-1.0)
+	ScoreFusion     string  // "linear", "max", "min", "harmonic", "reciprocal_rank_fusion"
+	RecencyWeight   float64 // Weight to apply to recency boosting (0.0-1.0)
+	RecencyHalfLife float64 // Half-life in days for recency decay
 }
 
 // DefaultHybridSearchParams returns a set of default parameters for hybrid search
@@ -31,8 +31,6 @@ func DefaultHybridSearchParams() *HybridSearchParams {
 		ScoreFusion:     "linear",
 		RecencyWeight:   0.2,
 		RecencyHalfLife: 30.0,
-		EnableReranking: false,
-		RerankModel:     "bge-reranker-v2-m3",
 	}
 }
 
@@ -41,6 +39,24 @@ type ScoredJobDetail struct {
 	DenseScore    float64
 	SparseScore   float64
 	CombinedScore float64
+}
+
+func (s *ScoredJobDetail) ToPineconeDocument() pinecone.Document {
+	// pinecone.Document is a map[string]any
+	return pinecone.Document{
+		"_id":           s.JobDetail.ID,
+		"description":   s.JobDetail.Description,
+		"provider":      s.JobDetail.Provider,
+		"providerID":    s.JobDetail.ProviderJobID,
+		"title":         s.JobDetail.Title,
+		"company":       s.JobDetail.Company,
+		"location":      s.JobDetail.Location,
+		"url":           s.JobDetail.URL,
+		"postedDate":    s.JobDetail.PostedDate,
+		"denseScore":    s.DenseScore,
+		"sparseScore":   s.SparseScore,
+		"combinedScore": s.CombinedScore,
+	}
 }
 
 // SearchResult holds raw search results from Pinecone
@@ -58,7 +74,6 @@ func (p *HybridSearchParams) Validate() *HybridSearchParams {
 		"min":                    true,
 		"harmonic":               true,
 		"reciprocal_rank_fusion": true,
-		"rerank":                 true,
 	}
 
 	if !validFusions[p.ScoreFusion] {
@@ -104,23 +119,39 @@ func (p *HybridSearchParams) Validate() *HybridSearchParams {
 		p.RecencyHalfLife = 30.0
 	}
 
-	// Default rerank model if none specified
-	if p.RerankModel == "" {
-		p.RerankModel = "bge-reranker-v2-m3"
-	}
-
 	return p
 }
 
-// QueryPinecone performs the actual Pinecone query for both dense and sparse vectors
-// This function is separated to make testing easier by allowing mocking of Pinecone responses
-func QueryPinecone(
-	ctx context.Context,
-	client *Pinecone,
-	steeringQuery *SteeringQuery,
-	criteriaID string,
-	topK int,
-) (*SearchResult, error) {
+// SemanticSearchJobs performs a hybrid search combining dense and sparse vectors
+// to find the most relevant job listings based on the query.
+//
+// Parameters:
+//   - ctx: The context for the operation
+//   - steeringQuery: The query to steer the search
+//   - criteriaID: Optional criteria ID to filter results
+//   - topK: Maximum number of results to return
+//   - params: Optional search parameters to customize the search behavior
+//
+// The function performs the following steps:
+//  1. Retrieves both dense and sparse vectors for the query
+//  2. Searches both dense and sparse indices
+//  3. Combines and normalizes scores using the specified fusion strategy
+//  4. Applies recency boosting if dates are available
+//  5. Deduplicates and sorts results
+//
+// If params is nil, default parameters will be used.
+func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, criteriaID string, topK int, params *HybridSearchParams) ([]ScoredJobDetail, error) {
+	if params == nil {
+		params = DefaultHybridSearchParams()
+	} else {
+		params = params.Validate()
+	}
+
+	client, err := NewPineconeClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Pinecone client: %w", err)
+	}
+
 	// Build filter map
 	filter := map[string]any{}
 	if criteriaID != "" {
@@ -160,23 +191,81 @@ func QueryPinecone(
 		return nil, fmt.Errorf("failed to search sparse index: %w", err)
 	}
 
-	return &SearchResult{
+	searchResult := &SearchResult{
 		DenseResults:  denseResults,
 		SparseResults: sparseResults,
-	}, nil
+	}
+
+	return processSearchResults(ctx, searchResult, topK, params)
 }
 
-// ProcessSearchResults processes the raw search results from Pinecone and returns the scored job details
-// This function is separated to make testing easier by allowing testing of result processing
-// without requiring actual Pinecone calls
-func ProcessSearchResults(
-	ctx context.Context,
-	searchResult *SearchResult,
-	steeringQuery *SteeringQuery,
-	topK int,
-	params *HybridSearchParams,
-	client *Pinecone,
-) ([]ScoredJobDetail, error) {
+// RerankResults applies reranking to a list of scored job details using the Pinecone reranker.
+// This is extracted to make testing easier.
+func RerankResults(ctx context.Context, client *Pinecone, scoredMatches []*ScoredJobDetail, rerankQuery string, topK int, model PineconeRerankModel) ([]ScoredJobDetail, error) {
+	rerankParams := map[string]any{
+		"truncate": "END",
+	}
+
+	// Convert to Documents for reranking
+	documents := make([]pinecone.Document, 0, len(scoredMatches))
+	for _, match := range scoredMatches {
+		if match.JobDetail.Description == "" {
+			continue
+		}
+
+		// Convert metadata to Document
+		doc := match.ToPineconeDocument()
+
+		documents = append(documents, doc)
+	}
+
+	rerankResponse, err := client.Inference.Rerank(ctx, &pinecone.RerankRequest{
+		Model:      string(model),
+		Query:      rerankQuery,
+		Documents:  documents,
+		RankFields: &[]string{"text"},
+		TopN:       &topK,
+		Parameters: &rerankParams,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to rerank jobs: %w", err)
+	}
+
+	// Create final results from reranker output
+	results := make([]ScoredJobDetail, 0, len(rerankResponse.Data))
+	for _, result := range rerankResponse.Data {
+		doc := *result.Document // Document is a map[string]any
+
+		// Parse posted date if available
+		var postedDate time.Time
+		if dateStr, ok := doc["postedDate"].(string); ok {
+			postedDate, _ = time.Parse(time.RFC3339, dateStr)
+		}
+
+		// Create job detail from document
+		jobDetail := JobDetail{
+			ID:          doc["ID"].(string),
+			Title:       safeGetString(doc, "title"),
+			Company:     safeGetString(doc, "company"),
+			Location:    safeGetString(doc, "location"),
+			Description: safeGetString(doc, "text"),
+			URL:         safeGetString(doc, "url"),
+			PostedDate:  postedDate,
+		}
+
+		results = append(results, ScoredJobDetail{
+			JobDetail:     jobDetail,
+			CombinedScore: float64(result.Score),
+		})
+	}
+
+	return results, nil
+}
+
+// processSearchResults processes raw search results from Pinecone and applies fusion scoring,
+// normalization, recency boosting, deduplication, and sorting.
+// The client parameter is optional and only needed when reranking is specified.
+func processSearchResults(_ context.Context, searchResult *SearchResult, topK int, params *HybridSearchParams) ([]ScoredJobDetail, error) {
 	// Create maps to track scores from each source
 	denseScores := make(map[string]float32)
 	sparseScores := make(map[string]float32)
@@ -203,8 +292,15 @@ func ProcessSearchResults(
 		if !exists {
 			match = &ScoredJobDetail{
 				JobDetail: JobDetail{
-					ID:         id,
-					PostedDate: postedDate,
+					ID:            id,
+					Provider:      meta.Fields["provider"].GetStringValue(),
+					ProviderJobID: meta.Fields["providerID"].GetStringValue(),
+					Title:         meta.Fields["title"].GetStringValue(),
+					Company:       meta.Fields["company"].GetStringValue(),
+					Location:      meta.Fields["location"].GetStringValue(),
+					URL:           meta.Fields["url"].GetStringValue(),
+					PostedDate:    postedDate,
+					Description:   meta.Fields["text"].GetStringValue(),
 				},
 				DenseScore:  float64(hit.Score),
 				SparseScore: 0,
@@ -236,8 +332,15 @@ func ProcessSearchResults(
 		if !exists {
 			match = &ScoredJobDetail{
 				JobDetail: JobDetail{
-					ID:         id,
-					PostedDate: postedDate,
+					ID:            id,
+					Provider:      meta.Fields["provider"].GetStringValue(),
+					ProviderJobID: meta.Fields["providerID"].GetStringValue(),
+					Title:         meta.Fields["title"].GetStringValue(),
+					Company:       meta.Fields["company"].GetStringValue(),
+					Location:      meta.Fields["location"].GetStringValue(),
+					URL:           meta.Fields["url"].GetStringValue(),
+					PostedDate:    postedDate,
+					Description:   meta.Fields["text"].GetStringValue(),
 				},
 				DenseScore:  0,
 				SparseScore: float64(hit.Score),
@@ -274,6 +377,22 @@ func ProcessSearchResults(
 
 		// Apply recency boosting if we have a date
 		if !match.JobDetail.PostedDate.IsZero() {
+			// Log details about the posted date and recency calculation
+			daysSince := time.Since(match.JobDetail.PostedDate).Hours() / 24.0
+			decayFactor := math.Exp(-daysSince / params.RecencyHalfLife)
+
+			// Calculate the boosted score separately for logging
+			recencyBoosted := (1.0-params.RecencyWeight)*fused + params.RecencyWeight*decayFactor
+
+			// Use a logger that doesn't affect production but works in tests
+			// We'll use fmt.Printf in a way that only outputs during tests
+			if _, file, _, ok := runtime.Caller(1); ok && strings.Contains(file, "_test.go") {
+				fmt.Printf("ID=%s, Dense=%.4f, Sparse=%.4f, Fused=%.4f, PostedDate=%v, DaysSince=%.2f, DecayFactor=%.4f, Recency=%.4f, Final=%.4f\n",
+					match.JobDetail.ID, match.DenseScore, match.SparseScore, fused,
+					match.JobDetail.PostedDate.Format(time.RFC3339), daysSince,
+					decayFactor, params.RecencyWeight, recencyBoosted)
+			}
+
 			fused = recencyBoost(fused, match.JobDetail.PostedDate, params.RecencyWeight, params.RecencyHalfLife)
 		}
 
@@ -316,71 +435,6 @@ func ProcessSearchResults(
 		scoredMatches = scoredMatches[:topK]
 	}
 
-	// Optional: use reranker for final ordering if specified
-	rerankParams := map[string]any{
-		"truncate": "END",
-	}
-
-	// If reranking is specifically requested
-	if params.ScoreFusion == "rerank" {
-		// Convert to Documents for reranking
-		documents := make([]pinecone.Document, 0, len(scoredMatches))
-		for _, match := range scoredMatches {
-			if match.JobDetail.Description == "" {
-				continue
-			}
-
-			// Convert metadata to Document
-			doc := pinecone.Document{}
-			doc["ID"] = match.JobDetail.ID
-			doc["Score"] = match.CombinedScore
-
-			documents = append(documents, doc)
-		}
-
-		rerankResponse, err := client.Inference.Rerank(ctx, &pinecone.RerankRequest{
-			Model:      string(params.RerankModel),
-			Query:      steeringQuery.RerankQuery,
-			Documents:  documents,
-			RankFields: &[]string{"text"},
-			TopN:       &topK,
-			Parameters: &rerankParams,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to rerank jobs: %w", err)
-		}
-
-		// Create final results from reranker output
-		results := make([]ScoredJobDetail, 0, len(rerankResponse.Data))
-		for _, result := range rerankResponse.Data {
-			doc := *result.Document // Document is a map[string]any
-
-			// Parse posted date if available
-			var postedDate time.Time
-			if dateStr, ok := doc["postedDate"].(string); ok {
-				postedDate, _ = time.Parse(time.RFC3339, dateStr)
-			}
-
-			// Create job detail from document
-			jobDetail := JobDetail{
-				ID:          doc["ID"].(string),
-				Title:       safeGetString(doc, "title"),
-				Company:     safeGetString(doc, "company"),
-				Location:    safeGetString(doc, "location"),
-				Description: safeGetString(doc, "text"),
-				URL:         safeGetString(doc, "url"),
-				PostedDate:  postedDate,
-			}
-
-			results = append(results, ScoredJobDetail{
-				JobDetail:     jobDetail,
-				CombinedScore: float64(result.Score),
-			})
-		}
-
-		return results, nil
-	}
-
 	// Create final results from sorted matches
 	results := make([]ScoredJobDetail, 0, len(scoredMatches))
 	for _, match := range scoredMatches {
@@ -392,47 +446,6 @@ func ProcessSearchResults(
 	}
 
 	return results, nil
-}
-
-// SemanticSearchJobs performs a hybrid search combining dense and sparse vectors
-// to find the most relevant job listings based on the query.
-//
-// Parameters:
-//   - ctx: The context for the operation
-//   - steeringQuery: The query to steer the search
-//   - criteriaID: Optional criteria ID to filter results
-//   - topK: Maximum number of results to return
-//   - params: Optional search parameters to customize the search behavior
-//
-// The function performs the following steps:
-//  1. Retrieves both dense and sparse vectors for the query
-//  2. Searches both dense and sparse indices
-//  3. Combines and normalizes scores using the specified fusion strategy
-//  4. Applies recency boosting if dates are available
-//  5. Deduplicates and sorts results
-//  6. Optionally applies reranking for final ordering
-//
-// If params is nil, default parameters will be used.
-func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, criteriaID string, topK int, params *HybridSearchParams) ([]ScoredJobDetail, error) {
-	if params == nil {
-		params = DefaultHybridSearchParams()
-	} else {
-		params = params.Validate()
-	}
-
-	client, err := NewPineconeClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Pinecone client: %w", err)
-	}
-
-	// Query Pinecone for both dense and sparse results
-	searchResult, err := QueryPinecone(ctx, client, steeringQuery, criteriaID, topK)
-	if err != nil {
-		return nil, err
-	}
-
-	// Process the search results
-	return ProcessSearchResults(ctx, searchResult, steeringQuery, topK, params, client)
 }
 
 // fusionScore combines dense and sparse scores using the specified method.
