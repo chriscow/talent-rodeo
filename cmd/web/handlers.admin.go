@@ -291,6 +291,9 @@ func (app *application) adminSearchJobs(w http.ResponseWriter, r *http.Request) 
 
 	selectedCriteriaID := ""
 
+	// Default params
+	params := internal.DefaultHybridSearchParams()
+
 	if r.Method == http.MethodPost {
 		if err := r.ParseForm(); err != nil {
 			app.serverError(w, r, err)
@@ -314,19 +317,52 @@ func (app *application) adminSearchJobs(w http.ResponseWriter, r *http.Request) 
 			}
 		}
 
+		// Parse HybridSearchParams fields from form
+		if v := r.PostForm.Get("dense_weight"); v != "" {
+			if f, err := strconv.ParseFloat(v, 64); err == nil {
+				params.DenseWeight = f
+			}
+		}
+		if v := r.PostForm.Get("sparse_weight"); v != "" {
+			if f, err := strconv.ParseFloat(v, 64); err == nil {
+				params.SparseWeight = f
+			}
+		}
+		if v := r.PostForm.Get("score_fusion"); v != "" {
+			params.ScoreFusion = v
+		}
+		if v := r.PostForm.Get("recency_weight"); v != "" {
+			if f, err := strconv.ParseFloat(v, 64); err == nil {
+				params.RecencyWeight = f
+			}
+		}
+		if v := r.PostForm.Get("recency_half_life"); v != "" {
+			if f, err := strconv.ParseFloat(v, 64); err == nil {
+				params.RecencyHalfLife = f
+			}
+		}
+		if v := r.PostForm.Get("rerank_model"); v != "" {
+			params.RerankModel = internal.PineconeRerankModel(v)
+		}
+
 		data["SearchQuery"] = searchQuery
 		data["TopK"] = topK
+		data["HybridParams"] = params
 
 		if searchQuery != "" {
 
-			reranked, err := app.semanticSearchJobs(ctx, searchQuery, topK, selectedCriteriaID)
+			reranked, err := app.semanticSearchJobsWithParams(ctx, searchQuery, topK, selectedCriteriaID, params)
 			if err != nil {
 				app.logger.Error("failed to search jobs", "error", err)
-				data["Error"] = "Failed to 	search jobs: " + err.Error()
+				data["Error"] = "Failed to \tsearch jobs: " + err.Error()
 			} else {
 				data["SearchResults"] = reranked.Data
 			}
 		}
+	}
+	// For GET, pre-fill with defaults
+	if r.Method != http.MethodPost {
+		data["HybridParams"] = params
 	}
 
 	if err := response.Page(w, http.StatusOK, data, "pages/admin/search-jobs.html"); err != nil {
@@ -425,4 +461,10 @@ func (app *application) semanticSearchJobs(ctx context.Context, searchQuery stri
 		TopN:       &topK,
 		Parameters: &params,
 	})
+}
+
+func (app *application) semanticSearchJobsWithParams(ctx context.Context, searchQuery string, topK int, selectedCriteriaID string, params *internal.HybridSearchParams) (*pinecone.RerankResponse, error) {
+	// TODO: Wire this to your new hybrid search implementation
+	// For now, just call the old function
+	return app.semanticSearchJobs(ctx, searchQuery, topK, selectedCriteriaID)
 }
