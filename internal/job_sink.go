@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	JobDetailNamespace = "job-details"
+	JobDetailNamespace = "job-details" // Pinecone namespace for job details
 )
 
 // JobProcessor is an interface that defines the methods for processing new job details

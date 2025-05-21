@@ -14,10 +14,12 @@ import (
 )
 
 type PineconeEmbedModel string
+type PineconeRerankModel string
 
 const (
-	PineconeEmbedDense  PineconeEmbedModel = "llama-text-embed-v2"
-	PineconeEmbedSparse PineconeEmbedModel = "pinecone-sparse-english-v0"
+	PineconeEmbedDense    PineconeEmbedModel  = "llama-text-embed-v2"
+	PineconeEmbedSparse   PineconeEmbedModel  = "pinecone-sparse-english-v0"
+	PineconeRerankBGEv2M3 PineconeRerankModel = "bge-reranker-v2-m3"
 )
 
 type Pinecone struct {
@@ -64,7 +66,7 @@ func WithRerank(topN int, rankFields []string) func(*PineconeQueryOptions) {
 		topNInt := int32(topN)
 
 		q.rerank = &pinecone.SearchRecordsRerank{
-			Model:      "bge-reranker-v2-m3",
+			Model:      string(PineconeRerankBGEv2M3),
 			TopN:       &topNInt,
 			RankFields: rankFields,
 		}
