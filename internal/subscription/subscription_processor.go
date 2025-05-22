@@ -9,6 +9,7 @@ import (
 	"os"
 	"sync"
 	"talent-rodeo/internal"
+	"talent-rodeo/internal/cloudflare"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -17,6 +18,9 @@ import (
 const (
 	// DefaultTickInterval is the default interval for processing subscriptions (24 hours)
 	DefaultTickInterval = 24 * time.Hour
+
+	// FeatureFlag for subscription processor
+	SubscriptionProcessorFlag = "subscription-processor"
 )
 
 // Processor handles the periodic checking and publishing of search criteria subscriptions.
@@ -31,6 +35,7 @@ type Processor struct {
 	interval   time.Duration             // Processing interval (defaults to DefaultTickInterval)
 	isRunning  bool                      // Flag indicating if the processor is currently running
 	cancelFunc context.CancelFunc        // Function to cancel the processing context
+	kv         *cloudflare.KV            // Cloudflare KV client for feature flags
 }
 
 // NewProcessor creates a new subscription processor with the provided Firestore client and logger.
@@ -76,6 +81,12 @@ func (p *Processor) Start(ctx context.Context) error {
 
 	p.logger.Info("Starting subscription processor", "interval", p.interval)
 
+	// Initialize Cloudflare KV client for feature flags
+	if err := p.initCloudflareKV(); err != nil {
+		p.logger.Error("Failed to initialize Cloudflare KV client", "error", err)
+		// Continue without feature flags
+	}
+
 	// Create a cancelable context
 	ctx, cancel := context.WithCancel(ctx)
 	p.cancelFunc = cancel
@@ -119,6 +130,17 @@ func (p *Processor) Start(ctx context.Context) error {
 	return nil
 }
 
+// initCloudflareKV initializes the Cloudflare KV client
+func (p *Processor) initCloudflareKV() error {
+	kv, err := cloudflare.NewKV()
+	if err != nil {
+		return fmt.Errorf("failed to create Cloudflare KV client: %w", err)
+	}
+
+	p.kv = kv
+	return nil
+}
+
 // Stop halts the subscription processor.
 // It stops the ticker, signals the goroutines to stop, and waits for all processing to complete.
 // This method is safe to call even if the processor is not running.
@@ -137,6 +159,7 @@ func (p *Processor) Stop() {
 
 	p.wg.Wait()
 	p.isRunning = false
+
 	p.logger.Info("Subscription processor stopped")
 }
 
@@ -151,6 +174,27 @@ func (p *Processor) Stop() {
 // Errors during processing of individual criteria are logged and reported to Sentry,
 // but do not stop the processing of other criteria.
 func (p *Processor) process(ctx context.Context) error {
+	// Check feature flag from Cloudflare KV
+	enabled := true // Default to enabled
+	if p.kv != nil {
+		var isEnabled bool
+		err := p.kv.Get(SubscriptionProcessorFlag, &isEnabled)
+		if err != nil {
+			if err != cloudflare.ErrNotFound {
+				// Log error but continue with default (enabled)
+				p.logger.Error("Failed to get feature flag from Cloudflare KV", "flag", SubscriptionProcessorFlag, "error", err)
+			}
+			// If key not found, keep default (true)
+		} else {
+			enabled = isEnabled
+		}
+
+		if !enabled {
+			// Subscription processor is disabled by feature flag, return silently
+			return nil
+		}
+	}
+
 	p.logger.Info("processing search criteria subscriptions...")
 
 	// Get all criteria
@@ -275,3 +319,63 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 	p.logger.Info("Successfully processed criteria", "id", criteria.ID)
 	return nil
 }
+
+/*
+func (app *application) saveUploadedFile(file multipart.File, filepath string) error {
+	// Read the entire file into a byte slice
+	b, err := io.ReadAll(file)
+	if err != nil {
+		return fmt.Errorf("couldn't read file: %v", err)
+	}
+
+	fileSize := int64(len(b))
+
+	// Convert the byte slice back into a reader
+	fileReader := bytes.NewReader(b)
+
+	// Create the S3 Bucket object
+	bucket := os.Getenv("SPACES_BUCKET")
+
+	app.logger.Info("Uploading file to DigitalOcean Spaces", "bucket", bucket, "key", filepath, "size", fileSize)
+
+	// Create the parameters for the upload
+	params := &s3.PutObjectInput{
+		Bucket:        aws.String(bucket),
+		Key:           aws.String(filepath),
+		Body:          fileReader,
+		ACL:           aws.String("public-read"), // or "public-read" if you want the file to be publicly accessible
+		ContentLength: aws.Int64(fileSize),
+	}
+
+	// Upload the file to S3
+	_, err = app.s3.PutObject(params)
+	if err != nil {
+		return fmt.Errorf("couldn't upload file: %v", err)
+	}
+
+	return nil
+}
+
+func (app *application) deleteImageByName(imageName string) error {
+	// Create the S3 Bucket object
+	bucket := os.Getenv("SPACES_BUCKET")
+
+	app.logger.Info("Deleting file from DigitalOcean Spaces", "bucket", bucket, "key", imageName)
+
+	// Create the parameters for the delete operation
+	params := &s3.DeleteObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(imageName),
+	}
+
+	// Delete the object from S3
+	_, err := app.s3.DeleteObject(params)
+	if err != nil {
+		return fmt.Errorf("couldn't delete file: %v", err)
+	}
+
+	app.logger.Info("File deleted successfully", "bucket", bucket, "key", imageName)
+
+	return nil
+}
+*/

@@ -26,6 +26,10 @@ import (
 
 	scsfs "github.com/alexedwards/scs/firestore"
 	"github.com/alexedwards/scs/v2"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/getsentry/sentry-go"
 	"github.com/joho/godotenv"
 	"github.com/lmittmann/tint"
@@ -126,6 +130,7 @@ type application struct {
 	logger                *slog.Logger
 	fs                    *internal.FirestoreClient
 	js                    jetstream.JetStream
+	s3                    *s3.S3
 	processor             *tasks.Processor
 	wg                    sync.WaitGroup
 	natsShutdown          chan struct{}
@@ -337,9 +342,15 @@ func run(logger *slog.Logger) error {
 		return fmt.Errorf("failed to recover processing appointments: %w", err)
 	}
 
+	s3Client, err := initS3Client()
+	if err != nil {
+		return fmt.Errorf("failed to initialize S3 client: %w", err)
+	}
+
 	app := &application{
 		config: cfg,
 		fs:     FirestoreClient,
+		s3:     s3Client,
 		logger: logger,
 		mailer: mailer,
 		pusher: pusherClient,
@@ -407,6 +418,21 @@ func setupNATSHandler(natsURL string, logger *slog.Logger) (*th.NATSMessageSched
 	return th.NewNATSMessageScheduler(js, logger), nil
 }
 
+func initS3Client() (*s3.S3, error) {
+	s3Config := &aws.Config{
+		Credentials:      credentials.NewStaticCredentials(os.Getenv("SPACES_KEY"), os.Getenv("SPACES_SECRET"), ""),
+		Endpoint:         aws.String(os.Getenv("SPACES_ENDPOINT")),
+		Region:           aws.String("us-east-1"), // DigitalOcean Spaces uses "us-east-1" as default region
+		S3ForcePathStyle: aws.Bool(false),         // Configures to use subdomain/virtual hosting style
+	}
+	newSession, err := session.NewSession(s3Config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new S3 session: %v", err)
+	}
+	s3Client := s3.New(newSession)
+	return s3Client, nil
+}
+
 func checkEnv(logger *slog.Logger) error {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -421,7 +447,11 @@ func checkEnv(logger *slog.Logger) error {
 
 	requiredKeys := []string{"BASE_URL", "SESSION_SECRET", "SMTP_USERNAME",
 		"SMTP_PASSWORD", "LINKEDIN_AUTH_CLIENT_ID", "LINKEDIN_AUTH_CLIENT_SECRET",
-		"OPENAI_API_KEY", "GEMINI_API_KEY", "PUSHER_APP_ID", "PUSHER_KEY", "PUSHER_SECRET", "PUSHER_CLUSTER",
+		"OPENAI_API_KEY", "GEMINI_API_KEY",
+
+		"PUSHER_APP_ID", "PUSHER_KEY", "PUSHER_SECRET", "PUSHER_CLUSTER",
+
+		"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_BUCKET_ENDPOINT",
 
 		"TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER",
 
