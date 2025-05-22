@@ -341,22 +341,23 @@ func (app *application) adminSearchJobs(w http.ResponseWriter, r *http.Request) 
 				params.RecencyHalfLife = f
 			}
 		}
-		if v := r.PostForm.Get("rerank_model"); v != "" {
-			params.RerankModel = internal.PineconeRerankModel(v)
-		}
+		// Add a boolean for enabling reranking
+		enableReranking := r.PostForm.Get("enable_reranking") == "on"
+		data["EnableReranking"] = enableReranking
 
 		data["SearchQuery"] = searchQuery
 		data["TopK"] = topK
 		data["HybridParams"] = params
+		data["EnableReranking"] = enableReranking // Add to data for template rendering
 
 		if searchQuery != "" {
 
-			reranked, err := app.semanticSearchJobsWithParams(ctx, searchQuery, topK, selectedCriteriaID, params)
+			results, err := app.semanticSearchJobsWithParams(ctx, searchQuery, topK, selectedCriteriaID, params, enableReranking)
 			if err != nil {
 				app.logger.Error("failed to search jobs", "error", err)
 				data["Error"] = "Failed to \tsearch jobs: " + err.Error()
 			} else {
-				data["SearchResults"] = reranked.Data
+				data["SearchResults"] = results
 			}
 		}
 	}
@@ -463,8 +464,43 @@ func (app *application) semanticSearchJobs(ctx context.Context, searchQuery stri
 	})
 }
 
-func (app *application) semanticSearchJobsWithParams(ctx context.Context, searchQuery string, topK int, selectedCriteriaID string, params *internal.HybridSearchParams) (*pinecone.RerankResponse, error) {
+func (app *application) semanticSearchJobsWithParams(ctx context.Context, searchQuery string, topK int, selectedCriteriaID string, params *internal.HybridSearchParams, enableReranking bool) ([]internal.ScoredJobDetail, error) {
 	// TODO: Wire this to your new hybrid search implementation
 	// For now, just call the old function
-	return app.semanticSearchJobs(ctx, searchQuery, topK, selectedCriteriaID)
+
+	// Create a steering query from the search string
+	steeringQuery := &internal.SteeringQuery{
+		Query:       searchQuery,
+		RerankQuery: searchQuery, // Use the same query for reranking
+	}
+
+	// Call the improved semantic search function
+	scoredJobs, err := internal.SemanticSearchJobs(ctx, steeringQuery, selectedCriteriaID, topK, params)
+	if err != nil {
+		return nil, fmt.Errorf("search failed: %w", err)
+	}
+
+	// Apply reranking if enabled
+	if enableReranking && len(scoredJobs) > 0 {
+		// Need to convert flat list to pointers for reranking
+		pointerJobs := make([]*internal.ScoredJobDetail, len(scoredJobs))
+		for i := range scoredJobs {
+			pointerJobs[i] = &scoredJobs[i]
+		}
+
+		client, err := internal.NewPineconeClient()
+		if err != nil {
+			return scoredJobs, fmt.Errorf("failed to create pinecone client for reranking: %w", err)
+		}
+
+		// Attempt reranking, but fall back to original results if it fails
+		rerankedJobs, err := internal.RerankResults(ctx, client, pointerJobs, searchQuery, topK, internal.PineconeRerankBGEv2M3)
+		if err != nil {
+			app.logger.Error("reranking failed, using original results", "error", err)
+		} else {
+			return rerankedJobs, nil
+		}
+	}
+
+	return scoredJobs, nil
 }
