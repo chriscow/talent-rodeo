@@ -36,6 +36,22 @@
         border-radius: 0.5rem;
         font-family: monospace;
     }
+
+    .checkbox-container {
+        display: flex;
+        align-items: center;
+        cursor: pointer;
+        margin-top: 0.5rem;
+    }
+    
+    .checkbox-container input[type="checkbox"] {
+        margin-right: 0.5rem;
+    }
+    
+    .checkbox-container span {
+        font-size: 0.9rem;
+        color: var(--pico-muted-color);
+    }
 </style>
 {{end}}
 
@@ -95,8 +111,11 @@
                 <input type="number" step="1" min="1" max="365" name="recency_half_life" id="recency_half_life" value="{{with .HybridParams}}{{printf "%.0f" .RecencyHalfLife}}{{else}}30{{end}}">
             </div>
             <div>
-                <label for="rerank_model">Rerank Model</label>
-                <input type="text" name="rerank_model" id="rerank_model" value="{{with .HybridParams}}{{.RerankModel}}{{else}}bge-reranker-v2-m3{{end}}">
+                <label for="enable_reranking">Enable Reranking</label>
+                <label class="checkbox-container">
+                    <input type="checkbox" name="enable_reranking" id="enable_reranking" {{if .EnableReranking}}checked{{end}}>
+                    <span>Use LLM-based reranking</span>
+                </label>
             </div>
             <div>
                 <label>&nbsp;</label>
@@ -115,7 +134,7 @@
                 <li><strong>Score Fusion:</strong> {{.HybridParams.ScoreFusion}}</li>
                 <li><strong>Recency Weight:</strong> {{printf "%.2f" .HybridParams.RecencyWeight}}</li>
                 <li><strong>Recency Half-Life:</strong> {{printf "%.0f" .HybridParams.RecencyHalfLife}} days</li>
-                <li><strong>Rerank Model:</strong> {{.HybridParams.RerankModel}}</li>
+                <li><strong>Reranking:</strong> {{if .EnableReranking}}Enabled (bge-reranker-v2-m3){{else}}Disabled{{end}}</li>
             </ul>
         </details>
     </section>
@@ -132,12 +151,12 @@
         
         {{range .SearchResults}}
         <article>
-            <span class="score-badge">{{printf "%.4f" .Score}}</span>
+            <span class="score-badge">{{printf "%.4f" .CombinedScore}}</span>
             <hgroup>
-                <h4>{{.Document.Title}}</h4>
-                <p>{{.Document.Company}} - {{.Document.Location}}</p>
+                <h4>{{.JobDetail.Title}}</h4>
+                <p>{{.JobDetail.Company}} - {{.JobDetail.Location}}</p>
             </hgroup>
-            <div>{{.Document.Text}}</div>
+            <div>{{.JobDetail.Description}}</div>
         </article>
         {{end}}
     </section>
