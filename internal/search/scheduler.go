@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"sync"
 	"talent-rodeo/internal"
+	"talent-rodeo/internal/cloudflare"
 	"time"
 )
 
@@ -22,7 +22,7 @@ type Mailer interface {
 	Send(recipient string, data any, patterns ...string) error
 }
 
-// Scheduler manages background job searches for users
+// The search scheduler determines which SearchCriteria need to be processed.
 type Scheduler struct {
 	fs        *internal.FirestoreClient
 	logger    *slog.Logger
@@ -33,6 +33,7 @@ type Scheduler struct {
 	done      chan struct{}
 
 	queue JobQueue
+	kv    *cloudflare.KV
 
 	disableSearchSchedulingLogOnce sync.Once
 }
@@ -40,13 +41,13 @@ type Scheduler struct {
 // NewScheduler creates a new search service
 func NewScheduler(fs *internal.FirestoreClient, logger *slog.Logger, queue JobQueue, mailer Mailer, recipient string) *Scheduler {
 
-	// Initialize the progress cache
-	// progressCache, err := NewSearchProgressCache()
-	// if err != nil {
-	// 	logger.Error("failed to initialize progress cache", "error", err)
-	// 	// Continue with nil cache, will fallback to map-based implementation
-	// }
 	logger = logger.With("pkg", "search.Scheduler")
+
+	// Initialize Cloudflare KV client for feature flag
+	kv, err := cloudflare.NewKV()
+	if err != nil {
+		logger.Error("failed to initialize Cloudflare KV client", "error", err)
+	}
 
 	if queue == nil {
 		panic("NewScheduler: queue is nil")
@@ -61,6 +62,7 @@ func NewScheduler(fs *internal.FirestoreClient, logger *slog.Logger, queue JobQu
 		ticker:    time.NewTicker(defaultSearchTickInterval),
 		wg:        sync.WaitGroup{},
 		done:      make(chan struct{}),
+		kv:        kv,
 		// pusher:    pusher,
 		// progressCache: progressCache,
 	}
@@ -84,12 +86,10 @@ func (s *Scheduler) Start(ctx context.Context) error {
 
 	// Start the background processing
 	go func() {
-		s.logger.Info("checking for past-due searches")
 		// Process searches immediately on start
 		s.wg.Add(1)
 		s.processSearches(ctx)
 		s.wg.Done()
-		s.logger.Info("completed past-due searches")
 
 		// Then continue with regular interval processing
 		s.run(ctx)
@@ -133,11 +133,27 @@ func (s *Scheduler) run(ctx context.Context) {
 	}
 }
 
+func (s *Scheduler) Enabled() bool {
+	// Check feature flag from Cloudflare KV
+	enabled := true
+	if s.kv != nil {
+		var isEnabled bool
+		if err := s.kv.Get("search-scheduler", &isEnabled); err != nil {
+			if err != cloudflare.ErrNotFound {
+				s.logger.Error("Failed to get feature flag from Cloudflare KV", "flag", "search-scheduler", "error", err)
+			}
+		} else {
+			enabled = isEnabled
+		}
+	}
+	return enabled
+}
+
 // processSearches finds users who need searches performed
 func (s *Scheduler) processSearches(ctx context.Context) {
-	if os.Getenv("DISABLE_SEARCH_SCHEDULING") == "true" {
+	if !s.Enabled() {
 		s.disableSearchSchedulingLogOnce.Do(func() {
-			s.logger.Info(internal.BGYellow("search scheduling disabled"))
+			s.logger.Info(internal.BGYellow("search scheduler disabled by feature flag"))
 		})
 		return
 	}
@@ -208,9 +224,17 @@ func (s *Scheduler) notifyAdmin(_ context.Context, user *internal.User, err erro
 
 // requeueIncompleteSearches finds and requeues any users that were previously queued but not completed
 func (s *Scheduler) requeueIncompleteSearches() error {
+	if !s.Enabled() {
+		return nil
+	}
+
+	// TODO: If several servers start at the same time, they will all try to requeue the same jobs.
 
 	// get all SearchJobs with a status that is not "complete"
 	// and requeue thems
+
+	s.logger.Info("checking for past-due searches")
+
 	searchTasks, err := internal.GetIncompleteSearchTasks(context.Background(), s.fs)
 	if err != nil {
 		return fmt.Errorf("failed to get incomplete search tasks: %w", err)
