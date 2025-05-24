@@ -79,11 +79,11 @@ func (p *Processor) Start(ctx context.Context) error {
 		return fmt.Errorf("processor is already running")
 	}
 
-	p.logger.Info("Starting subscription processor", "interval", p.interval)
+	p.logger.Info("starting subscription processor", "interval", p.interval)
 
 	// Initialize Cloudflare KV client for feature flags
 	if err := p.initCloudflareKV(); err != nil {
-		p.logger.Error("Failed to initialize Cloudflare KV client", "error", err)
+		p.logger.Error("failed to initialize Cloudflare KV client", "error", err)
 		// Continue without feature flags
 	}
 
@@ -99,7 +99,7 @@ func (p *Processor) Start(ctx context.Context) error {
 	go func() {
 		defer p.wg.Done()
 		if err := p.process(ctx); err != nil {
-			p.logger.Error("Error during initial subscription processing", "error", err)
+			p.logger.Error("error during initial subscription processing", "error", err)
 			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 				"source": "subscription_processor_initial",
 			})
@@ -114,7 +114,7 @@ func (p *Processor) Start(ctx context.Context) error {
 			select {
 			case <-p.ticker.C:
 				if err := p.process(ctx); err != nil {
-					p.logger.Error("Error during subscription processing", "error", err)
+					p.logger.Error("error during subscription processing", "error", err)
 					internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 						"source": "subscription_processor_tick",
 					})
@@ -149,7 +149,7 @@ func (p *Processor) Stop() {
 		return
 	}
 
-	p.logger.Info("Stopping subscription processor")
+	p.logger.Info("stopping subscription processor")
 	p.ticker.Stop()
 	p.done <- true
 
@@ -191,6 +191,7 @@ func (p *Processor) process(ctx context.Context) error {
 
 		if !enabled {
 			// Subscription processor is disabled by feature flag, return silently
+			p.logger.Info(internal.BGYellow("subscription processor disabled by feature flag"))
 			return nil
 		}
 	}
