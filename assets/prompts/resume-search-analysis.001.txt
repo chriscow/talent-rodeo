@@ -167,7 +167,7 @@ Primary Search Term: [Primary skill or job title]
     <classification>
     Justification: Chris Cowherd has a 30-year career in software engineering with extensive leadership experience, but his recent roles consistently highlight Go (Golang) as a primary programming language across multiple positions. His most recent roles at BlestX Ventures, Ambassador Software, and Stahurricane all feature Go prominently in their tech stacks, making it the most consistent and current technical skill for his job search.
     Search Type: Skills-based
-    Primary Search Term: Go
+    Primary Search Term: Go (Golang)
     </classification>
     ```
     </output>
