@@ -62,7 +62,7 @@ func (s *ScoredJobDetail) ToPineconeDocument() pinecone.Document {
 // SearchResult holds raw search results from Pinecone
 type SearchResult struct {
 	DenseResults  *pinecone.QueryVectorsResponse
-	SparseResults *pinecone.QueryVectorsResponse
+	SparseResults *pinecone.SearchRecordsResponse
 }
 
 // Validate ensures the parameters are valid and adjusts if necessary
@@ -165,11 +165,6 @@ func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, crite
 		return nil, fmt.Errorf("failed to get dense steering vector: %w", err)
 	}
 
-	sparseVector, err := steeringQuery.GetSparseVector(ctx, client, PineconeEmbedSparse)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get sparse steering vector: %w", err)
-	}
-
 	denseIndex := os.Getenv("PINECONE_DENSE_INDEX_HOST")
 	if denseIndex == "" {
 		return nil, fmt.Errorf("PINECONE_DENSE_INDEX_HOST environment variable not set")
@@ -185,7 +180,12 @@ func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, crite
 	if sparseIndex == "" {
 		return nil, fmt.Errorf("PINECONE_SPARSE_INDEX_HOST environment variable not set")
 	}
-	sparseResults, err := client.QueryByVector(ctx, sparseIndex, JobDetailNamespace, sparseVector,
+
+	query := steeringQuery.Query
+	if steeringQuery.MoveToward != nil {
+		query += " " + *steeringQuery.MoveToward
+	}
+	sparseResults, err := client.SearchRecords(ctx, sparseIndex, JobDetailNamespace, query,
 		WithTopK(topK*2), WithFilter(filter))
 	if err != nil {
 		return nil, fmt.Errorf("failed to search sparse index: %w", err)
@@ -313,19 +313,15 @@ func processSearchResults(_ context.Context, searchResult *SearchResult, topK in
 	}
 
 	// Process sparse results
-	for _, hit := range searchResult.SparseResults.Matches {
-		id := hit.Vector.Id
-		meta := hit.Vector.Metadata
-		if meta == nil {
-			continue // skip if no metadata
-		}
+	for _, hit := range searchResult.SparseResults.Result.Hits {
+		id := hit.Id
 
 		sparseScores[id] = hit.Score
 
 		// Parse posted date if available
 		var postedDate time.Time
-		if dateStr := meta.Fields["postedDate"].GetStringValue(); dateStr != "" {
-			postedDate, _ = time.Parse(time.RFC3339, dateStr)
+		if dateStr, ok := hit.Fields["postedDate"]; ok {
+			postedDate, _ = time.Parse(time.RFC3339, dateStr.(string))
 		}
 
 		match, exists := allMatches[id]
@@ -333,14 +329,14 @@ func processSearchResults(_ context.Context, searchResult *SearchResult, topK in
 			match = &ScoredJobDetail{
 				JobDetail: JobDetail{
 					ID:            id,
-					Provider:      meta.Fields["provider"].GetStringValue(),
-					ProviderJobID: meta.Fields["providerID"].GetStringValue(),
-					Title:         meta.Fields["title"].GetStringValue(),
-					Company:       meta.Fields["company"].GetStringValue(),
-					Location:      meta.Fields["location"].GetStringValue(),
-					URL:           meta.Fields["url"].GetStringValue(),
+					Provider:      hit.Fields["provider"].(string),
+					ProviderJobID: hit.Fields["providerJobID"].(string),
+					Title:         hit.Fields["title"].(string),
+					Company:       hit.Fields["company"].(string),
+					Location:      hit.Fields["location"].(string),
+					URL:           hit.Fields["url"].(string),
 					PostedDate:    postedDate,
-					Description:   meta.Fields["text"].GetStringValue(),
+					Description:   hit.Fields["text"].(string),
 				},
 				DenseScore:  0,
 				SparseScore: float64(hit.Score),

@@ -163,7 +163,7 @@ func convertJobDetail(detail LinkedInJobDetail) (*internal.JobDetail, error) {
 		Company:          detail.CompanyName,
 		Location:         detail.Location,
 		PostedDate:       postedDate,
-		URL:              "",
+		URL:              detail.JobApplyLink,
 		Description:      detail.Description,
 		SalaryInfo:       salaryRange,
 		EmploymentType:   detail.EmploymentType,

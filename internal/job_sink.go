@@ -165,14 +165,16 @@ func (s *JobSink) UpsertJobDetailEmbeddings(ctx context.Context, criteriaID stri
 	records := make([]*pinecone.IntegratedRecord, len(jobDetails))
 	for i, detail := range jobDetails {
 		records[i] = &pinecone.IntegratedRecord{
-			"_id":        detail.ID,
-			"criteriaID": criteriaID,
-			"text":       detail.Description, //  this is what gets embedded
-			"postedDate": detail.PostedDate,
-			"title":      detail.Title,
-			"company":    detail.Company,
-			"location":   detail.Location,
-			"url":        detail.URL,
+			"_id":           detail.ID,
+			"provider":      detail.Provider,
+			"providerJobID": detail.ProviderJobID,
+			"criteriaID":    criteriaID,
+			"text":          detail.Description, //  this is what gets embedded
+			"postedDate":    detail.PostedDate,
+			"title":         detail.Title,
+			"company":       detail.Company,
+			"location":      detail.Location,
+			"url":           detail.URL,
 		}
 	}
 
