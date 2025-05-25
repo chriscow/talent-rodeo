@@ -515,8 +515,6 @@ func ListAppointmentsNeedingProcessing(ctx context.Context, fs *FirestoreClient,
 			continue
 		}
 
-		println(Blue("Getting appointment"))
-
 		// Get the actual appointment
 		appointment, err := GetAppointment(ctx, fs, procRef.UserID, procRef.AppointmentID)
 		if err != nil {

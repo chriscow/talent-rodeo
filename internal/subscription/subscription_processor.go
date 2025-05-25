@@ -46,7 +46,7 @@ func NewProcessor(fs *internal.FirestoreClient, logger *slog.Logger) *Processor 
 		logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 	}
 	if fs == nil {
-		panic("Firestore client cannot be nil")
+		panic("firestore client cannot be nil")
 	}
 
 	logger = logger.With("pkg", "subscription.Processor")
@@ -160,7 +160,7 @@ func (p *Processor) Stop() {
 	p.wg.Wait()
 	p.isRunning = false
 
-	p.logger.Info("Subscription processor stopped")
+	p.logger.Info("subscription processor stopped")
 }
 
 // process handles the main logic of checking for eligible criteria and publishing to subscribers.
@@ -182,7 +182,7 @@ func (p *Processor) process(ctx context.Context) error {
 		if err != nil {
 			if err != cloudflare.ErrNotFound {
 				// Log error but continue with default (enabled)
-				p.logger.Error("Failed to get feature flag from Cloudflare KV", "flag", SubscriptionProcessorFlag, "error", err)
+				p.logger.Error("failed to get feature flag from Cloudflare KV", "flag", SubscriptionProcessorFlag, "error", err)
 			}
 			// If key not found, keep default (true)
 		} else {
@@ -258,7 +258,7 @@ func (p *Processor) process(ctx context.Context) error {
 // Errors during processing for individual users are logged and reported to Sentry,
 // but do not stop the processing for other users.
 func (p *Processor) processCriteria(ctx context.Context, criteria internal.SearchCriteria) error {
-	p.logger.Info("Processing criteria", "id", criteria.ID)
+	p.logger.Info("processing criteria", "id", criteria.ID)
 
 	// Get all subscribers for this criteria
 	subscribers, err := internal.GetCriteriaSubscribers(ctx, p.fs, criteria.ID)
@@ -283,7 +283,7 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 		return nil
 	}
 
-	p.logger.Info("Found new jobs for criteria", "jobs-count", len(jobIDs), "id", criteria.ID)
+	p.logger.Info("found new jobs for criteria", "jobs-count", len(jobIDs), "id", criteria.ID)
 
 	// Extract user IDs from subscriptions
 	userIDs := make([]string, len(subscribers))
@@ -317,7 +317,7 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 		return fmt.Errorf("failed to update LastPublishedAt for criteria %s: %w", criteria.ID, err)
 	}
 
-	p.logger.Info("Successfully processed criteria", "id", criteria.ID)
+	p.logger.Info("successfully processed criteria", "id", criteria.ID)
 	return nil
 }
 
