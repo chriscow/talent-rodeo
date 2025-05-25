@@ -76,8 +76,7 @@ var deleteAllRecordsCmd = &cobra.Command{
 				// Check if the argument contains commas
 				if strings.Contains(arg, ",") {
 					// Split by comma and add each part
-					parts := strings.Split(arg, ",")
-					for _, part := range parts {
+					for part := range strings.SplitSeq(arg, ",") {
 						trimmed := strings.TrimSpace(part)
 						if trimmed != "" {
 							ids = append(ids, trimmed)
