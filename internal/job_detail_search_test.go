@@ -734,8 +734,13 @@ func TestProcessSearchResults(t *testing.T) {
 				DenseResults: &pinecone.QueryVectorsResponse{
 					Matches: tc.denseMatches,
 				},
-				SparseResults: &pinecone.QueryVectorsResponse{
-					Matches: tc.sparseMatches,
+				SparseResults: &pinecone.SearchRecordsResponse{
+					Result: struct {
+						Hits []pinecone.Hit `json:"hits"`
+					}{Hits: []pinecone.Hit{
+						{Id: "job1", Score: 0.92, Fields: job1Fields.AsMap()},
+						{Id: "job2", Score: 0.82, Fields: job2Fields.AsMap()},
+					}},
 				},
 			}
 
@@ -846,11 +851,14 @@ func TestProcessSearchResults(t *testing.T) {
 					{Score: 0.80, Vector: job5Vector}, // Duplicate of job1 by content
 				},
 			},
-			SparseResults: &pinecone.QueryVectorsResponse{
-				Matches: []*pinecone.ScoredVector{
-					{Score: 0.92, Vector: job1Vector},
-					{Score: 0.82, Vector: job2Vector},
-				},
+
+			SparseResults: &pinecone.SearchRecordsResponse{
+				Result: struct {
+					Hits []pinecone.Hit `json:"hits"`
+				}{Hits: []pinecone.Hit{
+					{Id: "job1", Score: 0.92, Fields: job1Fields.AsMap()},
+					{Id: "job2", Score: 0.82, Fields: job2Fields.AsMap()},
+				}},
 			},
 		}
 

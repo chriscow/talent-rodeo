@@ -109,7 +109,7 @@ func (q *SteeringQuery) GetDenseVector(ctx context.Context, p *Pinecone, model P
 	}
 
 	// Create embeddings for all concepts in one call
-	embedResp, err := p.CreateEmbeddings(ctx, texts, model)
+	embedResp, err := p.CreateEmbeddings(ctx, texts, model, PineconeInputTypeQuery)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create embeddings: %w", err)
 	}
@@ -169,6 +169,8 @@ func (q *SteeringQuery) GetDenseVector(ctx context.Context, p *Pinecone, model P
 	return modifiedVector, nil
 }
 
+// NOTE: I guess you cannot currently generate sparse vectors with Pinecone. You can only query them.
+//
 // GetSparseVector generates a sparse vector from a steering query
 // This works specifically with sparse embedding models that use dot product similarity
 func (q *SteeringQuery) GetSparseVector(ctx context.Context, p *Pinecone, model PineconeEmbedModel) ([]float32, error) {
@@ -177,118 +179,7 @@ func (q *SteeringQuery) GetSparseVector(ctx context.Context, p *Pinecone, model 
 		return nil, fmt.Errorf("invalid steering query: %w", err)
 	}
 
-	// Build the list of texts to embed
-	texts := []string{q.Query}
-	if q.MoveToward != nil {
-		texts = append(texts, *q.MoveToward)
-	}
-	if q.MoveAway != nil {
-		texts = append(texts, *q.MoveAway)
-	}
-
-	// Create embeddings for all concepts in one call
-	embedResp, err := p.CreateEmbeddings(ctx, texts, model)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create embeddings: %w", err)
-	}
-
-	if len(embedResp.Data) == 0 {
-		return nil, fmt.Errorf("no embeddings returned")
-	}
-
-	// Check if the number of embeddings matches the number of texts
-	if len(embedResp.Data) != len(texts) {
-		return nil, fmt.Errorf("number of embeddings (%d) does not match number of texts (%d)",
-			len(embedResp.Data), len(texts))
-	}
-
-	embeddings := embedResp.Data
-
-	if embeddings[0].Values == nil {
-		return nil, fmt.Errorf("embedding for query is nil")
-	}
-
-	// Extract the query vector
-	queryVector := *embeddings[0].Values
-
-	// Create a sparse representation as a map of non-zero indices to values
-	sparseWeights := make(map[int]float32)
-	for i, val := range queryVector {
-		if val > 0 {
-			sparseWeights[i] = val
-		}
-	}
-
-	// Apply steering toward concept if specified
-	if q.MoveToward != nil && q.ForceToward > 0 {
-		towardEmbedding := embeddings[1]
-		if towardEmbedding.Values == nil {
-			return nil, fmt.Errorf("embedding for MoveToward is nil")
-		}
-
-		towardVector := *towardEmbedding.Values
-
-		// For each non-zero term in the "toward" vector, boost its weight in the query
-		for i, val := range towardVector {
-			if val > 0 {
-				// If term exists in query, boost its weight
-				if currentWeight, exists := sparseWeights[i]; exists {
-					sparseWeights[i] = currentWeight + float32(q.ForceToward)*val
-				} else {
-					// If term doesn't exist in query, add it with reduced weight
-					sparseWeights[i] = float32(q.ForceToward) * val
-				}
-			}
-		}
-	}
-
-	// Apply steering away from concept if specified
-	if q.MoveAway != nil && q.ForceAway > 0 {
-		idx := 1
-		if q.MoveToward != nil {
-			idx = 2
-		}
-
-		awayEmbedding := embeddings[idx]
-		if awayEmbedding.Values == nil {
-			return nil, fmt.Errorf("embedding for MoveAway is nil")
-		}
-
-		awayVector := *awayEmbedding.Values
-
-		// For each non-zero term in the "away" vector, reduce its weight in the query
-		for i, val := range awayVector {
-			if val > 0 {
-				// If term exists in query, reduce its weight
-				if currentWeight, exists := sparseWeights[i]; exists {
-					newWeight := currentWeight - float32(q.ForceAway)*val
-					if newWeight <= 0 {
-						// Remove term completely if weight becomes zero or negative
-						delete(sparseWeights, i)
-					} else {
-						sparseWeights[i] = newWeight
-					}
-				}
-				// If term doesn't exist in query, no need to do anything
-			}
-		}
-	}
-
-	// Build the final sparse vector
-	// First, create a zero-filled vector of the same dimension as the original
-	resultVector := make([]float32, len(queryVector))
-
-	// Then set only the non-zero values
-	for idx, weight := range sparseWeights {
-		if idx < len(resultVector) {
-			resultVector[idx] = weight
-		}
-	}
-
-	// We intentionally do NOT normalize the sparse vector
-	// as the magnitude represents term importance for dot product similarity
-
-	return resultVector, nil
+	return nil, fmt.Errorf("sparse vector generation is not supported")
 }
 
 func GenerateSteeringQuery(ctx context.Context, transcript *Transcript, opts ...tools.Option) (*SteeringQuery, error) {
@@ -346,6 +237,9 @@ func extractSteeringQuery(ctx context.Context, data string) (*SteeringQuery, err
 			return nil, fmt.Errorf("failed to parse steering query: %w", err)
 		}
 	}
+
+	query.ForceToward = 0.5
+	query.ForceAway = 0.5
 
 	return &query, nil
 }

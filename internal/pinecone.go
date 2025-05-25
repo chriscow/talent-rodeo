@@ -27,10 +27,11 @@ type Pinecone struct {
 }
 
 type PineconeQueryOptions struct {
-	topK   int
-	fields *[]string
-	filter *map[string]any
-	rerank *pinecone.SearchRecordsRerank
+	topK      int
+	fields    *[]string
+	filter    *map[string]any
+	sparseVec *pinecone.SparseValues
+	rerank    *pinecone.SearchRecordsRerank
 }
 
 func WithTopK(topK int) func(*PineconeQueryOptions) {
@@ -42,6 +43,12 @@ func WithTopK(topK int) func(*PineconeQueryOptions) {
 func WithFields(fields []string) func(*PineconeQueryOptions) {
 	return func(q *PineconeQueryOptions) {
 		q.fields = &fields
+	}
+}
+
+func WithSparseVector(vec *pinecone.SparseValues) func(*PineconeQueryOptions) {
+	return func(q *PineconeQueryOptions) {
+		q.sparseVec = vec
 	}
 }
 
@@ -91,7 +98,16 @@ func NewPineconeClient() (*Pinecone, error) {
 	}, nil
 }
 
-func (p *Pinecone) CreateEmbeddings(ctx context.Context, input []string, model PineconeEmbedModel) (*pinecone.EmbedResponse, error) {
+type PineconeInputType string
+
+const (
+	// PineconeInputTypeQuery is used for creating embeddings for retrieval
+	PineconeInputTypeQuery PineconeInputType = "query"
+	// PineInputTypePassage is used for creating embeddings for storage
+	PineconeInputTypePassage PineconeInputType = "passage"
+)
+
+func (p *Pinecone) CreateEmbeddings(ctx context.Context, input []string, model PineconeEmbedModel, inputType PineconeInputType) (*pinecone.EmbedResponse, error) {
 	if model == "" {
 		return nil, fmt.Errorf("embedding model is not set")
 	}
@@ -102,7 +118,7 @@ func (p *Pinecone) CreateEmbeddings(ctx context.Context, input []string, model P
 		Model:      string(model),
 		TextInputs: input,
 		Parameters: map[string]any{
-			"input_type": "query",
+			"input_type": string(inputType),
 			"truncate":   "END",
 		},
 	})
@@ -198,6 +214,7 @@ func (p *Pinecone) QueryByVector(ctx context.Context, indexHost, namespace strin
 		Vector:        queryVector,
 		TopK:          uint32(options.topK),
 		IncludeValues: false,
+		SparseValues:  options.sparseVec,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("querying by vector: %v", err)

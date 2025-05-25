@@ -12,8 +12,7 @@ import (
 )
 
 const (
-	// defaultSearchTickInterval = 15 * time.Minute
-	defaultSearchTickInterval = 5 * time.Second
+	defaultSearchTickInterval = 6 * time.Hour
 )
 
 // Mailer interface for sending notifications
