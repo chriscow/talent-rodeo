@@ -144,5 +144,15 @@ var genSearchQueriesCmd = &cobra.Command{
 			log.Fatalf("Error marshalling search queries to JSON: %v", err)
 		}
 		fmt.Println(string(qJSON))
+
+		p, err := internal.NewPineconeClient()
+		if err != nil {
+			log.Fatalf("failed to create pinecone client: %v", err)
+		}
+
+		_, err = q.GetDenseVector(ctx, p, internal.PineconeEmbedDense)
+		if err != nil {
+			log.Fatalf("Error getting dense vector: %v", err)
+		}
 	},
 }

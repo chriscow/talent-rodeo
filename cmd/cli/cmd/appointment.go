@@ -30,6 +30,11 @@ func init() {
 
 	listApptsCmd.Flags().BoolVarP(&jsonOutput, "json", "j", false, "Output in JSON format")
 	latestApptCmd.Flags().BoolVarP(&completedAppt, "completed", "c", false, "Only show completed appointments")
+
+	reprocessCmd.Flags().StringVarP(&userID, "user", "u", "", "User ID to reprocess the appointment for")
+	reprocessCmd.Flags().StringVarP(&appointmentID, "appointment", "a", "", "Appointment ID to reprocess")
+	reprocessCmd.MarkFlagRequired("appointment")
+	reprocessCmd.MarkFlagRequired("user")
 }
 
 // Good appointment ids: 230bfc29-2ba0-42b8-90e9-f2288b96965f (Vijaya), 2b0a2620-5117-402d-ba13-daf6e501d8be (Vijaya original)
@@ -160,10 +165,15 @@ var reprocessCmd = &cobra.Command{
 	Use:   "reprocess [appointment-id]",
 	Short: "Reprocess a completed appointment",
 	Long:  `Reprocess a completed appointment by running it through the transcript processor again`,
-	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
-		appointmentID := args[0]
+
+		if userID == "" {
+			return fmt.Errorf("user ID is required")
+		}
+		if appointmentID == "" {
+			return fmt.Errorf("appointment ID is required")
+		}
 
 		// Initialize Firestore client
 		fs, err := internal.NewFirestoreClient(ctx)
@@ -180,32 +190,10 @@ var reprocessCmd = &cobra.Command{
 
 		// Get all users since we don't know which user owns this appointment
 		logger.Debug("Listing users...")
-		users, err := internal.ListUsers(ctx, fs, 1000, 0)
+
+		appointment, err := internal.GetAppointment(ctx, fs, userID, appointmentID)
 		if err != nil {
-			return fmt.Errorf("failed to list users: %w", err)
-		}
-		logger.Debug("Found users", "count", len(users))
-
-		var appointment *internal.Appointment
-		var found bool
-		var userID string
-
-		// Search for the appointment across all users
-		for _, user := range users {
-			logger.Debug("Checking user for appointment", "user_id", user.ID, "user_name", user.Name)
-			appt, err := internal.GetAppointment(ctx, fs, user.ID, appointmentID)
-			if err == nil {
-				appointment = appt
-				found = true
-				userID = user.ID
-				logger.Debug("Found appointment", "user_id", user.ID, "user_name", user.Name)
-				break
-			}
-			logger.Debug("Appointment not found for user", "user_id", user.ID, "error", err)
-		}
-
-		if !found {
-			return fmt.Errorf("appointment %s not found", appointmentID)
+			return fmt.Errorf("failed to get appointment: %w", err)
 		}
 
 		// Process the appointment
