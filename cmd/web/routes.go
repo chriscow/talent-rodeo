@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"talent-rodeo/assets"
+	"talent-rodeo/internal"
 
 	"github.com/alexedwards/flow"
 	sentryhttp "github.com/getsentry/sentry-go/http"
@@ -105,11 +106,15 @@ func (app *application) routes() http.Handler {
 
 			// Add new admin search-jobs route
 			mux.HandleFunc("/admin/search-jobs", app.adminSearchJobs, "GET", "POST")
+
+			// Add feature flags admin page
+			mux.HandleFunc("/admin/feature-flags", app.adminFeatureFlags, "GET", "POST")
 		})
 	})
 
 	// Testing routes - only enabled in test mode
 	if os.Getenv("TESTING_MODE") == "true" {
+		app.logger.Info(internal.Red("TESTING_MODE is true - setting up testing routes"))
 		mux.HandleFunc("/testing/authenticate", app.handleTestingAuthenticate, "POST")
 		mux.HandleFunc("/testing/reset", app.handleTestingResetUserState, "POST")
 	}

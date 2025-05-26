@@ -22,22 +22,22 @@ type JobProcessor interface {
 	ProcessJob(ctx context.Context, jobID string) error
 }
 
-// JobSink is a struct that implements the search.JobEventHandler interface.
+// SearchResultProcessor is a struct that implements the search.JobEventHandler interface.
 // It is responsible for handling job listings and job details returned from a search.
 // It saves the job listings and job details to Firestore and links them to the search criteria.
-type JobSink struct {
+type SearchResultProcessor struct {
 	fs     *FirestoreClient
 	logger *slog.Logger
 }
 
-func NewJobSink(fs *FirestoreClient, logger *slog.Logger) *JobSink {
-	return &JobSink{
+func NewSearchResultProcessor(fs *FirestoreClient, logger *slog.Logger) *SearchResultProcessor {
+	return &SearchResultProcessor{
 		fs:     fs,
 		logger: logger,
 	}
 }
 
-func (s *JobSink) OnSearchStarted(jobSearch SearchTask) {
+func (s *SearchResultProcessor) OnSearchStarted(jobSearch SearchTask) {
 	s.logger.Info("JobSink: on search started", "criteria", jobSearch.Criteria.GetSearchHash())
 	ctx := context.Background()
 	if err := UpdateSearchTask(ctx, s.fs, &jobSearch); err != nil {
@@ -46,7 +46,7 @@ func (s *JobSink) OnSearchStarted(jobSearch SearchTask) {
 }
 
 // search.JobEventHandler implementation
-func (s *JobSink) OnJobListing(jobSearch SearchTask, job JobListing) {
+func (s *SearchResultProcessor) OnJobListing(jobSearch SearchTask, job JobListing) {
 	s.logger.Info("JobSink: on job listing", "job", job.ProviderJobID)
 
 	ctx := context.Background()
@@ -55,7 +55,7 @@ func (s *JobSink) OnJobListing(jobSearch SearchTask, job JobListing) {
 	}
 }
 
-func (s *JobSink) OnJobDetail(jobSearch SearchTask, job JobDetail) {
+func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, job JobDetail) {
 	s.logger.Info("JobSink: on job detail", "job", job.ProviderJobID)
 
 	//
@@ -102,8 +102,8 @@ func (s *JobSink) OnJobDetail(jobSearch SearchTask, job JobDetail) {
 	}
 }
 
-func (s *JobSink) OnSearchCompleted(jobSearch SearchTask, totalJobs int, errors []error) {
-	s.logger.Info("JobSink: on search completed", "criteria", jobSearch.Criteria.GetSearchHash(), "total_jobs", totalJobs, "errors", errors)
+func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJobs int, errors []error) {
+	s.logger.Info("JobSink:OnSearchCompleted", "criteria", jobSearch.Criteria.ID, "total_jobs", totalJobs, "errors", errors)
 
 	// TODO: Do this in a transaction
 	jobSearch.Status = SearchTaskStatusCompleted
@@ -142,7 +142,7 @@ func (s *JobSink) OnSearchCompleted(jobSearch SearchTask, totalJobs int, errors 
 	// s.processSubscriptions(ctx, jobSearch)
 }
 
-func (s *JobSink) UpsertJobDetailEmbeddings(ctx context.Context, criteriaID string, jobDetails []JobDetail) (int, error) {
+func (s *SearchResultProcessor) UpsertJobDetailEmbeddings(ctx context.Context, criteriaID string, jobDetails []JobDetail) (int, error) {
 	client, err := NewPineconeClient()
 	if err != nil {
 		return 0, fmt.Errorf("failed to create pinecone client: %w", err)

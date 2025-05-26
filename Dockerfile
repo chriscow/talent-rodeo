@@ -1,15 +1,15 @@
 ARG GO_VERSION=1
-FROM golang:${GO_VERSION}-bookworm as builder
+FROM golang:${GO_VERSION}-bookworm AS builder
 
 WORKDIR /usr/src/app
 COPY go.mod go.sum ./
 RUN go mod download && go mod verify
 COPY . .
-RUN go build -v -o /tr-web ./cmd/web
+RUN go build -v -o /talent-rodeo ./cmd/web
 
 
 FROM debian:bookworm
 RUN apt-get update -y && apt-get install -y ca-certificates
-COPY --from=builder /tr-web /usr/local/bin/
+COPY --from=builder /talent-rodeo /usr/local/bin/
 
-CMD ["/usr/local/bin/tr-web"]
+CMD ["/usr/local/bin/talent-rodeo"]

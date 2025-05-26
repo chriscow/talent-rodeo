@@ -35,9 +35,15 @@ type IntegrationTest struct {
 func NewIntegrationTest(t *testing.T) *IntegrationTest {
 	t.Helper()
 
-	// Ensure we're in test mode
+	// We need the server to be running in TESTING_MODE so we can authenticate the test user
 	if os.Getenv("TESTING_MODE") != "true" {
 		t.Fatal("TESTING_MODE must be set to 'true' for integration tests")
+	}
+
+	if os.Getenv("FIRESTORE_EMULATOR_HOST") != "" {
+		println(internal.Red("FIRESTORE_EMULATOR_HOST is set"))
+		println("Do not use the Firestore emulator for integration tests")
+		println("We end up with different databases and the server doesn't seem to be able to find the test user")
 	}
 
 	ctx := context.Background()
@@ -58,7 +64,7 @@ func NewIntegrationTest(t *testing.T) *IntegrationTest {
 func (it *IntegrationTest) setupFirestore() {
 	it.T.Helper()
 
-	fs, err := internal.NewTestFirestoreClient(it.Ctx)
+	fs, err := internal.NewFirestoreClient(it.Ctx)
 	it.requireNoError(err, "failed to create Firestore client")
 	it.Fs = fs
 }
@@ -263,6 +269,4 @@ func (it *IntegrationTest) Authenticate() {
 	if response.Status() != 200 {
 		it.T.Fatalf("Authentication failed with status %d", response.Status())
 	}
-
-	it.T.Logf("Successfully authenticated test user: %s", it.User.ID)
 }

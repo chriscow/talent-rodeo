@@ -12,14 +12,14 @@ import (
 func (app *application) handleTestingResetUserState(w http.ResponseWriter, r *http.Request) {
 	// Only allow this in testing mode
 	if os.Getenv("TESTING_MODE") != "true" {
-		app.clientError(w, http.StatusForbidden)
+		app.clientError(w, r, http.StatusForbidden)
 		return
 	}
 
 	// Get the current user
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
-		app.clientError(w, http.StatusUnauthorized)
+		app.clientError(w, r, http.StatusUnauthorized)
 		return
 	}
 
@@ -43,20 +43,20 @@ func (app *application) handleTestingResetUserState(w http.ResponseWriter, r *ht
 func (app *application) handleTestingAuthenticate(w http.ResponseWriter, r *http.Request) {
 	// Only allow this in testing mode
 	if os.Getenv("TESTING_MODE") != "true" {
-		app.clientError(w, http.StatusForbidden)
+		app.clientError(w, r, http.StatusForbidden)
 		return
 	}
 
 	// Require POST method
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
-		app.clientError(w, http.StatusMethodNotAllowed)
+		app.clientError(w, r, http.StatusMethodNotAllowed)
 		return
 	}
 
 	userID := r.Header.Get("X-Test-User-ID")
 	if userID == "" {
-		app.clientError(w, http.StatusBadRequest)
+		app.clientError(w, r, http.StatusBadRequest)
 		return
 	}
 
@@ -68,7 +68,21 @@ func (app *application) handleTestingAuthenticate(w http.ResponseWriter, r *http
 		return
 	}
 	if !found {
-		app.clientError(w, http.StatusNotFound)
+		app.logger.Info("test mode: user not found", "user_id", userID)
+
+		app.logger.Info("test mode: listing users")
+		users, err := internal.ListUsers(r.Context(), app.fs, 0, 100)
+		if err != nil {
+			app.logger.Error("failed to list users", "error", err)
+			app.serverError(w, r, fmt.Errorf("failed to list users: %w", err))
+			return
+		}
+
+		for _, u := range users {
+			app.logger.Info("test mode: user", "user", u)
+		}
+
+		app.clientError(w, r, http.StatusNotFound)
 		return
 	}
 

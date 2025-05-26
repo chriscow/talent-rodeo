@@ -136,6 +136,7 @@ type application struct {
 	natsShutdown          chan struct{}
 	mailer                *smtp.Mailer
 	pusher                *pusher.Client
+	jobDispatch           *internal.JobEventDispatch
 	sessionManager        *scs.SessionManager
 	searchProvider        *scrapingdog.Provider
 	searchScheduler       *search.Scheduler
@@ -335,13 +336,6 @@ func run(logger *slog.Logger) error {
 	// 	return fmt.Errorf("failed to start job processor: %w", err)
 	// }
 
-	if err := transcript.RecoverProcessingAppointments(sentry.CurrentHub(), FirestoreClient, logger); err != nil {
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"error_type": "transcript_recovery",
-		})
-		return fmt.Errorf("failed to recover processing appointments: %w", err)
-	}
-
 	s3Client, err := initS3Client()
 	if err != nil {
 		return fmt.Errorf("failed to initialize S3 client: %w", err)
@@ -377,6 +371,13 @@ func run(logger *slog.Logger) error {
 
 	if err := app.startServices(ctx); err != nil {
 		return fmt.Errorf("failed to start services: %w", err)
+	}
+
+	if err := transcript.RecoverProcessingAppointments(sentry.CurrentHub(), FirestoreClient, pusherClient, logger, app.jobDispatch, app.searchProvider); err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"error_type": "transcript_recovery",
+		})
+		return fmt.Errorf("failed to recover processing appointments: %w", err)
 	}
 
 	if cfg.autoHTTPS.domain != "" {
@@ -526,8 +527,10 @@ func setupSessionManager(cfg config, FirestoreClient *internal.FirestoreClient, 
 func (app *application) startServices(ctx context.Context) error {
 	app.subscriptionProcessor = subscription.NewProcessor(app.fs, app.logger)
 
-	jobSink := internal.NewJobSink(app.fs, app.logger)
-	app.searchProvider = scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), app.logger, scrapingdog.WithJobEventHandler(jobSink))
+	app.jobDispatch = internal.NewJobEventDispatch()
+	app.jobDispatch.Register("search-result-processor", internal.NewSearchResultProcessor(app.fs, app.logger))
+
+	app.searchProvider = scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), app.logger, scrapingdog.WithJobEventHandler(app.jobDispatch))
 	app.searchScheduler = search.NewScheduler(app.fs, app.logger, app.searchProvider, app.mailer, app.config.notifications.email)
 
 	if err := app.subscriptionProcessor.Start(ctx); err != nil {

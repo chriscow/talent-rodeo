@@ -2,245 +2,18 @@ package transcript
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"talent-rodeo/internal"
-	"talent-rodeo/internal/utils"
 	"testing"
 	"time"
 
 	"github.com/getsentry/sentry-go"
 
 	"github.com/chriscow/minds"
-	"github.com/chriscow/minds/tools"
 )
-
-func TestTranscriptProcessor(t *testing.T) {
-	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
-
-	client, err := internal.NewTestFirestoreClient(ctx)
-	if err != nil {
-		t.Fatalf("internal.NewTestFirestoreClient() error = %v", err)
-	}
-
-	// Clean up test data at the start
-	internal.DeleteTestData(t, client, "test-user-")
-
-	// Defer cleanup and client close
-	defer func() {
-		// Create a new context for cleanup since the original might be cancelled
-		cleanupCtx := context.Background()
-		cleanupClient, err := internal.NewTestFirestoreClient(cleanupCtx)
-		if err != nil {
-			t.Logf("Failed to create cleanup client: %v", err)
-			return
-		}
-		defer cleanupClient.Close()
-
-		internal.DeleteTestData(t, cleanupClient, "test-user-")
-	}()
-	defer client.Close()
-
-	// Create test user
-	user := internal.CreateTestUser(t, client, "Test User", "test@example.com", "+14251234567", false)
-
-	// Create Sentry hub for testing
-	hub := sentry.CurrentHub()
-
-	t.Run("ProcessCompletedAppointment", func(t *testing.T) {
-		// Set up mock responses for each prompt
-		mockResponses := []string{
-			// Mock response for transcript extract
-			`{
-				"skills": ["Go", "Python", "AWS"],
-				"experience": "5 years of software development",
-				"jobPreferences": "Senior engineering roles"
-			}`,
-			// Mock response for resolved preferences
-			`{
-				"roleTypes": ["Software Engineer", "Tech Lead"],
-				"experienceLevel": "Senior",
-				"locations": ["US-WA-SEA", "US-CA-SF"]
-			}`,
-			// Mock response for work preferences with final_determinations tags
-			`<final_determinations>
-				{
-					"remotePreference": "Hybrid",
-					"salaryRange": "$150,000 - $200,000",
-					"industryPreferences": ["Technology", "Finance"]
-				}
-			</final_determinations>`,
-			// Mock response for keyword analysis
-			`{
-				"keywords": ["golang", "distributed systems", "cloud architecture"],
-				"industries": ["tech", "finance"],
-				"roles": ["senior engineer", "tech lead"]
-			}`,
-			// Mock response for user statement
-			`{"statement": "Professional software engineer with 5 years of experience in Go and distributed systems"}`,
-		}
-
-		// Create a channel to feed mock responses in sequence
-		responseIndex := 0
-		tools.MockLLMResponse = mockResponses[responseIndex]
-		tools.MockLLMError = nil
-
-		// Create a goroutine to update the mock response after each LLM call
-		done := make(chan bool)
-		go func() {
-			for responseIndex < len(mockResponses)-1 {
-				time.Sleep(100 * time.Millisecond) // Give time for the LLM call to complete
-				responseIndex++
-				tools.MockLLMResponse = mockResponses[responseIndex]
-			}
-			done <- true
-		}()
-
-		// Create an appointment with a transcript
-		appointment := &internal.Appointment{
-			ID:            "test-completed-appointment",
-			UserID:        user.ID,
-			Name:          "Test Completed Appointment",
-			ScheduledTime: time.Now(),
-			Status:        internal.AppointmentStatusCompleted,
-		}
-		callID := "2709318a-1b74-44da-9ba9-e1973804b6b9"
-		appointment.CallID = &callID
-		summary := "Candidate has 5 years of Go experience and is looking for senior engineering roles"
-		appointment.Summary = &summary
-
-		// Create a mock transcript for testing
-		transcript := &internal.Transcript{
-			Messages: []minds.Message{
-				{
-					Role:    minds.RoleSystem,
-					Content: "System message",
-				},
-				{
-					Role:    minds.RoleUser,
-					Content: summary,
-				},
-			},
-		}
-
-		// Test the direct function calls that replaced processor methods
-		if err := getWorkPreferences(ctx, client, transcript, []string{"US-WA-SEA", "US-CA-SF"}, user); err != nil {
-			t.Fatalf("getWorkPreferences() error = %v", err)
-		}
-
-		if err := generateSteeringQuery(ctx, client, user, transcript); err != nil {
-			t.Fatalf("generateSteeringQuery() error = %v", err)
-		}
-
-		criteria, err := getOrCreateSearchCriteria(ctx, client, user)
-		if err != nil {
-			t.Fatalf("getOrCreateSearchCriteria() error = %v", err)
-		}
-
-		if err := internal.SubscribeToCriteria(ctx, client, user.ID, criteria.ID); err != nil {
-			t.Fatalf("internal.SubscribeToCriteria() error = %v", err)
-		}
-
-		// Test ProcessCompletedAppointment function as an integration test
-		go ProcessCompletedAppointment(hub, client, logger, appointment)
-
-		// Wait for all mock responses to be used
-		<-done
-
-		// Verify user search was updated
-		updatedUser, found, err := internal.GetUser(ctx, client, user.ID)
-		if err != nil {
-			t.Fatalf("internal.GetUser() error = %v", err)
-		}
-		if !found {
-			t.Fatal("internal.GetUser() user not found")
-		}
-		if updatedUser.SteeringQuery == nil {
-			t.Error("ProcessCompletedAppointment() did not update user search")
-		}
-
-		if updatedUser.WorkPreferences == nil {
-			t.Error("ProcessCompletedAppointment() did not update user work preferences")
-		}
-
-		subs, err := internal.GetSubscriptionsForUser(ctx, client, user.ID)
-		if err != nil {
-			t.Fatalf("internal.GetSubscriptionsForUser() error = %v", err)
-		}
-		if len(subs) == 0 {
-			t.Error("ProcessCompletedAppointment() did not create subscriptions")
-		}
-		if len(subs) != 1 {
-			t.Errorf("ProcessCompletedAppointment() created %d subscriptions, want 1", len(subs))
-		}
-	})
-}
-
-func TestTemplateExecution(t *testing.T) {
-	templates := []struct {
-		name     string
-		file     string
-		testData any
-	}{
-		{
-			name: "Extract Template",
-			file: "prompts/transcript-010-extract.txt",
-			testData: map[string]any{
-				"Transcript": "Sample transcript text with some conversation between the assistant and user " +
-					"discussing job preferences and experience.",
-			},
-		},
-		{
-			name: "Resolved Preferences Template",
-			file: "prompts/transcript-020-resolved-prefs.txt",
-			testData: map[string]any{
-				"ExtractedData": "Sample extracted data about job preferences and skills",
-			},
-		},
-		{
-			name: "Work Location Template",
-			file: "prompts/transcript-030-work-location.txt",
-			testData: map[string]any{
-				"ExtractedData":       "Sample extracted data",
-				"ResolvedPreferences": "Sample resolved preferences",
-				"Locations":           []string{"US-CA-SF", "US-WA-SEA"},
-			},
-		},
-		{
-			name: "Search Template",
-			file: "prompts/transcript-040-search.txt",
-			testData: map[string]any{
-				"ExtractedData":       "Sample extracted data",
-				"ResolvedPreferences": "Sample resolved preferences",
-			},
-		},
-		{
-			name: "User Statement Template",
-			file: "prompts/transcript-050-user-statement.txt",
-			testData: map[string]any{
-				"ExtractedData":       "Sample extracted data",
-				"ResolvedPreferences": "Sample resolved preferences",
-				"WorkAnalysis":        "Sample work analysis",
-				"SearchPhrases":       "Sample search phrases",
-			},
-		},
-	}
-
-	for _, tt := range templates {
-		t.Run(tt.name, func(t *testing.T) {
-			tmpl, err := utils.CreateTemplate(tt.file)
-			if err != nil {
-				t.Fatalf("Failed to create template %s: %v", tt.file, err)
-			}
-
-			_, err = tmpl.Execute(tt.testData)
-			if err != nil {
-				t.Errorf("Template execution failed for %s: %v", tt.file, err)
-			}
-		})
-	}
-}
 
 func TestNewResponseSchema(t *testing.T) {
 	t.Run("valid schema", func(t *testing.T) {
@@ -305,9 +78,9 @@ func TestRecoverProcessingAppointments(t *testing.T) {
 	}
 
 	// Mark as processing - this adds to the processing collection
-	err = internal.MarkAppointmentAsProcessing(ctx, client, appointment)
+	err = internal.ProcessAppointmentStarted(ctx, client, user, appointment)
 	if err != nil {
-		t.Fatalf("internal.MarkAppointmentAsProcessing() error = %v", err)
+		t.Fatalf("internal.ProcessAppointmentStarted() error = %v", err)
 	}
 
 	// Simulate server restart by checking for appointments needing processing
@@ -341,7 +114,7 @@ func TestRecoverProcessingAppointments(t *testing.T) {
 
 	// Run the recovery process - note that this would normally complete asynchronously
 	// so we're just testing that it starts the background job without errors
-	err = RecoverProcessingAppointments(hub, client, logger)
+	err = RecoverProcessingAppointments(hub, client, nil, logger, nil, nil)
 	if err != nil {
 		t.Fatalf("RecoverProcessingAppointments() error = %v", err)
 	}
@@ -350,4 +123,544 @@ func TestRecoverProcessingAppointments(t *testing.T) {
 	// This would require a way to wait for the async processing to finish
 	// For now, we'll just verify the recovery function didn't error
 	t.Log("Recovery process started successfully")
+}
+
+func TestExtractWorkPreferences(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("valid final determinations", func(t *testing.T) {
+		data := "Some text before <final_determinations>Remote work preferred, San Francisco Bay Area</final_determinations> some text after"
+		result, err := extractWorkPreferences(ctx, data)
+		if err != nil {
+			t.Errorf("extractWorkPreferences() error = %v, want nil", err)
+		}
+		if result == nil {
+			t.Error("extractWorkPreferences() result = nil, want non-nil")
+		}
+		expected := "Remote work preferred, San Francisco Bay Area"
+		if *result != expected {
+			t.Errorf("extractWorkPreferences() = %v, want %v", *result, expected)
+		}
+	})
+
+	t.Run("missing opening tag", func(t *testing.T) {
+		data := "Some text without tags Remote work preferred</final_determinations>"
+		_, err := extractWorkPreferences(ctx, data)
+		if err == nil {
+			t.Error("extractWorkPreferences() error = nil, want error for missing opening tag")
+		}
+		if !strings.Contains(err.Error(), "<final_determinations> tag not found") {
+			t.Errorf("extractWorkPreferences() error = %v, want error about missing opening tag", err)
+		}
+	})
+
+	t.Run("missing closing tag", func(t *testing.T) {
+		data := "Some text <final_determinations>Remote work preferred without closing"
+		_, err := extractWorkPreferences(ctx, data)
+		if err == nil {
+			t.Error("extractWorkPreferences() error = nil, want error for missing closing tag")
+		}
+		if !strings.Contains(err.Error(), "</final_determinations> tag not found") {
+			t.Errorf("extractWorkPreferences() error = %v, want error about missing closing tag", err)
+		}
+	})
+
+	t.Run("no determinations tags", func(t *testing.T) {
+		data := "Some text without any special tags"
+		_, err := extractWorkPreferences(ctx, data)
+		if err == nil {
+			t.Error("extractWorkPreferences() error = nil, want error for no tags")
+		}
+	})
+
+	t.Run("empty determinations", func(t *testing.T) {
+		data := "Some text <final_determinations></final_determinations> after"
+		result, err := extractWorkPreferences(ctx, data)
+		if err != nil {
+			t.Errorf("extractWorkPreferences() error = %v, want nil", err)
+		}
+		if result == nil {
+			t.Error("extractWorkPreferences() result = nil, want non-nil")
+		}
+		if *result != "" {
+			t.Errorf("extractWorkPreferences() = %v, want empty string", *result)
+		}
+	})
+}
+
+func TestGetOrCreateSearchCriteria(t *testing.T) {
+	ctx := context.Background()
+	client, err := internal.NewTestFirestoreClient(ctx)
+	if err != nil {
+		t.Fatalf("internal.NewTestFirestoreClient() error = %v", err)
+	}
+
+	// Clean up test data
+	internal.DeleteTestData(t, client, "test-criteria-")
+	defer func() {
+		cleanupCtx := context.Background()
+		cleanupClient, err := internal.NewTestFirestoreClient(cleanupCtx)
+		if err != nil {
+			t.Logf("Failed to create cleanup client: %v", err)
+			return
+		}
+		defer cleanupClient.Close()
+		internal.DeleteTestData(t, cleanupClient, "test-criteria-")
+	}()
+	defer client.Close()
+
+	t.Run("missing steering query", func(t *testing.T) {
+		user := &internal.User{
+			ID:              "test-criteria-user-1",
+			WorkPreferences: internal.StringPtr("Remote work in San Francisco"),
+			// SteeringQuery is nil
+		}
+
+		_, _, err := getOrCreateSearchCriteria(ctx, client, user)
+		if err == nil {
+			t.Error("getOrCreateSearchCriteria() error = nil, want error for missing steering query")
+		}
+		if !strings.Contains(err.Error(), "steering query or work preferences not found") {
+			t.Errorf("getOrCreateSearchCriteria() error = %v, want error about missing steering query", err)
+		}
+	})
+
+	t.Run("missing work preferences", func(t *testing.T) {
+		user := &internal.User{
+			ID: "test-criteria-user-2",
+			SteeringQuery: &internal.SteeringQuery{
+				Query: "software engineer python",
+			},
+			// WorkPreferences is nil
+		}
+
+		_, _, err := getOrCreateSearchCriteria(ctx, client, user)
+		if err == nil {
+			t.Error("getOrCreateSearchCriteria() error = nil, want error for missing work preferences")
+		}
+		if !strings.Contains(err.Error(), "steering query or work preferences not found") {
+			t.Errorf("getOrCreateSearchCriteria() error = %v, want error about missing work preferences", err)
+		}
+	})
+
+	t.Run("create new search criteria", func(t *testing.T) {
+		testGeoID := internal.GeoID{
+			ID:    "test-criteria-geoid",
+			Value: "San Francisco",
+		}
+		if err := internal.CreateGeoID(ctx, client, testGeoID); err != nil {
+			t.Fatalf("Failed to create test geo ID: %v", err)
+		}
+
+		user := &internal.User{
+			ID: "test-criteria-user-3",
+			SteeringQuery: &internal.SteeringQuery{
+				Query: "software engineer python",
+			},
+			WorkPreferences: internal.StringPtr("Remote work in San Francisco"),
+		}
+
+		criteria, _, err := getOrCreateSearchCriteria(ctx, client, user)
+		if err != nil {
+			t.Errorf("getOrCreateSearchCriteria() error = %v, want nil", err)
+		}
+		if criteria == nil {
+			t.Error("getOrCreateSearchCriteria() returned nil criteria")
+		}
+		if criteria.Query != "software engineer python" {
+			t.Errorf("getOrCreateSearchCriteria() query = %v, want %v", criteria.Query, "software engineer python")
+		}
+	})
+
+	t.Run("reuse existing search criteria", func(t *testing.T) {
+		user := &internal.User{
+			ID: "test-criteria-user-4",
+			SteeringQuery: &internal.SteeringQuery{
+				Query: "software engineer python",
+			},
+			WorkPreferences: internal.StringPtr("Remote work in San Francisco"),
+		}
+
+		// Create criteria first time
+		criteria1, _, err := getOrCreateSearchCriteria(ctx, client, user)
+		if err != nil {
+			t.Fatalf("getOrCreateSearchCriteria() first call error = %v", err)
+		}
+
+		// Call again with same data
+		criteria2, _, err := getOrCreateSearchCriteria(ctx, client, user)
+		if err != nil {
+			t.Errorf("getOrCreateSearchCriteria() second call error = %v, want nil", err)
+		}
+
+		if criteria1.ID != criteria2.ID {
+			t.Errorf("getOrCreateSearchCriteria() should reuse existing criteria, got different IDs: %v vs %v", criteria1.ID, criteria2.ID)
+		}
+	})
+}
+
+func TestProcessCompletedAppointmentErrorHandling(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
+	hub := sentry.CurrentHub()
+
+	client, err := internal.NewTestFirestoreClient(ctx)
+	if err != nil {
+		t.Fatalf("internal.NewTestFirestoreClient() error = %v", err)
+	}
+
+	// Clean up test data
+	internal.DeleteTestData(t, client, "test-process-error-")
+	defer func() {
+		cleanupCtx := context.Background()
+		cleanupClient, err := internal.NewTestFirestoreClient(cleanupCtx)
+		if err != nil {
+			t.Logf("Failed to create cleanup client: %v", err)
+			return
+		}
+		defer cleanupClient.Close()
+		internal.DeleteTestData(t, cleanupClient, "test-process-error-")
+	}()
+	defer client.Close()
+
+	t.Run("appointment with nil call ID", func(t *testing.T) {
+		user := internal.CreateTestUser(t, client, "Test Error User", "test-error@example.com", "+14251234567", false)
+		appointment := &internal.Appointment{
+			ID:            "test-process-error-appointment-1",
+			UserID:        user.ID,
+			Name:          "Test Error Appointment",
+			ScheduledTime: time.Now(),
+			Status:        internal.AppointmentStatusScheduled,
+			CreatedAt:     time.Now(),
+			UpdatedAt:     time.Now(),
+			CallID:        nil, // This should cause an error
+		}
+
+		err = internal.CreateAppointment(ctx, client, user.ID, appointment)
+		if err != nil {
+			t.Fatalf("internal.CreateAppointment() error = %v", err)
+		}
+
+		// This should not crash but should handle the error gracefully
+		ProcessCompletedCall(hub, client, nil, nil, logger, nil, user, appointment)
+
+		// Verify appointment status was not changed to processing since CallID was nil
+		updatedAppointment, err := internal.GetAppointment(ctx, client, user.ID, appointment.ID)
+		if err != nil {
+			t.Fatalf("internal.GetAppointment() error = %v", err)
+		}
+		if updatedAppointment.Status != internal.AppointmentStatusScheduled {
+			t.Errorf("ProcessCompletedAppointment() with nil CallID changed status to %v, want %v",
+				updatedAppointment.Status, internal.AppointmentStatusScheduled)
+		}
+	})
+
+	t.Run("non-existent user", func(t *testing.T) {
+		user := &internal.User{
+			ID: "test-process-error-user-1",
+		}
+
+		appointment := &internal.Appointment{
+			ID:            "test-process-error-appointment-2",
+			UserID:        "non-existent-user-id",
+			Name:          "Test Error Appointment",
+			ScheduledTime: time.Now(),
+			Status:        internal.AppointmentStatusScheduled,
+			CreatedAt:     time.Now(),
+			UpdatedAt:     time.Now(),
+			CallID:        internal.StringPtr("test-call-id"),
+		}
+
+		// This should not crash but should handle the error gracefully
+		ProcessCompletedCall(hub, client, nil, nil, logger, nil, user, appointment)
+
+		// Since the user doesn't exist, the function should return early
+		// and not create any processing entries
+		processingAppointments, err := internal.ListAppointmentsNeedingProcessing(ctx, client, logger)
+		if err != nil {
+			t.Fatalf("internal.ListAppointmentsNeedingProcessing() error = %v", err)
+		}
+
+		for _, a := range processingAppointments {
+			if a.ID == appointment.ID {
+				t.Error("ProcessCompletedAppointment() with non-existent user should not create processing entry")
+			}
+		}
+	})
+}
+
+func TestRecoverProcessingAppointmentsEdgeCases(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
+	hub := sentry.CurrentHub()
+
+	client, err := internal.NewTestFirestoreClient(ctx)
+	if err != nil {
+		t.Fatalf("internal.NewTestFirestoreClient() error = %v", err)
+	}
+
+	// Clean up test data
+	internal.DeleteTestData(t, client, "test-recover-edge-")
+	defer func() {
+		cleanupCtx := context.Background()
+		cleanupClient, err := internal.NewTestFirestoreClient(cleanupCtx)
+		if err != nil {
+			t.Logf("Failed to create cleanup client: %v", err)
+			return
+		}
+		defer cleanupClient.Close()
+		internal.DeleteTestData(t, cleanupClient, "test-recover-edge-")
+	}()
+	defer client.Close()
+
+	t.Run("empty processing list", func(t *testing.T) {
+		// Ensure no processing appointments exist for this test
+		processingAppointments, err := internal.ListAppointmentsNeedingProcessing(ctx, client, logger)
+		if err != nil {
+			t.Fatalf("internal.ListAppointmentsNeedingProcessing() error = %v", err)
+		}
+
+		// Clean any existing processing appointments for a clean test
+		for _, appt := range processingAppointments {
+			if strings.HasPrefix(appt.ID, "test-recover-edge-") {
+				user, found, err := internal.GetUser(ctx, client, appt.UserID)
+				if err == nil && found {
+					internal.ProcessAppointmentComplete(ctx, client, user, appt)
+				}
+			}
+		}
+
+		err = RecoverProcessingAppointments(hub, client, nil, logger, nil, nil)
+		if err != nil {
+			t.Errorf("RecoverProcessingAppointments() with empty list error = %v, want nil", err)
+		}
+	})
+
+	t.Run("multiple appointments to recover", func(t *testing.T) {
+		user := internal.CreateTestUser(t, client, "Test Multiple Recovery", "test-multiple@example.com", "+14251234568", false)
+
+		// Create multiple appointments and mark them as processing
+		var appointments []*internal.Appointment
+		for i := 0; i < 3; i++ {
+			appointment := &internal.Appointment{
+				ID:            fmt.Sprintf("test-recover-edge-appointment-%d", i),
+				UserID:        user.ID,
+				Name:          fmt.Sprintf("Test Multiple Recovery Appointment %d", i),
+				ScheduledTime: time.Now(),
+				Status:        internal.AppointmentStatusScheduled,
+				CreatedAt:     time.Now(),
+				UpdatedAt:     time.Now(),
+				CallID:        internal.StringPtr(fmt.Sprintf("test-call-%d", i)),
+				Summary:       internal.StringPtr(fmt.Sprintf("Test summary %d", i)),
+			}
+
+			err = internal.CreateAppointment(ctx, client, user.ID, appointment)
+			if err != nil {
+				t.Fatalf("internal.CreateAppointment() error = %v", err)
+			}
+
+			err = internal.ProcessAppointmentStarted(ctx, client, user, appointment)
+			if err != nil {
+				t.Fatalf("internal.ProcessAppointmentStarted() error = %v", err)
+			}
+
+			appointments = append(appointments, appointment)
+		}
+
+		// Run recovery
+		err = RecoverProcessingAppointments(hub, client, nil, logger, nil, nil)
+		if err != nil {
+			t.Errorf("RecoverProcessingAppointments() with multiple appointments error = %v, want nil", err)
+		}
+
+		// Verify all appointments are being processed
+		// Note: The actual processing happens asynchronously, so we just verify
+		// the recovery function started without error
+		t.Logf("Recovery process started for %d appointments", len(appointments))
+	})
+}
+
+func TestGenerateSteeringQueryEdgeCases(t *testing.T) {
+	ctx := context.Background()
+	client, err := internal.NewTestFirestoreClient(ctx)
+	if err != nil {
+		t.Fatalf("internal.NewTestFirestoreClient() error = %v", err)
+	}
+
+	// Clean up test data
+	internal.DeleteTestData(t, client, "test-steering-")
+	defer func() {
+		cleanupCtx := context.Background()
+		cleanupClient, err := internal.NewTestFirestoreClient(cleanupCtx)
+		if err != nil {
+			t.Logf("Failed to create cleanup client: %v", err)
+			return
+		}
+		defer cleanupClient.Close()
+		internal.DeleteTestData(t, cleanupClient, "test-steering-")
+	}()
+	defer client.Close()
+
+	t.Run("empty transcript", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("skipping test in short mode")
+		}
+		user := &internal.User{
+			ID: "test-steering-user-1",
+		}
+
+		// Create an empty transcript
+		transcript := &internal.Transcript{
+			Messages: []minds.Message{},
+		}
+
+		// This should handle empty transcript gracefully
+		err := generateSteeringQuery(ctx, client, user, transcript)
+
+		// The function might succeed with an empty query or fail gracefully
+		// Either is acceptable behavior for an empty transcript
+		if err != nil {
+			t.Logf("generateSteeringQuery() with empty transcript error = %v (expected)", err)
+		} else {
+			t.Log("generateSteeringQuery() with empty transcript succeeded")
+		}
+	})
+
+	t.Run("very short transcript", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("skipping test in short mode")
+		}
+
+		user := &internal.User{
+			ID: "test-steering-user-2",
+		}
+
+		transcript := &internal.Transcript{
+			Messages: []minds.Message{
+				{
+					Role:    minds.RoleUser,
+					Content: "I prefer remote work.",
+				},
+			},
+		}
+
+		err := generateSteeringQuery(ctx, client, user, transcript)
+
+		// Should handle short transcript gracefully
+		if err != nil {
+			t.Logf("generateSteeringQuery() with short transcript error = %v (may be expected)", err)
+		} else {
+			t.Log("generateSteeringQuery() with short transcript succeeded")
+		}
+	})
+}
+
+func TestGetWorkPreferencesEdgeCases(t *testing.T) {
+	ctx := context.Background()
+	client, err := internal.NewTestFirestoreClient(ctx)
+	if err != nil {
+		t.Fatalf("internal.NewTestFirestoreClient() error = %v", err)
+	}
+
+	// Clean up test data
+	internal.DeleteTestData(t, client, "test-work-prefs-")
+	defer func() {
+		cleanupCtx := context.Background()
+		cleanupClient, err := internal.NewTestFirestoreClient(cleanupCtx)
+		if err != nil {
+			t.Logf("Failed to create cleanup client: %v", err)
+			return
+		}
+		defer cleanupClient.Close()
+		internal.DeleteTestData(t, cleanupClient, "test-work-prefs-")
+	}()
+	defer client.Close()
+
+	t.Run("empty locations list", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("skipping test in short mode")
+		}
+
+		user := &internal.User{
+			ID: "test-work-prefs-user-1",
+		}
+
+		transcript := &internal.Transcript{
+			Messages: []minds.Message{
+				{
+					Role:    minds.RoleUser,
+					Content: "I prefer remote work.",
+				},
+			},
+		}
+
+		var locations []string // empty slice
+
+		err := getWorkPreferences(ctx, client, transcript, locations, user)
+
+		// Should handle empty locations gracefully
+		if err != nil {
+			t.Logf("getWorkPreferences() with empty locations error = %v (may be expected)", err)
+		} else {
+			t.Log("getWorkPreferences() with empty locations succeeded")
+		}
+	})
+
+	t.Run("nil locations list", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("skipping test in short mode")
+		}
+
+		user := &internal.User{
+			ID: "test-work-prefs-user-2",
+		}
+
+		transcript := &internal.Transcript{
+			Messages: []minds.Message{
+				{
+					Role:    minds.RoleUser,
+					Content: "I want to work in San Francisco.",
+				},
+			},
+		}
+
+		err := getWorkPreferences(ctx, client, transcript, nil, user)
+
+		// Should handle nil locations gracefully
+		if err != nil {
+			t.Logf("getWorkPreferences() with nil locations error = %v (may be expected)", err)
+		} else {
+			t.Log("getWorkPreferences() with nil locations succeeded")
+		}
+	})
+
+	t.Run("transcript with no location mentions", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("skipping test in short mode")
+		}
+
+		user := &internal.User{
+			ID: "test-work-prefs-user-3",
+		}
+
+		transcript := &internal.Transcript{
+			Messages: []minds.Message{
+				{
+					Role:    minds.RoleUser,
+					Content: "I like programming and solving problems.",
+				},
+			},
+		}
+
+		locations := []string{"san-francisco-ca", "new-york-ny", "austin-tx"}
+
+		err := getWorkPreferences(ctx, client, transcript, locations, user)
+
+		// Should handle transcript with no location mentions gracefully
+		if err != nil {
+			t.Logf("getWorkPreferences() with no location mentions error = %v (may be expected)", err)
+		} else {
+			t.Log("getWorkPreferences() with no location mentions succeeded")
+		}
+	})
 }

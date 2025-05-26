@@ -7,7 +7,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"talent-rodeo/internal"
-	"talent-rodeo/internal/search"
 	"time"
 )
 
@@ -62,7 +61,7 @@ type WorkerManager struct {
 	shutdownCtx  context.Context
 	shutdownFunc context.CancelFunc
 	shutdownFlag int32
-	eventHandler search.JobEventHandler
+	eventHandler internal.JobEventHandler
 }
 
 // WorkerOption configures the WorkerManager
@@ -76,7 +75,7 @@ func withWorkerLogger(logger *slog.Logger) WorkerOption {
 }
 
 // WithEventHandler sets the event handler for the worker manager
-func withEventHandler(handler search.JobEventHandler) WorkerOption {
+func withEventHandler(handler internal.JobEventHandler) WorkerOption {
 	return func(wm *WorkerManager) {
 		wm.eventHandler = handler
 	}

@@ -13,9 +13,36 @@ import (
 
 	"github.com/chriscow/minds/tools"
 	"github.com/getsentry/sentry-go"
+	"github.com/pusher/pusher-http-go/v5"
+	"github.com/samber/lo"
 )
 
-// ProcessCompletedAppointment updates the appointment after a successful call with the transcript summary.
+type userNotifier struct {
+	userID    string
+	publisher *pusher.Client
+	dispatch  *internal.JobEventDispatch
+}
+
+func (u *userNotifier) OnSearchStarted(task internal.SearchTask) {
+	fmt.Println("userNotifier:OnSearchStarted", task)
+}
+
+func (u *userNotifier) OnJobListing(task internal.SearchTask, listing internal.JobListing) {
+	// fmt.Println("userNotifier:OnJobListing", task, listing)
+}
+
+func (u *userNotifier) OnJobDetail(task internal.SearchTask, details internal.JobDetail) {
+	fmt.Println("userNotifier:OnJobDetail", task.Criteria.ID, details.Title)
+	internal.SendPusherMessage(u.publisher, u.userID, "Searching: "+details.Title, nil)
+}
+
+func (u *userNotifier) OnSearchCompleted(task internal.SearchTask, totalJobs int, errors []error) {
+	fmt.Println("userNotifier:OnSearchCompleted", task, totalJobs, errors)
+	u.dispatch.Deregister(u.userID)
+	internal.SendPusherRedirect(u.publisher, u.userID, "/dashboard")
+}
+
+// ProcessCompletedCall updates the appointment after a successful call with the transcript summary.
 // It is called as a background task after the transcript is fully processed.
 //
 // # It is called after an an end of call webhook is received in handlers.vapi.webhooks.go
@@ -30,47 +57,30 @@ import (
 //   - Save the search criteria to the user
 //
 // Saving a new search criteria triggers a new search.
-func ProcessCompletedAppointment(hub *sentry.Hub, fs *internal.FirestoreClient, logger *slog.Logger, appointment *internal.Appointment) {
+func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pusher.Client, queue internal.SearchQueue, logger *slog.Logger, dispatch *internal.JobEventDispatch, user *internal.User, appointment *internal.Appointment) {
 	ctx := context.Background()
 	sentry.SetHubOnContext(ctx, hub)
 
-	user, found, err := internal.GetUser(ctx, fs, appointment.UserID)
-	if err != nil {
-		logger.Error("failed to get user", "error", err)
-		hub.CaptureException(err)
-		return
-	}
-	if !found {
-		logger.Error("user not found", "user-id", appointment.UserID)
-		hub.CaptureException(err)
-		return
-	}
-
-	// Send initial processing state update
-	logger.Debug("updating user state to processing", "user-id", user.ID)
-	if err := internal.UpdateUserStatus(ctx, fs, user, internal.UserStatusCallProcessing); err != nil {
-		logger.Error("failed to update user state", "error", err)
-		hub.CaptureException(err)
-		return
-	}
-
-	start := time.Now()
-
 	if appointment.CallID == nil {
-		logger.Error("call ID is nil", "user-id", user.ID, "appointment_id", appointment.ID)
+		logger.Error("call ID is nil", "user-id", user.ID, "appointment-id", appointment.ID)
 		hub.CaptureException(fmt.Errorf("ProcessCompletedAppointment: call ID is nil"))
 		return
 	}
 
 	//
-	// Mark the appointment as processing
+	// Mark the appointment as processing and update user status
 	//
-	logger.Debug("processing appointment", "user-id", user.ID, "appointment_id", appointment.ID)
-	if err := internal.MarkAppointmentAsProcessing(ctx, fs, appointment); err != nil {
+	if err := internal.ProcessAppointmentStarted(ctx, fs, user, appointment); err != nil {
 		hub.CaptureException(err)
 		logger.Error("failed to mark appointment as processing", "error", err)
 		return
 	}
+
+	internal.SendPusherRedirect(psh, user.ID, "/dashboard")
+	time.Sleep(3 * time.Second)
+	internal.SendPusherMessage(psh, user.ID, "Analyzing your call", nil)
+
+	start := time.Now()
 
 	//
 	// Get the supported locations (Geo ID keys)
@@ -86,15 +96,20 @@ func ProcessCompletedAppointment(hub *sentry.Hub, fs *internal.FirestoreClient, 
 	//
 	// Get the transcript from the VAPI call
 	//
-	logger.Debug("getting transcript from VAPI call", "call_id", *appointment.CallID)
+	logger.Debug("getting transcript from VAPI call", "call-id", *appointment.CallID)
 	transcript, err := internal.GetAppointmentTranscript(ctx, fs, *appointment)
 	if err != nil {
+		hub.CaptureException(err)
+		logger.Error("failed to get transcript from VAPI call", "error", err)
+		internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
+		return
 	}
 
 	//
 	// Get work preferences
 	//
-	logger.Debug("getting work preferences", "user-id", user.ID, "appointment_id", appointment.ID)
+	internal.SendPusherMessage(psh, user.ID, "Determining your work preferences", nil)
+	logger.Debug("getting work preferences", "user-id", user.ID, "appointment-id", appointment.ID)
 	if err := getWorkPreferences(ctx, fs, transcript, locations, user); err != nil {
 		hub.CaptureException(err)
 		logger.Error("failed to get work preferences", "error", err)
@@ -105,7 +120,8 @@ func ProcessCompletedAppointment(hub *sentry.Hub, fs *internal.FirestoreClient, 
 	//
 	// Generate steering query
 	//
-	logger.Debug("generating steering query", "user-id", user.ID, "appointment_id", appointment.ID)
+	internal.SendPusherMessage(psh, user.ID, "Generating your search criteria", nil)
+	logger.Debug("generating steering query", "user-id", user.ID, "appointment-id", appointment.ID)
 	if err := generateSteeringQuery(ctx, fs, user, transcript); err != nil {
 		hub.CaptureException(err)
 		logger.Error("failed to generate steering query", "error", err)
@@ -116,7 +132,7 @@ func ProcessCompletedAppointment(hub *sentry.Hub, fs *internal.FirestoreClient, 
 	//
 	// Subscribe the user to the generated SearchCriteria
 	//
-	logger.Debug("subscribing user to search criteria", "user-id", user.ID, "appointment_id", appointment.ID)
+	logger.Debug("subscribing user to search criteria", "user-id", user.ID, "appointment-id", appointment.ID)
 	if user.SteeringQuery == nil || user.WorkPreferences == nil {
 		logger.Error("user steering query or work preferences not found", "user-id", user.ID)
 		hub.CaptureException(fmt.Errorf("user steering query or work preferences not found"))
@@ -127,8 +143,8 @@ func ProcessCompletedAppointment(hub *sentry.Hub, fs *internal.FirestoreClient, 
 	//
 	// Get or create search criteria
 	//
-	logger.Debug("getting or creating search criteria", "user-id", user.ID, "appointment_id", appointment.ID)
-	criteria, err := getOrCreateSearchCriteria(ctx, fs, user)
+	logger.Debug("getting or creating search criteria", "user-id", user.ID, "appointment-id", appointment.ID)
+	criteria, isNewCriteria, err := getOrCreateSearchCriteria(ctx, fs, user)
 	if err != nil {
 		hub.CaptureException(err)
 		logger.Error("failed to get or create search criteria", "error", err)
@@ -147,38 +163,78 @@ func ProcessCompletedAppointment(hub *sentry.Hub, fs *internal.FirestoreClient, 
 		return
 	}
 
+	if isNewCriteria {
+		if queue == nil {
+			logger.Error("queue is nil")
+			hub.CaptureException(fmt.Errorf("queue is nil"))
+			internal.ProcessAppointmentFailed(ctx, fs, user, appointment, fmt.Errorf("queue is nil"))
+			return
+		}
+
+		if dispatch == nil {
+			logger.Error("dispatch is nil")
+			hub.CaptureException(fmt.Errorf("dispatch is nil"))
+			internal.ProcessAppointmentFailed(ctx, fs, user, appointment, fmt.Errorf("dispatch is nil"))
+			return
+		}
+
+		//
+		// If a new criteria was created, we need to queue an immediate search
+		//
+		logger.Debug("search criteria created", "user-id", user.ID, "criteria-id", criteria.ID)
+		jobSearch, err := internal.CreateSearchTask(ctx, fs, *criteria, "scrapingdog")
+		if err != nil {
+			logger.Error("failed to create search task", "error", err)
+			hub.CaptureException(err)
+			internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
+			return
+		}
+
+		notifier := &userNotifier{userID: user.ID, dispatch: dispatch, publisher: psh}
+		dispatch.Register(user.ID, notifier)
+
+		if err := queue.QueueSearch(ctx, *jobSearch); err != nil {
+			logger.Error("failed to queue search", "error", err)
+			hub.CaptureException(err)
+			internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
+			return
+		}
+	}
+
 	logger.Debug(internal.Blue("⏱️ appointment processing took"), "duration", time.Since(start).String())
 
 	//
 	// Set the apppointment status to completed
 	//
-	logger.Debug("marking appointment as completed", "user-id", user.ID, "appointment_id", appointment.ID)
-	if err := internal.ProcessAppointmentComplete(ctx, fs, appointment); err != nil {
+	internal.SendPusherMessage(psh, user.ID, "Starting your first search (this takes a few minutes)", nil)
+	logger.Debug("marking appointment as completed", "user-id", user.ID, "appointment-id", appointment.ID)
+	if err := internal.ProcessAppointmentComplete(ctx, fs, user, appointment); err != nil {
 		logger.Error("failed to mark appointment as completed", "error", err)
-	}
-
-	logger.Debug(internal.Green("✅ appointment processing completed"), "user-id", user.ID, "appointment_id", appointment.ID)
-
-	//
-	// Send completion state update
-	//
-	if err := internal.UpdateUserStatus(ctx, fs, user, internal.UserStatusCallCompleted); err != nil {
-		logger.Error("failed to update user state", "error", err)
-	}
-
-	//
-	// Refresh user jobs - queries Pinecone for relevant jobs
-	//
-	logger.Debug("refreshing user jobs", "user-id", user.ID, "criteria-id", criteria.ID)
-	if err := internal.RefreshUserJobs(ctx, fs, user, *criteria); err != nil {
-		logger.Error("failed to refresh user jobs", "error", err)
 		hub.CaptureException(err)
+		internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
 		return
+	}
+
+	logger.Debug(internal.Green("✅ appointment processing completed"), "user-id", user.ID, "appointment-id", appointment.ID)
+
+	//
+	// Refresh user jobs - queries Pinecone for relevant jobs using an existing criteria
+	//
+	if !isNewCriteria {
+		logger.Debug("refreshing user jobs", "user-id", user.ID, "criteria-id", criteria.ID)
+		internal.SendPusherMessage(psh, user.ID, "Refreshing your results", nil)
+		if err := internal.RefreshUserJobs(ctx, fs, user, *criteria); err != nil {
+			logger.Error("failed to refresh user jobs", "error", err)
+			hub.CaptureException(err)
+			return
+		}
+
+		internal.SendPusherRedirect(psh, user.ID, "/dashboard")
 	}
 }
 
 // RecoverProcessingAppointments finds and reprocesses any appointments that were interrupted during processing
-func RecoverProcessingAppointments(hub *sentry.Hub, fs *internal.FirestoreClient, logger *slog.Logger) error {
+func RecoverProcessingAppointments(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pusher.Client, logger *slog.Logger, dispatch *internal.JobEventDispatch, queue internal.SearchQueue) error {
 	ctx := context.Background()
 
 	logger = logger.With("pkg", "transcript.RecoverProcessingAppointments")
@@ -190,89 +246,67 @@ func RecoverProcessingAppointments(hub *sentry.Hub, fs *internal.FirestoreClient
 		return fmt.Errorf("failed to list appointments needing processing: %w", err)
 	}
 
-	if len(appointments) > 0 {
-		logger.Info("found appointments needing processing", "count", len(appointments))
+	if len(appointments) == 0 {
+		logger.Info("no appointments needing processing found")
+		return nil
 	}
 
+	logger.Info("found appointments needing processing", "count", len(appointments))
+
+	// Collect unique user IDs from appointments
+	userMap := make(map[string]*internal.User)
 	for _, appointment := range appointments {
+		userMap[appointment.UserID] = nil
+	}
+
+	userIDs := lo.Keys(userMap)
+
+	// Get all users in one call
+	users, err := internal.GetUsersByIDs(ctx, fs, userIDs)
+	if err != nil {
+		return fmt.Errorf("failed to get users by ids: %w", err)
+	}
+
+	// Populate userMap with actual user data
+	for _, user := range users {
+		if _, exists := userMap[user.ID]; exists {
+			userMap[user.ID] = user
+		} else {
+			// If the user does not exist, skip the appointment
+			logger.Error("user not found for appointment",
+				"user-id", user.ID,
+			)
+			hub.CaptureException(fmt.Errorf("user not found for appointment: %s", user.ID))
+			// remove the appointment user from the list
+			delete(userMap, user.ID)
+			continue
+		}
+	}
+
+	// Process each appointment with its corresponding user
+	for _, appointment := range appointments {
+		user, ok := userMap[appointment.UserID]
+		if !ok {
+			logger.Error("user not found for appointment",
+				"user-id", appointment.UserID,
+				"appointment-id", appointment.ID)
+			hub.CaptureException(fmt.Errorf("user not found for appointment: %s", appointment.UserID))
+			continue
+		}
+
 		logger.Info("reprocessing appointment",
-			"appointment_id", appointment.ID,
+			"appointment-id", appointment.ID,
 			"user-id", appointment.UserID)
 
-		go ProcessCompletedAppointment(hub, fs, logger, appointment)
+		go ProcessCompletedCall(hub, fs, psh, queue, logger, dispatch, user, appointment)
 	}
 
 	return nil
 }
 
-// processor handles the processing of appointment transcripts
-// type processor struct {
-// 	fs     *internal.FirestoreClient
-// 	logger *slog.Logger
-// 	llm    *openai.Provider
-// }
-
-// // newProcessor creates a new TranscriptProcessor
-// func newProcessor(fs *internal.FirestoreClient, logger *slog.Logger) (*processor, error) {
-// 	llm, err := openai.NewProvider(openai.WithModel(transcriptModel))
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to create openai provider: %w", err)
-// 	}
-
-// 	logger = logger.With("pkg", "transcript.Processor")
-
-// 	return &processor{
-// 		fs:     fs,
-// 		logger: logger,
-// 		llm:    llm,
-// 	}, nil
-// }
-
-// // process updates the appointment after a successful call with the transcript summary
-// func (p *processor) process(ctx context.Context, user *internal.User, appointment *internal.Appointment) error {
-// 	p.logger.Info(internal.BGGreen("⏱️ processing completed appointment"), "user-id", user.ID, "appointment_id", appointment.ID)
-// 	defer p.logger.Info(internal.BGGreen("✅ processed completed appointment"), "user-id", user.ID, "appointment_id", appointment.ID)
-
-// 	internal.SentryBreadcrumb(ctx, sentry.Breadcrumb{
-// 		Type:     "appointment",
-// 		Category: "processing",
-// 		Message:  fmt.Sprintf("Processing completed appointment for user %s", user.ID),
-// 		Data: map[string]any{
-// 			"appointment_id": appointment.ID,
-// 			"user-id":        user.ID,
-// 		},
-// 	})
-
-// 	//
-// 	// Generate search queries
-// 	//
-// 	// if err := p.getSearchQueries(ctx, resume, appointment); err != nil {
-// 	// 	internal.SentryReportError(ctx, err, sentry.LevelError, nil)
-// 	// 	return fmt.Errorf("failed to generate search queries: %w", err)
-// 	// }
-
-// 	//
-// 	// Generate user statement
-// 	//
-// 	// if err := p.generateUserStatement(ctx, user, appointment); err != nil {
-// 	// 	internal.SentryReportError(ctx, err, sentry.LevelError, nil)
-// 	// 	return fmt.Errorf("failed to generate user statement: %w", err)
-// 	// }
-
-// 	//
-// 	// Generate job description
-// 	//
-// 	// if err := p.getJobDescription(ctx, resume, appointment); err != nil {
-// 	// 	internal.SentryReportError(ctx, err, sentry.LevelError, nil)
-// 	// 	return fmt.Errorf("failed to generate job description: %w", err)
-// 	// }
-
-// 	return nil
-// }
-
-func getOrCreateSearchCriteria(ctx context.Context, fs *internal.FirestoreClient, user *internal.User) (*internal.SearchCriteria, error) {
+func getOrCreateSearchCriteria(ctx context.Context, fs *internal.FirestoreClient, user *internal.User) (*internal.SearchCriteria, bool, error) {
 	if user.SteeringQuery == nil || user.WorkPreferences == nil {
-		return nil, fmt.Errorf("user steering query or work preferences not found")
+		return nil, false, fmt.Errorf("user steering query or work preferences not found")
 	}
 
 	steeringQuery := user.SteeringQuery.Query
@@ -280,25 +314,25 @@ func getOrCreateSearchCriteria(ctx context.Context, fs *internal.FirestoreClient
 
 	geoID, err := internal.ExtractGeoID(ctx, fs, workPreferences)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract geo id: %w", err)
+		return nil, false, fmt.Errorf("failed to extract geo id: %w", err)
 	}
 
 	id := internal.MakeSearchCriteriaID(steeringQuery, geoID)
 	criteria, found, err := internal.GetSearchCriteria(ctx, fs, id)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get search criteria: %w", err)
+		return nil, false, fmt.Errorf("failed to get search criteria: %w", err)
 	}
 
 	if found {
-		return criteria, nil
+		return criteria, false, nil
 	}
 
 	criteria, err = internal.CreateSearchCriteria(ctx, fs, steeringQuery, geoID, internal.DefaultMaxPages)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create search criteria: %w", err)
+		return nil, false, fmt.Errorf("failed to create search criteria: %w", err)
 	}
 
-	return criteria, nil
+	return criteria, true, nil
 }
 
 // generateSteeringQuery generates a steering query based on the transcript
@@ -317,75 +351,6 @@ func generateSteeringQuery(ctx context.Context, fs *internal.FirestoreClient, us
 	}
 	return nil
 }
-
-// func (p *processor) extract(ctx context.Context, transcript string, appointment *internal.Appointment) error {
-// 	p.logger.Debug("extracting data from transcript", "user-id", appointment.UserID, "appointment_id", appointment.ID)
-
-// 	start := time.Now()
-// 	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/transcript-010-extract.txt")
-// 	if err != nil {
-// 		return fmt.Errorf("failed to read extract prompt: %w", err)
-// 	}
-
-// 	prompt, err := tools.GeneratePrompt(tmpl, map[string]any{
-// 		"Transcript": transcript,
-// 	})
-// 	if err != nil {
-// 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-// 			"error_type":  "prompt_execution",
-// 			"entity_type": "appointment",
-// 		})
-// 		return fmt.Errorf("failed to generate prompt: %w", err)
-// 	}
-
-// 	data, err := tools.Ask(ctx, prompt)
-// 	if err != nil {
-// 		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
-// 		return fmt.Errorf("failed to ask LLM: %w", err)
-// 	}
-
-// 	// Save extracted data to appointment
-// 	appointment.ExtractedData.TranscriptExtract = &data
-// 	if err := internal.UpdateAppointment(ctx, p.fs, appointment); err != nil {
-// 		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
-// 		return fmt.Errorf("failed to update appointment with extracted data: %w", err)
-// 	}
-
-// 	p.logger.Debug("extracted data from transcript", "user-id", appointment.UserID, "appointment_id", appointment.ID, "elapsed", time.Since(start).String())
-// 	return nil
-// }
-
-// func (p *processor) resolveDiscrepancies(ctx context.Context, appointment *internal.Appointment) error {
-// 	p.logger.Debug("resolving preferences", "user-id", appointment.UserID, "appointment_id", appointment.ID)
-// 	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/transcript-020-resolved-prefs.txt")
-// 	if err != nil {
-// 		return fmt.Errorf("failed to read resolved preferences prompt: %w", err)
-// 	}
-
-// 	prompt, err := tools.GeneratePrompt(tmpl, map[string]any{
-// 		"ExtractedData": appointment.ExtractedData,
-// 	})
-// 	if err != nil {
-// 		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
-// 		return fmt.Errorf("failed to generate prompt: %w", err)
-// 	}
-
-// 	// Ask LLM to resolve preferences
-// 	data, err := tools.Ask(ctx, prompt)
-// 	if err != nil {
-// 		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
-// 		return fmt.Errorf("failed to ask LLM: %w", err)
-// 	}
-
-// 	// Save resolved preferences to appointment
-// 	appointment.ExtractedData.ResolvedPreferences = &data
-// 	if err := internal.UpdateAppointment(ctx, p.fs, appointment); err != nil {
-// 		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
-// 		return fmt.Errorf("failed to update appointment with resolved preferences: %w", err)
-// 	}
-
-// 	return nil
-// }
 
 func extractWorkPreferences(_ context.Context, data string) (*string, error) {
 	if strings.Contains(data, "<final_determinations>") {
@@ -441,7 +406,7 @@ func getWorkPreferences(ctx context.Context, fs *internal.FirestoreClient, trans
 }
 
 // func (p *processor) getSearchQueries(ctx context.Context, resume *internal.Resume, appointment *internal.Appointment) error {
-// 	p.logger.Debug("generating search criteria", "user-id", appointment.UserID, "appointment_id", appointment.ID)
+// 	p.logger.Debug("generating search criteria", "user-id", appointment.UserID, "appointment-id", appointment.ID)
 
 // 	queries, err := internal.GenerateSearchQueries(ctx, *resume, *appointment)
 // 	if err != nil {
@@ -459,7 +424,7 @@ func getWorkPreferences(ctx context.Context, fs *internal.FirestoreClient, trans
 // }
 
 // func (p *processor) generateUserStatement(ctx context.Context, user *internal.User, appointment *internal.Appointment) error {
-// 	p.logger.Debug("generating user statement", "user-id", user.ID, "appointment_id", appointment.ID)
+// 	p.logger.Debug("generating user statement", "user-id", user.ID, "appointment-id", appointment.ID)
 // 	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/transcript-050-user-statement.txt")
 // 	if err != nil {
 // 		return fmt.Errorf("failed to read user statement prompt: %w", err)
@@ -502,7 +467,7 @@ func getWorkPreferences(ctx context.Context, fs *internal.FirestoreClient, trans
 // }
 
 // func (p *processor) getJobDescription(ctx context.Context, resume *internal.Resume, appointment *internal.Appointment) error {
-// 	p.logger.Debug("getting job description", "user-id", appointment.UserID, "appointment_id", appointment.ID)
+// 	p.logger.Debug("getting job description", "user-id", appointment.UserID, "appointment-id", appointment.ID)
 
 // 	description, err := internal.GenerateJobDescription(ctx, *resume, *appointment)
 // 	if err != nil {

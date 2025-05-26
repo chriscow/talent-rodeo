@@ -16,6 +16,11 @@ const (
 	JobCriteriaLinkCollection = "job_criteria_links"
 )
 
+type SearchQueue interface {
+	QueueSearch(ctx context.Context, search SearchTask) error
+	GetQueueDepth(ctx context.Context) (int, error)
+}
+
 // JobDetail contains comprehensive information about a specific job.
 // This is returned by GetJobDetails and includes all available
 // information about the position.

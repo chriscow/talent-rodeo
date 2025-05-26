@@ -89,7 +89,7 @@ func (app *application) deleteAccount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.PostForm.Get("confirm_delete") != "on" {
-		app.clientError(w, http.StatusBadRequest)
+		app.clientError(w, r, http.StatusBadRequest)
 		return
 	}
 

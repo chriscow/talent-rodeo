@@ -83,33 +83,7 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 		return fmt.Errorf("user not found: %s", userID)
 	}
 
-	// if status == internal.AppointmentStatusCompleted {
-	// 	if err := internal.UpdateUserStatus(r.Context(), app.fs, user, internal.UserStatusCallAnalysisStarted); err != nil {
-	// 		wrappedErr := fmt.Errorf("failed to update user status: %w", err)
-	// 		app.logger.Error("failed to update user status", "error", err)
-
-	// 		internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
-	// 			"error_type":  "database_update",
-	// 			"entity_type": "user_status",
-	// 		})
-
-	// 		return wrappedErr
-	// 	}
-	// } else {
-	// 	user.State.Status = internal.UserStatusError
-	// 	err := fmt.Sprintf("Call ended with reason: %s", endReason)
-	// 	if err := internal.UpdateUserStateWithError(r.Context(), app.fs, user, err); err != nil {
-	// 		wrappedErr := fmt.Errorf("failed to update user state with error: %w", err)
-	// 		app.logger.Error("failed to update user state with error", "error", err)
-
-	// 		internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
-	// 			"error_type":  "database_update",
-	// 			"entity_type": "user_state",
-	// 		})
-
-	// 		return wrappedErr
-	// 	}
-	// }
+	user.State.Status = internal.UserStatusCallCompleted
 
 	if shouldLog {
 		app.logger.Info("appointment status updated",
@@ -123,8 +97,6 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 	// This actually just starts a goroutine to process the appointment and
 	// doesn't return an error but we check anyway in case that changes
 	// in the future.
-	go transcript.ProcessCompletedAppointment(hub, app.fs, app.logger, appt)
-
-	app.SendUserStateUpdate(user)
+	go transcript.ProcessCompletedCall(hub, app.fs, app.pusher, app.searchProvider, app.logger, app.jobDispatch, user, appt)
 	return nil
 }

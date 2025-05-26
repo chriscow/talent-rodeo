@@ -8,18 +8,26 @@ import (
 func TestExtractGeoID(t *testing.T) {
 	ctx := context.Background()
 
-	client, err := NewFirestoreClient(ctx)
+	client, err := NewTestFirestoreClient(ctx)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
 	defer client.Close()
+
+	geoid := GeoID{
+		ID:    "12345678",
+		Value: "San Francisco, CA",
+	}
+	if err := CreateGeoID(ctx, client, geoid); err != nil {
+		t.Fatalf("Failed to create geo ID: %v", err)
+	}
 
 	got, err := ExtractGeoID(ctx, client, "I'm looking for a job in San Francisco")
 	if err != nil {
 		t.Fatalf("Failed to extract geo ID: %v", err)
 	}
 
-	want := "90000084"
+	want := "12345678"
 	if got != want {
 		t.Errorf("got %s, want %s", got, want)
 	}
@@ -64,22 +72,23 @@ func TestPopulateGeoIDs(t *testing.T) {
 	}
 
 	// Batch write to avoid too many individual writes
-	batch := client.Batch()
+	bulkWriter := client.BulkWriter(ctx)
 
-	// Add each GeoID to the batch
+	// Add each GeoID to the bulk writer
 	for _, geoID := range geoIDs {
 		doc := client.Collection("geo_ids").Doc(geoID.id)
-		batch.Set(doc, map[string]interface{}{
+		_, err := bulkWriter.Set(doc, map[string]interface{}{
 			"id":    geoID.id,
 			"value": geoID.value,
 		})
+		if err != nil {
+			t.Fatalf("Failed to add to bulk writer: %v", err)
+		}
 	}
 
-	// Commit the batch
-	_, err = batch.Commit(ctx)
-	if err != nil {
-		t.Fatalf("Failed to commit batch: %v", err)
-	}
+	// Commit the bulk writer
+	bulkWriter.End()
+	bulkWriter.Flush()
 
 	// Verify the data was written correctly
 	gotGeoIDs, err := ListGeoIDs(ctx, client)

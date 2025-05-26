@@ -254,6 +254,26 @@ func UpdateUser(ctx context.Context, fs *FirestoreClient, id string, updates map
 	return nil
 }
 
+func UpdateUserTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, id string, updates map[string]any) error {
+
+	var fsUpdates []firestore.Update
+
+	for field, value := range updates {
+
+		fsUpdates = append(fsUpdates, firestore.Update{
+			Path:  field,
+			Value: value,
+		})
+	}
+
+	fsUpdates = append(fsUpdates, firestore.Update{
+		Path:  "UpdatedAt",
+		Value: time.Now(),
+	})
+
+	return tx.Update(fs.Collection(usersCollection).Doc(id), fsUpdates)
+}
+
 // DeleteUser deletes a user document and all its subcollections
 func DeleteUser(ctx context.Context, fs *FirestoreClient, id string) error {
 

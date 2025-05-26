@@ -1,0 +1,69 @@
+{{define "title"}}Feature Flags - Admin{{end}}
+
+{{define "page:main"}}
+<main class="container">
+    <h1>Feature Flags</h1>
+    
+    {{if .Error}}
+    <article class="error">Error: {{.Error}}</article>
+    {{end}}
+    
+    {{if .Success}}
+    <article class="success">{{.Success}}</article>
+    {{end}}
+    
+    <form method="POST" autocomplete="off">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        
+        <fieldset>
+            <legend>System Feature Flags</legend>
+            
+            <article>
+                <header>
+                    <h3>Search Scheduler</h3>
+                    <p>Controls whether the search scheduler processes search criteria automatically</p>
+                </header>
+                <label>
+                    <input type="checkbox" name="search-scheduler" value="true" {{if .SearchSchedulerEnabled}}checked{{end}}>
+                    Enable Search Scheduler
+                </label>
+            </article>
+            
+            <article>
+                <header>
+                    <h3>Subscription Processor</h3>
+                    <p>Controls whether the subscription processor publishes job matches to users</p>
+                </header>
+                <label>
+                    <input type="checkbox" name="subscription-processor" value="true" {{if .SubscriptionProcessorEnabled}}checked{{end}}>
+                    Enable Subscription Processor
+                </label>
+            </article>
+        </fieldset>
+        
+        <button type="submit">Update Feature Flags</button>
+    </form>
+    
+    <section>
+        <h2>Current Status</h2>
+        <div class="grid">
+            <article>
+                <header>Search Scheduler</header>
+                <p>
+                    Status: <mark class="{{if .SearchSchedulerEnabled}}success{{else}}error{{end}}">
+                        {{if .SearchSchedulerEnabled}}Enabled{{else}}Disabled{{end}}
+                    </mark>
+                </p>
+            </article>
+            <article>
+                <header>Subscription Processor</header>
+                <p>
+                    Status: <mark class="{{if .SubscriptionProcessorEnabled}}success{{else}}error{{end}}">
+                        {{if .SubscriptionProcessorEnabled}}Enabled{{else}}Disabled{{end}}
+                    </mark>
+                </p>
+            </article>
+        </div>
+    </section>
+</main>
+{{end}}

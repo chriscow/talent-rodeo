@@ -110,7 +110,7 @@
 </main>
 
 <!-- Add user data for state monitoring -->
-<div data-user-id="{{.User.ID}}" 
+<div data-session-id="{{.User.ID}}" 
      data-pusher-key="{{.PusherKey}}" 
      data-pusher-cluster="{{.PusherCluster}}"
      data-next-search-time="{{.NextSearchTime.Unix}}"
@@ -254,20 +254,20 @@
             console.log('Dashboard: Simulated search completed event:', data);
         };
 
-        const userElement = document.querySelector('[data-user-id]');
-        if (!userElement) {
+        const sessionEle = document.querySelector('[data-session-id]');
+        if (!sessionEle) {
             console.error('Dashboard: No user element found');
             return;
         }
         
         console.log('Dashboard: Connecting to Pusher...', {
-            key: userElement.dataset.pusherKey,
-            cluster: userElement.dataset.pusherCluster,
-            userId: userElement.dataset.userId
+            key: sessionEle.dataset.pusherKey,
+            cluster: sessionEle.dataset.pusherCluster,
+            sessionId: sessionEle.dataset.sessionId
         });
         
         // Set up automatic refresh based on next search time
-        const nextSearchTimeUnix = parseInt(userElement.dataset.nextSearchTime, 10);
+        const nextSearchTimeUnix = parseInt(sessionEle.dataset.nextSearchTime, 10);
         if (!isNaN(nextSearchTimeUnix) && nextSearchTimeUnix > 0) {
             const nextSearchTime = new Date(nextSearchTimeUnix * 1000);
             const now = new Date();
@@ -286,11 +286,11 @@
             }
         }
         
-        const pusher = new Pusher(userElement.dataset.pusherKey, {
-            cluster: userElement.dataset.pusherCluster
+        const pusher = new Pusher(sessionEle.dataset.pusherKey, {
+            cluster: sessionEle.dataset.pusherCluster
         });
         
-        const channelName = `user-${userElement.dataset.userId}`;
+        const channelName = `${sessionEle.dataset.sessionId}`;
         console.log('Dashboard: Subscribing to channel:', channelName);
         
         const channel = pusher.subscribe(channelName);

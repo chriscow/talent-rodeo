@@ -13,7 +13,11 @@ import (
 	"talent-rodeo/internal"
 	th "talent-rodeo/internal/tasks/handlers"
 	"time"
+
+	"github.com/chriscow/vapi-go"
 )
+
+const TestingCallID = "529b3685-0db4-4bd0-a94f-96e2b79272c7"
 
 // TaskProcessor defines the interface for processing tasks
 type TaskProcessor interface {
@@ -47,25 +51,21 @@ func EndOfCall(ctx context.Context, processor TaskProcessor, userID, appointment
 	}
 
 	// Load test data
-	reportData, err := loadEndOfCallTestData()
+	callData, err := loadCallData(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to load test data: %w", err)
 	}
 
-	logger.Debug("loaded end-of-call test data", "data", truncateJSON(string(reportData), 200))
+	logger.Debug("loaded end-of-call test data", "data", truncateJSON(string(callData), 200))
 
 	// Update report with appointment ID
-	msg, err := updateEndOfCallReport(reportData, userID, appointmentID)
+	reportData, err := convertCallToEndOfCallReport(callData, userID, appointmentID)
 	if err != nil {
 		return fmt.Errorf("failed to update end of call report: %w", err)
 	}
 
-	if msgBytes, err := json.Marshal(msg); err == nil {
-		logger.Debug("updated end of call report", "message", truncateJSON(string(msgBytes), 200))
-	}
-
 	// Create webhook payload
-	payload, err := createWebhookPayload(msg)
+	payload, err := createWebhookPayload(reportData)
 	if err != nil {
 		return fmt.Errorf("failed to create webhook payload: %w", err)
 	}
@@ -142,19 +142,23 @@ func EndOfCall(ctx context.Context, processor TaskProcessor, userID, appointment
 	return nil
 }
 
-// loadEndOfCallTestData loads the test data from the file system
-func loadEndOfCallTestData() ([]byte, error) {
-	wd, err := os.Getwd()
-	fmt.Printf("DEBUG: Working directory: %s\n", wd)
+// loadCallData loads the call data from the file system
+func loadCallData(ctx context.Context) ([]byte, error) {
 
-	reportData, err := os.ReadFile("testdata/vapi/webhooks/end-of-call-report/end-of-call-report_1743786911443605712.json")
+	call, err := vapi.GetCall(ctx, TestingCallID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read test data: %w", err)
+		return nil, fmt.Errorf("failed to get call: %w", err)
 	}
+
+	reportData, err := json.Marshal(call)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal call: %w", err)
+	}
+
 	return reportData, nil
 }
 
-// updateEndOfCallReport prepares a simulated end-of-call webhook message by:
+// convertCallToEndOfCallReport prepares a simulated end-of-call webhook message by:
 // 1. Taking a template webhook message from test data
 // 2. Injecting the provided appointment ID into the message
 // 3. Handling different possible message structures:
@@ -164,48 +168,38 @@ func loadEndOfCallTestData() ([]byte, error) {
 //
 // This function is used in testing to simulate VAPI webhook callbacks with
 // real appointment IDs while maintaining the structure of a real webhook response.
-func updateEndOfCallReport(reportData []byte, userID, appointmentID string) ([]byte, error) {
+func convertCallToEndOfCallReport(callData []byte, userID, appointmentID string) ([]byte, error) {
 	// Parse the message data into a map for debugging
-	var data map[string]any
-	if err := json.Unmarshal(reportData, &data); err != nil {
+	var call vapi.Call
+	if err := json.Unmarshal(callData, &call); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal message data: %w", err)
-	}
-
-	// Extract the message content
-	messageData, ok := data["message"].(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("invalid message structure")
-	}
-
-	// Initialize or update call information
-	var call map[string]any
-	if call, ok = messageData["call"].(map[string]any); !ok {
-		return nil, fmt.Errorf("invalid call structure")
 	}
 
 	// Update call fields
 	// call["id"] = appointmentID  -- the call id cannot be the appointment id
-	call["name"] = appointmentID
+	call.Name = &appointmentID
+	call.Customer.Name = userID
 
-	customer, ok := call["customer"].(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("invalid customer structure")
+	report := vapi.EndOfCallReport{
+		ID:          &appointmentID,
+		Analysis:    call.Analysis,
+		Artifact:    call.Artifact,
+		Assistant:   call.Assistant,
+		Call:        &call,
+		Customer:    call.Customer,
+		EndedReason: "completed",
+		Messages:    call.Artifact.Messages,
+		PhoneNumber: call.PhoneNumber,
+		Transcript:  &call.Artifact.Transcript,
+		Type:        "end-of-call-report",
 	}
 
-	customer["name"] = userID
-
-	messageData["call"] = call
-
-	// Ensure required fields are present
-	messageData["type"] = "end-of-call-report"
-	if _, ok := messageData["endedReason"]; !ok {
-		messageData["endedReason"] = "completed"
+	envelope := vapi.EndOfCallReportEnvelope{
+		EndOfCallReport: report,
 	}
-
-	data["message"] = messageData
 
 	// Convert report to bytes
-	return json.Marshal(data)
+	return json.Marshal(envelope)
 }
 
 // createWebhookPayload creates a webhook payload from a webhook message

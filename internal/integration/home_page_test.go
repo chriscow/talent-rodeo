@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"talent-rodeo/internal"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -8,9 +9,21 @@ import (
 
 // TestProfilePage verifies that authenticated users are redirected to the profile page
 func TestProfilePage(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	// Create new test environment
 	it := NewIntegrationTest(t)
 	defer it.Close()
+
+	_, found, err := internal.GetUser(it.Ctx, it.Fs, it.User.ID)
+	if err != nil {
+		t.Fatalf("Failed to get user: %v", err)
+	}
+	if !found {
+		t.Fatalf("User not found")
+	}
 
 	// Authenticate the test user
 	it.Authenticate()

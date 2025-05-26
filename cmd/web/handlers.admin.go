@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"talent-rodeo/internal"
+	"talent-rodeo/internal/cloudflare"
 	"talent-rodeo/internal/funcs"
 	"talent-rodeo/internal/response"
 	"talent-rodeo/internal/utils"
@@ -143,7 +144,7 @@ func (app *application) adminCompareJobs(w http.ResponseWriter, r *http.Request)
 
 		if searchTaskID != "" {
 			var err error
-			jobDetails, err = internal.ListJobDetailsForSearch(ctx, app.fs, searchTaskID)
+			jobDetails, err = internal.ListJobDetailsForSearchTask(ctx, app.fs, searchTaskID)
 			if err != nil {
 				data["Error"] = err.Error()
 			} else {
@@ -503,4 +504,91 @@ func (app *application) semanticSearchJobsWithParams(ctx context.Context, search
 	}
 
 	return scoredJobs, nil
+}
+
+func (app *application) adminFeatureFlags(w http.ResponseWriter, r *http.Request) {
+	data := app.newTemplateData(r)
+
+	// Initialize Cloudflare KV client
+	kv, err := cloudflare.NewKV()
+	if err != nil {
+		app.logger.Error("failed to create Cloudflare KV client", "error", err)
+		data["Error"] = "Failed to initialize Cloudflare KV: " + err.Error()
+		if err := response.Page(w, http.StatusOK, data, "pages/admin/feature-flags.html"); err != nil {
+			app.serverError(w, r, err)
+		}
+		return
+	}
+
+	// Get current flag states
+	searchSchedulerEnabled := true       // Default to enabled
+	subscriptionProcessorEnabled := true // Default to enabled
+
+	// Read search-scheduler flag
+	var searchFlag bool
+	if err := kv.Get("search-scheduler", &searchFlag); err != nil {
+		if err != cloudflare.ErrNotFound {
+			app.logger.Error("failed to get search-scheduler flag", "error", err)
+		}
+		// Keep default value if error or not found
+	} else {
+		searchSchedulerEnabled = searchFlag
+	}
+
+	// Read subscription-processor flag
+	var subscriptionFlag bool
+	if err := kv.Get("subscription-processor", &subscriptionFlag); err != nil {
+		if err != cloudflare.ErrNotFound {
+			app.logger.Error("failed to get subscription-processor flag", "error", err)
+		}
+		// Keep default value if error or not found
+	} else {
+		subscriptionProcessorEnabled = subscriptionFlag
+	}
+
+	data["SearchSchedulerEnabled"] = searchSchedulerEnabled
+	data["SubscriptionProcessorEnabled"] = subscriptionProcessorEnabled
+
+	// Handle POST request for updating flags
+	if r.Method == http.MethodPost {
+		if err := r.ParseForm(); err != nil {
+			app.logger.Error("failed to parse form", "error", err)
+			data["Error"] = "Failed to parse form: " + err.Error()
+		} else {
+			// Get checkbox values (unchecked = not present in form)
+			newSearchEnabled := r.PostForm.Get("search-scheduler") == "true"
+			newSubscriptionEnabled := r.PostForm.Get("subscription-processor") == "true"
+
+			var errors []string
+
+			// Update search-scheduler flag
+			if err := kv.Set("search-scheduler", newSearchEnabled, 0); err != nil {
+				app.logger.Error("failed to set search-scheduler flag", "error", err)
+				errors = append(errors, "Failed to update search-scheduler: "+err.Error())
+			} else {
+				app.logger.Info("updated search-scheduler flag", "enabled", newSearchEnabled)
+			}
+
+			// Update subscription-processor flag
+			if err := kv.Set("subscription-processor", newSubscriptionEnabled, 0); err != nil {
+				app.logger.Error("failed to set subscription-processor flag", "error", err)
+				errors = append(errors, "Failed to update subscription-processor: "+err.Error())
+			} else {
+				app.logger.Info("updated subscription-processor flag", "enabled", newSubscriptionEnabled)
+			}
+
+			if len(errors) > 0 {
+				data["Error"] = strings.Join(errors, "; ")
+			} else {
+				data["Success"] = "Feature flags updated successfully"
+				// Update the displayed values
+				data["SearchSchedulerEnabled"] = newSearchEnabled
+				data["SubscriptionProcessorEnabled"] = newSubscriptionEnabled
+			}
+		}
+	}
+
+	if err := response.Page(w, http.StatusOK, data, "pages/admin/feature-flags.html"); err != nil {
+		app.serverError(w, r, err)
+	}
 }
