@@ -25,7 +25,7 @@ var (
 
 type jobSinkForwarder struct {
 	logger  *slog.Logger
-	jobSink *internal.JobSink
+	jobSink *internal.SearchResultProcessor
 	done    chan struct{}
 }
 
@@ -166,7 +166,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	defer fs.Close()
 
 	// Create JobSink (no JobProcessor for MVP)
-	jobSink := internal.NewJobSink(fs, logger)
+	jobSink := internal.NewSearchResultProcessor(fs, logger)
 	// Wrap with forwarder for logging
 	eventHandler := &jobSinkForwarder{
 		logger:  logger,

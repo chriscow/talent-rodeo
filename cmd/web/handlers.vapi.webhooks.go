@@ -208,19 +208,6 @@ func (h *application) handleTransferDestinationRequest(w http.ResponseWriter, r 
 	}
 }
 
-// getMapKeys returns a sorted list of keys from a map for logging
-func getMapKeys(data []byte) []string {
-	var m map[string]any
-	if err := json.Unmarshal(data, &m); err != nil {
-		return nil
-	}
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	return keys
-}
-
 // handleEndOfCallReport processes an end-of-call report webhook
 func handleEndOfCallReport(r *http.Request, app *application, msg []byte) error {
 	envelope, err := validateEndOfCallReport(msg)
@@ -229,9 +216,7 @@ func handleEndOfCallReport(r *http.Request, app *application, msg []byte) error 
 	}
 
 	report := envelope.EndOfCallReport
-
 	appointmentID := *report.Call.Name
-
 	customerID := report.Call.Customer.Name
 
 	app.processCompletedAppointment(r, customerID, appointmentID, *envelope)

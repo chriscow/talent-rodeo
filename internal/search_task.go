@@ -71,6 +71,23 @@ func CreateSearchTask(ctx context.Context, fs *FirestoreClient, criteria SearchC
 	return jobSearch, err
 }
 
+func CreateSearchTaskTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, criteria SearchCriteria, provider string) (*SearchTask, error) {
+	nowUTC := time.Now().UTC()
+	jobSearch := &SearchTask{
+		ID:        uuid.New().String(),
+		Criteria:  criteria,
+		Provider:  provider,
+		Status:    SearchTaskStatusQueued,
+		CreatedAt: nowUTC,
+	}
+
+	if err := tx.Set(fs.Collection(SearchTaskCollection).Doc(jobSearch.ID), jobSearch); err != nil {
+		return nil, err
+	}
+
+	return jobSearch, nil
+}
+
 func UpdateSearchTask(ctx context.Context, fs *FirestoreClient, task *SearchTask) error {
 	_, err := fs.Collection(SearchTaskCollection).Doc(task.ID).Set(ctx, task)
 	return err
@@ -164,8 +181,8 @@ func GetJobDetailsForSearchTask(ctx context.Context, fs *FirestoreClient, search
 	return jobDetails, nil
 }
 
-// ListJobDetailsForSearch lists all JobDetail docs for a given SearchTask ID from the subcollection.
-func ListJobDetailsForSearch(ctx context.Context, fs *FirestoreClient, searchTaskID string) ([]*JobDetail, error) {
+// ListJobDetailsForSearchTask lists all JobDetail docs for a given SearchTask ID from the subcollection.
+func ListJobDetailsForSearchTask(ctx context.Context, fs *FirestoreClient, searchTaskID string) ([]*JobDetail, error) {
 	if searchTaskID == "" {
 		return nil, fmt.Errorf("searchTaskID is required")
 	}

@@ -40,7 +40,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cheggaaa/pb v1.0.29 // indirect
 	github.com/chriscow/minds/tools v0.0.3 // indirect
-	github.com/chriscow/vapi-go v0.0.0-20250420143011-0a8970d55b72 // indirect
+	github.com/chriscow/vapi-go v0.0.0-20250525200013-6c79188c1f71 // indirect
 	github.com/cncf/xds/go v0.0.0-20250501225837-2ac532fd4443 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dgraph-io/ristretto/v2 v2.2.0 // indirect
@@ -67,6 +67,7 @@ require (
 	github.com/pinecone-io/go-pinecone/v3 v3.1.0 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
+	github.com/pusher/pusher-http-go/v5 v5.1.1 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/samber/lo v1.50.0 // indirect
 	github.com/sashabaranov/go-openai v1.39.1 // indirect

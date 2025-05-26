@@ -355,7 +355,7 @@ func (app *application) callNow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.logger.Debug("Call request", "appointment", appointment)
+	app.logger.Debug("handlers.schedule::callNow", "appointment", appointment)
 
 	body, err := json.Marshal(appointment)
 	if err != nil {

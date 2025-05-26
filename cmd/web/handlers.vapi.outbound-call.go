@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
 
+	"cloud.google.com/go/firestore"
 	"github.com/chriscow/vapi-go"
 
 	"google.golang.org/grpc/codes"
@@ -29,7 +31,8 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	var appointment internal.Appointment
+	var appointment *internal.Appointment
+	var user *internal.User
 	var apptErr error
 
 	defer func() {
@@ -44,10 +47,18 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 			errStr := apptErr.Error()
 			appointment.Error = &errStr
 			appointment.Status = internal.AppointmentStatusFailed
-			internal.UpdateAppointment(r.Context(), app.fs, &appointment)
-		} else {
-			appointment.Status = internal.AppointmentStatusRunning
-			internal.UpdateAppointment(r.Context(), app.fs, &appointment)
+			user.State.Status = internal.UserStatusError
+			user.State.Error = &errStr
+			app.fs.RunTransaction(r.Context(), func(ctx context.Context, tx *firestore.Transaction) error {
+				if err := internal.UpdateUserStatusTx(ctx, app.fs, tx, user, internal.UserStatusError); err != nil {
+					return fmt.Errorf("failed to update user: %w", err)
+				}
+
+				if err := internal.UpdateAppointmentTx(ctx, app.fs, tx, appointment); err != nil {
+					return fmt.Errorf("failed to update appointment: %w", err)
+				}
+				return nil
+			})
 		}
 	}()
 
@@ -104,7 +115,8 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	user, found, apptErr := internal.GetUser(r.Context(), app.fs, appointment.UserID)
+	var found bool
+	user, found, apptErr = internal.GetUser(r.Context(), app.fs, appointment.UserID)
 	if apptErr != nil {
 		apptErr = fmt.Errorf("failed to get user: %w", apptErr)
 		app.logger.Error("Failed to get user", "error", apptErr)
@@ -196,41 +208,42 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 		TwilioPhoneNumber: os.Getenv("TWILIO_FROM_NUMBER"),
 	}
 
-	// Create call config
-	callConfig := vapi.Call{
-		Name:               &appointment.ID,
-		AssistantID:        &assistantID,
-		PhoneNumber:        &phone,
-		AssistantOverrides: assistantOverrides,
-		Customer: &vapi.Customer{
-			Number: *user.Phone,
-			Name:   user.ID,
-		},
-	}
+	var result *vapi.Call
+	if os.Getenv("TESTING_MODE") == "true" {
+		result, err = vapi.GetCall(r.Context(), simulate.TestingCallID)
+		if err != nil {
+			apptErr = fmt.Errorf("failed to get call: %w", err)
+			app.logger.Error("Failed to get call", "error", err)
+			app.reportServerError(r, apptErr)
+			return
+		}
 
-	// configJSON, err := json.MarshalIndent(callConfig, "", "  ")
-	// if err != nil {
-	// 	apptErr = fmt.Errorf("failed to marshal call config: %w", err)
-	// 	app.logger.Error("Failed to marshal call config", "error", apptErr)
-	// 	app.reportServerError(r, apptErr)
-	// 	// This is likely our problem, so we don't want to retry
-	// 	w.WriteHeader(http.StatusOK)
-	// 	return
-	// }
-	// app.logger.Debug("handleVapiCall: call config", "call_config", string(configJSON))
+		appointment.CallID = result.ID
+	} else {
+		// Create call config
+		callConfig := vapi.Call{
+			Name:               &appointment.ID,
+			AssistantID:        &assistantID,
+			PhoneNumber:        &phone,
+			AssistantOverrides: assistantOverrides,
+			Customer: &vapi.Customer{
+				Number: *user.Phone,
+				Name:   user.ID,
+			},
+		}
 
-	// Create the call
-	result, err := vapi.CreateCall(r.Context(), callConfig)
-	if err != nil {
-		apptErr = fmt.Errorf("handleVapiCall CreateCall: %w", err)
-		app.logger.Error("Failed to create call", "error", err)
-		app.reportServerError(r, apptErr)
+		result, err = vapi.CreateCall(r.Context(), callConfig)
+		if err != nil {
+			apptErr = fmt.Errorf("handleVapiCall CreateCall: %w", err)
+			app.logger.Error("Failed to create call", "error", err)
+			app.reportServerError(r, apptErr)
 
-		// This is likely a transient error, but it could be we are not configuring the call correctly, so we want to retry
-		response.JSON(w, http.StatusInternalServerError, map[string]string{
-			"error": "failed to create call: " + err.Error(),
-		})
-		return
+			// This is likely a transient error, but it could be we are not configuring the call correctly, so we want to retry
+			response.JSON(w, http.StatusInternalServerError, map[string]string{
+				"error": "failed to create call: " + err.Error(),
+			})
+			return
+		}
 	}
 
 	if result.ID != nil && result.Status != nil {
@@ -245,10 +258,23 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 		app.reportServerError(r, fmt.Errorf("unexpected nil pointer result from CreateCall"))
 	}
 
-	user.State.Status = internal.UserStatusCallStarted
-	if err := internal.UpdateUserStatus(r.Context(), app.fs, user, user.State.Status); err != nil {
-		app.logger.Error("Failed to update user", "error", err)
-		app.reportServerError(r, fmt.Errorf("failed to update user: %w", err))
+	app.fs.RunTransaction(r.Context(), func(ctx context.Context, tx *firestore.Transaction) error {
+		appointment.Status = internal.AppointmentStatusRunning
+		if err := internal.UpdateAppointmentTx(ctx, app.fs, tx, appointment); err != nil {
+			return fmt.Errorf("failed to update appointment: %w", err)
+		}
+
+		user.State.Status = internal.UserStatusCallStarted
+		if err := internal.UpdateUserStatusTx(ctx, app.fs, tx, user, internal.UserStatusCallStarted); err != nil {
+			return fmt.Errorf("failed to update user: %w", err)
+		}
+
+		return nil
+	})
+
+	if err := internal.SendPusherRedirect(app.pusher, user.ID, "/dashboard"); err != nil {
+		app.logger.Error("Failed to send pusher redirect", "error", err)
+		// app.reportServerError(r, fmt.Errorf("failed to send pusher redirect: %w", err))
 	}
 
 	// In test mode, schedule a simulated end-of-call webhook

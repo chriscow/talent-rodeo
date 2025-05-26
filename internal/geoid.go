@@ -12,11 +12,26 @@ import (
 const geoIDCollection = "geo_ids"
 
 // GeoID represents a geographic location identifier
-// Note: After the reversal operation, ID contains what was previously in Value field
-// and Value contains what was previously the document ID
 type GeoID struct {
-	ID    string
+	ID string
+	// Value is the display name or description of the GeoID
 	Value string
+}
+
+func CreateGeoID(ctx context.Context, fs *FirestoreClient, geoID GeoID) error {
+	// Ensure the ID field is not empty
+	if geoID.ID == "" {
+		return fmt.Errorf("geoID ID cannot be empty")
+	}
+	if geoID.Value == "" {
+		return fmt.Errorf("geoID Value cannot be empty")
+	}
+	// Create or update the GeoID document in Firestore
+	_, err := fs.Collection(geoIDCollection).Doc(geoID.ID).Set(ctx, geoID)
+	if err != nil {
+		return fmt.Errorf("failed to create or update GeoID: %w", err)
+	}
+	return nil
 }
 
 func GetGeoID(ctx context.Context, fs *FirestoreClient, id string) (GeoID, error) {

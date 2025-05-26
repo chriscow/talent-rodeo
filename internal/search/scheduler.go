@@ -31,14 +31,14 @@ type Scheduler struct {
 	wg        sync.WaitGroup
 	done      chan struct{}
 
-	queue JobQueue
+	queue internal.SearchQueue
 	kv    *cloudflare.KV
 
 	disableSearchSchedulingLogOnce sync.Once
 }
 
 // NewScheduler creates a new search service
-func NewScheduler(fs *internal.FirestoreClient, logger *slog.Logger, queue JobQueue, mailer Mailer, recipient string) *Scheduler {
+func NewScheduler(fs *internal.FirestoreClient, logger *slog.Logger, queue internal.SearchQueue, mailer Mailer, recipient string) *Scheduler {
 
 	logger = logger.With("pkg", "search.Scheduler")
 
@@ -87,7 +87,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 	go func() {
 		// Process searches immediately on start
 		s.wg.Add(1)
-		s.processSearches(ctx)
+		s.StartCriteriaSearch(ctx)
 		s.wg.Done()
 
 		// Then continue with regular interval processing
@@ -123,7 +123,7 @@ func (s *Scheduler) run(ctx context.Context) {
 			return
 		case <-s.ticker.C:
 			s.wg.Add(1)
-			s.processSearches(ctx)
+			s.StartCriteriaSearch(ctx)
 			s.wg.Done()
 		case <-s.done:
 			s.logger.Info("background processing stopped")
@@ -148,8 +148,8 @@ func (s *Scheduler) Enabled() bool {
 	return enabled
 }
 
-// processSearches finds users who need searches performed
-func (s *Scheduler) processSearches(ctx context.Context) {
+// StartCriteriaSearch finds criteria that need searches performed
+func (s *Scheduler) StartCriteriaSearch(ctx context.Context) {
 	if !s.Enabled() {
 		s.disableSearchSchedulingLogOnce.Do(func() {
 			s.logger.Info(internal.BGYellow("search scheduler disabled by feature flag"))

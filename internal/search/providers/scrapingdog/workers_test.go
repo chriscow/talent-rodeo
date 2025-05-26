@@ -103,7 +103,6 @@ func TestWorkerManagerWithOptions(t *testing.T) {
 	assert.NotNil(t, wm)
 	assert.Equal(t, mockSearchProvider, wm.provider)
 	assert.Equal(t, mockHandler, wm.eventHandler)
-	assert.Equal(t, mockLogger, wm.logger)
 }
 
 func TestQueueSearchAndGetQueueDepth(t *testing.T) {

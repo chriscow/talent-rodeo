@@ -3,6 +3,8 @@ package internal
 import (
 	"context"
 	"time"
+
+	"cloud.google.com/go/firestore"
 )
 
 type UserStatus int
@@ -35,6 +37,16 @@ func UpdateUserStatus(ctx context.Context, fs *FirestoreClient, user *User, stat
 	user.State.Error = nil // Clear any previous errors
 
 	return UpdateUser(ctx, fs, user.ID, map[string]any{
+		"State": user.State,
+	})
+}
+
+func UpdateUserStatusTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, user *User, status UserStatus) error {
+	user.State.Status = status
+	user.State.Started = time.Now()
+	user.State.Error = nil // Clear any previous errors
+
+	return UpdateUserTx(ctx, fs, tx, user.ID, map[string]any{
 		"State": user.State,
 	})
 }

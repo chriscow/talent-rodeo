@@ -3,54 +3,57 @@
 {{define "page:main"}}
 <main class="container-narrow">
     <article>
-        <header>
-            <h1 id="page-title">We'll be calling you shortly</h1>
-        </header>
+        {{if eq .Appointment.Status "scheduled"}}
+            <hgroup>
+                <h1 id="page-title">We'll be calling you shortly</h1>
+                <p>Please stand by!</p>
+            </hgroup>
+            <section>
+                <h3>What to expect:</h3>
+                <ul>
+                    <li>Our AI assistant will introduce itself</li>
+                    <li>You'll discuss your work preferences</li>
+                    <li>The conversation will be natural and casual</li>
+                    <li>You can ask questions at any time</li>
+                </ul>
+            </section>
+        {{else if eq .Appointment.Status "running"}}
+            <hgroup>
+                <h1 id="page-title">We're calling you now!</h1>
+                <p>Please answer your phone when it rings.</p>
+            </hgroup>
+        {{else if eq .Appointment.Status "processing"}}
+            <hgroup>
+                <h1 id="page-title">Processing your conversation</h1>
+                <p>This takes a several minutes.</p>
+            </hgroup>
+            <progress></progress>
+            <p>
+                We are building your personalized job search criteria.
+            </p>
+        {{else if eq .Appointment.Status "completed"}}
+            <hgroup>
+                <h1 id="page-title">We're running your first search</h1>
+                <p>This may take a few minutes.</p>
+            </hgroup>
+            <progress></progress>
+            <p>
+                This page will automatically refresh when your first results are ready.
+            </p>
+        {{end}}
 
-        <div id="status-content">
-            {{if eq .Appointment.Status "scheduled"}}
-                <p>
-                    Your call is scheduled for <strong>{{.Appointment.ScheduledTime | humanDate}}</strong> in your local time.
-                    Please make sure you're available to take our call.
+        <footer class="grid">
+            <div style="text-align: center;">
+                <p id="status-content" style="font-style: italic; color: #666; margin-top: 10px;">
+                    &nbsp;
                 </p>
-            {{else if eq .Appointment.Status "running"}}
-                <p>
-                    We are currently calling you! Please answer your phone when it rings.
-                </p>
-            {{else if eq .Appointment.Status "processing"}}
-                <p>
-                    We are processing your conversation and building your personalized job search criteria.
-                </p>
-                <progress style="width: 100%; margin: 1rem 0;"></progress>
-                <p class="text-small">
-                    This may take a few minutes. Please don't close this window.
-                </p>
-            {{end}}
-        </div>
-
-        <article aria-label="What to expect" class="secondary">
-            <header>
-                <h2>What to expect:</h2>
-            </header>
-            <ul>
-                <li>Our AI assistant will introduce itself</li>
-                <li>You'll discuss your work preferences</li>
-                <li>The conversation will be natural and casual</li>
-                <li>You can ask questions at any time</li>
-            </ul>
-        </article>
-
-        <footer>
-            <form method="post" action="/profile/schedule/reschedule">
-                <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
-                <button type="submit" class="secondary">Reschedule Call</button>
-            </form>
+            </div>
         </footer>
     </article>
 </main>
 
 <!-- Add user data for state monitoring -->
-<div data-user-id="{{.User.ID}}" 
+<div data-session-id="{{.User.ID}}" 
      data-pusher-key="{{.PusherKey}}" 
      data-pusher-cluster="{{.PusherCluster}}"
      hidden></div>
@@ -60,57 +63,29 @@
 <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const userElement = document.querySelector('[data-user-id]');
+        const userElement = document.querySelector('[data-session-id]');
         if (!userElement) return;
+        
+        // Check if appointment status is "completed" and set up auto-refresh
+        const statusContent = document.getElementById('status-content');
         
         const pusher = new Pusher(userElement.dataset.pusherKey, {
             cluster: userElement.dataset.pusherCluster
         });
         
-        const channel = pusher.subscribe(`user-${userElement.dataset.userId}`);
-        const statusContent = document.getElementById('status-content');
-        const pageTitle = document.getElementById('page-title');
+        const channel = pusher.subscribe(`${userElement.dataset.sessionId}`);
         
-        channel.bind('state-update', function(data) {
-            console.log('Received state update:', data); // Add logging to help debug
-
-            // Handle different states
-            if (data.error) {
-                window.location.href = '/profile';
-                return;
-            }
+        channel.bind('server-message', function(data) {
+            console.log('Received server message:', data); // Add logging to help debug
 
             // Use the state.status_text value from the backend
-            const status = data.state.status_text;
-            
-            if (status === 'Call Started') {
-                pageTitle.textContent = 'Your Call is Starting';
-                statusContent.innerHTML = `
-                    <p>
-                        We are currently calling you! Please answer your phone when it rings.
-                    </p>
-                `;
-                return;
-            }
-            if (status === 'Call Processing') {
-                pageTitle.textContent = 'Processing Your Conversation';
-                statusContent.innerHTML = `
-                    <p>
-                        We are processing your conversation and building your personalized job search criteria.
-                    </p>
-                    <progress style="width: 100%; margin: 1rem 0;"></progress>
-                    <p class="text-small">
-                        This may take a few minutes. Please don't close this window.
-                    </p>
-                `;
-                return;
-            }
-            if (status === 'Call Completed') {
-                window.location.href = '/dashboard';
-                return;
-            }
-            // For any other state update (e.g., Intro Call Scheduled, Call Analysis Started, Job Search states), redirect to /profile
-            window.location.href = '/profile';
+            const message = data.message;
+
+            statusContent.textContent = message;
+        });
+
+        channel.bind('server-redirect', function(data) {
+            window.location.href = data.url;
         });
     });
 </script>

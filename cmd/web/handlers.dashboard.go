@@ -117,28 +117,9 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 
 	app.logger.Debug("showDashboard", "user_id", user.ID, "status", user.State.Status.String())
 
-	// If user is in call_scheduled state, check if they have any jobs
-	if user.State.Status == internal.UserStatusCallScheduled {
-		// Use the more efficient UserHasAnyJobs function instead of retrieving all counts
-		start := time.Now()
-		hasJobs, err := internal.UserHasAnyJobs(r.Context(), app.fs, user.ID)
-		if err != nil {
-			wrappedErr := fmt.Errorf("showDashboard: failed to check if user has jobs: %w", err)
-			app.logger.Error("showDashboard: failed to check if user has jobs", "error", err)
-			internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
-				"error_type":  "database_retrieval",
-				"entity_type": "user_jobs_check",
-			})
-			app.serverError(w, r, wrappedErr)
-			return
-		}
-		app.logger.Debug("showDashboard: UserHasAnyJobs took", "duration", time.Since(start).String())
-
-		// If they don't have any jobs, show the waiting for call page
-		if !hasJobs {
-			app.showWaitingForCall(w, r, user)
-			return
-		}
+	if user.State.Status < internal.UserStatusCallCompleted {
+		app.showWaitingForCall(w, r, user)
+		return
 	}
 
 	// Use our helper function to parse and validate the status
@@ -312,39 +293,20 @@ func (app *application) showWaitingForCall(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Find the most recent active appointment
+	// Find the most recent appointment regardless of status
 	var activeAppointment *internal.Appointment
 	for _, appt := range appointments {
-		if appt.Status == internal.AppointmentStatusScheduled || appt.Status == internal.AppointmentStatusRunning {
-			if activeAppointment == nil || appt.ScheduledTime.After(activeAppointment.ScheduledTime) {
-				activeAppointment = appt
-			}
+		if appt.Status == internal.AppointmentStatusCancelled || appt.Status == internal.AppointmentStatusFailed || appt.Status == internal.AppointmentStatusOther {
+			continue
+		}
+
+		if activeAppointment == nil || appt.CreatedAt.After(activeAppointment.CreatedAt) {
+			activeAppointment = appt
 		}
 	}
 
 	if activeAppointment == nil {
-		user.State.Status = internal.UserStatusResumeUploaded
-		if err := internal.UpdateUserStatus(r.Context(), app.fs, user, internal.UserStatusResumeUploaded); err != nil {
-			wrappedErr := fmt.Errorf("showDashboard: failed to update user status: %w", err)
-			app.logger.Error("showDashboard: failed to update user status", "error", err)
-
-			internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
-				"error_type":  "database_update",
-				"entity_type": "user_status",
-			})
-
-			app.serverError(w, r, wrappedErr)
-			return
-		}
-
-		// we expected the user to have an appointment, but they don't
-		// so we redirect to the profile page
-		app.logger.Error(internal.Red("showDashboard: no active appointment found when showing dashboard"), "user_id", user.ID)
-		internal.SentryReportError(r.Context(), fmt.Errorf("no active appointment found when showing dashboard"), sentry.LevelError, map[string]string{
-			"error_type":  "no_active_appointment",
-			"entity_type": "appointments",
-		})
-		// we expected the user to have an appointment, but they don't
+		// redirect to the profile page
 		http.Redirect(w, r, "/profile", http.StatusSeeOther)
 		return
 	}

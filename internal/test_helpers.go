@@ -342,3 +342,10 @@ func ResetUserState(ctx context.Context, fs *FirestoreClient, user *User) error 
 
 	return nil
 }
+
+func StringPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}

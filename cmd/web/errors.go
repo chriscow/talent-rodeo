@@ -79,12 +79,12 @@ func (app *application) badRequest(w http.ResponseWriter, r *http.Request, err e
 	}
 }
 
-func (app *application) clientError(w http.ResponseWriter, status int) {
-	data := app.newTemplateData(nil)
+func (app *application) clientError(w http.ResponseWriter, r *http.Request, status int) {
+	data := app.newTemplateData(r)
 	data["ErrorMessage"] = http.StatusText(status)
 
 	err := response.Page(w, status, data, "pages/errors/400.html")
 	if err != nil {
-		app.serverError(w, nil, err)
+		app.serverError(w, r, err)
 	}
 }

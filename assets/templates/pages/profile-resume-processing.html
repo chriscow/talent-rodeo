@@ -5,14 +5,14 @@
     <article>
         <hgroup>
             <h1>Processing Your Resume</h1>
-            <p>Our AI is analyzing your resume and preparing for your upcoming call</p>
+            <p>Our AI is analyzing your resume and preparing for your call</p>
         </hgroup>
 
         <p>
-            We're uploading your resume and having our AI analyze it to understand your background, skills, and experience. 
+            We're uploading your resume and our AI is analyzing it to understand your background, skills, and experience. 
             This helps us prepare personalized questions and recommendations for your call. 
-            <strong>This process can take several minutes</strong> - thank you for your patience!
         </p>
+        <p><strong>This process can take several minutes</strong> - thank you for your patience!</p>
 
         <div class="grid">
             <div style="text-align: center;">
@@ -25,7 +25,7 @@
 </main>
 
 <!-- Add user data for state monitoring -->
-<div data-user-id="{{.User.ID}}" 
+<div data-session-id="{{.User.ID}}" 
      data-pusher-key="{{.PusherKey}}" 
      data-pusher-cluster="{{.PusherCluster}}"
      hidden></div>
@@ -91,30 +91,24 @@
         updateFunMessage(); // Show first message immediately
         const messageInterval = setInterval(updateFunMessage, 1750);
 
-        const userElement = document.querySelector('[data-user-id]');
-        if (!userElement) return;
-        
-        const pusher = new Pusher(userElement.dataset.pusherKey, {
-            cluster: userElement.dataset.pusherCluster
-        });
-        
-        const channel = pusher.subscribe(`user-${userElement.dataset.userId}`);
+        const sessionElement = document.querySelector('[data-session-id]');
+        if (!sessionElement) return;
+
         const statusMessage = document.getElementById('status-message');
         
-        channel.bind('state-update', function(data) {
-            // Update status message if available
-            if (statusMessage && data.description) {
-                statusMessage.textContent = data.description;
-            }
+        const pusher = new Pusher(sessionElement.dataset.pusherKey, {
+            cluster: sessionElement.dataset.pusherCluster
+        });
+        
+        const channel = pusher.subscribe(`${sessionElement.dataset.sessionId}`);
+        
+        channel.bind('server-message', function(data) {
+            const message = data.message;
+            statusMessage.textContent = message;
+        });
 
-            // Handle redirects based on state
-            if (data.error || data.state === 1) { // UserStatusError = 1
-                clearInterval(messageInterval); // Stop fun messages
-                window.location.href = '/profile';
-            } else if (data.state === 4) { // UserStatusResumeUploaded = 4
-                clearInterval(messageInterval); // Stop fun messages
-                window.location.href = '/profile/schedule';
-            }
+        channel.bind('server-redirect', function(data) {
+            window.location.href = data.url;
         });
     });
 </script>
