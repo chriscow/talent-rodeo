@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sync"
 	"talent-rodeo/internal"
+	"talent-rodeo/internal/search/providers/scrapingdog"
 	"talent-rodeo/internal/transcript"
-	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/google/uuid"
@@ -39,6 +40,30 @@ func init() {
 
 // Good appointment ids: 230bfc29-2ba0-42b8-90e9-f2288b96965f (Vijaya), 2b0a2620-5117-402d-ba13-daf6e501d8be (Vijaya original)
 // 2709318a-1b74-44da-9ba9-e1973804b6b9 (Chris)
+
+type jobEventHandler struct {
+	userID   string
+	dispatch *internal.JobEventDispatch
+	wg       *sync.WaitGroup
+}
+
+func (u *jobEventHandler) OnSearchStarted(task internal.SearchTask) {
+	fmt.Println("userNotifier:OnSearchStarted", task)
+}
+
+func (u *jobEventHandler) OnJobListing(task internal.SearchTask, listing internal.JobListing) {
+	fmt.Println("userNotifier:OnJobListing", task, listing)
+}
+
+func (u *jobEventHandler) OnJobDetail(task internal.SearchTask, details internal.JobDetail) {
+	fmt.Println("userNotifier:OnJobDetail", task, details)
+}
+
+func (u *jobEventHandler) OnSearchCompleted(task internal.SearchTask, totalJobs int, errors []error) {
+	fmt.Println("userNotifier:OnSearchCompleted", task, totalJobs, errors)
+	u.dispatch.Deregister(u.userID)
+	u.wg.Done()
+}
 
 var appointmentCmd = &cobra.Command{
 	Use:     "appointment",
@@ -174,6 +199,7 @@ var reprocessCmd = &cobra.Command{
 		if appointmentID == "" {
 			return fmt.Errorf("appointment ID is required")
 		}
+		fmt.Printf("Started reprocessing appointment %s\n", appointmentID)
 
 		// Initialize Firestore client
 		fs, err := internal.NewFirestoreClient(ctx)
@@ -188,49 +214,44 @@ var reprocessCmd = &cobra.Command{
 		// Initialize Sentry hub
 		hub := sentry.CurrentHub()
 
-		// Get all users since we don't know which user owns this appointment
-		logger.Debug("Listing users...")
-
 		appointment, err := internal.GetAppointment(ctx, fs, userID, appointmentID)
 		if err != nil {
 			return fmt.Errorf("failed to get appointment: %w", err)
 		}
 
-		// Process the appointment
-		transcript.ProcessCompletedAppointment(hub, fs, logger, appointment)
-
-		fmt.Printf("Started reprocessing appointment %s\n", appointmentID)
-
-		// Poll for completion
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
-		timeout := time.After(10 * time.Minute)
-
-		for {
-			select {
-			case <-timeout:
-				return fmt.Errorf("timed out waiting for appointment processing to complete")
-			case <-ticker.C:
-				currentAppt, err := internal.GetAppointment(ctx, fs, userID, appointmentID)
-				if err != nil {
-					return fmt.Errorf("failed to get appointment status: %w", err)
-				}
-
-				logger.Debug("Current appointment status", "status", currentAppt.Status)
-
-				if currentAppt.Status != internal.AppointmentStatusProcessing {
-					if currentAppt.Status == internal.AppointmentStatusCompleted {
-						fmt.Printf("Successfully reprocessed appointment %s\n", appointmentID)
-						return nil
-					}
-					if currentAppt.Status == internal.AppointmentStatusFailed {
-						return fmt.Errorf("appointment processing failed")
-					}
-					return fmt.Errorf("unexpected appointment status: %s", currentAppt.Status)
-				}
-
-				fmt.Printf("Still processing appointment %s...\n", appointmentID)
-			}
+		user, found, err := internal.GetUser(ctx, fs, userID)
+		if err != nil {
+			return fmt.Errorf("failed to get user: %w", err)
 		}
+		if !found {
+			return fmt.Errorf("user not found")
+		}
+
+		dispatch := internal.NewJobEventDispatch()
+		dispatch.Register(userID, internal.NewSearchResultProcessor(fs, logger))
+		queue := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), logger, scrapingdog.WithJobEventHandler(dispatch))
+
+		transcript.ProcessCompletedCall(hub, fs, nil, queue, logger, dispatch, user, appointment)
+
+		currentAppt, err := internal.GetAppointment(ctx, fs, userID, appointmentID)
+		if err != nil {
+			return fmt.Errorf("failed to get appointment status: %w", err)
+		}
+
+		logger.Debug("Current appointment status", "status", currentAppt.Status)
+
+		if currentAppt.Status != internal.AppointmentStatusProcessing {
+			if currentAppt.Status == internal.AppointmentStatusCompleted {
+				fmt.Printf("Successfully reprocessed appointment %s\n", appointmentID)
+				return nil
+			}
+			if currentAppt.Status == internal.AppointmentStatusFailed {
+				return fmt.Errorf("appointment processing failed")
+			}
+			return fmt.Errorf("unexpected appointment status: %s", currentAppt.Status)
+		}
+
+		fmt.Printf("Still processing appointment %s...\n", appointmentID)
+		return nil
 	},
 }

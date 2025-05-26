@@ -179,8 +179,8 @@ func ListAppointments(ctx context.Context, fs *FirestoreClient, userID string) (
 func ListCompletedAppointments(ctx context.Context, fs *FirestoreClient, userID string) ([]*Appointment, error) {
 	// Create a query for completed appointments where completed_at exists
 	query := fs.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).
-		Where("status", "==", AppointmentStatusCompleted).
-		Where("completed_at", ">", time.Time{}) // Filter for non-nil completed_at values
+		Where("Status", "==", AppointmentStatusCompleted).
+		Where("CompletedAt", ">", time.Time{}) // Filter for non-nil completed_at values
 
 	iter := query.Documents(ctx)
 
@@ -221,10 +221,18 @@ func ListCompletedAppointments(ctx context.Context, fs *FirestoreClient, userID 
 }
 
 func UpdateAppointment(ctx context.Context, fs *FirestoreClient, appointment *Appointment) error {
+	if appointment == nil {
+		return fmt.Errorf("appointment cannot be nil")
+	}
 	_, err := fs.Collection(usersCollection).Doc(appointment.UserID).Collection(appointmentsCollection).Doc(appointment.ID).Set(ctx, appointment)
 	if err != nil {
 		return fmt.Errorf("failed to update appointment: %w", err)
 	}
+	return nil
+}
+
+func UpdateAppointmentTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, appointment *Appointment) error {
+	tx.Set(fs.Collection(usersCollection).Doc(appointment.UserID).Collection(appointmentsCollection).Doc(appointment.ID), appointment)
 	return nil
 }
 
@@ -320,33 +328,41 @@ type processingAppointment struct {
 }
 
 // When an appointment enters processing state, add a reference to this collection
-func MarkAppointmentAsProcessing(ctx context.Context, fs *FirestoreClient, appointment *Appointment) error {
-	// Update the appointment as normal
-	appointment.Status = AppointmentStatusProcessing
-	appointment.UpdatedAt = time.Now()
+func ProcessAppointmentStarted(ctx context.Context, fs *FirestoreClient, user *User, appointment *Appointment) error {
+	return fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		// Update the appointment as normal
+		appointment.Status = AppointmentStatusProcessing
+		appointment.UpdatedAt = time.Now()
 
-	if err := UpdateAppointment(ctx, fs, appointment); err != nil {
-		return err
-	}
+		if err := UpdateAppointmentTx(ctx, fs, tx, appointment); err != nil {
+			return err
+		}
 
-	// Add reference to the processing tracking collection
-	// processingRef := map[string]interface{}{
-	// 	"UserID":        appointment.UserID,
-	// 	"AppointmentID": appointment.ID,
-	// 	"StartedAt":     time.Now(),
-	// }
-	processingRef := processingAppointment{
-		UserID:        appointment.UserID,
-		AppointmentID: appointment.ID,
-		StartedAt:     time.Now(),
-	}
+		// Add reference to the processing tracking collection
+		// processingRef := map[string]interface{}{
+		// 	"UserID":        appointment.UserID,
+		// 	"AppointmentID": appointment.ID,
+		// 	"StartedAt":     time.Now(),
+		// }
+		processingRef := processingAppointment{
+			UserID:        appointment.UserID,
+			AppointmentID: appointment.ID,
+			StartedAt:     time.Now(),
+		}
 
-	_, err := fs.Collection(processingAppointmentsCollection).Doc(appointment.ID).Set(ctx, processingRef)
-	return err
+		if err := tx.Set(fs.Collection(processingAppointmentsCollection).Doc(appointment.ID), processingRef); err != nil {
+			return fmt.Errorf("failed to add processing reference in transaction: %w", err)
+		}
+
+		if err := UpdateUserStatusTx(ctx, fs, tx, user, UserStatusCallProcessing); err != nil {
+			return fmt.Errorf("failed to update user state: %w", err)
+		}
+		return nil
+	})
 }
 
 // When processing is complete, remove from tracking collection
-func ProcessAppointmentComplete(ctx context.Context, fs *FirestoreClient, appointment *Appointment) error {
+func ProcessAppointmentComplete(ctx context.Context, fs *FirestoreClient, user *User, appointment *Appointment) error {
 	return fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		// Update appointment status
 		appointment.Status = AppointmentStatusCompleted
@@ -364,6 +380,11 @@ func ProcessAppointmentComplete(ctx context.Context, fs *FirestoreClient, appoin
 
 		if err := tx.Delete(processingRef); err != nil {
 			return fmt.Errorf("failed to delete processing reference in transaction: %w", err)
+		}
+
+		// Send completion state update
+		if err := UpdateUserStatusTx(ctx, fs, tx, user, UserStatusCallCompleted); err != nil {
+			return fmt.Errorf("failed to update user state: %w", err)
 		}
 
 		return nil

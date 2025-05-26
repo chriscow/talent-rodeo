@@ -50,7 +50,7 @@ type Provider struct {
 	apiClient     *APIClient
 	cache         search.JobCache
 	workerManager *WorkerManager
-	eventHandler  search.JobEventHandler
+	eventHandler  internal.JobEventHandler
 	logger        *slog.Logger
 	apiKey        string
 }
@@ -84,7 +84,7 @@ func WithCache(cache search.JobCache) ProviderOption {
 }
 
 // WithJobEventHandler sets the job event handler for the provider
-func WithJobEventHandler(handler search.JobEventHandler) ProviderOption {
+func WithJobEventHandler(handler internal.JobEventHandler) ProviderOption {
 	return func(p *Provider) {
 		p.eventHandler = handler
 	}
@@ -129,7 +129,7 @@ func NewProvider(apiKey string, logger *slog.Logger, opts ...ProviderOption) *Pr
 	return provider
 }
 
-func (p *Provider) SetEventHandler(handler search.JobEventHandler) {
+func (p *Provider) SetEventHandler(handler internal.JobEventHandler) {
 	p.eventHandler = handler
 	if p.workerManager != nil {
 		p.workerManager.eventHandler = handler

@@ -204,7 +204,7 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 		if err := internal.AnnotateResume(context.Background(), app.fs, app.logger, user, &resume); err != nil {
 			app.logger.Error("Failed to annotate resume", "error", err)
 		}
-		app.SendUserStateUpdate(user)
+		internal.SendPusherRedirect(app.pusher, user.ID, "/dashboard")
 	}()
 
 	// Show processing page

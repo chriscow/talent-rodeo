@@ -15,6 +15,7 @@ To complete this task, follow these steps:
    - If the user agrees with the suggestion, use that as the main Query.
    - If the user corrects or modifies the suggestion, use the corrected version as the main Query.
    - If the user proposes multiple suggestions, determine between the AI's suggested search query and the user's suggestions to select one as the main search query. Incorporate the rest into the MoveToward concept below.
+   - Use the canonical form for the terms of the search query (i.e. "Go (Golang)" instead of "Go").
 
 3. Determine the MoveToward concept:
    - Identify additional search terms or preferences mentioned by the user.

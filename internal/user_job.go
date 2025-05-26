@@ -344,7 +344,7 @@ func UserHasAnyJobs(ctx context.Context, fs *FirestoreClient, userID string) (bo
 	}
 
 	// Just get the first job document - if any exist
-	iter := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Limit(1).Documents(ctx)
+	iter := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Where("Status", "!=", string(JobStatusUnprocessed)).Limit(1).Documents(ctx)
 
 	// Check if there's at least one document
 	_, err := iter.Next()

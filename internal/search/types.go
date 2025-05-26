@@ -43,19 +43,6 @@ const (
 	ExperienceDirector   ExperienceLevel = "director"
 )
 
-// JobEventHandler defines the interface for handling job-related events
-type JobEventHandler interface {
-	OnSearchStarted(task internal.SearchTask)
-	OnJobListing(task internal.SearchTask, listing internal.JobListing)
-	OnJobDetail(task internal.SearchTask, details internal.JobDetail)
-	OnSearchCompleted(task internal.SearchTask, totalJobs int, errors []error)
-}
-
-type JobQueue interface {
-	QueueSearch(ctx context.Context, search internal.SearchTask) error
-	GetQueueDepth(ctx context.Context) (int, error)
-}
-
 // JobProvider interface defines methods that must be implemented by all job providers
 type JobProvider interface {
 	Name() string
