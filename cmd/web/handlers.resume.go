@@ -156,7 +156,7 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 	_, err = io.Copy(tempFile, file)
 	if err != nil {
 		form.Validator.AddFieldError("resume", "Failed to process file. Please try again.")
-		if err := response.Page(w, http.StatusUnprocessableEntity); err != nil {
+		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
 		}
 		return
