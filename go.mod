@@ -4,14 +4,14 @@ go 1.24
 
 toolchain go1.24.0
 
-replace (
-	github.com/chriscow/go-openai-realtime => ../go-openai-realtime
-	github.com/chriscow/minds => ../thoughtnet/minds
-	github.com/chriscow/minds/providers/gemini => ../thoughtnet/minds/providers/gemini
-	github.com/chriscow/minds/providers/openai => ../thoughtnet/minds/providers/openai
-	github.com/chriscow/minds/tools => ../thoughtnet/minds/tools
-	github.com/chriscow/vapi-go => ../vapi-go
-)
+// replace (
+// 	github.com/chriscow/go-openai-realtime => ../go-openai-realtime
+// 	github.com/chriscow/minds => ../thoughtnet/minds
+// 	github.com/chriscow/minds/providers/gemini => ../thoughtnet/minds/providers/gemini
+// 	github.com/chriscow/minds/providers/openai => ../thoughtnet/minds/providers/openai
+// 	github.com/chriscow/minds/tools => ../thoughtnet/minds/tools
+// 	github.com/chriscow/vapi-go => ../vapi-go
+// )
 
 require (
 	cloud.google.com/go/firestore v1.18.0
@@ -71,7 +71,7 @@ require (
 	github.com/chriscow/minds/providers/gemini v0.0.5-0.20250303171538-dc7c074db869
 	github.com/chriscow/minds/providers/openai v0.0.5
 	github.com/chriscow/minds/tools v0.0.3-0.20250514162534-27df8006baa7
-	github.com/chriscow/vapi-go v0.0.0-20250525200013-6c79188c1f71
+	github.com/chriscow/vapi-go v0.0.0-20250527195805-6e2047355010
 	github.com/cloudflare/cloudflare-go v0.115.0
 	github.com/dgraph-io/ristretto/v2 v2.2.0
 	github.com/getsentry/sentry-go v0.32.0
