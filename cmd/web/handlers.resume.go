@@ -100,7 +100,7 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 
 	if err := r.ParseMultipartForm(10 << 20); err != nil { // 10MB max
 		form.Validator.AddFieldError("resume", "File too large. Maximum size is 10MB")
-		if err := response.NamedTemplate(w, http.StatusUnprocessableEntity, data, "partial:resume-form", "partials/resume-form.html"); err != nil {
+		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
 		}
 		return
@@ -114,7 +114,7 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 	file, header, err := r.FormFile("resume")
 	if err != nil {
 		form.Validator.AddFieldError("resume", "Please select a file")
-		if err := response.NamedTemplate(w, http.StatusUnprocessableEntity, data, "partial:resume-form", "partials/resume-form.html"); err != nil {
+		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
 		}
 		return
@@ -135,7 +135,7 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 	form.Validator.CheckField(isValidFileType(header.Filename), "resume", "Invalid file type. Please upload a DOCX, PDF, or TXT file.")
 
 	if form.Validator.HasErrors() {
-		if err := response.NamedTemplate(w, http.StatusUnprocessableEntity, data, "partial:resume-form", "partials/resume-form.html"); err != nil {
+		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
 		}
 		return
@@ -146,7 +146,7 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 	tempFile, err := os.CreateTemp("", "resume-*."+filepath.Ext(header.Filename))
 	if err != nil {
 		form.Validator.AddFieldError("resume", "Failed to process file. Please try again.")
-		if err := response.NamedTemplate(w, http.StatusUnprocessableEntity, data, "partial:resume-form", "partials/resume-form.html"); err != nil {
+		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
 		}
 		return
@@ -156,7 +156,7 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 	_, err = io.Copy(tempFile, file)
 	if err != nil {
 		form.Validator.AddFieldError("resume", "Failed to process file. Please try again.")
-		if err := response.NamedTemplate(w, http.StatusUnprocessableEntity, data, "partial:resume-form", "partials/resume-form.html"); err != nil {
+		if err := response.Page(w, http.StatusUnprocessableEntity); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
 		}
 		return
@@ -165,7 +165,7 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 	resumeText, err := app.extractResumeText(tempFile, header.Filename)
 	if err != nil {
 		form.Validator.AddFieldError("resume", fmt.Sprintf("Failed to extract text from resume: %v", err))
-		if err := response.NamedTemplate(w, http.StatusUnprocessableEntity, data, "partial:resume-form", "partials/resume-form.html"); err != nil {
+		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
 		}
 		return
@@ -177,7 +177,7 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := internal.CreateResume(r.Context(), app.fs, *user, &resume); err != nil {
 		form.Validator.AddFieldError("resume", "Failed to save resume. Please try again.")
-		if err := response.NamedTemplate(w, http.StatusUnprocessableEntity, data, "partial:resume-form", "partials/resume-form.html"); err != nil {
+		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
 		}
 		return

@@ -693,8 +693,8 @@ github.com/chriscow/minds/providers/openai v0.0.5 h1:myTeCXszsKK+e7usfIbO5dBBb2+
 github.com/chriscow/minds/providers/openai v0.0.5/go.mod h1:pgyvq0DCT54xraFXzZpKq2UCT4oIzulw3rwiq/vik/A=
 github.com/chriscow/minds/tools v0.0.3-0.20250514162534-27df8006baa7 h1:52PT5GXvpH7OimZsObSMlnRWkXk9T8Ezw6bkXwRSVLc=
 github.com/chriscow/minds/tools v0.0.3-0.20250514162534-27df8006baa7/go.mod h1:BJ00UsqPC+D6R5KeIQsoePb3eDe+aCJDMp09zC0LqLQ=
-github.com/chriscow/vapi-go v0.0.0-20250525200013-6c79188c1f71 h1:O6H0Wj7xueo6/LKyo8O3YKLkIPptFr1Cnjbfv1Kq9ro=
-github.com/chriscow/vapi-go v0.0.0-20250525200013-6c79188c1f71/go.mod h1:vte5a9rQGpiLR7sXIczbnsxfF/2ozgmRk7FYlkvKPSQ=
+github.com/chriscow/vapi-go v0.0.0-20250527195805-6e2047355010 h1:S3j3un7Y+3ytVxV7HyKdTIr6I+UNJgqhLWb5DUl3llY=
+github.com/chriscow/vapi-go v0.0.0-20250527195805-6e2047355010/go.mod h1:vte5a9rQGpiLR7sXIczbnsxfF/2ozgmRk7FYlkvKPSQ=
 github.com/chzyer/logex v1.1.10/go.mod h1:+Ywpsq7O8HXn0nuIou7OrIPyXbp3wmkHB+jjWRnGsAI=
 github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e/go.mod h1:nSuG5e5PlCu98SY8svDHJxuZscDgtXS6KTTbou5AhLI=
 github.com/chzyer/test v0.0.0-20180213035817-a1ea475d72b1/go.mod h1:Q3SI9o4m/ZMnBNeIyt5eFwwo7qiLfzFZmjNmxjkiQlU=
