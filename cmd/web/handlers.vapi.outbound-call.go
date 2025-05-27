@@ -235,7 +235,14 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 		result, err = vapi.CreateCall(r.Context(), callConfig)
 		if err != nil {
 			apptErr = fmt.Errorf("handleVapiCall CreateCall: %w", err)
-			app.logger.Error("Failed to create call", "error", err)
+			app.logger.Error("failed to create call", "error", err)
+
+			b, err := json.MarshalIndent(callConfig, "", "  ")
+			if err != nil {
+				app.logger.Error("failed to marshal call config", "error", err)
+			}
+			app.logger.Error("call config", "call_config", string(b))
+
 			app.reportServerError(r, apptErr)
 
 			// This is likely a transient error, but it could be we are not configuring the call correctly, so we want to retry
