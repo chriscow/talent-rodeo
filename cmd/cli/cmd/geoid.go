@@ -58,7 +58,7 @@ func init() {
 	importGeoidsCmd := &cobra.Command{
 		Use:   "import",
 		Short: "Import geoids from JSON",
-		Long:  `Import geoids from JSON data. Can read from stdin or a file.
+		Long: `Import geoids from JSON data. Can read from stdin or a file.
 		
 Examples:
   # Import from file
@@ -71,7 +71,7 @@ Examples:
   cli geoids list | cli geoids import`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
-			
+
 			fs, err := internal.NewFirestoreClient(ctx)
 			if err != nil {
 				return fmt.Errorf("failed to create Firestore client: %w", err)
@@ -81,7 +81,7 @@ Examples:
 			// Get input source
 			var input io.Reader = os.Stdin
 			filename, _ := cmd.Flags().GetString("file")
-			
+
 			if filename != "" {
 				file, err := os.Open(filename)
 				if err != nil {
@@ -105,7 +105,7 @@ Examples:
 			// Import each GeoID
 			successCount := 0
 			errorCount := 0
-			
+
 			for _, geoid := range geoids {
 				if err := internal.CreateGeoID(ctx, fs, geoid); err != nil {
 					fmt.Fprintf(os.Stderr, "Error importing GeoID %s (%s): %v\n", geoid.ID, geoid.Value, err)
@@ -127,7 +127,7 @@ Examples:
 				output, _ := json.MarshalIndent(result, "", "  ")
 				fmt.Println(string(output))
 			} else {
-				fmt.Printf("\nImport completed: %d successful, %d errors out of %d total\n", 
+				fmt.Printf("\nImport completed: %d successful, %d errors out of %d total\n",
 					successCount, errorCount, len(geoids))
 			}
 
