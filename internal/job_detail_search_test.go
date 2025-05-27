@@ -792,7 +792,7 @@ func TestProcessSearchResults(t *testing.T) {
 				// Add debugging for Strong recency boost test
 				if tc.name == "Strong recency boost" {
 					for i, result := range results {
-						t.Logf("Result #%d: ID=%s, Score=%v", i+1, result.JobDetail.ID, result.CombinedScore)
+						t.Logf("Result #%d: ID=%s, Score=%v", i+1, result.JobDetail.ID, result.Score)
 					}
 				}
 
@@ -816,8 +816,8 @@ func TestProcessSearchResults(t *testing.T) {
 
 			// Verify score range (all scores should be between 0 and 1)
 			for _, result := range results {
-				if result.CombinedScore < 0 || result.CombinedScore > 1 {
-					t.Errorf("Combined score %f is outside expected range [0,1]", result.CombinedScore)
+				if result.Score < 0 || result.Score > 1 {
+					t.Errorf("Combined score %f is outside expected range [0,1]", result.Score)
 				}
 			}
 		})
@@ -1005,7 +1005,7 @@ func TestProcessSearchResultsCore(t *testing.T) {
 				ID:          "job1",
 				Description: "Software developer with Java experience",
 			},
-			CombinedScore: 0.9,
+			Score: 0.9,
 		}
 
 		job2 := ScoredJobDetail{
@@ -1013,7 +1013,7 @@ func TestProcessSearchResultsCore(t *testing.T) {
 				ID:          "job2",
 				Description: "Software developer with Java experience", // Same description as job1
 			},
-			CombinedScore: 0.8,
+			Score: 0.8,
 		}
 
 		job3 := ScoredJobDetail{
@@ -1021,7 +1021,7 @@ func TestProcessSearchResultsCore(t *testing.T) {
 				ID:          "job3",
 				Description: "Data scientist with Python experience",
 			},
-			CombinedScore: 0.7,
+			Score: 0.7,
 		}
 
 		jobs := []*ScoredJobDetail{&job1, &job2, &job3}
@@ -1036,7 +1036,7 @@ func TestProcessSearchResultsCore(t *testing.T) {
 			}
 
 			// Keep job with highest score for each unique hash
-			if existing, found := deduplicated[hash]; !found || job.CombinedScore > existing.CombinedScore {
+			if existing, found := deduplicated[hash]; !found || job.Score > existing.Score {
 				deduplicated[hash] = job
 			}
 		}
@@ -1049,7 +1049,7 @@ func TestProcessSearchResultsCore(t *testing.T) {
 
 		// Sort by score
 		sort.Slice(deduplicatedJobs, func(i, j int) bool {
-			return deduplicatedJobs[i].CombinedScore > deduplicatedJobs[j].CombinedScore
+			return deduplicatedJobs[i].Score > deduplicatedJobs[j].Score
 		})
 
 		// Verify deduplication worked (should only have job1 and job3)

@@ -223,7 +223,7 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 	if !isNewCriteria {
 		logger.Debug("refreshing user jobs", "user-id", user.ID, "criteria-id", criteria.ID)
 		internal.SendPusherMessage(psh, user.ID, "Refreshing your results", nil)
-		if err := internal.RefreshUserJobs(ctx, fs, user, *criteria); err != nil {
+		if err := internal.RefreshUserJobs(ctx, fs, user, *criteria, 0); err != nil {
 			logger.Error("failed to refresh user jobs", "error", err)
 			hub.CaptureException(err)
 			return
