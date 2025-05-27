@@ -58,6 +58,8 @@ type UserJob struct {
 	// ID is the same as the job_details document ID (provider_job_id)
 	ID     string
 	Status JobStatus
+	Score  float64 // Semantic search score, if applicable
+
 	// User interaction metadata
 	ViewedAt   *time.Time
 	SavedAt    *time.Time
@@ -131,28 +133,17 @@ func CreateUserJob(ctx context.Context, fs *FirestoreClient, userID, jobRefID st
 	return job, nil
 }
 
-func CreateUserJobsBatch(ctx context.Context, fs *FirestoreClient, userID string, jobRefs []string) ([]*UserJob, error) {
+func CreateUserJobsBatch(ctx context.Context, fs *FirestoreClient, userID string, jobs []UserJob) error {
 	if userID == "" {
-		return nil, fmt.Errorf("user ID is required")
+		return fmt.Errorf("user ID is required")
 	}
-	if len(jobRefs) == 0 {
-		return nil, fmt.Errorf("job references are required")
+	if len(jobs) == 0 {
+		return nil
 	}
-
-	jobs := make([]*UserJob, len(jobRefs))
 
 	// Use Transaction instead of the deprecated Batch
-	err := fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		for i, jobRefID := range jobRefs {
-			job := &UserJob{
-				ID:        jobRefID,
-				JobRef:    fs.Collection(JobDetailsCollection).Doc(jobRefID),
-				CreatedAt: time.Now(),
-				UpdatedAt: time.Now(),
-				Status:    JobStatusUnprocessed,
-			}
-			jobs[i] = job
-
+	return fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		for _, job := range jobs {
 			docRef := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Doc(job.ID)
 			if err := tx.Set(docRef, job); err != nil {
 				return err
@@ -160,12 +151,6 @@ func CreateUserJobsBatch(ctx context.Context, fs *FirestoreClient, userID string
 		}
 		return nil
 	})
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	return jobs, nil
 }
 
 func GetUserJob(ctx context.Context, fs *FirestoreClient, userID, jobID string) (*UserJob, bool, error) {
@@ -224,7 +209,7 @@ func GetUserJobsSorted(ctx context.Context, fs *FirestoreClient, userID string, 
 	}
 
 	// Add ordering after filters
-	baseQuery = baseQuery.OrderBy("CreatedAt", firestore.Asc)
+	baseQuery = baseQuery.OrderBy("Score", firestore.Desc)
 
 	// Apply paging if a page token is provided
 	var query firestore.Query
@@ -502,7 +487,7 @@ func DeleteAllUserJobsByPrefix(ctx context.Context, fs *FirestoreClient, prefix 
 //
 // The function skips users without a steering query.
 // If no matching jobs are found for the user, it logs this and returns without error.
-func RefreshUserJobs(ctx context.Context, fs *FirestoreClient, user *User, criteria SearchCriteria) error {
+func RefreshUserJobs(ctx context.Context, fs *FirestoreClient, user *User, criteria SearchCriteria, threshold float64) error {
 	// Skip users without a steering query
 	if user.SteeringQuery == nil {
 		return fmt.Errorf("user %s has no steering query", user.ID)
@@ -531,29 +516,38 @@ func RefreshUserJobs(ctx context.Context, fs *FirestoreClient, user *User, crite
 		existingJobIDs[job.ID] = job
 	}
 
-	jobRefs := []string{}
+	jobRefs := []UserJob{}
 
 	// Create a user job for each matching job
 	for _, scoredJob := range scoredJobs {
+
+		if scoredJob.Score < threshold {
+			// Skip jobs below the threshold
+			continue
+		}
+
 		jobID := scoredJob.JobDetail.ID
+
+		job := UserJob{
+			ID:            jobID,
+			Score:         scoredJob.Score,
+			JobRef:        fs.Collection(JobDetailsCollection).Doc(jobID),
+			CreatedAt:     time.Now(),
+			UpdatedAt:     time.Now(),
+			Status:        JobStatusNew, // TODO: Once we have LLM analysis, this will be set to JobStatusUnprocessed
+			IsRecommended: true,         // TODO: When we have LLM analysis, set this based on the analysis
+		}
 
 		// Check if the user already has this job
 		if _, exists := existingJobIDs[jobID]; exists {
 			continue // Skip if the job already exists
 		}
 
-		jobRefs = append(jobRefs, jobID)
+		jobRefs = append(jobRefs, job)
 	}
 
 	// Create user jobs in batch
-	if len(jobRefs) > 0 {
-		_, err := CreateUserJobsBatch(ctx, fs, user.ID, jobRefs)
-		if err != nil {
-			return fmt.Errorf("failed to create user jobs in batch for user %s: %w", user.ID, err)
-		}
-	}
-
-	return nil
+	return CreateUserJobsBatch(ctx, fs, user.ID, jobRefs)
 }
 
 // isYesRating checks if a rating contains "yes" (case insensitive)

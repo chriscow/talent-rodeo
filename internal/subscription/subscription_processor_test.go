@@ -16,7 +16,7 @@ func TestFeatureFlagFromCloudflareKV(t *testing.T) {
 	}
 
 	// Set a test value
-	flagKey := SubscriptionProcessorFlag
+	flagKey := SubscriptionProcessorKey
 	testValue := true
 
 	// Set with a short expiration for testing purposes
@@ -45,7 +45,7 @@ func TestFeatureFlagFromCloudflareKV(t *testing.T) {
 
 	// Test direct feature flag reading
 	var isEnabled bool
-	err = kv.Get(SubscriptionProcessorFlag, &isEnabled)
+	err = kv.Get(SubscriptionProcessorKey, &isEnabled)
 	if err != nil && err != cloudflare.ErrNotFound {
 		t.Errorf("Error reading flag directly: %v", err)
 	} else if err == nil {

@@ -12,13 +12,24 @@ import (
 )
 
 const (
-	defaultSearchTickInterval = 6 * time.Hour
+	defaultSearchTickInterval = 24 * time.Hour
+	SchedulerSettingsKey      = "search-scheduler"
 )
 
 // Mailer interface for sending notifications
 type Mailer interface {
 	// func (m *Mailer) Send(recipient string, data any, patterns ...string) error {
 	Send(recipient string, data any, patterns ...string) error
+}
+
+type SchedulerSettings struct {
+	Enabled  bool
+	Interval time.Duration
+}
+
+var DefaultSchedulerSettings = SchedulerSettings{
+	Enabled:  true,
+	Interval: defaultSearchTickInterval,
 }
 
 // The search scheduler determines which SearchCriteria need to be processed.
@@ -33,6 +44,8 @@ type Scheduler struct {
 
 	queue internal.SearchQueue
 	kv    *cloudflare.KV
+
+	settings SchedulerSettings
 
 	disableSearchSchedulingLogOnce sync.Once
 }
@@ -70,13 +83,12 @@ func NewScheduler(fs *internal.FirestoreClient, logger *slog.Logger, queue inter
 // Start begins the background search processing
 func (s *Scheduler) Start(ctx context.Context) error {
 	s.logger.Info("starting search scheduler")
-	if s.ticker == nil {
-		s.ticker = time.NewTicker(defaultSearchTickInterval)
-	}
 
 	if s.queue == nil {
 		panic("NewScheduler::Start: queue is nil")
 	}
+
+	s.RefreshSettings()
 
 	// Then requeue any users that were previously queued but not completed
 	if err := s.requeueIncompleteSearches(); err != nil {
@@ -84,9 +96,9 @@ func (s *Scheduler) Start(ctx context.Context) error {
 	}
 
 	// Start the background processing
+	s.wg.Add(1) // used for graceful shutdown if Close is called
 	go func() {
 		// Process searches immediately on start
-		s.wg.Add(1)
 		s.StartCriteriaSearch(ctx)
 		s.wg.Done()
 
@@ -94,6 +106,29 @@ func (s *Scheduler) Start(ctx context.Context) error {
 		s.run(ctx)
 	}()
 
+	return nil
+}
+
+func (s *Scheduler) RefreshSettings() error {
+	var settings SchedulerSettings
+	if s.kv != nil {
+		if err := s.kv.Get(SchedulerSettingsKey, &settings); err != nil {
+			settings = DefaultSchedulerSettings
+			s.logger.Info("No search scheduler settings found, using defaults")
+			if err := s.kv.Set(SchedulerSettingsKey, settings, 0); err != nil {
+				return fmt.Errorf("failed to set default search scheduler settings: %w", err)
+			}
+			s.logger.Info("Default search scheduler settings saved to Cloudflare KV", "settings", settings)
+		}
+	} else {
+		s.logger.Info("Cloudflare KV not initialized, using default settings")
+	}
+
+	s.settings = settings
+	if s.settings.Interval <= 0 {
+		s.settings.Interval = defaultSearchTickInterval
+	}
+	s.ticker.Reset(s.settings.Interval)
 	return nil
 }
 
@@ -122,7 +157,7 @@ func (s *Scheduler) run(ctx context.Context) {
 			s.logger.Info("background processing stopped due to context cancellation")
 			return
 		case <-s.ticker.C:
-			s.wg.Add(1)
+			s.wg.Add(1) // used for graceful shutdown if Close is called
 			s.StartCriteriaSearch(ctx)
 			s.wg.Done()
 		case <-s.done:
@@ -133,23 +168,13 @@ func (s *Scheduler) run(ctx context.Context) {
 }
 
 func (s *Scheduler) Enabled() bool {
-	// Check feature flag from Cloudflare KV
-	enabled := true
-	if s.kv != nil {
-		var isEnabled bool
-		if err := s.kv.Get("search-scheduler", &isEnabled); err != nil {
-			if err != cloudflare.ErrNotFound {
-				s.logger.Error("Failed to get feature flag from Cloudflare KV", "flag", "search-scheduler", "error", err)
-			}
-		} else {
-			enabled = isEnabled
-		}
-	}
-	return enabled
+	return s.settings.Enabled
 }
 
 // StartCriteriaSearch finds criteria that need searches performed
 func (s *Scheduler) StartCriteriaSearch(ctx context.Context) {
+	s.RefreshSettings()
+
 	if !s.Enabled() {
 		s.disableSearchSchedulingLogOnce.Do(func() {
 			s.logger.Info(internal.BGYellow("search scheduler disabled by feature flag"))

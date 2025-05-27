@@ -287,7 +287,7 @@ func TestProcessorIntegration(t *testing.T) {
 		}
 
 		// Process user jobs - should skip due to no steering query
-		err = internal.RefreshUserJobs(ctx, fs, testUser, *criteria)
+		err = internal.RefreshUserJobs(ctx, fs, testUser, *criteria, 0)
 		if err == nil {
 			t.Fatalf("RefreshUserJobs should return an error for user without steering query")
 		}

@@ -35,10 +35,10 @@ func DefaultHybridSearchParams() *HybridSearchParams {
 }
 
 type ScoredJobDetail struct {
-	JobDetail     JobDetail
-	DenseScore    float64
-	SparseScore   float64
-	CombinedScore float64
+	JobDetail   JobDetail
+	DenseScore  float64
+	SparseScore float64
+	Score       float64
 }
 
 func (s *ScoredJobDetail) ToPineconeDocument() pinecone.Document {
@@ -55,7 +55,7 @@ func (s *ScoredJobDetail) ToPineconeDocument() pinecone.Document {
 		"postedDate":    s.JobDetail.PostedDate,
 		"denseScore":    s.DenseScore,
 		"sparseScore":   s.SparseScore,
-		"combinedScore": s.CombinedScore,
+		"combinedScore": s.Score,
 	}
 }
 
@@ -254,8 +254,8 @@ func RerankResults(ctx context.Context, client *Pinecone, scoredMatches []*Score
 		}
 
 		results = append(results, ScoredJobDetail{
-			JobDetail:     jobDetail,
-			CombinedScore: float64(result.Score),
+			JobDetail: jobDetail,
+			Score:     float64(result.Score),
 		})
 	}
 
@@ -392,7 +392,7 @@ func processSearchResults(_ context.Context, searchResult *SearchResult, topK in
 			fused = recencyBoost(fused, match.JobDetail.PostedDate, params.RecencyWeight, params.RecencyHalfLife)
 		}
 
-		match.CombinedScore = fused
+		match.Score = fused
 	}
 
 	// deduplicate documents by hash
@@ -410,7 +410,7 @@ func processSearchResults(_ context.Context, searchResult *SearchResult, topK in
 		}
 
 		// Keep the match with the highest score if duplicates exist
-		if existing, found := deduplicated[hash]; !found || match.CombinedScore > existing.CombinedScore {
+		if existing, found := deduplicated[hash]; !found || match.Score > existing.Score {
 			deduplicated[hash] = match
 		}
 	}
@@ -423,7 +423,7 @@ func processSearchResults(_ context.Context, searchResult *SearchResult, topK in
 
 	// Sort by combined score in descending order
 	sort.Slice(scoredMatches, func(i, j int) bool {
-		return scoredMatches[i].CombinedScore > scoredMatches[j].CombinedScore
+		return scoredMatches[i].Score > scoredMatches[j].Score
 	})
 
 	// Limit to topK
