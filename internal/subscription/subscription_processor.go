@@ -20,8 +20,20 @@ const (
 	DefaultTickInterval = 24 * time.Hour
 
 	// FeatureFlag for subscription processor
-	SubscriptionProcessorFlag = "subscription-processor"
+	SubscriptionProcessorKey = "subscription-processor"
 )
+
+type ProcessorSettings struct {
+	Interval          time.Duration // Interval for processing subscriptions
+	Enabled           bool          // Whether the processor is enabled
+	JobThresholdScore float64       // Minimum job score to consider for publishing
+}
+
+var DefaultSettings = ProcessorSettings{
+	Interval:          DefaultTickInterval,
+	Enabled:           true, // Default to enabled
+	JobThresholdScore: 0.5,  // Default job score threshold
+}
 
 // Processor handles the periodic checking and publishing of search criteria subscriptions.
 // It runs on a configurable interval, processes eligible search criteria, and publishes
@@ -32,10 +44,10 @@ type Processor struct {
 	ticker     *time.Ticker              // Ticker for scheduling periodic processing
 	done       chan bool                 // Channel to signal shutdown
 	wg         sync.WaitGroup            // WaitGroup to manage goroutines
-	interval   time.Duration             // Processing interval (defaults to DefaultTickInterval)
 	isRunning  bool                      // Flag indicating if the processor is currently running
 	cancelFunc context.CancelFunc        // Function to cancel the processing context
 	kv         *cloudflare.KV            // Cloudflare KV client for feature flags
+	settings   ProcessorSettings         // Settings for the processor, including interval and enabled state
 }
 
 // NewProcessor creates a new subscription processor with the provided Firestore client and logger.
@@ -49,12 +61,14 @@ func NewProcessor(fs *internal.FirestoreClient, logger *slog.Logger) *Processor 
 		panic("firestore client cannot be nil")
 	}
 
+	settings := DefaultSettings
+
 	logger = logger.With("pkg", "subscription.Processor")
 	return &Processor{
 		fs:       fs,
 		logger:   logger,
-		interval: DefaultTickInterval,
 		done:     make(chan bool),
+		settings: settings,
 	}
 }
 
@@ -65,7 +79,7 @@ func NewProcessor(fs *internal.FirestoreClient, logger *slog.Logger) *Processor 
 //
 //	processor := subscription.NewProcessor(fs, logger).WithInterval(12 * time.Hour)
 func (p *Processor) WithInterval(interval time.Duration) *Processor {
-	p.interval = interval
+	p.settings.Interval = interval
 	return p
 }
 
@@ -79,7 +93,7 @@ func (p *Processor) Start(ctx context.Context) error {
 		return fmt.Errorf("processor is already running")
 	}
 
-	p.logger.Info("starting subscription processor", "interval", p.interval)
+	p.logger.Info("starting subscription processor", "interval", p.settings.Interval)
 
 	// Initialize Cloudflare KV client for feature flags
 	if err := p.initCloudflareKV(); err != nil {
@@ -87,11 +101,16 @@ func (p *Processor) Start(ctx context.Context) error {
 		// Continue without feature flags
 	}
 
+	if err := p.RefreshSettings(); err != nil {
+		p.logger.Error("failed to refresh subscription processor settings", "error", err)
+		// Continue with default settings
+	}
+
 	// Create a cancelable context
 	ctx, cancel := context.WithCancel(ctx)
 	p.cancelFunc = cancel
 
-	p.ticker = time.NewTicker(p.interval)
+	p.ticker = time.NewTicker(p.settings.Interval)
 	p.isRunning = true
 
 	// Run once at startup
@@ -141,6 +160,34 @@ func (p *Processor) initCloudflareKV() error {
 	return nil
 }
 
+func (p *Processor) RefreshSettings() error {
+	var settings ProcessorSettings
+	if err := p.kv.Get(SubscriptionProcessorKey, &settings); err != nil {
+		if err != cloudflare.ErrNotFound {
+			p.logger.Error("failed to get subscription processor settings from Cloudflare KV", "key", SubscriptionProcessorKey, "error", err)
+			return fmt.Errorf("failed to get feature flag: %w", err)
+		}
+		// If not found, use default settings
+		settings = DefaultSettings
+		if err := p.kv.Set(SubscriptionProcessorKey, DefaultSettings, 0); err != nil {
+			p.logger.Error("failed to set default subscription processor settings in Cloudflare KV", "key", SubscriptionProcessorKey, "error", err)
+			return fmt.Errorf("failed to set default feature flag: %w", err)
+		}
+	}
+
+	p.settings = settings
+	if p.settings.Interval <= 0 {
+		p.settings.Interval = DefaultTickInterval
+	}
+	if p.ticker != nil {
+		p.ticker.Stop()
+	}
+	p.ticker = time.NewTicker(p.settings.Interval)
+
+	p.logger.Info("refreshed subscription processor settings", "interval", p.settings.Interval, "enabled", p.settings.Enabled, "job_threshold_score", p.settings.JobThresholdScore)
+	return nil
+}
+
 // Stop halts the subscription processor.
 // It stops the ticker, signals the goroutines to stop, and waits for all processing to complete.
 // This method is safe to call even if the processor is not running.
@@ -174,26 +221,10 @@ func (p *Processor) Stop() {
 // Errors during processing of individual criteria are logged and reported to Sentry,
 // but do not stop the processing of other criteria.
 func (p *Processor) process(ctx context.Context) error {
-	// Check feature flag from Cloudflare KV
-	enabled := true // Default to enabled
-	if p.kv != nil {
-		var isEnabled bool
-		err := p.kv.Get(SubscriptionProcessorFlag, &isEnabled)
-		if err != nil {
-			if err != cloudflare.ErrNotFound {
-				// Log error but continue with default (enabled)
-				p.logger.Error("failed to get feature flag from Cloudflare KV", "flag", SubscriptionProcessorFlag, "error", err)
-			}
-			// If key not found, keep default (true)
-		} else {
-			enabled = isEnabled
-		}
-
-		if !enabled {
-			// Subscription processor is disabled by feature flag, return silently
-			p.logger.Info(internal.BGYellow("subscription processor disabled by feature flag"))
-			return nil
-		}
+	p.RefreshSettings()
+	if !p.settings.Enabled {
+		p.logger.Info("subscription processor is disabled, skipping processing")
+		return nil
 	}
 
 	p.logger.Info("processing search criteria subscriptions...")
@@ -298,7 +329,7 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 	}
 
 	for _, user := range users {
-		if err := internal.RefreshUserJobs(ctx, p.fs, user, criteria); err != nil {
+		if err := internal.RefreshUserJobs(ctx, p.fs, user, criteria, p.settings.JobThresholdScore); err != nil {
 			// Log error but continue with other users
 			p.logger.Error("Error processing jobs for user", "user-id", user.ID, "error", err)
 			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
