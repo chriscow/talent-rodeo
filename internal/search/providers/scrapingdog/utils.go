@@ -156,14 +156,15 @@ func convertJobDetail(detail LinkedInJobDetail) (*internal.JobDetail, error) {
 	}
 
 	result := internal.JobDetail{
-		ID:               createJobID(JobProviderName, detail.ID), // linkedin-1234567890
-		Provider:         JobProviderName,
-		ProviderJobID:    detail.ID,
-		Title:            detail.Position,
-		Company:          detail.CompanyName,
-		Location:         detail.Location,
-		PostedDate:       postedDate,
-		URL:              detail.JobApplyLink,
+		ID:            createJobID(JobProviderName, detail.ID), // linkedin-1234567890
+		Provider:      JobProviderName,
+		ProviderJobID: detail.ID,
+		Title:         detail.Position,
+		Company:       detail.CompanyName,
+		Location:      detail.Location,
+		PostedDate:    postedDate,
+		// URL is set by the worker because the URL is part of the job listing
+		ApplyURL:         detail.JobApplyLink,
 		Description:      detail.Description,
 		SalaryInfo:       salaryRange,
 		EmploymentType:   detail.EmploymentType,

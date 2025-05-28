@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/samber/lo"
 )
 
 // JobWithDetails combines UserJob with the job details
@@ -74,61 +75,51 @@ func (j *JobWithDetails) Requirements() []string {
 	return []string{}
 }
 
-// showDashboard handles GET requests to /dashboard.
-func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
-	data := app.newTemplateData(r)
-
-	// Add invite-only mode check near the beginning after data initialization
-	if os.Getenv("INVITE_ONLY") == "true" {
-		data["InviteOnly"] = true
-	}
-
+func dashboardValidateUserStatus(r *http.Request) (*internal.User, error) {
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
-		app.logger.Warn("showDashboard: user not in context")
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
+		return nil, fmt.Errorf("user not authenticated")
 	}
 
 	if user.ID == "" {
-		app.logger.Warn("showDashboard: user ID is empty")
-		internal.SentryReportError(r.Context(), fmt.Errorf("user ID is empty"), sentry.LevelError, map[string]string{
-			"error_type":  "user_id_empty",
-			"entity_type": "user",
-		})
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
+		return nil, fmt.Errorf("user ID is empty")
 	}
 
 	if user.State.Status < internal.UserStatusCallScheduled {
-		app.logger.Warn("showDashboard: user has not onboarded", "user_id", user.ID, "status", user.State.Status.String())
 		internal.SentryReportError(r.Context(), fmt.Errorf("user has not onboarded"), sentry.LevelError, map[string]string{
 			"user_status": user.State.Status.String(),
 			"error_type":  "user_not_onboarded",
 			"entity_type": "user",
 		})
-		http.Redirect(w, r, "/profile", http.StatusSeeOther)
-		return
+		return nil, fmt.Errorf("user has not onboarded")
 	}
 
 	internal.SentrySetScope(r.Context(), map[string]any{
 		"user_status": user.State.Status.String(),
 	})
+	return user, nil
+}
 
-	app.logger.Debug("showDashboard", "user_id", user.ID, "status", user.State.Status.String())
+// showDashboard handles GET requests to /dashboard.
+func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
+	data := app.newTemplateData(r)
+	user, err := dashboardValidateUserStatus(r)
+	if err != nil {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
 
 	if user.State.Status < internal.UserStatusCallCompleted {
 		app.showWaitingForCall(w, r, user)
 		return
 	}
 
-	// Use our helper function to parse and validate the status
 	status, isValid := internal.ParseJobStatus(r.URL.Query().Get("status"))
 	if !isValid {
 		status = internal.JobStatusNew
 	}
 
-	// Get the showAllRatings parameter from the query string
+	// If this is true, we show all ratings not just the "IsRecommended" ones
 	showAllRatings := r.URL.Query().Get("show_all") == "true"
 
 	pageToken := r.URL.Query().Get("page")
@@ -164,7 +155,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 
 	// Get paginated jobs by status
 	start = time.Now()
-	jobs, nextPageToken, err := internal.GetUserJobsSorted(r.Context(), app.fs, user.ID, internal.JobStatus(status), pageSize, pageToken, showAllRatings)
+	userJobs, nextPageToken, err := internal.GetUserJobsSorted(r.Context(), app.fs, user.ID, internal.JobStatus(status), pageSize, pageToken, showAllRatings)
 	if err != nil {
 		wrappedErr := fmt.Errorf("showDashboard: failed to get sorted user jobs: %w", err)
 		app.logger.Error("showDashboard: failed to get sorted user jobs", "error", err)
@@ -192,43 +183,35 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 		app.logger.Debug("showDashboard: GetUserJobsSorted took", "duration", time.Since(start).String())
 	}
 
-	// Fetch job details for the filtered jobs
-	var jobsWithDetails []*JobWithDetails
-	for _, job := range jobs {
-		// Fetch job details from job_ref
-		var details JobWithDetails
-		details.UserJob = job
-
-		docSnap, err := job.JobRef.Get(r.Context())
-		if err != nil {
-			wrappedErr := fmt.Errorf("showDashboard: failed to get job details: %w", err)
-			app.logger.Error("showDashboard: failed to get job details", "error", err)
-
-			internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
-				"error_type":  "database_retrieval",
-				"entity_type": "job_details",
-			})
-
-			app.serverError(w, r, wrappedErr)
-			return
+	jobs := map[string]JobWithDetails{}
+	for _, job := range userJobs {
+		jobs[job.JobRef.ID] = JobWithDetails{
+			UserJob: job,
 		}
+	}
 
-		var jobDetail internal.JobDetail
-		if err := docSnap.DataTo(&jobDetail); err != nil {
-			wrappedErr := fmt.Errorf("showDashboard: failed to unmarshal job details: %w", err)
-			app.logger.Error("showDashboard: failed to unmarshal job details", "error", err)
+	jobIDs := lo.Keys(jobs)
 
-			internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
-				"error_type":  "data_processing",
-				"entity_type": "job_details",
-			})
-
-			app.serverError(w, r, wrappedErr)
-			return
+	jobDetails, err := internal.GetJobDetailsByIDs(r.Context(), app.fs, jobIDs)
+	if err != nil {
+		wrappedErr := fmt.Errorf("showDashboard: failed to get job details by IDs: %w", err)
+		app.logger.Error("showDashboard: failed to get job details by IDs", "error", err)
+		internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
+			"error_type":  "database_retrieval",
+			"entity_type": "job_details",
+			"job_ids":     strings.Join(jobIDs, ","),
+		})
+		app.serverError(w, r, wrappedErr)
+		return
+	}
+	// Merge job details into the jobs map
+	for _, detail := range jobDetails {
+		if job, exists := jobs[detail.ID]; exists {
+			job.JobDetail = detail
+			jobs[detail.ID] = job
+		} else {
+			app.logger.Warn("showDashboard: job detail found without corresponding user job", "job_id", detail.ID)
 		}
-		details.JobDetail = &jobDetail
-
-		jobsWithDetails = append(jobsWithDetails, &details)
 	}
 
 	// Calculate pagination information
@@ -244,9 +227,9 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 	// Add data to template
 	data["CurrentStatus"] = user.State.Status.Description()
 	data["CurrentTime"] = time.Now()
-	data["HasJobs"] = len(jobsWithDetails) > 0 || statusJobCount > 0
+	data["HasJobs"] = len(jobs) > 0 || statusJobCount > 0
 	data["ActiveStatus"] = string(status)
-	data["Jobs"] = jobsWithDetails
+	data["Jobs"] = jobs
 	data["NextPageToken"] = nextPageToken
 	data["CurrentPageToken"] = pageToken
 	data["HasNextPage"] = nextPageToken != ""

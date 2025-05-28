@@ -2,10 +2,13 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"talent-rodeo/assets"
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"github.com/chriscow/minds/tools"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -34,6 +37,7 @@ type JobDetail struct {
 	Location      string
 	PostedDate    time.Time
 	URL           string
+	ApplyURL      string // Direct application link, if different from job URL
 
 	// Detailed information
 	Description string // Complete job description
@@ -70,9 +74,12 @@ type JobDetailCriteriaLink struct {
 }
 
 type JobDetailExtractedData struct {
-	Summary        string   `description:"a concise summary of the job listing"`
-	Requirements   []string `description:"the essential criteria that employers consider non-negotiable for a candidate to perform the job successfully"`
-	Qualifications []string `description:"the broader set of skills, experiences, and attributes that make someone a good fit for the role"`
+	Summary             string   `json:"summary" description:"Core function and scope of the role"`
+	Responsibilities    []string `json:"responsibilities" description:"Specific tasks the hire will perform"`
+	Requirements        []string `json:"requirements" description:"Mandatory barriers to entry (e.g., degrees, legal requirements)"`
+	Skills              []string `json:"skills" description:"Technical/hard skills (tools, languages, systems)"`
+	Qualifications      []string `json:"qualifications" description:"Broader competencies (experience level, soft skills, industry knowledge)"`
+	BonusQualifications []string `json:"bonus_qualifications" description:"Secondary assets (e.g., familiarity with adjacent technologies)"`
 }
 
 // Company contains information about the company posting the job.
@@ -150,6 +157,29 @@ func initJobDetail(ctx context.Context, fs *FirestoreClient, job *JobDetail) {
 	}
 
 	job.CreatedAt = time.Now().UTC()
+}
+
+func ExtractJobDetailData(ctx context.Context, job *JobDetail) error {
+	pb, err := assets.EmbeddedFiles.ReadFile("prompts/job-summary.001.txt")
+	if err != nil {
+		return fmt.Errorf("failed to read system prompt: %w", err)
+	}
+
+	b, err := json.Marshal(job)
+	if err != nil {
+		return fmt.Errorf("failed to marshal job detail: %w", err)
+	}
+
+	prompt := string(pb) + "\n\n```json\n" + string(b) + "\n```\n\n"
+
+	data, err := tools.StructuredAsk[JobDetailExtractedData](ctx, prompt, "extracted-data",
+		tools.WithModel(tools.DeepSeekChat))
+	if err != nil {
+		return fmt.Errorf("failed to summarize job detail: %w", err)
+	}
+
+	job.ExtractedData = &data
+	return nil
 }
 
 func SaveJobDetail(ctx context.Context, fs *FirestoreClient, job *JobDetail) error {
