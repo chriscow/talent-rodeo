@@ -340,6 +340,8 @@ func (wm *WorkerManager) processQueuedSearch(ctx context.Context, workerID int, 
 			continue
 		}
 
+		details.URL = job.URL // this is the original URL from the job listing
+
 		// Notify about the new job
 		if wm.eventHandler != nil {
 			wm.eventHandler.OnJobDetail(searchJob, *details)
