@@ -109,6 +109,9 @@ func (app *application) routes() http.Handler {
 
 			// Add feature flags admin page
 			mux.HandleFunc("/admin/feature-flags", app.adminFeatureFlags, "GET", "POST")
+
+			// Add user dashboard admin page
+			mux.HandleFunc("/admin/user-dashboard", app.adminUserDashboard, "GET", "POST")
 		})
 	})
 

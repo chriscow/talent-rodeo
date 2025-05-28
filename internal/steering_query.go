@@ -40,12 +40,12 @@ func (sq SteeringQuery) Validate() error {
 	}
 
 	// Validate ForceToward only if MoveToward is set
-	if sq.MoveToward != nil && (sq.ForceToward < 0 || sq.ForceToward > 1) {
+	if sq.MoveToward != nil && (sq.ForceToward == 0 || sq.ForceToward > 1) {
 		return fmt.Errorf("ForceToward must be between 0.0 and 1.0, got %f", sq.ForceToward)
 	}
 
 	// Validate ForceAway only if MoveAway is set
-	if sq.MoveAway != nil && (sq.ForceAway < 0 || sq.ForceAway > 1) {
+	if sq.MoveAway != nil && (sq.ForceAway == 0 || sq.ForceAway > 1) {
 		return fmt.Errorf("ForceAway must be between 0.0 and 1.0, got %f", sq.ForceAway)
 	}
 
@@ -192,8 +192,8 @@ func GenerateSteeringQuery(ctx context.Context, transcript *Transcript, opts ...
 
 	options := []tools.Option{
 		tools.WithSystemMessage(string(tmpl)),
-		tools.WithModel(tools.DeepSeekChat),
-		tools.WithMaxTokens(2000),
+		tools.WithModel(tools.DeepSeekReasoner),
+		tools.WithMaxTokens(5000),
 	}
 
 	if len(opts) > 0 {
@@ -238,7 +238,7 @@ func extractSteeringQuery(ctx context.Context, data string) (*SteeringQuery, err
 		}
 	}
 
-	query.ForceToward = 0.5
+	query.ForceToward = 0.8
 	query.ForceAway = 0.5
 
 	return &query, nil
