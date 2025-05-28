@@ -29,6 +29,7 @@ var TemplateFuncs = template.FuncMap{
 	"timeSince":      time.Since,
 	"timeUntil":      time.Until,
 	"formatTime":     formatTime,
+	"approxAge":      ApproxAge,
 	"approxDuration": ApproxDuration,
 	"humanDate":      humanDate,
 
@@ -92,6 +93,40 @@ var TemplateFuncs = template.FuncMap{
 
 func formatTime(format string, t time.Time) string {
 	return t.Format(format)
+}
+
+func ApproxAge(t time.Time) string {
+	if t.IsZero() {
+		return "unknown"
+	}
+
+	d := time.Since(t)
+	if d < time.Second {
+		return "just now"
+	}
+
+	ds := int(math.Round(d.Seconds()))
+	if ds < 60 {
+		return fmt.Sprintf("%d seconds ago", ds)
+	}
+
+	dm := int(math.Round(d.Minutes()))
+	if dm < 60 {
+		return fmt.Sprintf("%d minutes ago", dm)
+	}
+
+	dh := int(math.Round(d.Hours()))
+	if dh < 24 {
+		return fmt.Sprintf("%d hours ago", dh)
+	}
+
+	dd := int(math.Round(float64(d / day)))
+	if dd < 365 {
+		return fmt.Sprintf("%d days ago", dd)
+	}
+
+	dy := int(math.Round(float64(d / year)))
+	return fmt.Sprintf("%d years ago", dy)
 }
 
 func ApproxDuration(d time.Duration) string {

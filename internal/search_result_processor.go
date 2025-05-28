@@ -31,6 +31,7 @@ type SearchResultProcessor struct {
 }
 
 func NewSearchResultProcessor(fs *FirestoreClient, logger *slog.Logger) *SearchResultProcessor {
+	logger = logger.With("pkg", "SearchResultProcessor")
 	return &SearchResultProcessor{
 		fs:     fs,
 		logger: logger,
@@ -38,72 +39,78 @@ func NewSearchResultProcessor(fs *FirestoreClient, logger *slog.Logger) *SearchR
 }
 
 func (s *SearchResultProcessor) OnSearchStarted(jobSearch SearchTask) {
-	s.logger.Info("JobSink: on search started", "criteria", jobSearch.Criteria.GetSearchHash())
+	s.logger.Info("OnSearchStarted", "criteria", jobSearch.Criteria.GetSearchHash())
 	ctx := context.Background()
 	if err := UpdateSearchTask(ctx, s.fs, &jobSearch); err != nil {
-		s.logger.Error("JobSink: failed to update search task", "error", err)
+		s.logger.Error("failed to update search task", "error", err)
 	}
 }
 
 // search.JobEventHandler implementation
 func (s *SearchResultProcessor) OnJobListing(jobSearch SearchTask, job JobListing) {
-	s.logger.Info("JobSink: on job listing", "job", job.ProviderJobID)
+	s.logger.Info("OnJobListing", "job", job.ProviderJobID)
 
 	ctx := context.Background()
 	if err := SaveJobListing(ctx, s.fs, jobSearch, &job); err != nil {
-		s.logger.Error("JobSink: failed to create job listing", "error", err)
+		s.logger.Error("failed to create job listing", "error", err)
 	}
 }
 
 func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, job JobDetail) {
-	s.logger.Info("JobSink: on job detail", "job", job.ProviderJobID)
+	s.logger.Info("OnJobDetail", "jobID", job.ProviderJobID)
 
 	//
 	// TODO: Do we care if the same job detail was found multiple times?
 	//
+	go func() {
+		// Check if link already exists before the transaction
+		ctx := context.Background()
+		linkID := fmt.Sprintf("%s_%s", jobSearch.Criteria.ID, job.ID)
+		linkRef := s.fs.Collection(JobCriteriaLinkCollection).Doc(linkID)
+		linkDoc, err := linkRef.Get(ctx)
+		linkExists := err == nil && linkDoc.Exists()
 
-	// Check if link already exists before the transaction
-	ctx := context.Background()
-	linkID := fmt.Sprintf("%s_%s", jobSearch.Criteria.ID, job.ID)
-	linkRef := s.fs.Collection(JobCriteriaLinkCollection).Doc(linkID)
-	linkDoc, err := linkRef.Get(ctx)
-	linkExists := err == nil && linkDoc.Exists()
-
-	// Transaction for data operations only
-	err = s.fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		// 1. Save the job detail
-		if err := SaveJobDetailTx(ctx, s.fs, tx, &job); err != nil {
-			return fmt.Errorf("failed to save job detail: %w", err)
+		if err := ExtractJobDetailData(ctx, &job); err != nil {
+			s.logger.Error("failed to extract job detail data", "error", err, "jobID", job.ID)
+			return
 		}
 
-		if err := AddJobDetailToSearchTaskTx(ctx, s.fs, tx, jobSearch.ID, &job); err != nil {
-			return fmt.Errorf("failed to add job detail to search task: %w", err)
-		}
-
-		// 2. Link the job detail to the criteria (only if it doesn't exist)
-		if !linkExists {
-			// Create the link directly without reading inside the transaction
-			link := JobDetailCriteriaLink{
-				CriteriaID: jobSearch.Criteria.ID,
-				JobID:      job.ID,
-				CreatedAt:  time.Now(),
+		// Transaction for data operations only
+		err = s.fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+			// 1. Save the job detail
+			if err := SaveJobDetailTx(ctx, s.fs, tx, &job); err != nil {
+				return fmt.Errorf("failed to save job detail: %w", err)
 			}
-			if err := tx.Create(linkRef, &link); err != nil {
-				return fmt.Errorf("failed to create link: %w", err)
+
+			if err := AddJobDetailToSearchTaskTx(ctx, s.fs, tx, jobSearch.ID, &job); err != nil {
+				return fmt.Errorf("failed to add job detail to search task: %w", err)
 			}
+
+			// 2. Link the job detail to the criteria (only if it doesn't exist)
+			if !linkExists {
+				// Create the link directly without reading inside the transaction
+				link := JobDetailCriteriaLink{
+					CriteriaID: jobSearch.Criteria.ID,
+					JobID:      job.ID,
+					CreatedAt:  time.Now(),
+				}
+				if err := tx.Create(linkRef, &link); err != nil {
+					return fmt.Errorf("failed to create link: %w", err)
+				}
+			}
+
+			return nil
+		})
+
+		if err != nil {
+			s.logger.Error("failed to save job detail and link", "error", err)
+			return
 		}
-
-		return nil
-	})
-
-	if err != nil {
-		s.logger.Error("JobSink: failed to save job detail and link", "error", err)
-		return
-	}
+	}()
 }
 
 func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJobs int, errors []error) {
-	s.logger.Info("JobSink:OnSearchCompleted", "criteria", jobSearch.Criteria.ID, "total_jobs", totalJobs, "errors", errors)
+	s.logger.Info("SearnSearchCompleted", "criteria", jobSearch.Criteria.ID, "total_jobs", totalJobs, "errors", errors)
 
 	// TODO: Do this in a transaction
 	jobSearch.Status = SearchTaskStatusCompleted
@@ -118,7 +125,7 @@ func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJob
 
 	ctx := context.Background()
 	if err := UpdateSearchTask(ctx, s.fs, &jobSearch); err != nil {
-		s.logger.Error("JobSink: failed to update search task", "error", err)
+		s.logger.Error("failed to update search task", "error", err)
 	}
 
 	criteria := jobSearch.Criteria
@@ -129,15 +136,15 @@ func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJob
 
 	jobDetails, err := GetJobDetailsForSearchTask(ctx, s.fs, jobSearch.ID)
 	if err != nil {
-		s.logger.Error("JobSink: failed to get job details", "error", err)
+		s.logger.Error("failed to get job details", "error", err)
 		return
 	}
 
 	count, err := s.UpsertJobDetailEmbeddings(ctx, jobSearch.Criteria.ID, jobDetails)
 	if err != nil {
-		s.logger.Error("JobSink: failed to embed job details", "error", err)
+		s.logger.Error("failed to embed job details", "error", err)
 	}
-	s.logger.Info("JobSink: embedded job details", "count", count)
+	s.logger.Info("embedded job details", "count", count)
 
 	// s.processSubscriptions(ctx, jobSearch)
 }
@@ -193,16 +200,16 @@ func (s *SearchResultProcessor) UpsertJobDetailEmbeddings(ctx context.Context, c
 	return count, nil
 }
 
-// func (s *JobSink) processSubscriptions(ctx context.Context, jobSearch SearchJob) {
+// func (s *processSubscriptions(ctx context.Context, jobSearch SearchJob) {
 // 	subscriptions, err := GetCriteriaSubscribers(s.fs, jobSearch.Criteria.ID)
 // 	if err != nil {
-// 		s.logger.Error("JobSink: failed to get users subscribed to criteria", "error", err)
+// 		s.logger.Error("failed to get users subscribed to criteria", "error", err)
 // 		return
 // 	}
 
 // 	for _, subscription := range subscriptions {
 // 		if err := s.processor.EnqueueAnalysis(ctx, subscription.UserID, jobSearch.ID); err != nil {
-// 			s.logger.Error("JobSink: failed to queue job processing for user", "error", err, "user_id", subscription.UserID)
+// 			s.logger.Error("failed to queue job processing for user", "error", err, "user_id", subscription.UserID)
 // 		}
 // 	}
 // }

@@ -133,25 +133,35 @@
 
 {{define "job-card"}}
 <article class="job-card">
+    {{.UserJob.Score}}
     <hgroup>
-        <h3>{{.Title}}</h3>
-        <p class="company">{{.CompanyName}}</p>
+        <h3>{{.JobDetail.Title}}</h3>
+        <p class="company">{{.JobDetail.Company}}</p>
     </hgroup>
+    <nav>
+    <span>{{.JobDetail.PostedDate | approxAge}}</span>
+    {{if .JobDetail.URL}}
     <a href="{{.JobDetail.URL}}" target="_blank">View Job</a>
-    <details>
-        <summary>Rating: {{.Analysis.FinalJudgment.Rating}}</summary>
-        <p>{{.Analysis.FinalJudgment.Explanation}}</p>
-    </details>
+    {{end}}
+    {{if .JobDetail.ApplyURL}}
+    <a href="{{.JobDetail.ApplyURL}}" target="_blank">Apply Now</a>
+    {{end}}
+    </nav>
+    <!-- <details>
+        <summary>Rating: N/A</summary>
+        <p>[analysis]</p>
+    </details> -->
+
+
     <div class="job-content">
-        {{with .Summary}}
+        {{with .JobDetail.ExtractedData.Summary}}
         <div class="summary">
             <p>{{.}}</p>
         </div>
         {{end}}
-        {{with .Requirements}}
-        {{if .}}
-        <div class="requirements">
-            <h4>Requirements</h4>
+        {{with .JobDetail.ExtractedData.Responsibilities}}
+        <div class="responsibilities">
+            <h4>Responsibilities</h4>
             <ul>
                 {{range .}}
                 <li>{{.}}</li>
@@ -159,9 +169,27 @@
             </ul>
         </div>
         {{end}}
+        {{with .JobDetail.ExtractedData.Skills}}
+        <div class="skills">
+            <h4>Skills</h4>
+            <ul>
+                {{range .}}
+                <li>{{.}}</li>
+                {{end}}
+            </ul>
+        </div>
         {{end}}
-        {{with .Qualifications}}
-        {{if .}}
+        {{with .JobDetail.ExtractedData.Requirements}}
+        <div class="requirements">
+            <h4>Requirements</h4>
+            <ul>
+                {{range .}}
+                <li>{{.}}</li>
+                {{end}}
+            </ul>
+        {{end}}
+        </div>
+        {{with .JobDetail.ExtractedData.Qualifications}}
         <div class="qualifications">
             <h4>Qualifications</h4>
             <ul>
@@ -171,10 +199,19 @@
             </ul>
         </div>
         {{end}}
+        {{with .JobDetail.ExtractedData.BonusQualifications}}
+        <div class="bonus-qualifications">
+            <h4>Bonus Qualifications</h4>
+            <ul>
+                {{range .}}
+                <li>{{.}}</li>
+                {{end}}
+            </ul>
+        </div>
         {{end}}
     </div>
     <footer>
-        <small>Added {{.CreatedAt | humanDate}}</small>
+        <small>Added {{.JobDetail.CreatedAt | humanDate}}</small>
     </footer>
 </article>
 {{end}}
