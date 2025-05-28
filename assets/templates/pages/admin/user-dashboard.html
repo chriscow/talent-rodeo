@@ -1,0 +1,362 @@
+{{define "title"}}User Dashboard - Admin{{end}}
+
+{{define "page:main"}}
+<main class="container">
+    <h1>User Dashboard Viewer</h1>
+    <p>Select a user to view their dashboard and evaluate search result quality.</p>
+    
+    {{if .Error}}
+    <article class="error">Error: {{.Error}}</article>
+    {{end}}
+    
+    <form method="POST" autocomplete="off">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        
+        <div class="grid">
+            <div>
+                <label for="user_id">Select User</label>
+                <select name="user_id" id="user_id" required>
+                    <option value="">-- Select a User --</option>
+                    {{range .Users}}
+                        <option value="{{.ID}}" {{if eq $.SelectedUserID .ID}}selected{{end}}>
+                            {{.Name}} ({{.Email}}) - {{.State.Status.String}}
+                        </option>
+                    {{end}}
+                </select>
+            </div>
+            
+            {{if .SelectedUser}}
+            <div>
+                <label for="status">Job Status</label>
+                <select name="status" id="status">
+                    {{range $status := .JobStatuses}}
+                        <option value="{{$status}}" {{if eq $.ActiveStatus $status}}selected{{end}}>
+                            {{index $.StatusDisplayNames $status}}
+                        </option>
+                    {{end}}
+                </select>
+            </div>
+            
+            <div>
+                <label>
+                    <input type="checkbox" name="show_all" value="true" {{if .ShowAllRatings}}checked{{end}}>
+                    Show all ratings (including non-recommended)
+                </label>
+            </div>
+            {{end}}
+        </div>
+        
+        <button type="submit">View User Dashboard</button>
+    </form>
+    
+    {{if .SelectedUser}}
+    <section class="user-dashboard">
+        <header>
+            <h2>Dashboard for {{.SelectedUser.Name}} ({{.SelectedUser.Email}})</h2>
+            <p>
+                <strong>Status:</strong> {{.SelectedUser.State.Status.String}} | 
+                <strong>Created:</strong> {{.SelectedUser.CreatedAt | humanDate}} |
+                <strong>Jobs for {{index .StatusDisplayNames .ActiveStatus}}:</strong> {{.TotalJobsForStatus}}
+            </p>
+        </header>
+        
+        <!-- Include the same job status tabs as the regular dashboard -->
+        <nav class="job-status-tabs">
+            <ul>
+                {{range $status := .JobStatuses}}
+                <li {{if eq $.ActiveStatus $status}}class="active"{{end}}>
+                    <a href="#" onclick="document.querySelector('select[name=status]').value='{{$status}}'; document.querySelector('form').submit(); return false;">
+                        {{index $.StatusDisplayNames $status}}
+                    </a>
+                </li>
+                {{end}}
+            </ul>
+        </nav>
+        
+        <!-- Job listings section -->
+        <section id="jobs-container">
+            <header>
+                <h3>{{index .StatusDisplayNames .ActiveStatus}}</h3>
+            </header>
+            
+            {{if .Jobs}}
+                <div class="jobs-grid">
+                    {{range .Jobs}}
+                        {{template "job-card" .}}
+                    {{end}}
+                </div>
+                
+                {{if .HasNextPage}}
+                <article class="notice">
+                    <p>Showing first 10 results. There are more jobs available for this status.</p>
+                </article>
+                {{end}}
+            {{else}}
+                <article class="notice">
+                    {{if not .HasJobs}}
+                        <p>No {{.ActiveStatus}} jobs yet for this user.</p>
+                    {{else}}
+                        <p>No {{.ActiveStatus}} jobs found for this user.</p>
+                    {{end}}
+                </article>
+            {{end}}
+        </section>
+    </section>
+    {{end}}
+</main>
+{{end}}
+
+{{define "page:styles"}}
+<style>
+    .user-dashboard {
+        margin-top: 2rem;
+        padding-top: 2rem;
+        border-top: 1px solid var(--muted-border-color);
+    }
+    
+    .user-dashboard header {
+        margin-bottom: 2rem;
+    }
+    
+    .user-dashboard header h2 {
+        margin-bottom: 0.5rem;
+        color: var(--primary);
+    }
+    
+    .user-dashboard header p {
+        color: var(--muted-color);
+        font-size: 0.9rem;
+    }
+    
+    /* Job status tabs navigation */
+    .job-status-tabs ul {
+        display: flex;
+        list-style: none;
+        padding: 0;
+        margin: 1rem 0;
+        border-bottom: 1px solid var(--muted-border-color);
+    }
+    
+    .job-status-tabs li {
+        margin-right: 1rem;
+        padding: 0.5rem 1rem;
+    }
+    
+    .job-status-tabs li.active {
+        font-weight: bold;
+        border-bottom: 3px solid var(--primary);
+    }
+    
+    .job-status-tabs a {
+        text-decoration: none;
+        color: var(--primary);
+        cursor: pointer;
+    }
+    
+    .job-status-tabs a:hover {
+        color: var(--primary-hover);
+    }
+    
+    /* Jobs grid */
+    .jobs-grid {
+        display: grid;
+        gap: 1.5rem;
+        margin-top: 1rem;
+    }
+    
+    @media (min-width: 768px) {
+        .jobs-grid {
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+        }
+    }
+    
+    /* Job cards */
+    .job-card {
+        background: var(--card-background-color);
+        border: 1px solid var(--muted-border-color);
+        border-radius: var(--border-radius);
+        padding: 1.5rem;
+        box-shadow: var(--card-box-shadow);
+        transition: transform 0.2s ease;
+    }
+    
+    .job-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+    
+    .job-card hgroup {
+        margin-bottom: 1rem;
+    }
+    
+    .job-card h3 {
+        margin-bottom: 0.25rem;
+        color: var(--primary);
+        font-size: 1.1rem;
+    }
+    
+    .job-card .company {
+        color: var(--muted-color);
+        font-size: 0.9rem;
+        margin: 0;
+    }
+    
+    .job-content {
+        margin: 1rem 0;
+    }
+    
+    .job-card .summary {
+        margin-bottom: 1rem;
+        padding: 0.75rem;
+        background: var(--code-background-color);
+        border-radius: var(--border-radius);
+        font-size: 0.9rem;
+        line-height: 1.4;
+    }
+    
+    .job-card .requirements h4,
+    .job-card .qualifications h4,
+    .job-card .skills h4,
+    .job-card .responsibilities h4,
+    .job-card .bonus-qualifications h4 {
+        font-size: 0.9rem;
+        margin-bottom: 0.5rem;
+        color: var(--primary);
+    }
+    
+    .job-card .requirements ul,
+    .job-card .qualifications ul,
+    .job-card .skills ul,
+    .job-card .responsibilities ul,
+    .job-card .bonus-qualifications ul {
+        margin: 0 0 1rem 0;
+        padding-left: 1.25rem;
+    }
+    
+    .job-card .requirements li,
+    .job-card .qualifications li,
+    .job-card .skills li,
+    .job-card .responsibilities li,
+    .job-card .bonus-qualifications li {
+        font-size: 0.85rem;
+        line-height: 1.3;
+        margin-bottom: 0.25rem;
+    }
+    
+    .job-card footer {
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--muted-border-color);
+        font-size: 0.8rem;
+        color: var(--muted-color);
+    }
+    
+    /* Notices */
+    .notice {
+        padding: 1rem;
+        border-radius: var(--border-radius);
+        margin: 1rem 0;
+        background: var(--secondary-background);
+        border: 1px solid var(--secondary-border);
+    }
+    
+    .notice.error {
+        background: var(--del-background-color);
+        border-color: var(--del-color);
+        color: var(--del-color);
+    }
+</style>
+{{end}}
+
+
+
+{{define "job-card"}}
+
+{{with .JobDetails}}
+<article class="job-card">
+    <hgroup>
+        <h3>{{.Title}}</h3>
+        <p class="company">{{.Company}} - <em>Posted {{.PostedDate | approxAge}}</em></p>
+    </hgroup>
+    <div>
+        <span>
+    {{if .URL}}
+    <a href="{{.URL}}" target="_blank">View Job</a>
+    {{end}}
+    {{if .ApplyURL}}
+    &nbsp;&nbsp;<a href="{{.ApplyURL}}" target="_blank">Apply Now</a>
+    {{end}}
+    </span>
+    </div>
+    <br />
+<!-- 
+    <details>&nbsp;
+         <summary>Rating: N/A</summary>
+        <p>[analysis]</p> 
+    </details>
+-->
+
+
+    <div class="job-content">
+        {{with .ExtractedData.Summary}}
+        <div class="summary">
+            <p>{{.}}</p>
+        </div>
+        {{end}}
+        {{with .ExtractedData.Responsibilities}}
+        <div class="responsibilities">
+            <h4>Responsibilities</h4>
+            <ul>
+                {{range .}}
+                <li>{{.}}</li>
+                {{end}}
+            </ul>
+        </div>
+        {{end}}
+        {{with .ExtractedData.Skills}}
+        <div class="skills">
+            <h4>Skills</h4>
+            <ul>
+                {{range .}}
+                <li>{{.}}</li>
+                {{end}}
+            </ul>
+        </div>
+        {{end}}
+        {{with .ExtractedData.Requirements}}
+        <div class="requirements">
+            <h4>Requirements</h4>
+            <ul>
+                {{range .}}
+                <li>{{.}}</li>
+                {{end}}
+            </ul>
+        {{end}}
+        </div>
+        {{with .ExtractedData.Qualifications}}
+        <div class="qualifications">
+            <h4>Qualifications</h4>
+            <ul>
+                {{range .}}
+                <li>{{.}}</li>
+                {{end}}
+            </ul>
+        </div>
+        {{end}}
+        {{with .ExtractedData.BonusQualifications}}
+        <div class="bonus-qualifications">
+            <h4>Bonus Qualifications</h4>
+            <ul>
+                {{range .}}
+                <li>{{.}}</li>
+                {{end}}
+            </ul>
+        </div>
+        {{end}}
+    </div>
+{{end}}
+    <footer>
+        <small>Added {{.JobDetails.CreatedAt | humanDate}} &nbsp; | &nbsp; {{percentage .UserJob.Score 1}}</small>
+    </footer>
+</article>
+{{end}}

@@ -1,18 +1,22 @@
 You are tasked with creating a steering query based on a transcript of a conversation between a job-seeking user and an AI assistant. The user will provide the transcript below.
 
-Your goal is to analyze this transcript and create a steering query that accurately represents the user's job search preferences. The steering query should be structured as follows:
+Your goal is to analyze this transcript and create a steering query that accurately represents the user's job search preferences. 
 
-1. Query: The main job title or skill we will search on
+The steering query is structured with the following fields:
+
+1. Query: The one job title, skill or programming language we will search on (required)
 2. MoveToward: A concept to move results toward (optional)
 3. MoveAway: A concept to move results away from (optional)
+4. RerankingQuery: An all encompassing sentence that combines the concepts of Query, MoveToward and MoveAway (required)
 
 To complete this task, follow these steps:
 
-1. Carefully read and analyze the provided transcript.
+1. Carefully read and analyze the provided transcript and formulate your reasoning for the above four fields.
+   - For each component of the steering query, provide the actual quotes from the transcript that support your decisions.
 
 2. Identify the main search query:
    - Look for the AI assistant's suggested search query and any corrections or additions made by the user.
-   - If the user agrees with the suggestion, use that as the main Query.
+   - If the user agrees with the suggestion, use cannonical form as the main term.
    - If the user corrects or modifies the suggestion, use the corrected version as the main Query.
    - If the user proposes multiple suggestions, determine between the AI's suggested search query and the user's suggestions to select one as the main search query. Incorporate the rest into the MoveToward concept below.
    - Use the canonical form for the terms of the search query (i.e. "Go (Golang)" instead of "Go").
@@ -29,10 +33,6 @@ To complete this task, follow these steps:
 5. Create the Reranking Query
    - Combine Query, MoveToward concept and MoveAway concept into a concise query in sentence form to use for a reranking transformer to rerank the results.
 
-6. Formulate your reasoning:
-   - For each component of the steering query, provide the actual quotes from the transcript that support your decisions.
-   - Explain your rationale for the chosen ForceToward and ForceAway values.
-
 7. Create the final JSON output:
    - Structure the steering query as a JSON object that can be unmarshaled into the provided Go struct.
    - Ensure all fields are properly formatted and values are appropriate types (string for Query, MoveToward, and MoveAway; float64 for ForceToward and ForceAway).
@@ -41,7 +41,7 @@ Your final output should be a JSON object containing only the steering query com
 
 <answer>
 {
-  "Query": "Canonical form of the main search term.",
+  "Query": "Canonical form of the main search term. Programming language or job title most likely",
   "MoveToward": "Sentence describing what semantic concepts to move toward",
   "MoveAway": "Sentence describing what semantic concepts to move away from",
   "RerankingQuery": "All encompasing sentence that combines the concepts of Query, MoveToward and MoveAway"
