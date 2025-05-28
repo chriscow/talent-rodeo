@@ -172,7 +172,7 @@ func ExtractJobDetailData(ctx context.Context, job *JobDetail) error {
 
 	prompt := string(pb) + "\n\n```json\n" + string(b) + "\n```\n\n"
 
-	data, err := tools.StructuredAsk[JobDetailExtractedData](ctx, prompt, "extracted-data",
+	data, err := tools.StructuredAsk[JobDetailExtractedData](ctx, "extracted-data", prompt,
 		tools.WithModel(tools.DeepSeekChat))
 	if err != nil {
 		return fmt.Errorf("failed to summarize job detail: %w", err)
