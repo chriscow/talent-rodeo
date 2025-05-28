@@ -35,7 +35,6 @@ import (
 	"github.com/lmittmann/tint"
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
-	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/pusher/pusher-http-go/v5"
 )
@@ -403,21 +402,21 @@ func setupPusher(logger *slog.Logger) *pusher.Client {
 }
 
 // setupNATSHandler sets up the NATS client and returns the handler.
-func setupNATSHandler(natsURL string, logger *slog.Logger) (*th.NATSMessageScheduler, error) {
-	// Connect to NATS
-	nc, err := nats.Connect(natsURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to NATS: %w", err)
-	}
+// func setupNATSHandler(natsURL string, logger *slog.Logger) (*th.NATSMessageScheduler, error) {
+// 	// Connect to NATS
+// 	nc, err := nats.Connect(natsURL)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("failed to connect to NATS: %w", err)
+// 	}
 
-	// Create JetStream context
-	js, err := jetstream.New(nc)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create JetStream context: %w", err)
-	}
+// 	// Create JetStream context
+// 	js, err := jetstream.New(nc)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("failed to create JetStream context: %w", err)
+// 	}
 
-	return th.NewNATSMessageScheduler(js, logger), nil
-}
+// 	return th.NewNATSMessageScheduler(js, logger), nil
+// }
 
 func initS3Client() (*s3.S3, error) {
 	s3Config := &aws.Config{
