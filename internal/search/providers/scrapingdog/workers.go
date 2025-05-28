@@ -340,7 +340,9 @@ func (wm *WorkerManager) processQueuedSearch(ctx context.Context, workerID int, 
 			continue
 		}
 
-		details.URL = job.URL // this is the original URL from the job listing
+		details.URL = job.URL                       // this is the original URL from the job listing
+		details.CompanyLogo = job.CompanyLogo       // use the logo from the listing
+		details.CompanyProfile = job.CompanyProfile // use the profile from the listing
 
 		// Notify about the new job
 		if wm.eventHandler != nil {

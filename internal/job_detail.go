@@ -34,10 +34,14 @@ type JobDetail struct {
 	ProviderJobID string
 	Title         string
 	Company       string
-	Location      string
-	PostedDate    time.Time
-	URL           string
-	ApplyURL      string // Direct application link, if different from job URL
+
+	CompanyLogo    string
+	CompanyProfile string
+
+	Location   string
+	PostedDate time.Time
+	URL        string
+	ApplyURL   string // Direct application link, if different from job URL
 
 	// Detailed information
 	Description string // Complete job description

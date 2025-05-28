@@ -54,9 +54,8 @@ var TemplateFuncs = template.FuncMap{
 	"decr":        decr,
 	"formatInt":   formatInt,
 	"formatFloat": formatFloat,
-	"mul": func(a, b float32) float32 {
-		return a * b
-	},
+	"mul":         mul,
+	"percentage":  percentage,
 	"add": func(a, b int) int {
 		return a + b
 	},
@@ -107,25 +106,51 @@ func ApproxAge(t time.Time) string {
 
 	ds := int(math.Round(d.Seconds()))
 	if ds < 60 {
+		if ds == 1 {
+			return "1 second ago"
+		}
+		if ds == 0 {
+			return "just now"
+		}
 		return fmt.Sprintf("%d seconds ago", ds)
 	}
 
 	dm := int(math.Round(d.Minutes()))
 	if dm < 60 {
+		if dm == 1 {
+			return "1 minute ago"
+		} else if dm == 0 {
+			return "just now"
+		}
 		return fmt.Sprintf("%d minutes ago", dm)
 	}
 
 	dh := int(math.Round(d.Hours()))
 	if dh < 24 {
+		if dh == 1 {
+			return "1 hour ago"
+		} else if dh == 0 {
+			return "just now"
+		}
 		return fmt.Sprintf("%d hours ago", dh)
 	}
 
 	dd := int(math.Round(float64(d / day)))
 	if dd < 365 {
+		if dd == 1 {
+			return "1 day ago"
+		} else if dd == 0 {
+			return "just now"
+		}
 		return fmt.Sprintf("%d days ago", dd)
 	}
 
 	dy := int(math.Round(float64(d / year)))
+	if dy == 1 {
+		return "1 year ago"
+	} else if dy == 0 {
+		return "just now"
+	}
 	return fmt.Sprintf("%d years ago", dy)
 }
 
@@ -294,6 +319,68 @@ func toInt64(i any) (int64, error) {
 	}
 
 	return 0, fmt.Errorf("unable to convert type %T to int", i)
+}
+
+// mul multiplies two numeric values and returns a float64
+func mul(a, b any) (float64, error) {
+	aFloat, err := toFloat64(a)
+	if err != nil {
+		return 0, fmt.Errorf("first argument: %w", err)
+	}
+
+	bFloat, err := toFloat64(b)
+	if err != nil {
+		return 0, fmt.Errorf("second argument: %w", err)
+	}
+
+	return aFloat * bFloat, nil
+}
+
+// percentage converts a decimal value to a percentage string with specified decimal places
+func percentage(value any, decimalPlaces int) (string, error) {
+	f, err := toFloat64(value)
+	if err != nil {
+		return "", fmt.Errorf("unable to convert to percentage: %w", err)
+	}
+
+	// Convert to percentage (multiply by 100) and format
+	percentage := f * 100
+	format := "%." + strconv.Itoa(decimalPlaces) + "f%%"
+	return printer.Sprintf(format, percentage), nil
+}
+
+// toFloat64 converts various numeric types to float64
+func toFloat64(i any) (float64, error) {
+	switch v := i.(type) {
+	case int:
+		return float64(v), nil
+	case int8:
+		return float64(v), nil
+	case int16:
+		return float64(v), nil
+	case int32:
+		return float64(v), nil
+	case int64:
+		return float64(v), nil
+	case uint:
+		return float64(v), nil
+	case uint8:
+		return float64(v), nil
+	case uint16:
+		return float64(v), nil
+	case uint32:
+		return float64(v), nil
+	case uint64:
+		return float64(v), nil
+	case float32:
+		return float64(v), nil
+	case float64:
+		return v, nil
+	case string:
+		return strconv.ParseFloat(v, 64)
+	}
+
+	return 0, fmt.Errorf("unable to convert type %T to float64", i)
 }
 
 // humanDate formats a time.Time into a human-readable date
