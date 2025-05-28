@@ -243,10 +243,6 @@ func (p *Processor) process(ctx context.Context) error {
 	var eligibleCriteria []internal.SearchCriteria
 
 	for _, criteria := range allCriteria {
-		// Must have subscribers
-		if criteria.SubscriberCount <= 0 {
-			continue
-		}
 
 		// Must have been searched recently
 		if criteria.LastSearchedAt == nil || criteria.LastSearchedAt.Before(twentyFourHoursAgo) {
@@ -256,6 +252,10 @@ func (p *Processor) process(ctx context.Context) error {
 		// Must not have been published recently
 		if criteria.LastPublishedAt != nil && criteria.LastPublishedAt.After(twentyFourHoursAgo) {
 			continue
+		}
+
+		if criteria.SubscriberCount <= 0 {
+			p.logger.Warn("criteria has no subscribers", "id", criteria.ID)
 		}
 
 		eligibleCriteria = append(eligibleCriteria, criteria)
@@ -314,13 +314,13 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 		return nil
 	}
 
-	p.logger.Info("found new jobs for criteria", "jobs-count", len(jobIDs), "id", criteria.ID)
-
 	// Extract user IDs from subscriptions
 	userIDs := make([]string, len(subscribers))
 	for i, sub := range subscribers {
 		userIDs[i] = sub.UserID
 	}
+
+	p.logger.Info("found new jobs for criteria", "jobs-count", len(jobIDs), "id", criteria.ID, "user-count", len(userIDs))
 
 	// Get all users in one call
 	users, err := internal.GetUsersByIDs(ctx, p.fs, userIDs)
@@ -329,6 +329,7 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 	}
 
 	for _, user := range users {
+		p.logger.Info("refreshing user jobs", "user-id", user.ID, "criteria-id", criteria.ID)
 		if err := internal.RefreshUserJobs(ctx, p.fs, user, criteria, p.settings.JobThresholdScore); err != nil {
 			// Log error but continue with other users
 			p.logger.Error("Error processing jobs for user", "user-id", user.ID, "error", err)
