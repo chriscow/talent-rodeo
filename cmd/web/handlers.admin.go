@@ -592,3 +592,116 @@ func (app *application) adminFeatureFlags(w http.ResponseWriter, r *http.Request
 		app.serverError(w, r, err)
 	}
 }
+
+func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	data := app.newTemplateData(r)
+
+	// Fetch all users for the dropdown
+	users, err := internal.ListUsers(ctx, app.fs, 100, 0) // Limiting to 100 users
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+	data["Users"] = users
+
+	// Handle POST request for user selection
+	if r.Method == http.MethodPost {
+		if err := r.ParseForm(); err != nil {
+			app.serverError(w, r, fmt.Errorf("failed to parse form: %w", err))
+			return
+		}
+
+		selectedUserID := r.PostForm.Get("user_id")
+		if selectedUserID == "" {
+			data["Error"] = "No user selected"
+		} else {
+			// Fetch the selected user's details
+			selectedUser, found, err := internal.GetUser(ctx, app.fs, selectedUserID)
+			if err != nil {
+				app.serverError(w, r, fmt.Errorf("failed to get user: %w", err))
+				return
+			}
+			if !found {
+				data["Error"] = "User not found"
+			} else {
+				data["SelectedUser"] = selectedUser
+				data["SelectedUserID"] = selectedUserID
+
+				// Get user's dashboard data similar to showDashboard
+				status := internal.JobStatusNew
+				if statusParam := r.PostForm.Get("status"); statusParam != "" {
+					if parsedStatus, isValid := internal.ParseJobStatus(statusParam); isValid {
+						status = parsedStatus
+					}
+				}
+
+				showAllRatings := r.PostForm.Get("show_all") == "true"
+				pageSize := 10 // Show more jobs in admin view
+
+				// Get the job count for the selected status
+				statusJobCount, err := internal.GetJobsCount(ctx, app.fs, selectedUser.ID, status, showAllRatings)
+				if err != nil {
+					app.logger.Warn("adminUserDashboard: failed to get job count", "error", err, "user_id", selectedUserID)
+					statusJobCount = 0
+				}
+
+				// Get paginated jobs by status
+				userJobs, nextPageToken, err := internal.GetUserJobsSorted(ctx, app.fs, selectedUser.ID, status, pageSize, "", showAllRatings)
+				if err != nil {
+					app.logger.Warn("adminUserDashboard: failed to get user jobs", "error", err, "user_id", selectedUserID)
+					userJobs = []*internal.UserJob{}
+				}
+
+				// Combine user jobs with job details
+				jobs := map[string]JobWithDetails{}
+				for _, job := range userJobs {
+					jobs[job.JobRef.ID] = JobWithDetails{
+						UserJob: job,
+					}
+				}
+
+				jobIDs := make([]string, 0, len(jobs))
+				for id := range jobs {
+					jobIDs = append(jobIDs, id)
+				}
+
+				if len(jobIDs) > 0 {
+					jobDetails, err := internal.GetJobDetailsByIDs(ctx, app.fs, jobIDs)
+					if err != nil {
+						app.logger.Warn("adminUserDashboard: failed to get job details", "error", err, "user_id", selectedUserID)
+					} else {
+						// Merge job details into the jobs map
+						for _, detail := range jobDetails {
+							if job, exists := jobs[detail.ID]; exists {
+								job.JobDetail = detail
+								jobs[detail.ID] = job
+							}
+						}
+					}
+				}
+
+				// Add dashboard data to template
+				data["HasJobs"] = len(jobs) > 0 || statusJobCount > 0
+				data["ActiveStatus"] = string(status)
+				data["Jobs"] = jobs
+				data["HasNextPage"] = nextPageToken != ""
+				data["TotalJobsForStatus"] = statusJobCount
+				data["JobStatuses"] = internal.GetJobStatuses()
+				data["StatusDisplayNames"] = map[string]string{
+					"new":      "New Jobs",
+					"viewed":   "Viewed Jobs",
+					"saved":    "Saved Jobs",
+					"applied":  "Applied Jobs",
+					"rejected": "Rejected Jobs",
+				}
+				data["ShowAllRatings"] = showAllRatings
+				data["TestMode"] = true // Enable test mode features in dashboard view
+			}
+		}
+	}
+
+	if err := response.Page(w, http.StatusOK, data, "pages/admin/user-dashboard.html"); err != nil {
+		app.serverError(w, r, err)
+	}
+}
