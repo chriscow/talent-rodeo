@@ -133,24 +133,27 @@
 
 {{define "job-card"}}
 <article class="job-card">
-    {{.UserJob.Score}}
     <hgroup>
         <h3>{{.JobDetail.Title}}</h3>
-        <p class="company">{{.JobDetail.Company}}</p>
+        <p class="company">{{.JobDetail.Company}} - <em>Posted {{.JobDetail.PostedDate | approxAge}}</em></p>
     </hgroup>
-    <nav>
-    <span>{{.JobDetail.PostedDate | approxAge}}</span>
+    <div>
+        <span>
     {{if .JobDetail.URL}}
     <a href="{{.JobDetail.URL}}" target="_blank">View Job</a>
     {{end}}
     {{if .JobDetail.ApplyURL}}
-    <a href="{{.JobDetail.ApplyURL}}" target="_blank">Apply Now</a>
+    &nbsp;&nbsp;<a href="{{.JobDetail.ApplyURL}}" target="_blank">Apply Now</a>
     {{end}}
-    </nav>
-    <!-- <details>
-        <summary>Rating: N/A</summary>
-        <p>[analysis]</p>
-    </details> -->
+    </span>
+    </div>
+    <br />
+<!-- 
+    <details>&nbsp;
+         <summary>Rating: N/A</summary>
+        <p>[analysis]</p> 
+    </details>
+-->
 
 
     <div class="job-content">
@@ -211,7 +214,7 @@
         {{end}}
     </div>
     <footer>
-        <small>Added {{.JobDetail.CreatedAt | humanDate}}</small>
+        <small>Added {{.JobDetail.CreatedAt | humanDate}} &nbsp; | &nbsp; {{percentage .UserJob.Score 1}}</small>
     </footer>
 </article>
 {{end}}
