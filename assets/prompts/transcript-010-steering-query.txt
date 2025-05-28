@@ -41,7 +41,7 @@ Your final output should be a JSON object containing only the steering query com
 
 <answer>
 {
-  "Query": "Main search term",
+  "Query": "Canonical form of the main search term.",
   "MoveToward": "Sentence describing what semantic concepts to move toward",
   "MoveAway": "Sentence describing what semantic concepts to move away from",
   "RerankingQuery": "All encompasing sentence that combines the concepts of Query, MoveToward and MoveAway"
