@@ -36,5 +36,7 @@ func SendPusherRedirect(psh *pusher.Client, userID string, url string) error {
 		return err
 	}
 
+	fmt.Println("SendPusherRedirect: redirect sent to user", userID, "to", url)
+
 	return nil
 }
