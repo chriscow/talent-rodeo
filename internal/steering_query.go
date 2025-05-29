@@ -188,12 +188,11 @@ func GenerateSteeringQuery(ctx context.Context, transcript *Transcript, opts ...
 		return nil, fmt.Errorf("failed to read steering query prompt: %w", err)
 	}
 
-	prompt := `<transcript>` + transcript.String() + `</transcript>`
+	prompt := string(tmpl) + `\n\n<transcript>` + transcript.String() + `</transcript>`
 
 	options := []tools.Option{
-		tools.WithSystemMessage(string(tmpl)),
-		tools.WithModel(tools.DeepSeekReasoner),
-		tools.WithMaxTokens(5000),
+		tools.WithModel(tools.DeepSeekChat),
+		tools.WithMaxTokens(8192),
 	}
 
 	if len(opts) > 0 {

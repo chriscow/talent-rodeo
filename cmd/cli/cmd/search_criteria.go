@@ -137,7 +137,7 @@ func runCreateCriteria(cmd *cobra.Command, args []string) error {
 	// }
 
 	// Create search criteria
-	criteria, err := internal.CreateSearchCriteria(ctx, fs, criteriaQueryFlag, criteriaGeoIDFlag, criteriaMaxPagesFlag)
+	criteria, err := internal.CreateSearchCriteria(ctx, fs, criteriaQueryFlag, criteriaGeoIDFlag, criteriaMaxPagesFlag, internal.ListingAgeDay)
 	if err != nil {
 		return fmt.Errorf("failed to create search criteria: %w", err)
 	}

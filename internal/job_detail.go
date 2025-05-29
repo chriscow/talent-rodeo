@@ -345,18 +345,18 @@ func DeleteJobDetailsByPrefix(ctx context.Context, fs *FirestoreClient, prefix s
 }
 
 // GetJobDetailsByIDs retrieves multiple job details by their IDs
-func GetJobDetailsByIDs(ctx context.Context, fs *FirestoreClient, ids []string) ([]*JobDetail, error) {
+func GetJobDetailsByIDs(ctx context.Context, fs *FirestoreClient, ids []string) ([]JobDetail, error) {
 	if len(ids) == 0 {
-		return []*JobDetail{}, nil
+		return []JobDetail{}, nil
 	}
 
 	// First check cache
-	var result []*JobDetail
+	var result []JobDetail
 	var missingIDs []string
 
 	for _, id := range ids {
 		if jobDetail, ok := fs.jobDetailCache.Get(id); ok {
-			result = append(result, jobDetail)
+			result = append(result, *jobDetail)
 		} else {
 			missingIDs = append(missingIDs, id)
 		}
@@ -391,7 +391,7 @@ func GetJobDetailsByIDs(ctx context.Context, fs *FirestoreClient, ids []string) 
 			fs.jobDetailCache.SetWithTTL(jobDetail.ID, &jobDetail, 1, 1*time.Hour)
 
 			// Add to result
-			result = append(result, &jobDetail)
+			result = append(result, jobDetail)
 		}
 	}
 

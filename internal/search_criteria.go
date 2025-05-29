@@ -14,9 +14,17 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+type ListingAge string
+
 const (
 	DefaultMaxPages          = 5
 	searchCriteriaCollection = "search_criteria"
+
+	ListingAgeDay   ListingAge = "day"   // Last 24 hours
+	ListingAgeWeek  ListingAge = "week"  // Last 7 days
+	ListingAgeMonth ListingAge = "month" // Last 30 days
+
+	DefaultListingAge ListingAge = ListingAgeDay // Default to "day" if not specified
 )
 
 // SearchCriteria defines the parameters used to search for jobs.
@@ -30,6 +38,7 @@ type SearchCriteria struct {
 	Experience      []string
 	WorkType        *string
 	MaxPages        int
+	ListingAge      ListingAge // e.g., "day", "week", "month"
 	Error           string
 	SubscriberCount int
 	LastSearchedAt  *time.Time
@@ -50,12 +59,13 @@ func MakeSearchCriteriaID(query string, geoID string) string {
 	return funcs.Slugify(fmt.Sprintf("%s-%s", query, geoID))
 }
 
-func CreateSearchCriteria(ctx context.Context, fs *FirestoreClient, query string, geoID string, maxPages int) (*SearchCriteria, error) {
+func CreateSearchCriteria(ctx context.Context, fs *FirestoreClient, query, geoID string, maxPages int, age ListingAge) (*SearchCriteria, error) {
 	criteria := &SearchCriteria{
 		ID:              MakeSearchCriteriaID(query, geoID),
 		Query:           query,
 		GeoID:           geoID,
 		MaxPages:        maxPages,
+		ListingAge:      age,
 		SubscriberCount: 0,
 	}
 
@@ -90,19 +100,24 @@ func GetSearchCriteria(ctx context.Context, fs *FirestoreClient, id string) (*Se
 // that either have never been searched (LastSearchedAt is nil) or haven't
 // been searched in the last 24 hours.
 func GetSearchCriteriaNeedsSearch(ctx context.Context, fs *FirestoreClient) ([]SearchCriteria, error) {
+	ids, err := ListSubscribedCriteriaIDs(ctx, fs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list subscribed criteria IDs: %w", err)
+	}
+	if len(ids) == 0 {
+		// No subscribed criteria, return empty slice
+		return []SearchCriteria{}, nil
+	}
+
 	coll := fs.Collection(searchCriteriaCollection)
+	// Filter the collection to only include criteria that are subscribed
+	baseQuery := coll.WhereEntity(firestore.PropertyFilter{Path: "ID", Operator: "in", Value: ids})
 
 	// Calculate 24 hours ago
 	twentyFourHoursAgo := time.Now().Add(-24 * time.Hour)
 
-	// Base query on the collection
-	baseQuery := coll.Query
-
-	// First filter: Only consider criteria with SubscriberCount > 0
-	q := baseQuery.Where("SubscriberCount", ">", 0)
-
-	// Then add condition for search timing using an OR filter
-	q = q.WhereEntity(firestore.OrFilter{
+	// Add condition for search timing using an OR filter
+	q := baseQuery.WhereEntity(firestore.OrFilter{
 		Filters: []firestore.EntityFilter{
 			firestore.PropertyFilter{Path: "LastSearchedAt", Operator: "==", Value: nil},
 			firestore.PropertyFilter{Path: "LastSearchedAt", Operator: "<", Value: twentyFourHoursAgo},

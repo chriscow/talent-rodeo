@@ -36,6 +36,10 @@ func (u *userNotifier) OnJobDetail(task internal.SearchTask, details internal.Jo
 	internal.SendPusherMessage(u.publisher, u.userID, "Searching: "+details.Title, nil)
 }
 
+func (u *userNotifier) OnPageComplete(task internal.SearchTask, page int, jobsFound int, errors []error) {
+	fmt.Println("userNotifier:OnPageComplete", task, page, jobsFound, errors)
+}
+
 func (u *userNotifier) OnSearchCompleted(task internal.SearchTask, totalJobs int, errors []error) {
 	fmt.Println("userNotifier:OnSearchCompleted", task, totalJobs, errors)
 	u.dispatch.Deregister(u.userID)
@@ -179,8 +183,12 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 		}
 
 		//
-		// If a new criteria was created, we need to queue an immediate search
+		// If a new criteria was created, we need to queue an immediate search.
+		// We also increase / broaden the first search for a new criteria.
 		//
+		criteria.MaxPages = internal.DefaultMaxPages * 5 // Increase the first search to get more results
+		criteria.ListingAge = internal.ListingAgeWeek    // Do a week instead of a day
+
 		logger.Debug("search criteria created", "user-id", user.ID, "criteria-id", criteria.ID)
 		jobSearch, err := internal.CreateSearchTask(ctx, fs, *criteria, "scrapingdog")
 		if err != nil {
@@ -223,11 +231,11 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 	if !isNewCriteria {
 		logger.Debug("refreshing user jobs", "user-id", user.ID, "criteria-id", criteria.ID)
 		internal.SendPusherMessage(psh, user.ID, "Refreshing your results", nil)
-		if err := internal.RefreshUserJobs(ctx, fs, user, *criteria, 0); err != nil {
-			logger.Error("failed to refresh user jobs", "error", err)
-			hub.CaptureException(err)
-			return
-		}
+		// if err := internal.RefreshUserJobs(ctx, fs, user, *criteria, 0); err != nil {
+		// 	logger.Error("failed to refresh user jobs", "error", err)
+		// 	hub.CaptureException(err)
+		// 	return
+		// }
 
 		internal.SendPusherRedirect(psh, user.ID, "/dashboard")
 	}
@@ -327,7 +335,7 @@ func getOrCreateSearchCriteria(ctx context.Context, fs *internal.FirestoreClient
 		return criteria, false, nil
 	}
 
-	criteria, err = internal.CreateSearchCriteria(ctx, fs, steeringQuery, geoID, internal.DefaultMaxPages)
+	criteria, err = internal.CreateSearchCriteria(ctx, fs, steeringQuery, geoID, internal.DefaultMaxPages, internal.DefaultListingAge)
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to create search criteria: %w", err)
 	}
