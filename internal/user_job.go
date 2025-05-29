@@ -489,68 +489,68 @@ func DeleteAllUserJobsByPrefix(ctx context.Context, fs *FirestoreClient, prefix 
 //
 // The function skips users without a steering query.
 // If no matching jobs are found for the user, it logs this and returns without error.
-func RefreshUserJobs(ctx context.Context, fs *FirestoreClient, user *User, criteria SearchCriteria, threshold float64) error {
-	// Skip users without a steering query
-	if user.SteeringQuery == nil {
-		return fmt.Errorf("user %s has no steering query", user.ID)
-	}
+// func RefreshUserJobs(ctx context.Context, fs *FirestoreClient, user *User, criteria SearchCriteria, threshold float64) error {
+// 	// Skip users without a steering query
+// 	if user.SteeringQuery == nil {
+// 		return fmt.Errorf("user %s has no steering query", user.ID)
+// 	}
 
-	// Search for jobs using the user's steering query and the criteria ID
-	params := DefaultHybridSearchParams()
-	scoredJobs, err := SemanticSearchJobs(ctx, user.SteeringQuery, criteria.ID, DefaultUserJobsTopK, params)
-	if err != nil {
-		return fmt.Errorf("failed to search jobs for user %s: %w", user.ID, err)
-	}
+// 	// Search for jobs using the user's steering query and the criteria ID
+// 	params := DefaultHybridSearchParams()
+// 	scoredJobs, err := SemanticSearchJobs(ctx, user.SteeringQuery, criteria.ID, DefaultUserJobsTopK, params)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to search jobs for user %s: %w", user.ID, err)
+// 	}
 
-	if len(scoredJobs) == 0 {
-		return nil
-	}
+// 	if len(scoredJobs) == 0 {
+// 		return nil
+// 	}
 
-	// This only counts as one read.
-	jobs, err := ListUserJobs(ctx, fs, user.ID)
-	if err != nil {
-		return fmt.Errorf("failed to list user jobs for user %s: %w", user.ID, err)
-	}
+// 	// This only counts as one read.
+// 	jobs, err := ListUserJobs(ctx, fs, user.ID)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to list user jobs for user %s: %w", user.ID, err)
+// 	}
 
-	// Create a map of existing job IDs for quick lookup
-	existingJobIDs := make(map[string]UserJob, len(jobs))
-	for _, job := range jobs {
-		existingJobIDs[job.ID] = job
-	}
+// 	// Create a map of existing job IDs for quick lookup
+// 	existingJobIDs := make(map[string]UserJob, len(jobs))
+// 	for _, job := range jobs {
+// 		existingJobIDs[job.ID] = job
+// 	}
 
-	jobRefs := []UserJob{}
+// 	jobRefs := []UserJob{}
 
-	// Create a user job for each matching job
-	for _, scoredJob := range scoredJobs {
+// 	// Create a user job for each matching job
+// 	for _, scoredJob := range scoredJobs {
 
-		if scoredJob.Score < threshold {
-			// Skip jobs below the threshold
-			continue
-		}
+// 		if scoredJob.Score < threshold {
+// 			// Skip jobs below the threshold
+// 			continue
+// 		}
 
-		jobID := scoredJob.JobDetail.ID
+// 		jobID := scoredJob.JobDetail.ID
 
-		job := UserJob{
-			ID:            jobID,
-			Score:         scoredJob.Score,
-			JobRef:        fs.Collection(JobDetailsCollection).Doc(jobID),
-			CreatedAt:     time.Now(),
-			UpdatedAt:     time.Now(),
-			Status:        JobStatusNew, // TODO: Once we have LLM analysis, this will be set to JobStatusUnprocessed
-			IsRecommended: true,         // TODO: When we have LLM analysis, set this based on the analysis
-		}
+// 		job := UserJob{
+// 			ID:            jobID,
+// 			Score:         scoredJob.Score,
+// 			JobRef:        fs.Collection(JobDetailsCollection).Doc(jobID),
+// 			CreatedAt:     time.Now(),
+// 			UpdatedAt:     time.Now(),
+// 			Status:        JobStatusNew, // TODO: Once we have LLM analysis, this will be set to JobStatusUnprocessed
+// 			IsRecommended: true,         // TODO: When we have LLM analysis, set this based on the analysis
+// 		}
 
-		// Check if the user already has this job
-		if _, exists := existingJobIDs[jobID]; exists {
-			continue // Skip if the job already exists
-		}
+// 		// Check if the user already has this job
+// 		if _, exists := existingJobIDs[jobID]; exists {
+// 			continue // Skip if the job already exists
+// 		}
 
-		jobRefs = append(jobRefs, job)
-	}
+// 		jobRefs = append(jobRefs, job)
+// 	}
 
-	// Create user jobs in batch
-	return CreateUserJobsBatch(ctx, fs, user.ID, jobRefs)
-}
+// 	// Create user jobs in batch
+// 	return CreateUserJobsBatch(ctx, fs, user.ID, jobRefs)
+// }
 
 // isYesRating checks if a rating contains "yes" (case insensitive)
 func isYesRating(rating string) bool {
@@ -601,7 +601,7 @@ func GetSemanticJobsForUser(ctx context.Context, fs *FirestoreClient, user *User
 	for _, job := range jobDetails {
 		if scoredJob, exists := jobMap[job.ID]; exists {
 			// Update the job detail with the full job data
-			scoredJob.JobDetail = *job
+			scoredJob.JobDetail = job
 			jobMap[job.ID] = scoredJob
 		}
 	}

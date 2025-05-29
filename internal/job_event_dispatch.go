@@ -9,6 +9,7 @@ type JobEventHandler interface {
 	OnSearchStarted(task SearchTask)
 	OnJobListing(task SearchTask, listing JobListing)
 	OnJobDetail(task SearchTask, details JobDetail)
+	OnPageComplete(task SearchTask, page int, jobsFound int, errors []error)
 	OnSearchCompleted(task SearchTask, totalJobs int, errors []error)
 }
 
@@ -112,6 +113,27 @@ func (jed *JobEventDispatch) OnJobDetail(task SearchTask, details JobDetail) {
 				recover()
 			}()
 			handler.OnJobDetail(task, details)
+		}()
+	}
+}
+
+// OnPageComplete implements JobEventHandler
+func (jed *JobEventDispatch) OnPageComplete(task SearchTask, page int, jobsFound int, errors []error) {
+	jed.mu.RLock()
+	handlers := make([]JobEventHandler, 0, len(jed.handlers))
+	for _, handler := range jed.handlers {
+		handlers = append(handlers, handler)
+	}
+	jed.mu.RUnlock()
+
+	// Call handlers sequentially, ignoring any errors
+	for _, handler := range handlers {
+		func() {
+			defer func() {
+				// Ignore panics from handlers
+				recover()
+			}()
+			handler.OnPageComplete(task, page, jobsFound, errors)
 		}()
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"github.com/samber/lo"
 	"google.golang.org/api/iterator"
 )
 
@@ -201,4 +202,34 @@ func GetCriteriaSubscribers(ctx context.Context, fs *FirestoreClient, criteriaID
 	}
 
 	return subscribers, nil
+}
+
+// ListSubscribedCriteria retrieves all criteria that has a user subscribed to it.
+func ListSubscribedCriteriaIDs(ctx context.Context, fs *FirestoreClient) ([]string, error) {
+	// Query all subscriptions for the user
+	query := fs.Collection(userCriteriaCollection)
+	iter := query.Documents(ctx)
+	defer iter.Stop()
+
+	criteria := map[string]string{}
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("error iterating user criteria: %w", err)
+		}
+
+		var subscription SearchCriteriaSubscription
+		if err := doc.DataTo(&subscription); err != nil {
+			return nil, fmt.Errorf("error parsing subscription data: %w", err)
+		}
+
+		criteria[subscription.CriteriaID] = subscription.CriteriaID
+	}
+
+	keys := lo.Keys(criteria)
+
+	return keys, nil
 }

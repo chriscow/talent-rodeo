@@ -246,6 +246,78 @@ func (wm *WorkerManager) startWorker(ctx context.Context, workerID int) {
 	}
 }
 
+// processSearchPage processes a single page of job search results
+func (wm *WorkerManager) processSearchPage(ctx context.Context, searchJob *internal.SearchTask, page int, logger *slog.Logger) ([]internal.JobListing, []error) {
+	var pageErrors []error
+
+	// Execute the search for this page
+	listings, err := wm.provider.SearchJobListings(ctx, searchJob.Criteria, page)
+
+	// Handle errors
+	if err != nil {
+		logger.Error("failed to search for jobs",
+			"page", page,
+			"error", err)
+		pageErrors = append(pageErrors, fmt.Errorf("page %d: %w", page, err))
+		return nil, pageErrors
+	}
+
+	// If we got no results, this is not an error but indicates end of pagination
+	if len(listings) == 0 {
+		logger.Debug("no more results found", "page", page)
+		return nil, pageErrors
+	}
+
+	// Process each job listing to get details
+	var validJobs []internal.JobListing
+	for _, job := range listings {
+		select {
+		case <-ctx.Done():
+			pageErrors = append(pageErrors, ctx.Err())
+			return validJobs, pageErrors
+		default:
+			// Continue processing
+		}
+
+		// Get job details
+		details, err := wm.provider.GetJobDetails(ctx, job.ProviderJobID)
+		if err != nil {
+			logger.Error("failed to get job details",
+				"jobID", job.ID,
+				"error", err)
+			pageErrors = append(pageErrors, fmt.Errorf("get details for %s: %w", job.ID, err))
+			continue
+		}
+
+		details.URL = job.URL                       // this is the original URL from the job listing
+		details.CompanyLogo = job.CompanyLogo       // use the logo from the listing
+		details.CompanyProfile = job.CompanyProfile // use the profile from the listing
+
+		// Notify about the new job
+		if wm.eventHandler != nil {
+			wm.eventHandler.OnJobDetail(*searchJob, *details)
+		}
+
+		validJobs = append(validJobs, job)
+	}
+
+	logger.Debug("found jobs",
+		"page", page,
+		"count", len(listings),
+		"validJobs", len(validJobs))
+
+	searchJob.PagesCompleted = page
+	now := time.Now().UTC()
+	searchJob.UpdatedAt = &now
+
+	// Notify about page completion
+	if wm.eventHandler != nil {
+		wm.eventHandler.OnPageComplete(*searchJob, page, len(validJobs), pageErrors)
+	}
+
+	return validJobs, pageErrors
+}
+
 // processQueuedSearch handles the search processing workflow
 func (wm *WorkerManager) processQueuedSearch(ctx context.Context, workerID int, searchJob internal.SearchTask) error {
 	// Create a child context that can be canceled if the parent is done
@@ -280,7 +352,7 @@ func (wm *WorkerManager) processQueuedSearch(ctx context.Context, workerID int, 
 		searchJob.Criteria.MaxPages = internal.DefaultMaxPages
 	}
 
-	for page := 1; page <= searchJob.Criteria.MaxPages; page++ {
+	for page := searchJob.PagesCompleted + 1; page <= searchJob.Criteria.MaxPages; page++ {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -288,72 +360,24 @@ func (wm *WorkerManager) processQueuedSearch(ctx context.Context, workerID int, 
 			// Continue processing
 		}
 
-		// Execute the search
-		jobs, err := wm.provider.SearchJobListings(ctx, searchJob.Criteria, page)
+		// Process this page of search results
+		pageJobs, pageErrors := wm.processSearchPage(ctx, &searchJob, page, logger)
 
-		// Handle errors
-		if err != nil {
-			logger.Error("failed to search for jobs",
-				"page", page,
-				"error", err)
-			searchErrors = append(searchErrors, fmt.Errorf("page %d: %w", page, err))
-			continue
-		}
+		// Add any errors from this page to our overall error collection
+		searchErrors = append(searchErrors, pageErrors...)
 
 		// If we got no results, stop pagination
-		if len(jobs) == 0 {
-			logger.Debug("no more results found", "page", page)
+		if len(pageJobs) == 0 {
 			break
 		}
 
 		// Add jobs to the list
-		allJobs = append(allJobs, jobs...)
-
-		wm.logger.Debug("found jobs",
-			"page", page,
-			"count", len(jobs),
-			"totalSoFar", len(allJobs))
+		allJobs = append(allJobs, pageJobs...)
 	}
 
 	// Log completion
 	logger.Info("search completed",
 		"totalJobs", len(allJobs),
-		"errors", len(searchErrors))
-
-	// Process found jobs (get details and create user jobs)
-	processedCount := 0
-	for _, job := range allJobs {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			// Continue processing
-		}
-
-		// Get job details
-		details, err := wm.provider.GetJobDetails(ctx, job.ProviderJobID)
-		if err != nil {
-			logger.Error("failed to get job details",
-				"jobID", job.ID,
-				"error", err)
-			searchErrors = append(searchErrors, fmt.Errorf("get details for %s: %w", job.ID, err))
-			continue
-		}
-
-		details.URL = job.URL                       // this is the original URL from the job listing
-		details.CompanyLogo = job.CompanyLogo       // use the logo from the listing
-		details.CompanyProfile = job.CompanyProfile // use the profile from the listing
-
-		// Notify about the new job
-		if wm.eventHandler != nil {
-			wm.eventHandler.OnJobDetail(searchJob, *details)
-		}
-		processedCount++
-	}
-
-	logger.Info("job processing completed",
-		"totalJobs", len(allJobs),
-		"processedJobs", processedCount,
 		"errors", len(searchErrors))
 
 	// Update user's search status

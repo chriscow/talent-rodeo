@@ -13,6 +13,14 @@ import (
 	"time"
 )
 
+type SortBy string
+
+const (
+	SortByDay   SortBy = "day"   // Last 24 hours
+	SortByWeek  SortBy = "week"  // Last 7 days
+	SortByMonth SortBy = "month" // Last 30 days
+)
+
 // APIClientInterface defines the interface for the API client
 type APIClientInterface interface {
 	SearchJobListings(ctx context.Context, query string, location string, page int) ([]LinkedInJobListing, error)
@@ -73,7 +81,7 @@ func NewAPIClient(apiKey string, opts ...APIOption) *APIClient {
 }
 
 // SearchJobListings searches for jobs with the given criteria
-func (c *APIClient) SearchJobListings(ctx context.Context, query string, location string, page int) ([]LinkedInJobListing, error) {
+func (c *APIClient) SearchJobListings(ctx context.Context, query, location string, page int, sortBy SortBy) ([]LinkedInJobListing, error) {
 	c.logger.Info("searching for job listings",
 		"query", query,
 		"location", location,
@@ -90,7 +98,7 @@ func (c *APIClient) SearchJobListings(ctx context.Context, query string, locatio
 	q.Set("api_key", c.apiKey)
 	q.Set("field", query)
 	q.Set("geoid", location)
-	q.Set("sort_by", "day") // day (last 24 hours), week (last 7 days), month (last 30 days)
+	q.Set("sort_by", string(sortBy)) // day (last 24 hours), week (last 7 days), month (last 30 days)
 	q.Set("page", strconv.Itoa(page))
 	baseURL.RawQuery = q.Encode()
 

@@ -70,6 +70,17 @@ func (m *MockEventHandler) OnJobDetail(search internal.SearchTask, details inter
 	m.jobsReceived = append(m.jobsReceived, details.ID)
 }
 
+func (m *MockEventHandler) OnPageComplete(search internal.SearchTask, page int, jobsFound int, errors []error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	m.onSearchCompletedCalled = true
+	if len(errors) > 0 {
+		m.jobsReceived = append(m.jobsReceived, "error")
+	} else {
+		m.jobsReceived = append(m.jobsReceived, "page_complete")
+	}
+}
+
 func (m *MockEventHandler) OnSearchCompleted(search internal.SearchTask, totalJobs int, errors []error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()

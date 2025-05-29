@@ -29,9 +29,10 @@ func TestSearchCriteria(t *testing.T) {
 		query := fmt.Sprintf("%s-query-%d", testPrefix, timestamp)
 		geoID := "us-wa-seattle"
 		maxPages := 5
+		age := ListingAgeMonth
 
 		// Create search criteria
-		created, err := CreateSearchCriteria(ctx, client, query, geoID, maxPages)
+		created, err := CreateSearchCriteria(ctx, client, query, geoID, maxPages, age)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() error = %v", err)
 		}
@@ -48,6 +49,10 @@ func TestSearchCriteria(t *testing.T) {
 		}
 		if created.LastSearchedAt != nil {
 			t.Errorf("LastSearchedAt = %v, want nil", created.LastSearchedAt)
+		}
+
+		if created.ListingAge != age {
+			t.Errorf("ListingAge = %v, want %v", created.ListingAge, age)
 		}
 
 		// Get created criteria by ID
@@ -80,9 +85,10 @@ func TestSearchCriteria(t *testing.T) {
 		query := fmt.Sprintf("%s-query-update-%d", testPrefix, timestamp)
 		geoID := "us-ca-sanfrancisco"
 		maxPages := 3
+		age := ListingAgeMonth
 
 		// Create search criteria
-		created, err := CreateSearchCriteria(ctx, client, query, geoID, maxPages)
+		created, err := CreateSearchCriteria(ctx, client, query, geoID, maxPages, age)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() error = %v", err)
 		}
@@ -121,7 +127,7 @@ func TestSearchCriteria(t *testing.T) {
 		// Create criteria that needs search (never searched) with subscribers
 		timestamp := time.Now().UnixNano()
 		query1 := fmt.Sprintf("%s-never-searched-%d", testPrefix, timestamp)
-		created1, err := CreateSearchCriteria(ctx, client, query1, "us-ny-newyork", 2)
+		created1, err := CreateSearchCriteria(ctx, client, query1, "us-ny-newyork", 2, ListingAgeMonth)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() never searched error = %v", err)
 		}
@@ -134,7 +140,7 @@ func TestSearchCriteria(t *testing.T) {
 
 		// Create criteria searched more than 24 hours ago with subscribers
 		query2 := fmt.Sprintf("%s-old-search-%d", testPrefix, timestamp)
-		created2, err := CreateSearchCriteria(ctx, client, query2, "us-tx-austin", 2)
+		created2, err := CreateSearchCriteria(ctx, client, query2, "us-tx-austin", 2, ListingAgeMonth)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() old search error = %v", err)
 		}
@@ -149,7 +155,7 @@ func TestSearchCriteria(t *testing.T) {
 
 		// Create criteria searched recently (should not need search) with subscribers
 		query3 := fmt.Sprintf("%s-recent-search-%d", testPrefix, timestamp)
-		created3, err := CreateSearchCriteria(ctx, client, query3, "us-fl-miami", 2)
+		created3, err := CreateSearchCriteria(ctx, client, query3, "us-fl-miami", 2, ListingAgeMonth)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() recent search error = %v", err)
 		}
@@ -164,7 +170,7 @@ func TestSearchCriteria(t *testing.T) {
 
 		// Create criteria that needs search (never searched) with NO subscribers
 		query4 := fmt.Sprintf("%s-never-searched-no-subs-%d", testPrefix, timestamp)
-		created4, err := CreateSearchCriteria(ctx, client, query4, "us-il-chicago", 2)
+		created4, err := CreateSearchCriteria(ctx, client, query4, "us-il-chicago", 2, ListingAgeMonth)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() no subscribers error = %v", err)
 		}
@@ -177,7 +183,7 @@ func TestSearchCriteria(t *testing.T) {
 
 		// Create criteria searched more than 24 hours ago with NO subscribers
 		query5 := fmt.Sprintf("%s-old-search-no-subs-%d", testPrefix, timestamp)
-		created5, err := CreateSearchCriteria(ctx, client, query5, "us-ga-atlanta", 2)
+		created5, err := CreateSearchCriteria(ctx, client, query5, "us-ga-atlanta", 2, ListingAgeMonth)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() old search no subscribers error = %v", err)
 		}
@@ -307,14 +313,14 @@ func TestSearchCriteria(t *testing.T) {
 
 		// Create first criteria
 		query1 := fmt.Sprintf("%s-all-1-%d", testPrefix, timestamp)
-		created1, err := CreateSearchCriteria(ctx, client, query1, "us-wa-seattle", 3)
+		created1, err := CreateSearchCriteria(ctx, client, query1, "us-wa-seattle", 3, ListingAgeMonth)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() for GetAll test error = %v", err)
 		}
 
 		// Create second criteria
 		query2 := fmt.Sprintf("%s-all-2-%d", testPrefix, timestamp)
-		created2, err := CreateSearchCriteria(ctx, client, query2, "us-ca-sanfrancisco", 4)
+		created2, err := CreateSearchCriteria(ctx, client, query2, "us-ca-sanfrancisco", 4, ListingAgeMonth)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() for GetAll test error = %v", err)
 		}
@@ -344,7 +350,7 @@ func TestSearchCriteria(t *testing.T) {
 		// Create a criteria to delete
 		timestamp := time.Now().UnixNano()
 		query := fmt.Sprintf("%s-delete-%d", testPrefix, timestamp)
-		created, err := CreateSearchCriteria(ctx, client, query, "us-co-denver", 5)
+		created, err := CreateSearchCriteria(ctx, client, query, "us-co-denver", 5, ListingAgeMonth)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() for DeleteSearchCriteria test error = %v", err)
 		}
@@ -387,7 +393,7 @@ func TestSearchCriteria(t *testing.T) {
 		geoID := "us-co-denver"
 		maxPages := 2
 
-		criteria, err := CreateSearchCriteria(ctx, client, query, geoID, maxPages)
+		criteria, err := CreateSearchCriteria(ctx, client, query, geoID, maxPages, ListingAgeMonth)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() error = %v", err)
 		}
