@@ -59,6 +59,10 @@ func (u *jobEventHandler) OnJobDetail(task internal.SearchTask, details internal
 	fmt.Println("userNotifier:OnJobDetail", task, details)
 }
 
+func (u *jobEventHandler) OnPageComplete(task internal.SearchTask, page int, jobsFound int, errors []error) {
+	fmt.Printf("userNotifier:OnPageComplete page=%d jobs=%d errors=%d\n", page, jobsFound, len(errors))
+}
+
 func (u *jobEventHandler) OnSearchCompleted(task internal.SearchTask, totalJobs int, errors []error) {
 	fmt.Println("userNotifier:OnSearchCompleted", task, totalJobs, errors)
 	u.dispatch.Deregister(u.userID)

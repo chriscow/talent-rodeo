@@ -55,6 +55,20 @@ func (f *jobSinkForwarder) OnJobDetail(task internal.SearchTask, details interna
 	f.jobSink.OnJobDetail(task, details)
 }
 
+func (f *jobSinkForwarder) OnPageComplete(task internal.SearchTask, page int, jobsFound int, errors []error) {
+	if len(errors) > 0 {
+		f.logger.Error(internal.BGRed("Page completed with errors"),
+			"page", page,
+			"jobsFound", jobsFound,
+			"errors", errors)
+	} else {
+		f.logger.Info(internal.BGGreen("Page completed successfully"),
+			"page", page,
+			"jobsFound", jobsFound)
+	}
+	f.jobSink.OnPageComplete(task, page, jobsFound, errors)
+}
+
 func (f *jobSinkForwarder) OnSearchCompleted(task internal.SearchTask, totalJobs int, errors []error) {
 	if len(errors) > 0 {
 		f.logger.Error(internal.BGRed("Search completed with errors"),

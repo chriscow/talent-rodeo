@@ -91,7 +91,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 	s.RefreshSettings()
 
 	// Then requeue any users that were previously queued but not completed
-	if err := s.requeueIncompleteSearches(); err != nil {
+	if err := s.RecoverIncompleteSearches(); err != nil {
 		return fmt.Errorf("failed to requeue incomplete searches: %w", err)
 	}
 
@@ -246,8 +246,8 @@ func (s *Scheduler) notifyAdmin(_ context.Context, user *internal.User, err erro
 	}
 }
 
-// requeueIncompleteSearches finds and requeues any users that were previously queued but not completed
-func (s *Scheduler) requeueIncompleteSearches() error {
+// RecoverIncompleteSearches finds and requeues any users that were previously queued but not completed
+func (s *Scheduler) RecoverIncompleteSearches() error {
 	if !s.Enabled() {
 		return nil
 	}

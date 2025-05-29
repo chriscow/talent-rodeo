@@ -130,7 +130,6 @@ func (app *application) adminCompareJobs(w http.ResponseWriter, r *http.Request)
 		searchTaskID string
 		leftJobID    string
 		rightJobID   string
-		jobDetails   []*internal.JobDetail
 	)
 
 	if r.Method == http.MethodPost {
@@ -144,7 +143,22 @@ func (app *application) adminCompareJobs(w http.ResponseWriter, r *http.Request)
 
 		if searchTaskID != "" {
 			var err error
-			jobDetails, err = internal.ListJobDetailsForSearchTask(ctx, app.fs, searchTaskID)
+			jobIDs, err := internal.GetJobIDsForSearchTask(ctx, app.fs, searchTaskID)
+			if err != nil {
+				app.logger.Error("failed to list job refs for search task", "error", err, "search_task_id", searchTaskID)
+				data["Error"] = "Failed to list job refs: " + err.Error()
+			}
+
+			app.logger.Info("fetching job details for search task", "job_count", len(jobIDs), "search_task_id", searchTaskID)
+
+			// Fetch job details for the selected search task
+			jobDetails, err := internal.GetJobDetailsByIDs(ctx, app.fs, jobIDs)
+			if err != nil {
+				app.logger.Error("failed to get job details by IDs", "error", err, "job_ids", jobIDs)
+				data["Error"] = "Failed to get job details: " + err.Error()
+				jobDetails = nil
+			}
+
 			if err != nil {
 				data["Error"] = err.Error()
 			} else {
@@ -157,10 +171,10 @@ func (app *application) adminCompareJobs(w http.ResponseWriter, r *http.Request)
 				var leftJob, rightJob *internal.JobDetail
 				for _, job := range jobDetails {
 					if job.ID == leftJobID {
-						leftJob = job
+						leftJob = &job
 					}
 					if job.ID == rightJobID {
-						rightJob = job
+						rightJob = &job
 					}
 				}
 				data["LeftJob"] = leftJob
@@ -721,7 +735,7 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 							// Merge job details into the jobs map (matching main dashboard approach)
 							for _, detail := range jobDetails {
 								if job, exists := jobs[detail.ID]; exists {
-									job.JobDetail = *detail
+									job.JobDetail = detail
 									jobs[detail.ID] = job
 								}
 							}

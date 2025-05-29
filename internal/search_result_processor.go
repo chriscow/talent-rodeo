@@ -82,7 +82,7 @@ func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, job JobDetail)
 				return fmt.Errorf("failed to save job detail: %w", err)
 			}
 
-			if err := AddJobDetailToSearchTaskTx(ctx, s.fs, tx, jobSearch.ID, &job); err != nil {
+			if err := AddJobDetailToSearchTaskTx(ctx, s.fs, tx, jobSearch.ID, job.ID); err != nil {
 				return fmt.Errorf("failed to add job detail to search task: %w", err)
 			}
 
@@ -107,6 +107,19 @@ func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, job JobDetail)
 			return
 		}
 	}()
+}
+
+func (s *SearchResultProcessor) OnPageComplete(jobSearch SearchTask, page int, jobsFound int, errors []error) {
+	s.logger.Info("OnPageComplete", "criteria", jobSearch.Criteria.ID, "page", page, "jobs_found", jobsFound, "errors", len(errors))
+
+	// Log any errors for this page
+	if len(errors) > 0 {
+		for _, err := range errors {
+			s.logger.Error("page processing error", "page", page, "error", err)
+		}
+	}
+
+	UpdateSearchTask(context.Background(), s.fs, &jobSearch)
 }
 
 func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJobs int, errors []error) {
@@ -134,9 +147,19 @@ func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJob
 	criteria.LastSearchJobID = jobSearch.ID
 	UpdateSearchCriteria(ctx, s.fs, &criteria)
 
-	jobDetails, err := GetJobDetailsForSearchTask(ctx, s.fs, jobSearch.ID)
+	ids, err := GetJobIDsForSearchTask(ctx, s.fs, jobSearch.ID)
 	if err != nil {
 		s.logger.Error("failed to get job details", "error", err)
+		return
+	}
+
+	jobDetails, err := GetJobDetailsByIDs(ctx, s.fs, ids)
+	if err != nil {
+		s.logger.Error("failed to get job details by IDs", "error", err)
+		return
+	}
+	if len(jobDetails) == 0 {
+		s.logger.Info("no job details found for criteria", "criteriaID", jobSearch.Criteria.ID)
 		return
 	}
 

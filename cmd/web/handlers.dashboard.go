@@ -301,7 +301,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 			// Merge job details into the jobs map
 			for _, detail := range jobDetails {
 				if job, exists := jobs[detail.ID]; exists {
-					job.JobDetail = *detail
+					job.JobDetail = detail
 					jobs[detail.ID] = job
 				} else {
 					app.logger.Warn("showDashboard: job detail found without corresponding user job", "job_id", detail.ID)

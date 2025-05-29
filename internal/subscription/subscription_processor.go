@@ -323,24 +323,24 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 	p.logger.Info("found new jobs for criteria", "jobs-count", len(jobIDs), "id", criteria.ID, "user-count", len(userIDs))
 
 	// Get all users in one call
-	users, err := internal.GetUsersByIDs(ctx, p.fs, userIDs)
+	_, err = internal.GetUsersByIDs(ctx, p.fs, userIDs)
 	if err != nil {
 		return fmt.Errorf("failed to get users: %w", err)
 	}
 
-	for _, user := range users {
-		p.logger.Info("refreshing user jobs", "user-id", user.ID, "criteria-id", criteria.ID)
-		if err := internal.RefreshUserJobs(ctx, p.fs, user, criteria, p.settings.JobThresholdScore); err != nil {
-			// Log error but continue with other users
-			p.logger.Error("Error processing jobs for user", "user-id", user.ID, "error", err)
-			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-				"source":      "subscription_processor",
-				"criteria_id": criteria.ID,
-				"user_id":     user.ID,
-			})
-			continue
-		}
-	}
+	// for _, user := range users {
+	// 	p.logger.Info("refreshing user jobs", "user-id", user.ID, "criteria-id", criteria.ID)
+	// 	if err := internal.RefreshUserJobs(ctx, p.fs, user, criteria, p.settings.JobThresholdScore); err != nil {
+	// 		// Log error but continue with other users
+	// 		p.logger.Error("Error processing jobs for user", "user-id", user.ID, "error", err)
+	// 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+	// 			"source":      "subscription_processor",
+	// 			"criteria_id": criteria.ID,
+	// 			"user_id":     user.ID,
+	// 		})
+	// 		continue
+	// 	}
+	// }
 
 	// Update LastPublishedAt for this criteria
 	now := time.Now()

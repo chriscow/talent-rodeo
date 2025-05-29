@@ -25,13 +25,15 @@ const (
 
 // SearchTask represents a queued job search with a provider.
 type SearchTask struct {
-	ID        string
-	Criteria  SearchCriteria
-	Provider  string
-	Status    SearchTaskStatus
-	Error     *string
-	CreatedAt time.Time
-	UpdatedAt *time.Time
+	ID             string
+	Criteria       SearchCriteria
+	Provider       string
+	Status         SearchTaskStatus
+	Error          *string
+	PagesCompleted int
+	PagesTotal     int
+	CreatedAt      time.Time
+	UpdatedAt      *time.Time
 }
 
 var ErrSearchTaskExists = errors.New("search task already exists")
@@ -60,11 +62,13 @@ func CreateSearchTask(ctx context.Context, fs *FirestoreClient, criteria SearchC
 
 	nowUTC := time.Now().UTC()
 	jobSearch := &SearchTask{
-		ID:        uuid.New().String(),
-		Criteria:  criteria,
-		Provider:  provider,
-		Status:    SearchTaskStatusQueued,
-		CreatedAt: nowUTC,
+		ID:             uuid.New().String(),
+		Criteria:       criteria,
+		Provider:       provider,
+		Status:         SearchTaskStatusQueued,
+		CreatedAt:      nowUTC,
+		PagesCompleted: 0,
+		PagesTotal:     criteria.MaxPages,
 	}
 
 	_, err := fs.Collection(SearchTaskCollection).Doc(jobSearch.ID).Set(ctx, jobSearch)
@@ -132,38 +136,49 @@ func SetSearchTaskStatus(ctx context.Context, fs *FirestoreClient, id string, st
 	return err
 }
 
+type JobDetailRef struct {
+	JobID     string    `firestore:"job_id"`
+	CreatedAt time.Time `firestore:"created_at"`
+}
+
 // AddJobDetailToSearch adds a JobDetail as a subcollection doc under a SearchTask.
-func AddJobDetailToSearchTask(ctx context.Context, fs *FirestoreClient, searchTaskID string, job *JobDetail) error {
-	if searchTaskID == "" || job == nil || job.ID == "" {
+func AddJobDetailToSearchTask(ctx context.Context, fs *FirestoreClient, searchTaskID string, jobID string) error {
+	if searchTaskID == "" || jobID == "" {
 		return fmt.Errorf("searchTaskID and job.ID are required")
 	}
-	jobRef := fs.Collection(SearchTaskCollection).Doc(searchTaskID).Collection(JobDetailsCollection).Doc(job.ID)
-	_, err := jobRef.Set(ctx, job)
+
+	jobRef := fs.Collection(SearchTaskCollection).Doc(searchTaskID).Collection(JobDetailsCollection).Doc(jobID)
+	ref := JobDetailRef{
+		JobID:     jobID,
+		CreatedAt: time.Now().UTC(),
+	}
+
+	_, err := jobRef.Set(ctx, ref)
 	return err
 }
 
 // AddJobDetailToSearchTaskTx adds a JobDetail as a subcollection doc under a SearchTask.
-func AddJobDetailToSearchTaskTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, searchTaskID string, job *JobDetail) error {
-	if searchTaskID == "" || job == nil || job.ID == "" {
+func AddJobDetailToSearchTaskTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, searchTaskID string, jobID string) error {
+	if searchTaskID == "" || jobID == "" {
 		return fmt.Errorf("searchTaskID and job.ID are required")
 	}
-	jobRef := fs.Collection(SearchTaskCollection).Doc(searchTaskID).Collection(JobDetailsCollection).Doc(job.ID)
 
-	// Use the transaction to set the job detail
-	if err := tx.Set(jobRef, job); err != nil {
-		return err
+	jobRef := fs.Collection(SearchTaskCollection).Doc(searchTaskID).Collection(JobDetailsCollection).Doc(jobID)
+	ref := JobDetailRef{
+		JobID:     jobID,
+		CreatedAt: time.Now().UTC(),
 	}
 
-	return nil
+	return tx.Set(jobRef, ref)
 }
 
-func GetJobDetailsForSearchTask(ctx context.Context, fs *FirestoreClient, searchTaskID string) ([]JobDetail, error) {
+func GetJobIDsForSearchTask(ctx context.Context, fs *FirestoreClient, searchTaskID string) ([]string, error) {
 	if searchTaskID == "" {
 		return nil, fmt.Errorf("searchTaskID is required")
 	}
 	colRef := fs.Collection(SearchTaskCollection).Doc(searchTaskID).Collection(JobDetailsCollection)
 	iter := colRef.Documents(ctx)
-	var jobDetails []JobDetail
+	var jobIDs []string
 	for {
 		doc, err := iter.Next()
 		if err == iterator.Done {
@@ -172,36 +187,36 @@ func GetJobDetailsForSearchTask(ctx context.Context, fs *FirestoreClient, search
 		if err != nil {
 			return nil, err
 		}
-		var job JobDetail
+		var job JobDetailRef
 		if err := doc.DataTo(&job); err != nil {
 			return nil, err
 		}
-		jobDetails = append(jobDetails, job)
+		jobIDs = append(jobIDs, job.JobID)
 	}
-	return jobDetails, nil
+	return jobIDs, nil
 }
 
-// ListJobDetailsForSearchTask lists all JobDetail docs for a given SearchTask ID from the subcollection.
-func ListJobDetailsForSearchTask(ctx context.Context, fs *FirestoreClient, searchTaskID string) ([]*JobDetail, error) {
-	if searchTaskID == "" {
-		return nil, fmt.Errorf("searchTaskID is required")
-	}
-	colRef := fs.Collection(SearchTaskCollection).Doc(searchTaskID).Collection(JobDetailsCollection)
-	iter := colRef.Documents(ctx)
-	var jobs []*JobDetail
-	for {
-		doc, err := iter.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		var job JobDetail
-		if err := doc.DataTo(&job); err != nil {
-			return nil, err
-		}
-		jobs = append(jobs, &job)
-	}
-	return jobs, nil
-}
+// // ListJobDetailsForSearchTask lists all JobDetail docs for a given SearchTask ID from the subcollection.
+// func ListJobDetailsForSearchTask(ctx context.Context, fs *FirestoreClient, searchTaskID string) ([]*JobDetail, error) {
+// 	if searchTaskID == "" {
+// 		return nil, fmt.Errorf("searchTaskID is required")
+// 	}
+// 	colRef := fs.Collection(SearchTaskCollection).Doc(searchTaskID).Collection(JobDetailsCollection)
+// 	iter := colRef.Documents(ctx)
+// 	var jobs []*JobDetail
+// 	for {
+// 		doc, err := iter.Next()
+// 		if err == iterator.Done {
+// 			break
+// 		}
+// 		if err != nil {
+// 			return nil, err
+// 		}
+// 		var job JobDetail
+// 		if err := doc.DataTo(&job); err != nil {
+// 			return nil, err
+// 		}
+// 		jobs = append(jobs, &job)
+// 	}
+// 	return jobs, nil
+// }
