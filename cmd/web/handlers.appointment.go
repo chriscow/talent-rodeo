@@ -97,6 +97,14 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 	// This actually just starts a goroutine to process the appointment and
 	// doesn't return an error but we check anyway in case that changes
 	// in the future.
-	go transcript.ProcessCompletedCall(hub, app.fs, app.pusher, app.searchProvider, app.logger, app.jobDispatch, user, appt)
+	cfg := transcript.SMTPConfig{
+		Host:     app.config.smtp.host,
+		Port:     app.config.smtp.port,
+		Username: app.config.smtp.username,
+		Password: app.config.smtp.password,
+		From:     app.config.smtp.from,
+	}
+
+	go transcript.ProcessCompletedCall(hub, app.fs, app.pusher, app.searchProvider, app.logger, app.jobDispatch, user, appt, &cfg)
 	return nil
 }

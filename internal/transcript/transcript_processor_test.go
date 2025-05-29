@@ -114,7 +114,7 @@ func TestRecoverProcessingAppointments(t *testing.T) {
 
 	// Run the recovery process - note that this would normally complete asynchronously
 	// so we're just testing that it starts the background job without errors
-	err = RecoverProcessingAppointments(hub, client, nil, logger, nil, nil)
+	err = RecoverProcessingAppointments(hub, client, nil, logger, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("RecoverProcessingAppointments() error = %v", err)
 	}
@@ -342,7 +342,7 @@ func TestProcessCompletedAppointmentErrorHandling(t *testing.T) {
 		}
 
 		// This should not crash but should handle the error gracefully
-		ProcessCompletedCall(hub, client, nil, nil, logger, nil, user, appointment)
+		ProcessCompletedCall(hub, client, nil, nil, logger, nil, user, appointment, nil)
 
 		// Verify appointment status was not changed to processing since CallID was nil
 		updatedAppointment, err := internal.GetAppointment(ctx, client, user.ID, appointment.ID)
@@ -372,7 +372,7 @@ func TestProcessCompletedAppointmentErrorHandling(t *testing.T) {
 		}
 
 		// This should not crash but should handle the error gracefully
-		ProcessCompletedCall(hub, client, nil, nil, logger, nil, user, appointment)
+		ProcessCompletedCall(hub, client, nil, nil, logger, nil, user, appointment, nil)
 
 		// Since the user doesn't exist, the function should return early
 		// and not create any processing entries
@@ -430,7 +430,7 @@ func TestRecoverProcessingAppointmentsEdgeCases(t *testing.T) {
 			}
 		}
 
-		err = RecoverProcessingAppointments(hub, client, nil, logger, nil, nil)
+		err = RecoverProcessingAppointments(hub, client, nil, logger, nil, nil, nil)
 		if err != nil {
 			t.Errorf("RecoverProcessingAppointments() with empty list error = %v, want nil", err)
 		}
@@ -468,7 +468,7 @@ func TestRecoverProcessingAppointmentsEdgeCases(t *testing.T) {
 		}
 
 		// Run recovery
-		err = RecoverProcessingAppointments(hub, client, nil, logger, nil, nil)
+		err = RecoverProcessingAppointments(hub, client, nil, logger, nil, nil, nil)
 		if err != nil {
 			t.Errorf("RecoverProcessingAppointments() with multiple appointments error = %v, want nil", err)
 		}
