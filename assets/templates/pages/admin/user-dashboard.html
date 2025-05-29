@@ -271,20 +271,18 @@
 
 
 {{define "job-card"}}
-
-{{with .JobDetail}}
 <article class="job-card">
     <hgroup>
-        <h3>{{.Title}}</h3>
-        <p class="company">{{.Company}} - <em>Posted {{.PostedDate | approxAge}}</em></p>
+        <h3>{{.JobDetail.Title}}</h3>
+        <p class="company">{{.JobDetail.Company}} - <em>Posted {{.JobDetail.PostedDate | approxAge}}</em></p>
     </hgroup>
     <div>
         <span>
-    {{if .URL}}
-    <a href="{{.URL}}" target="_blank">View Job</a>
+    {{if .JobDetail.URL}}
+    <a href="{{.JobDetail.URL}}" target="_blank">View Job</a>
     {{end}}
-    {{if .ApplyURL}}
-    &nbsp;&nbsp;<a href="{{.ApplyURL}}" target="_blank">Apply Now</a>
+    {{if .JobDetail.ApplyURL}}
+    &nbsp;&nbsp;<a href="{{.JobDetail.ApplyURL}}" target="_blank">Apply Now</a>
     {{end}}
     </span>
     </div>
@@ -298,12 +296,12 @@
 
 
     <div class="job-content">
-        {{with .ExtractedData.Summary}}
+        {{with .JobDetail.ExtractedData.Summary}}
         <div class="summary">
             <p>{{.}}</p>
         </div>
         {{end}}
-        {{with .ExtractedData.Responsibilities}}
+        {{with .JobDetail.ExtractedData.Responsibilities}}
         <div class="responsibilities">
             <h4>Responsibilities</h4>
             <ul>
@@ -313,7 +311,7 @@
             </ul>
         </div>
         {{end}}
-        {{with .ExtractedData.Skills}}
+        {{with .JobDetail.ExtractedData.Skills}}
         <div class="skills">
             <h4>Skills</h4>
             <ul>
@@ -323,7 +321,7 @@
             </ul>
         </div>
         {{end}}
-        {{with .ExtractedData.Requirements}}
+        {{with .JobDetail.ExtractedData.Requirements}}
         <div class="requirements">
             <h4>Requirements</h4>
             <ul>
@@ -333,7 +331,7 @@
             </ul>
         {{end}}
         </div>
-        {{with .ExtractedData.Qualifications}}
+        {{with .JobDetail.ExtractedData.Qualifications}}
         <div class="qualifications">
             <h4>Qualifications</h4>
             <ul>
@@ -343,7 +341,7 @@
             </ul>
         </div>
         {{end}}
-        {{with .ExtractedData.BonusQualifications}}
+        {{with .JobDetail.ExtractedData.BonusQualifications}}
         <div class="bonus-qualifications">
             <h4>Bonus Qualifications</h4>
             <ul>
@@ -354,9 +352,14 @@
         </div>
         {{end}}
     </div>
-{{end}}
     <footer>
-        <small>Added {{.JobDetail.CreatedAt | humanDate}} &nbsp; | &nbsp; {{percentage .UserJob.Score 1}}</small>
+        <small>Added {{.JobDetail.CreatedAt | humanDate}} &nbsp; | &nbsp; 
+        {{if .IsSemanticOnly}}
+            {{percentage .ScoredJobDetail.Score 1}}
+        {{else}}
+            {{percentage .UserJob.Score 1}}
+        {{end}}
+        </small>
     </footer>
 </article>
 {{end}}

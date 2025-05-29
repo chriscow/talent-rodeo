@@ -177,7 +177,7 @@ func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, crite
 	}
 
 	denseResults, err := client.QueryByVector(ctx, denseIndex, JobDetailNamespace, denseVector,
-		WithTopK(topK*2), WithMetadataFilter(metaFilter), WithFields([]string{"ID", "provider", "providerID", "title", "company", "location", "url", "postedDate", "text"}))
+		WithTopK(topK*2), WithMetadataFilter(metaFilter))
 	if err != nil {
 		return nil, fmt.Errorf("failed to search dense index: %w", err)
 	}
@@ -192,7 +192,7 @@ func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, crite
 		query += " " + *steeringQuery.MoveToward
 	}
 	sparseResults, err := client.SearchRecords(ctx, sparseIndex, JobDetailNamespace, query,
-		WithTopK(topK*2), WithFilter(filter), WithFields([]string{"ID", "provider", "providerID", "title", "company", "location", "url", "postedDate", "text"}))
+		WithTopK(topK*2), WithFilter(filter), WithFields([]string{"ID"}))
 	if err != nil {
 		return nil, fmt.Errorf("failed to search sparse index: %w", err)
 	}
@@ -326,8 +326,10 @@ func processSearchResults(_ context.Context, searchResult *SearchResult, topK in
 
 		// Parse posted date if available
 		var postedDate time.Time
-		if dateStr, ok := hit.Fields["postedDate"]; ok {
-			postedDate, _ = time.Parse(time.RFC3339, dateStr.(string))
+		if dateStr, ok := hit.Fields["postedDate"]; ok && dateStr != nil {
+			if dateString, ok := dateStr.(string); ok {
+				postedDate, _ = time.Parse(time.RFC3339, dateString)
+			}
 		}
 
 		match, exists := allMatches[id]
@@ -335,14 +337,14 @@ func processSearchResults(_ context.Context, searchResult *SearchResult, topK in
 			match = &ScoredJobDetail{
 				JobDetail: JobDetail{
 					ID:            id,
-					Provider:      hit.Fields["provider"].(string),
-					ProviderJobID: hit.Fields["providerJobID"].(string),
-					Title:         hit.Fields["title"].(string),
-					Company:       hit.Fields["company"].(string),
-					Location:      hit.Fields["location"].(string),
-					URL:           hit.Fields["url"].(string),
+					Provider:      safeGetString(hit.Fields, "provider"),
+					ProviderJobID: safeGetString(hit.Fields, "providerJobID"),
+					Title:         safeGetString(hit.Fields, "title"),
+					Company:       safeGetString(hit.Fields, "company"),
+					Location:      safeGetString(hit.Fields, "location"),
+					URL:           safeGetString(hit.Fields, "url"),
 					PostedDate:    postedDate,
-					Description:   hit.Fields["text"].(string),
+					Description:   safeGetString(hit.Fields, "text"),
 				},
 				DenseScore:  0,
 				SparseScore: float64(hit.Score),

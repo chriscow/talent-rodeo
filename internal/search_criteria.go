@@ -52,10 +52,11 @@ func MakeSearchCriteriaID(query string, geoID string) string {
 
 func CreateSearchCriteria(ctx context.Context, fs *FirestoreClient, query string, geoID string, maxPages int) (*SearchCriteria, error) {
 	criteria := &SearchCriteria{
-		ID:       MakeSearchCriteriaID(query, geoID),
-		Query:    query,
-		GeoID:    geoID,
-		MaxPages: maxPages,
+		ID:              MakeSearchCriteriaID(query, geoID),
+		Query:           query,
+		GeoID:           geoID,
+		MaxPages:        maxPages,
+		SubscriberCount: 0,
 	}
 
 	_, err := fs.Collection(searchCriteriaCollection).Doc(criteria.ID).Create(ctx, criteria)

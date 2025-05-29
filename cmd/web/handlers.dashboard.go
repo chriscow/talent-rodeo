@@ -13,64 +13,90 @@ import (
 	"github.com/samber/lo"
 )
 
-// JobWithDetails combines UserJob with the job details
+// JobWithDetails combines UserJob with the job details, and can also handle ScoredJobDetail
 type JobWithDetails struct {
-	*internal.UserJob
-	*internal.JobDetail
+	UserJob                  *internal.UserJob
+	internal.ScoredJobDetail      // For semantic search results without UserJob
+	IsSemanticOnly           bool // True if this comes from semantic search without UserJob
 }
 
 // CreatedAt returns when the job was added to the user's list
 func (j *JobWithDetails) CreatedAt() time.Time {
-	return j.UserJob.CreatedAt
+	if j.UserJob != nil {
+		return j.UserJob.CreatedAt
+	}
+
+	// For semantic-only jobs, use the job's posted date or current time
+	if !j.ScoredJobDetail.JobDetail.PostedDate.IsZero() {
+		return j.ScoredJobDetail.JobDetail.PostedDate
+	}
+	return time.Now()
 }
 
 // Title returns the job title for display
 func (j *JobWithDetails) Title() string {
-	// Use UserJob title first if available (from job search),
-	// otherwise fallback to JobDetail title
-	if j.JobDetail != nil && j.JobDetail.Title != "" {
+	// Use JobDetail title if available
+	if j.JobDetail.Title != "" {
 		return j.JobDetail.Title
+	}
+	// For ScoredJobDetail
+	if j.JobDetail.Title != "" {
+		return j.ScoredJobDetail.JobDetail.Title
 	}
 	return ""
 }
 
 // CompanyName returns the company name for display
 func (j *JobWithDetails) CompanyName() string {
-	// Use UserJob company name if available,
-	// otherwise fallback to JobDetail company
-
+	// Use JobDetail company if available
+	if j.JobDetail.Company != "" {
+		return j.JobDetail.Company
+	}
+	// For ScoredJobDetail
+	if j.ScoredJobDetail.JobDetail.Company != "" {
+		return j.ScoredJobDetail.JobDetail.Company
+	}
 	return ""
+}
+
+// GetScore returns the semantic search score if available
+func (j *JobWithDetails) GetScore() float64 {
+	return j.ScoredJobDetail.Score
+}
+
+// GetID returns the job ID
+func (j *JobWithDetails) GetID() string {
+	return j.ScoredJobDetail.JobDetail.ID
 }
 
 // Summary returns the job summary
 func (j *JobWithDetails) Summary() string {
-	if j.JobDetail != nil && j.JobDetail.ExtractedData != nil {
-		return j.JobDetail.ExtractedData.Summary
+	jobDetail := j.JobDetail
+	if jobDetail.ExtractedData != nil {
+		return jobDetail.ExtractedData.Summary
 	}
-	// Fallback to full description if summary is not available
-	if j.JobDetail != nil {
-		return j.JobDetail.Description
-	}
-	return ""
+	return jobDetail.Description
 }
 
 // Qualifications returns the job qualifications
 func (j *JobWithDetails) Qualifications() []string {
-	if j.JobDetail != nil && j.JobDetail.ExtractedData != nil {
-		if len(j.JobDetail.ExtractedData.Qualifications) > 0 {
-			return j.JobDetail.ExtractedData.Qualifications
+	jobDetail := j.ScoredJobDetail.JobDetail
+	if jobDetail.ExtractedData != nil {
+		if len(jobDetail.ExtractedData.Qualifications) > 0 {
+			return jobDetail.ExtractedData.Qualifications
 		}
 		// Fallback to regular qualifications if summary qualifications not available
-		if len(j.JobDetail.Qualifications) > 0 {
-			return j.JobDetail.Qualifications
+		if len(jobDetail.Qualifications) > 0 {
+			return jobDetail.Qualifications
 		}
 	}
 	return []string{}
 }
 
 func (j *JobWithDetails) Requirements() []string {
-	if j.JobDetail != nil && j.JobDetail.ExtractedData != nil {
-		return j.JobDetail.ExtractedData.Requirements
+	jobDetail := j.ScoredJobDetail.JobDetail
+	if jobDetail.ExtractedData != nil {
+		return jobDetail.ExtractedData.Requirements
 	}
 	return []string{}
 }
@@ -153,64 +179,134 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 		app.logger.Debug("showDashboard: GetJobsCount took", "duration", time.Since(start).String())
 	}
 
-	// Get paginated jobs by status
-	start = time.Now()
-	userJobs, nextPageToken, err := internal.GetUserJobsSorted(r.Context(), app.fs, user.ID, internal.JobStatus(status), pageSize, pageToken, showAllRatings)
-	if err != nil {
-		wrappedErr := fmt.Errorf("showDashboard: failed to get sorted user jobs: %w", err)
-		app.logger.Error("showDashboard: failed to get sorted user jobs", "error", err)
+	// Hybrid Approach: Use semantic search for "New" jobs, existing queries for other statuses
+	jobs := map[string]JobWithDetails{}
+	var semanticJobsSlice []JobWithDetails // Ordered slice for semantic search results
+	var nextPageToken string
 
-		internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
-			"error_type":  "database_retrieval",
-			"entity_type": "user_jobs",
-			"job_status":  string(status),
-		})
+	if status == internal.JobStatusNew {
+		// For "New" status, use semantic search with jobs that have no UserJob record
+		start = time.Now()
 
-		// Check if this is the missing collection/index error for new users
-		if strings.Contains(err.Error(), "failed to iterate user jobs") &&
-			(strings.Contains(err.Error(), "The query requires an index") ||
-				strings.Contains(err.Error(), "FailedPrecondition")) {
-			// For new users without any jobs collection yet, show a welcome message
-			data["FirestoreError"] = true
-			data["HasJobs"] = false
-			data["Jobs"] = nil
-		} else {
-			// For other errors, return server error
+		// Get user's subscriptions to find criteriaID for semantic search
+		subscriptions, err := internal.GetSubscriptionsForUser(r.Context(), app.fs, user.ID)
+		if err != nil {
+			wrappedErr := fmt.Errorf("showDashboard: failed to get user subscriptions: %w", err)
+			app.logger.Error("showDashboard: failed to get user subscriptions", "error", err)
+			internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
+				"error_type":  "database_retrieval",
+				"entity_type": "user_subscriptions",
+			})
 			app.serverError(w, r, wrappedErr)
 			return
 		}
-	} else {
-		app.logger.Debug("showDashboard: GetUserJobsSorted took", "duration", time.Since(start).String())
-	}
 
-	jobs := map[string]JobWithDetails{}
-	for _, job := range userJobs {
-		jobs[job.JobRef.ID] = JobWithDetails{
-			UserJob: job,
-		}
-	}
+		if len(subscriptions) > 0 {
+			// Use the first subscription's criteria for semantic search
+			criteriaID := subscriptions[0].CriteriaID
+			topK := pageSize // Use pageSize as topK for semantic search
 
-	jobIDs := lo.Keys(jobs)
+			semanticJobs, err := internal.GetSemanticJobsForUser(r.Context(), app.fs, user, criteriaID, topK)
+			if err != nil {
+				wrappedErr := fmt.Errorf("showDashboard: failed to get semantic jobs: %w", err)
+				app.logger.Error("showDashboard: failed to get semantic jobs", "error", err)
+				internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
+					"error_type":  "semantic_search",
+					"entity_type": "semantic_jobs",
+					"criteria_id": criteriaID,
+				})
+				app.serverError(w, r, wrappedErr)
+				return
+			}
 
-	jobDetails, err := internal.GetJobDetailsByIDs(r.Context(), app.fs, jobIDs)
-	if err != nil {
-		wrappedErr := fmt.Errorf("showDashboard: failed to get job details by IDs: %w", err)
-		app.logger.Error("showDashboard: failed to get job details by IDs", "error", err)
-		internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
-			"error_type":  "database_retrieval",
-			"entity_type": "job_details",
-			"job_ids":     strings.Join(jobIDs, ","),
-		})
-		app.serverError(w, r, wrappedErr)
-		return
-	}
-	// Merge job details into the jobs map
-	for _, detail := range jobDetails {
-		if job, exists := jobs[detail.ID]; exists {
-			job.JobDetail = detail
-			jobs[detail.ID] = job
+			// Filter semantic jobs to only include those without existing UserJob records
+			existingUserJobs, err := internal.ListUserJobs(r.Context(), app.fs, user.ID)
+			if err != nil {
+				app.logger.Warn("showDashboard: failed to get existing user jobs for filtering", "error", err)
+				existingUserJobs = []internal.UserJob{} // Continue with empty list
+			}
+
+			// Create a set of existing job IDs for fast lookup
+			existingJobIDs := make(map[string]bool)
+			for _, userJob := range existingUserJobs {
+				existingJobIDs[userJob.JobRef.ID] = true
+			}
+
+			// Add semantic jobs that don't have UserJob records, preserving order
+			for _, scoredJob := range semanticJobs {
+				if !existingJobIDs[scoredJob.JobDetail.ID] {
+					semanticJobsSlice = append(semanticJobsSlice, JobWithDetails{
+						ScoredJobDetail: scoredJob,
+						IsSemanticOnly:  true,
+					})
+				}
+			}
+
+			app.logger.Debug("showDashboard: semantic search completed", "duration", time.Since(start).String(), "found", len(semanticJobs), "new", len(semanticJobsSlice))
 		} else {
-			app.logger.Warn("showDashboard: job detail found without corresponding user job", "job_id", detail.ID)
+			app.logger.Info("showDashboard: user has no subscriptions, showing empty new jobs")
+		}
+	} else {
+		// For other statuses, use existing UserJob queries
+		start = time.Now()
+		userJobs, _, err := internal.GetUserJobsSorted(r.Context(), app.fs, user.ID, internal.JobStatus(status), pageSize, pageToken, showAllRatings)
+		if err != nil {
+			wrappedErr := fmt.Errorf("showDashboard: failed to get sorted user jobs: %w", err)
+			app.logger.Error("showDashboard: failed to get sorted user jobs", "error", err)
+
+			internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
+				"error_type":  "database_retrieval",
+				"entity_type": "user_jobs",
+				"job_status":  string(status),
+			})
+
+			// Check if this is the missing collection/index error for new users
+			if strings.Contains(err.Error(), "failed to iterate user jobs") &&
+				(strings.Contains(err.Error(), "The query requires an index") ||
+					strings.Contains(err.Error(), "FailedPrecondition")) {
+				// For new users without any jobs collection yet, show a welcome message
+				data["FirestoreError"] = true
+				data["HasJobs"] = false
+				data["Jobs"] = nil
+			} else {
+				// For other errors, return server error
+				app.serverError(w, r, wrappedErr)
+				return
+			}
+		} else {
+			app.logger.Debug("showDashboard: GetUserJobsSorted took", "duration", time.Since(start).String())
+		}
+
+		for _, job := range userJobs {
+			jobs[job.JobRef.ID] = JobWithDetails{
+				UserJob: job,
+			}
+		}
+
+		// Get job details for UserJob records
+		jobIDs := lo.Keys(jobs)
+		if len(jobIDs) > 0 {
+			jobDetails, err := internal.GetJobDetailsByIDs(r.Context(), app.fs, jobIDs)
+			if err != nil {
+				wrappedErr := fmt.Errorf("showDashboard: failed to get job details by IDs: %w", err)
+				app.logger.Error("showDashboard: failed to get job details by IDs", "error", err)
+				internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
+					"error_type":  "database_retrieval",
+					"entity_type": "job_details",
+					"job_ids":     strings.Join(jobIDs, ","),
+				})
+				app.serverError(w, r, wrappedErr)
+				return
+			}
+			// Merge job details into the jobs map
+			for _, detail := range jobDetails {
+				if job, exists := jobs[detail.ID]; exists {
+					job.JobDetail = *detail
+					jobs[detail.ID] = job
+				} else {
+					app.logger.Warn("showDashboard: job detail found without corresponding user job", "job_id", detail.ID)
+				}
+			}
 		}
 	}
 
@@ -227,9 +323,17 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 	// Add data to template
 	data["CurrentStatus"] = user.State.Status.Description()
 	data["CurrentTime"] = time.Now()
-	data["HasJobs"] = len(jobs) > 0 || statusJobCount > 0
+
+	// Set jobs data and HasJobs based on status type
+	if status == internal.JobStatusNew {
+		data["HasJobs"] = len(semanticJobsSlice) > 0 || statusJobCount > 0
+		data["Jobs"] = semanticJobsSlice
+	} else {
+		data["HasJobs"] = len(jobs) > 0 || statusJobCount > 0
+		data["Jobs"] = jobs
+	}
+
 	data["ActiveStatus"] = string(status)
-	data["Jobs"] = jobs
 	data["NextPageToken"] = nextPageToken
 	data["CurrentPageToken"] = pageToken
 	data["HasNextPage"] = nextPageToken != ""
@@ -242,8 +346,8 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 
 	// Map for display names of job statuses
 	data["StatusDisplayNames"] = map[string]string{
-		"new":      "New Jobs",
-		"viewed":   "Viewed Jobs",
+		"new": "New Jobs",
+		// "viewed":   "Viewed Jobs",
 		"saved":    "Saved Jobs",
 		"applied":  "Applied Jobs",
 		"rejected": "Rejected Jobs",

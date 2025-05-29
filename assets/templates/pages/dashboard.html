@@ -24,15 +24,6 @@
             </div>
         </div>
         {{end}}
-        <div>
-            <ins id="new-jobs-indicator" class="notice" style="display: none;">
-                <span id="new-jobs-count"></span> new jobs are available. 
-                <a href="/dashboard{{if .TestMode}}?test_mode={{.TestMode}}{{end}}">Refresh</a>
-            </ins>
-            <div id="search-completion-indicator" class="notice" style="display: none;">
-                Search complete! Found <span id="search-completion-count"></span> jobs. 
-                <a href="/dashboard{{if .TestMode}}?test_mode={{.TestMode}}{{end}}">Refresh</a>
-            </div>
         </div>
     </header>
 
@@ -43,7 +34,7 @@
         <p>Our team has been notified and is working to resolve it. Please check back later.</p>
     </article>
     {{end}}
-    <ins id="search-status" class="notice secondary">
+    <ins id="search-status" class="notice secondary" style="display: none;">
         <div id="search-progress-container" style="display: none; margin-top: 10px;">
             <progress id="search-progress-bar" value="0" max="100"></progress>
             <div id="search-progress-details" style="font-size: 0.9em; margin-top: 5px;"></div>
@@ -109,12 +100,8 @@
     </section>
 </main>
 
-<!-- Add user data for state monitoring -->
-<div data-session-id="{{.User.ID}}" 
-     data-pusher-key="{{.PusherKey}}" 
-     data-pusher-cluster="{{.PusherCluster}}"
-     data-next-search-time="{{.NextSearchTime.Unix}}"
-     hidden></div>
+<!-- Add user data for browser functionality -->
+<div data-next-search-time="{{.NextSearchTime.Unix}}" hidden></div>
 {{end}}
 
 {{define "waitlist-opt-out"}}
@@ -214,13 +201,12 @@
         {{end}}
     </div>
     <footer>
-        <small>Added {{.JobDetail.CreatedAt | humanDate}} &nbsp; | &nbsp; {{percentage .UserJob.Score 1}}</small>
+        <small>Added {{.JobDetail.CreatedAt | humanDate}} &nbsp; | &nbsp; {{percentage .ScoredJobDetail.Score 1}}</small>
     </footer>
 </article>
 {{end}}
 
 {{define "page:scripts"}}
-<script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         console.log('Dashboard: Initializing...');
@@ -245,333 +231,16 @@
             }
         });
         
-        // Initialize Notyf
-        const notyf = new Notyf({
-            types: [
-            {
-                type: 'status',
-                background: 'blue',
-                icon: false,
-                position: { x: 'center', y: 'top' },
-                dismissible: true,
-                duration: 4000
-            },
-            {
-                type: 'success',
-                position: { x: 'right', y: 'bottom' },
-                dismissible: true,
-                duration: 4000
-            }, {
-                type: 'error',
-                position: { x: 'right', y: 'bottom' },
-                dismissible: true,
-                duration: 0 // Error messages stay until dismissed
-            }]
-        });
-
-        // Function to simulate a new job being found
-        window.simulateNewJob = function(count) {
-            const data = { count: count || 1 };
-            handleNewJob(data);
-            console.log('Dashboard: Simulated new job event:', data);
-        };
-
-        // Function to simulate search completed event
-        window.simulateSearchCompleted = function(totalJobs, errors = []) {
-            const data = {
-                total_jobs: totalJobs,
-                status_text: "Job Search Complete",
-                description: `Search completed with ${totalJobs} jobs found`,
-            };
-            
-            // Add errors if provided
-            if (errors.length > 0) {
-                data.errors = errors;
-            }
-            
-            // Directly call the state update handler
-            handleStateUpdate(data);
-            console.log('Dashboard: Simulated search completed event:', data);
-        };
-
-        const sessionEle = document.querySelector('[data-session-id]');
-        if (!sessionEle) {
-            console.error('Dashboard: No user element found');
-            return;
-        }
-        
-        console.log('Dashboard: Connecting to Pusher...', {
-            key: sessionEle.dataset.pusherKey,
-            cluster: sessionEle.dataset.pusherCluster,
-            sessionId: sessionEle.dataset.sessionId
-        });
-        
-        // Set up automatic refresh based on next search time
-        const nextSearchTimeUnix = parseInt(sessionEle.dataset.nextSearchTime, 10);
-        if (!isNaN(nextSearchTimeUnix) && nextSearchTimeUnix > 0) {
-            const nextSearchTime = new Date(nextSearchTimeUnix * 1000);
-            const now = new Date();
-            
-            if (nextSearchTime > now) {
-                // Calculate time until refresh (add a small buffer of 5 seconds after search time)
-                const refreshDelay = nextSearchTime.getTime() - now.getTime() + 5000;
-                
-                console.log('Dashboard: Scheduling page refresh at', nextSearchTime.toLocaleString());
-                
-                // Schedule page refresh
-                setTimeout(function() {
-                    console.log('Dashboard: Auto-refreshing page for scheduled search');
-                    window.location.reload();
-                }, refreshDelay);
-            }
-        }
-        
-        const pusher = new Pusher(sessionEle.dataset.pusherKey, {
-            cluster: sessionEle.dataset.pusherCluster
-        });
-        
-        const channelName = `${sessionEle.dataset.sessionId}`;
-        console.log('Dashboard: Subscribing to channel:', channelName);
-        
-        const channel = pusher.subscribe(channelName);
-        const searchStatus = document.getElementById('search-status');
-        const searchStatusMessage = document.getElementById('search-status-message');
-        const newJobsIndicator = document.getElementById('new-jobs-indicator');
-        const newJobsCount = document.getElementById('new-jobs-count');
-        
-        // Move the new job handler to a named function
-        let totalNewJobs = 0;  // Keep track of total new jobs
-        function handleNewJob(data) {
-            console.log('Dashboard: Received new-job event:', data);
-            
-            if (!data.count) {
-                console.warn('Dashboard: New job event missing count');
-                return;
-            }
-            
-            // Increment the total count
-            totalNewJobs += data.count;
-            
-            // Update the count in the header indicator
-            newJobsCount.textContent = totalNewJobs;
-            newJobsIndicator.style.display = 'block';
-            console.log('Dashboard: Updated new jobs count:', totalNewJobs);
-
-            // Show a success toast notification
-            // notyf.success({
-            //     message: `Found ${data.count} new jobs matching your criteria!`,
-            //     dismissible: true
-            // });
-        }
-
-        // Extract the state update handler to a named function
-        function handleStateUpdate(data) {
-            console.log('Dashboard: Received state-update event:', data);
-            
-            if (!data.description && !data.status_text) {
-                console.warn('Dashboard: State update missing description or status');
-                return;
-            }
-            
-            // Get the search progress container and progress bar
-            const progressContainer = document.getElementById('search-progress-container');
-            const progressBar = document.getElementById('search-progress-bar');
-            const progressDetails = document.getElementById('search-progress-details');
-            const phaseIndicator = document.getElementById('search-phase-indicator');
-            
-            // Show/hide search status based on job search states
-            if (data.status_text === 'Job Search Queued' ||
-                data.status_text === 'Job Search Scheduled' || 
-                data.status_text === 'Job Search Started' ||
-                data.status_text === 'Job Search In Progress' ||
-                data.status_text === 'Job Analysis Started' ||
-                data.status_text === 'Job Analysis In Progress' ||
-                data.status_text === 'Call Analysis Started') {
-                
-                console.log('Dashboard: Showing search status:', data.description);
-                searchStatus.style.display = 'block';
-                
-                // Show the phase indicator for all search-related states
-                if (phaseIndicator) {
-                    phaseIndicator.style.display = 'block';
-                    
-                    // Update active phase
-                    if (data.phase) {
-                        updateActivePhase(data.phase);
-                    }
-                }
-                
-                // Handle progress bar visibility and updates
-                if (progressContainer && progressBar && progressDetails) {
-                    // For analysis progress or search in progress, show progress bar
-                    if (data.phase === 'analysis_in_progress' || 
-                        data.phase === 'search_in_progress') {
-                        
-                        progressContainer.style.display = 'block';
-                        
-                        // Update progress bar if we have percentage information
-                        if (data.progress_percentage !== undefined) {
-                            progressBar.value = data.progress_percentage;
-                            
-                            // For search in progress without a known total, show indeterminate
-                            if (data.phase === 'search_in_progress' && !data.search_completed) {
-                                progressBar.removeAttribute('value'); // Makes it indeterminate
-                            }
-                        }
-                        
-                        // Create detailed progress message
-                        let detailsText = data.description || '';
-                        if (data.phase === 'analysis_in_progress') {
-                            if (data.jobs_analyzed !== undefined && data.jobs_found > 0) {
-                                detailsText = `Analyzed ${data.jobs_analyzed} of ${data.jobs_found} jobs`;
-                                
-                                // Add match stats if available
-                                if (data.jobs_matched !== undefined && data.jobs_not_matched !== undefined) {
-                                    detailsText += ` (${data.jobs_matched} matches, ${data.jobs_not_matched} non-matches)`;
-                                }
-                            }
-                        } else if (data.phase === 'search_in_progress') {
-                            if (data.jobs_found !== undefined) {
-                                detailsText = `Found ${data.jobs_found} jobs so far...`;
-                            }
-                        }
-                        
-                        if (detailsText) {
-                            progressDetails.textContent = detailsText;
-                        }
-                    } else {
-                        // For other states, show the container but with just the message
-                        progressContainer.style.display = 'block';
-                        progressDetails.textContent = data.description;
-                    }
-                }
-                
-            } else if (data.status_text === 'Job Search Complete' || 
-                       data.status_text === 'Job Analysis Complete') {
-                console.log('Dashboard: Search or analysis completed');
-                
-                // Update the search status
-                searchStatus.style.display = 'block';
-                progressContainer.style.display = 'block';
-                progressDetails.textContent = data.description;
-                
-                // Update active phase
-                if (phaseIndicator && data.phase) {
-                    phaseIndicator.style.display = 'block';
-                    updateActivePhase(data.phase);
-                }
-                
-                // Hide progress bar for completion states
-                if (progressBar) {
-                    progressBar.style.display = 'none';
-                }
-                
-                // Update the search completion indicator for the final phase
-                if (data.phase === 'analysis_complete') {
-                    const searchCompletionCount = document.getElementById('search-completion-count');
-                    const searchCompletionIndicator = document.getElementById('search-completion-indicator');
-                    
-                    if (searchCompletionCount && searchCompletionIndicator && data.jobs_matched !== undefined) {
-                        searchCompletionCount.textContent = data.jobs_matched;
-                        searchCompletionIndicator.style.display = 'block';
-                    }
-                    
-                    // After all analysis is complete, we can refresh the page to show all matches
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 3000); // Give user time to see the completion message
-                }
-            }
-
-            // Show error notifications if there's an error
-            if (data.error) {
-                console.log('Dashboard: Showing error notification:', data.error);
-                notyf.error({
-                    message: data.error,
-                    dismissible: true,
-                    duration: 0
-                });
-            }
-            
-            // Show any errors that occurred during search
-            if (data.errors && data.errors.length > 0) {
-                console.log('Dashboard: Showing error notifications:', data.errors);
-                data.errors.forEach(error => {
-                    notyf.error({
-                        message: error,
-                        dismissible: true,
-                        duration: 0
-                    });
-                });
-            }
-        }
-        
-        // Function to update the active phase in the phase indicator
-        function updateActivePhase(currentPhase) {
-            const allSteps = document.querySelectorAll('.search-phase-step');
-            const phaseOrder = ['search_queued', 'search_scheduled', 'search_started', 'search_in_progress', 
-                                'search_complete', 'analysis_started', 'analysis_in_progress', 
-                                'analysis_complete'];
-            
-            // Get the index of the current phase
-            const currentPhaseIndex = phaseOrder.indexOf(currentPhase);
-            
-            if (currentPhaseIndex === -1) {
-                console.warn('Dashboard: Unknown phase', currentPhase);
-                return;
-            }
-            
-            // Mark steps as active or inactive based on the current phase
-            allSteps.forEach(step => {
-                const stepPhase = step.getAttribute('data-phase');
-                const stepPhaseIndex = phaseOrder.indexOf(stepPhase);
-                
-                if (stepPhaseIndex <= currentPhaseIndex) {
-                    step.classList.add('active');
-                } else {
-                    step.classList.remove('active');
-                }
-            });
-        }
-
-        // Bind the handler to the channel
-        channel.bind('state-update', handleStateUpdate);
-        channel.bind('new-job', handleNewJob);
-
-        // Add connection state logging
-        pusher.connection.bind('state_change', function(states) {
-            console.log('Dashboard: Pusher connection state changed:', {
-                previousState: states.previous,
-                currentState: states.current
-            });
-        });
-
-        pusher.connection.bind('connected', function() {
-            console.log('Dashboard: Successfully connected to Pusher');
-        });
-
-        pusher.connection.bind('error', function(err) {
-            console.error('Dashboard: Pusher connection error:', err);
-        });
-
         // Add event listener for the rating filter checkbox
         const showAllRatingsCheckbox = document.getElementById('show-all-ratings');
         if (showAllRatingsCheckbox) {
             showAllRatingsCheckbox.addEventListener('change', function() {
-                // Get current URL and update the show_all parameter
-                const url = new URL(window.location.href);
-                url.searchParams.set('show_all', this.checked);
-                
-                // Keep the current status if it exists
-                const currentStatus = url.searchParams.get('status');
-                if (currentStatus) {
-                    url.searchParams.set('status', currentStatus);
+                const url = new URL(window.location);
+                if (this.checked) {
+                    url.searchParams.set('show_all', 'true');
+                } else {
+                    url.searchParams.delete('show_all');
                 }
-                
-                // Remove page parameter when filter changes
-                url.searchParams.delete('page');
-                
-                // Navigate to the new URL
                 window.location.href = url.toString();
             });
         }
@@ -603,138 +272,6 @@
     .job-status-tabs a {
         text-decoration: none;
         color: var(--primary);
-    }
-    
-    /* Search phase indicator */
-    .search-phase-container {
-        margin: 1.5rem 0;
-        padding: 1rem;
-        background-color: var(--card-background-color);
-        border-radius: var(--border-radius);
-        box-shadow: var(--card-box-shadow);
-    }
-    
-    .search-phase-steps {
-        display: flex;
-        justify-content: space-between;
-        position: relative;
-    }
-    
-    .search-phase-steps::before {
-        content: '';
-        position: absolute;
-        top: 20px;
-        left: 0;
-        right: 0;
-        height: 2px;
-        background-color: var(--muted-border-color);
-        z-index: 1;
-    }
-    
-    .search-phase-step {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        position: relative;
-        z-index: 2;
-        width: 20%;
-    }
-    
-    .step-icon {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        background-color: var(--muted-border-color);
-        color: var(--text-color);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: bold;
-        margin-bottom: 0.5rem;
-        transition: background-color 0.3s ease, color 0.3s ease;
-    }
-    
-    .step-label {
-        font-size: 0.8rem;
-        text-align: center;
-        color: var(--muted-color);
-        transition: color 0.3s ease;
-    }
-    
-    .search-phase-step.active .step-icon {
-        background-color: var(--primary);
-        color: white;
-    }
-    
-    .search-phase-step.active .step-label {
-        color: var(--primary);
-        font-weight: bold;
-    }
-    
-    /* Progress bar styling */
-    #search-progress-container {
-        margin-top: 0.75rem;
-    }
-    
-    progress {
-        width: 100%;
-        height: 10px;
-        border-radius: 5px;
-        background-color: var(--muted-border-color);
-    }
-    
-    progress::-webkit-progress-bar {
-        background-color: var(--muted-border-color);
-        border-radius: 5px;
-    }
-    
-    progress::-webkit-progress-value {
-        background-color: var(--primary);
-        border-radius: 5px;
-    }
-    
-    progress::-moz-progress-bar {
-        background-color: var(--primary);
-        border-radius: 5px;
-    }
-    
-    #search-progress-details {
-        text-align: center;
-        margin-top: 0.25rem;
-        font-size: 0.8rem;
-        color: var(--muted-color);
-    }
-    
-    /* Responsive adjustments for phase indicator */
-    @media (max-width: 768px) {
-        .step-label {
-            font-size: 0.7rem;
-        }
-        
-        .step-icon {
-            width: 30px;
-            height: 30px;
-            font-size: 0.8rem;
-        }
-        
-        .search-phase-steps::before {
-            top: 15px;
-        }
-    }
-    
-    @media (max-width: 480px) {
-        .search-phase-steps {
-            flex-wrap: wrap;
-        }
-        
-        .search-phase-step {
-            width: 33%;
-            margin-bottom: 1rem;
-        }
-        
-        .search-phase-steps::before {
-            display: none;
-        }
     }
     
     /* Jobs grid */
@@ -788,13 +325,19 @@
     }
     
     .job-card .requirements h4,
-    .job-card .qualifications h4 {
+    .job-card .qualifications h4,
+    .job-card .responsibilities h4,
+    .job-card .skills h4,
+    .job-card .bonus-qualifications h4 {
         font-size: 1rem;
         margin-bottom: 0.5rem;
     }
     
     .job-card .requirements ul,
-    .job-card .qualifications ul {
+    .job-card .qualifications ul,
+    .job-card .responsibilities ul,
+    .job-card .skills ul,
+    .job-card .bonus-qualifications ul {
         list-style: none;
         padding-left: 0;
         margin: 0;
@@ -803,7 +346,10 @@
     }
     
     .job-card .requirements li,
-    .job-card .qualifications li {
+    .job-card .qualifications li,
+    .job-card .responsibilities li,
+    .job-card .skills li,
+    .job-card .bonus-qualifications li {
         margin-bottom: 0.25rem;
     }
     
@@ -863,19 +409,6 @@
     
     .rating-filter input[type="checkbox"] {
         margin: 0;
-    }
-    
-    /* Next search info styles */
-    #next-search-info {
-        font-size: 0.9rem;
-        display: flex;
-        align-items: center;
-    }
-    
-    #next-search-info::before {
-        content: "⏰";
-        margin-right: 0.5rem;
-        font-size: 1.1rem;
     }
     
     /* Test mode controls - TEMPORARY */
