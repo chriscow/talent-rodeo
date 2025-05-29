@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"talent-rodeo/cmd/cli/cmd"
@@ -9,8 +10,11 @@ import (
 )
 
 func main() {
-	if err := godotenv.Overload(); err != nil {
-		fmt.Printf("Error loading .env file: %v\n", err)
+	envFile := flag.String("env", ".env", "Path to the .env file")
+	flag.Parse()
+
+	if err := godotenv.Overload(*envFile); err != nil {
+		fmt.Printf("Error loading .env file: %s err: %v\n", envFile, err)
 		os.Exit(1)
 	}
 

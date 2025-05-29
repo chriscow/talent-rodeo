@@ -121,7 +121,8 @@ type config struct {
 		clientID     string
 		clientSecret string
 	}
-	testing bool // Flag to indicate if the application is running in test mode
+	testing bool   // Flag to indicate if the application is running in test mode
+	envFile string // override which env file to load, e.g. ".env.prod" or ".env.dev"
 }
 
 type application struct {
@@ -143,73 +144,70 @@ type application struct {
 }
 
 func run(logger *slog.Logger) error {
-	if err := checkEnv(logger); err != nil {
-		return err
-	}
-
-	// To initialize Sentry's handler, you need to initialize Sentry itself beforehand
-	// https://chris-cowherd.sentry.io/projects/talent-rodeo-dev/getting-started/
-	if err := sentry.Init(sentry.ClientOptions{
-		Dsn: "https://17ea83f451376a7be4907f9020704128@o4508059028946944.ingest.us.sentry.io/4509140632010752",
-	}); err != nil {
-		fmt.Printf("Sentry initialization failed: %v\n", err)
-		return err
-	}
-
-	defer sentry.Flush(time.Second * 5)
-	// Capture panics and send them to Sentry
-	defer func() {
-		if err := recover(); err != nil {
-			sentry.CurrentHub().Recover(err)
-			sentry.Flush(time.Second * 5)
-			fmt.Printf("Panic: %v\n", err)
-			fmt.Printf("Stack trace: %s\n", string(debug.Stack()))
-		}
-	}()
-
+	// Define ALL flags at once, before any Parse() call
 	var cfg config
-
-	flag.StringVar(&cfg.baseURL, "base-url", os.Getenv("BASE_URL"), "base URL for the application")
+	flag.StringVar(&cfg.envFile, "env", ".env", "override which env file to load, e.g. '.env.prod' or '.env.dev'")
 	flag.IntVar(&cfg.httpPort, "http-port", 2304, "port to listen on for HTTP requests")
 
+	// Define all other flags here (before parsing environment)
+	flag.StringVar(&cfg.baseURL, "base-url", "", "base URL for the application") // Note: empty default initially
 	flag.IntVar(&cfg.nats.port, "nats-port", 42223, "port to listen on for NATS")
 	flag.StringVar(&cfg.nats.url, "nats-url", "nats://localhost:42223", "URL for NATS server")
 	flag.BoolVar(&cfg.nats.embedded, "embedded-nats", true, "use embedded NATS server")
-
 	flag.StringVar(&cfg.autoHTTPS.domain, "auto-https-domain", "", "domain to enable automatic HTTPS for")
 	flag.StringVar(&cfg.autoHTTPS.email, "auto-https-email", "admin@example.com", "contact email address for problems with LetsEncrypt certificates")
 	flag.BoolVar(&cfg.autoHTTPS.staging, "auto-https-staging", false, "use LetsEncrypt staging environment")
-
-	flag.StringVar(&cfg.cookie.secretKey, "cookie-secret-key", os.Getenv("SESSION_SECRET"), "secret key for cookie authentication/encryption")
-
-	flag.StringVar(&cfg.firebase.projectID, "firebase-project-id", os.Getenv("FIREBASE_PROJECT_ID"), "Firebase project ID")
-
-	flag.StringVar(&cfg.db.dsn, "db-dsn", os.Getenv("DB_DSN"), "PostgreSQL DSN")
+	flag.StringVar(&cfg.cookie.secretKey, "cookie-secret-key", "", "secret key for cookie authentication/encryption")
+	flag.StringVar(&cfg.firebase.projectID, "firebase-project-id", "", "Firebase project ID")
+	flag.StringVar(&cfg.db.dsn, "db-dsn", "", "PostgreSQL DSN")
 	flag.BoolVar(&cfg.db.automigrate, "db-automigrate", false, "run migrations on startup")
-
 	flag.StringVar(&cfg.notifications.email, "notifications-email", "", "contact email address for error notifications")
-
-	flag.StringVar(&cfg.session.secretKey, "session-secret-key", os.Getenv("SESSION_SECRET"), "secret key for session cookie authentication")
+	flag.StringVar(&cfg.session.secretKey, "session-secret-key", "", "secret key for session cookie authentication")
 	flag.StringVar(&cfg.session.oldSecretKey, "session-old-secret-key", "", "previous secret key for session cookie authentication")
-
 	flag.StringVar(&cfg.smtp.host, "smtp-host", "example.smtp.host", "smtp host")
 	flag.IntVar(&cfg.smtp.port, "smtp-port", 25, "smtp port")
 	flag.StringVar(&cfg.smtp.username, "smtp-username", "example_username", "smtp username")
 	flag.StringVar(&cfg.smtp.password, "smtp-password", "pa55word", "smtp password")
 	flag.StringVar(&cfg.smtp.from, "smtp-from", "Example Name <no-reply@example.org>", "smtp sender")
+	flag.StringVar(&cfg.linkedin.clientID, "linkedin-client-id", "", "LinkedIn client ID")
+	flag.StringVar(&cfg.linkedin.clientSecret, "linkedin-client-secret", "", "LinkedIn client secret")
+	flag.BoolVar(&cfg.testing, "testing", false, "enable testing mode")
+	showVersion := flag.Bool("version", false, "display version and exit")
 
-	flag.StringVar(&cfg.linkedin.clientID, "linkedin-client-id", os.Getenv("LINKEDIN_AUTH_CLIENT_ID"), "LinkedIn client ID")
-	flag.StringVar(&cfg.linkedin.clientSecret, "linkedin-client-secret", os.Getenv("LINKEDIN_AUTH_CLIENT_SECRET"), "LinkedIn client secret")
+	// Parse flags ONCE
+	flag.Parse()
+
+	// Load environment file
+	if err := checkEnv(logger, cfg.envFile); err != nil {
+		return fmt.Errorf("error checking environment: %w", err)
+	}
+
+	// Apply environment variable defaults to config fields that weren't set by flags
+	if cfg.baseURL == "" {
+		cfg.baseURL = os.Getenv("BASE_URL")
+	}
+	if cfg.cookie.secretKey == "" {
+		cfg.cookie.secretKey = os.Getenv("SESSION_SECRET")
+	}
+	if cfg.firebase.projectID == "" {
+		cfg.firebase.projectID = os.Getenv("FIREBASE_PROJECT_ID")
+	}
+	if cfg.db.dsn == "" {
+		cfg.db.dsn = os.Getenv("DB_DSN")
+	}
+	if cfg.session.secretKey == "" {
+		cfg.session.secretKey = os.Getenv("SESSION_SECRET")
+	}
+	if cfg.linkedin.clientID == "" {
+		cfg.linkedin.clientID = os.Getenv("LINKEDIN_AUTH_CLIENT_ID")
+	}
+	if cfg.linkedin.clientSecret == "" {
+		cfg.linkedin.clientSecret = os.Getenv("LINKEDIN_AUTH_CLIENT_SECRET")
+	}
 
 	if cfg.linkedin.clientID == "" || cfg.linkedin.clientSecret == "" {
 		return fmt.Errorf("LINKEDIN_AUTH_CLIENT_ID and LINKEDIN_AUTH_CLIENT_SECRET environment variables are required")
 	}
-
-	flag.BoolVar(&cfg.testing, "testing", false, "enable testing mode")
-
-	showVersion := flag.Bool("version", false, "display version and exit")
-
-	flag.Parse()
 
 	logger.Info("Starting HTTP server", "port", cfg.httpPort)
 
@@ -433,7 +431,7 @@ func initS3Client() (*s3.S3, error) {
 	return s3Client, nil
 }
 
-func checkEnv(logger *slog.Logger) error {
+func checkEnv(logger *slog.Logger, envFile string) error {
 	wd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("failed to get working directory: %w", err)
@@ -441,8 +439,14 @@ func checkEnv(logger *slog.Logger) error {
 
 	logger.Info("checkEnv: working directory: " + internal.Yellow(wd))
 
-	if err = godotenv.Overload(); err != nil {
-		fmt.Printf("checkEnv: Error loading .env file: %s\n", err.Error())
+	// Use the specified env file or default to .env
+	if envFile == "" {
+		envFile = ".env"
+	}
+
+	logger.Info("Loading environment file", "file", envFile)
+	if err = godotenv.Overload(envFile); err != nil {
+		fmt.Printf("checkEnv: did not load `%s` file: %s\n", envFile, err.Error())
 	}
 
 	requiredKeys := []string{

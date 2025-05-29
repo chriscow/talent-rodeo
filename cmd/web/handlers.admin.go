@@ -646,36 +646,84 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 					statusJobCount = 0
 				}
 
-				// Get paginated jobs by status
-				userJobs, nextPageToken, err := internal.GetUserJobsSorted(ctx, app.fs, selectedUser.ID, status, pageSize, "", showAllRatings)
-				if err != nil {
-					app.logger.Warn("adminUserDashboard: failed to get user jobs", "error", err, "user_id", selectedUserID)
-					userJobs = []*internal.UserJob{}
-				}
-
-				// Combine user jobs with job details
+				// Hybrid Approach: Use semantic search for "New" jobs, existing queries for other statuses
 				jobs := map[string]JobWithDetails{}
-				for _, job := range userJobs {
-					jobs[job.JobRef.ID] = JobWithDetails{
-						UserJob: job,
-					}
-				}
+				var semanticJobsSlice []JobWithDetails // Ordered slice for semantic search results
+				var nextPageToken string
 
-				jobIDs := make([]string, 0, len(jobs))
-				for id := range jobs {
-					jobIDs = append(jobIDs, id)
-				}
+				if status == internal.JobStatusNew {
+					// For "New" status, use semantic search with jobs that have no UserJob record
 
-				if len(jobIDs) > 0 {
-					jobDetails, err := internal.GetJobDetailsByIDs(ctx, app.fs, jobIDs)
+					// Get user's subscriptions to find criteriaID for semantic search
+					subscriptions, err := internal.GetSubscriptionsForUser(ctx, app.fs, selectedUser.ID)
 					if err != nil {
-						app.logger.Warn("adminUserDashboard: failed to get job details", "error", err, "user_id", selectedUserID)
-					} else {
-						// Merge job details into the jobs map
-						for _, detail := range jobDetails {
-							if job, exists := jobs[detail.ID]; exists {
-								job.JobDetail = detail
-								jobs[detail.ID] = job
+						app.logger.Warn("adminUserDashboard: failed to get subscriptions", "error", err, "user_id", selectedUserID)
+					} else if len(subscriptions) > 0 {
+						// Use the first subscription's criteria for semantic search
+						criteriaID := subscriptions[0].CriteriaID
+
+						// Get semantic search results for the user
+						semanticJobs, err := internal.GetSemanticJobsForUser(ctx, app.fs, selectedUser, criteriaID, pageSize)
+						if err != nil {
+							app.logger.Warn("adminUserDashboard: failed to get semantic jobs", "error", err, "user_id", selectedUserID)
+						} else {
+							// Filter semantic jobs to only include those without existing UserJob records
+							existingUserJobs, err := internal.ListUserJobs(ctx, app.fs, selectedUser.ID)
+							if err != nil {
+								app.logger.Warn("adminUserDashboard: failed to get existing user jobs for filtering", "error", err, "user_id", selectedUserID)
+								existingUserJobs = []internal.UserJob{} // Continue with empty list
+							}
+
+							// Create a set of existing job IDs for fast lookup
+							existingJobIDs := make(map[string]bool)
+							for _, userJob := range existingUserJobs {
+								existingJobIDs[userJob.JobRef.ID] = true
+							}
+
+							// Add semantic jobs that don't have UserJob records, preserving order
+							for _, semanticJob := range semanticJobs {
+								if !existingJobIDs[semanticJob.JobDetail.ID] {
+									jobWithDetails := JobWithDetails{
+										ScoredJobDetail: semanticJob,
+										IsSemanticOnly:  true,
+									}
+									jobs[semanticJob.JobDetail.ID] = jobWithDetails
+									semanticJobsSlice = append(semanticJobsSlice, jobWithDetails)
+								}
+							}
+						}
+					}
+				} else {
+					// For other statuses, use existing UserJob queries
+
+					// Get paginated jobs by status
+					userJobs, pageToken, err := internal.GetUserJobsSorted(ctx, app.fs, selectedUser.ID, status, pageSize, "", showAllRatings)
+					if err != nil {
+						app.logger.Warn("adminUserDashboard: failed to get user jobs", "error", err, "user_id", selectedUserID)
+						userJobs = []*internal.UserJob{}
+					}
+					nextPageToken = pageToken
+
+					// Get job details for UserJob records
+					jobIDs := make([]string, 0, len(userJobs))
+					for _, job := range userJobs {
+						jobIDs = append(jobIDs, job.JobRef.ID)
+						jobs[job.JobRef.ID] = JobWithDetails{
+							UserJob: job,
+						}
+					}
+
+					if len(jobIDs) > 0 {
+						jobDetails, err := internal.GetJobDetailsByIDs(ctx, app.fs, jobIDs)
+						if err != nil {
+							app.logger.Warn("adminUserDashboard: failed to get job details", "error", err, "user_id", selectedUserID)
+						} else {
+							// Merge job details into the jobs map (matching main dashboard approach)
+							for _, detail := range jobDetails {
+								if job, exists := jobs[detail.ID]; exists {
+									job.JobDetail = *detail
+									jobs[detail.ID] = job
+								}
 							}
 						}
 					}
@@ -684,19 +732,27 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 				// Add dashboard data to template
 				data["HasJobs"] = len(jobs) > 0 || statusJobCount > 0
 				data["ActiveStatus"] = string(status)
-				data["Jobs"] = jobs
+				data["NextPageToken"] = nextPageToken
 				data["HasNextPage"] = nextPageToken != ""
 				data["TotalJobsForStatus"] = statusJobCount
 				data["JobStatuses"] = internal.GetJobStatuses()
 				data["StatusDisplayNames"] = map[string]string{
 					"new":      "New Jobs",
-					"viewed":   "Viewed Jobs",
 					"saved":    "Saved Jobs",
 					"applied":  "Applied Jobs",
 					"rejected": "Rejected Jobs",
 				}
 				data["ShowAllRatings"] = showAllRatings
 				data["TestMode"] = true // Enable test mode features in dashboard view
+
+				// Set jobs data based on status type (matching main dashboard approach)
+				if status == internal.JobStatusNew {
+					data["HasJobs"] = len(semanticJobsSlice) > 0 || statusJobCount > 0
+					data["Jobs"] = semanticJobsSlice
+				} else {
+					data["HasJobs"] = len(jobs) > 0 || statusJobCount > 0
+					data["Jobs"] = jobs
+				}
 			}
 		}
 	}
