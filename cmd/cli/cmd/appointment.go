@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"sync"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/search/providers/scrapingdog"
@@ -18,12 +19,14 @@ import (
 )
 
 var completedAppt bool
+var sendRecap bool
 
 func init() {
 	appointmentCmd.AddCommand(reprocessCmd)
 	appointmentCmd.AddCommand(listApptsCmd)
 	appointmentCmd.AddCommand(createApptCmd)
 	appointmentCmd.AddCommand(latestApptCmd)
+	appointmentCmd.AddCommand(sendRecapCmd)
 	RootCmd.AddCommand(appointmentCmd)
 
 	createApptCmd.Flags().StringVarP(&userID, "user", "u", "", "User ID to create the appointment for")
@@ -36,6 +39,12 @@ func init() {
 	reprocessCmd.Flags().StringVarP(&appointmentID, "appointment", "a", "", "Appointment ID to reprocess")
 	reprocessCmd.MarkFlagRequired("appointment")
 	reprocessCmd.MarkFlagRequired("user")
+	reprocessCmd.Flags().BoolVarP(&sendRecap, "send-recap", "r", false, "Send a recap email after reprocessing the appointment")
+
+	sendRecapCmd.Flags().StringVarP(&userID, "user", "u", "", "User ID for the appointment")
+	sendRecapCmd.Flags().StringVarP(&appointmentID, "appointment", "a", "", "Appointment ID to send recap email for")
+	sendRecapCmd.MarkFlagRequired("appointment")
+	sendRecapCmd.MarkFlagRequired("user")
 }
 
 // Good appointment ids: 230bfc29-2ba0-42b8-90e9-f2288b96965f (Vijaya), 2b0a2620-5117-402d-ba13-daf6e501d8be (Vijaya original)
@@ -203,6 +212,7 @@ var reprocessCmd = &cobra.Command{
 		if appointmentID == "" {
 			return fmt.Errorf("appointment ID is required")
 		}
+
 		fmt.Printf("Started reprocessing appointment %s\n", appointmentID)
 
 		// Initialize Firestore client
@@ -235,7 +245,26 @@ var reprocessCmd = &cobra.Command{
 		dispatch.Register(userID, internal.NewSearchResultProcessor(fs, logger))
 		queue := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), logger, scrapingdog.WithJobEventHandler(dispatch))
 
-		transcript.ProcessCompletedCall(hub, fs, nil, queue, logger, dispatch, user, appointment)
+		var cfg *transcript.SMTPConfig
+		if sendRecap {
+			portStr := os.Getenv("SMTP_PORT")
+			if portStr == "" {
+				portStr = "587" // default SMTP port
+			}
+			port, err := strconv.Atoi(portStr)
+			if err != nil {
+				return fmt.Errorf("invalid SMTP_PORT environment variable: %w", err)
+			}
+			cfg = &transcript.SMTPConfig{
+				Host:     os.Getenv("SMTP_HOST"),
+				Port:     port,
+				Username: os.Getenv("SMTP_USERNAME"),
+				Password: os.Getenv("SMTP_PASSWORD"),
+				From:     os.Getenv("SMTP_FROM"),
+			}
+		}
+
+		transcript.ProcessCompletedCall(hub, fs, nil, queue, logger, dispatch, user, appointment, cfg)
 
 		currentAppt, err := internal.GetAppointment(ctx, fs, userID, appointmentID)
 		if err != nil {
@@ -256,6 +285,83 @@ var reprocessCmd = &cobra.Command{
 		}
 
 		fmt.Printf("Still processing appointment %s...\n", appointmentID)
+		return nil
+	},
+}
+
+var sendRecapCmd = &cobra.Command{
+	Use:   "send-recap",
+	Short: "Send a recap email for a completed appointment",
+	Long:  `Send a recap email for a completed appointment using the appointment transcript`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := context.Background()
+
+		if userID == "" {
+			return fmt.Errorf("user ID is required")
+		}
+		if appointmentID == "" {
+			return fmt.Errorf("appointment ID is required")
+		}
+
+		// Initialize Firestore client
+		fs, err := internal.NewFirestoreClient(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to create firestore client: %w", err)
+		}
+		defer fs.Close()
+
+		// Get the appointment
+		appointment, err := internal.GetAppointment(ctx, fs, userID, appointmentID)
+		if err != nil {
+			return fmt.Errorf("failed to get appointment: %w", err)
+		}
+
+		// Get the user
+		user, found, err := internal.GetUser(ctx, fs, userID)
+		if err != nil {
+			return fmt.Errorf("failed to get user: %w", err)
+		}
+		if !found {
+			return fmt.Errorf("user not found")
+		}
+
+		// Get the transcript
+		appointmentTranscript, err := internal.GetAppointmentTranscript(ctx, fs, *appointment)
+		if err != nil {
+			return fmt.Errorf("failed to get appointment transcript: %w", err)
+		}
+
+		// Configure SMTP from environment variables
+		portStr := os.Getenv("SMTP_PORT")
+		if portStr == "" {
+			portStr = "587" // default SMTP port
+		}
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			return fmt.Errorf("invalid SMTP_PORT environment variable: %w", err)
+		}
+
+		cfg := transcript.SMTPConfig{
+			Host:     os.Getenv("SMTP_HOST"),
+			Port:     port,
+			Username: os.Getenv("SMTP_USERNAME"),
+			Password: os.Getenv("SMTP_PASSWORD"),
+			From:     os.Getenv("SMTP_FROM"),
+		}
+
+		// Validate required SMTP configuration
+		if cfg.Host == "" || cfg.Username == "" || cfg.Password == "" || cfg.From == "" {
+			return fmt.Errorf("missing required SMTP configuration. Please set SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD, and SMTP_FROM environment variables")
+		}
+
+		// Generate and send the recap email
+		fmt.Printf("Sending recap email for appointment %s to %s...\n", appointmentID, user.Email)
+		err = transcript.GenerateRecapEmail(ctx, fs, user, appointmentTranscript, cfg)
+		if err != nil {
+			return fmt.Errorf("failed to generate and send recap email: %w", err)
+		}
+
+		fmt.Printf("Successfully sent recap email for appointment %s\n", appointmentID)
 		return nil
 	},
 }
