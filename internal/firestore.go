@@ -19,8 +19,9 @@ import (
 type FirestoreClient struct {
 	*firestore.Client
 
-	jobListingCache *ristretto.Cache[string, *JobListing]
-	jobDetailCache  *ristretto.Cache[string, *JobDetail]
+	jobListingCache   *ristretto.Cache[string, *JobListing]
+	jobDetailCache    *ristretto.Cache[string, *JobDetail]
+	semanticJobsCache *ristretto.Cache[string, []ScoredJobDetail]
 }
 
 // Track if this is the first call to NewFirestoreClient
@@ -99,10 +100,21 @@ func NewFirestoreClient(ctx context.Context) (*FirestoreClient, error) {
 		return nil, fmt.Errorf("failed to create job detail cache: %w", err)
 	}
 
+	semanticJobsCache, err := ristretto.NewCache(&ristretto.Config[string, []ScoredJobDetail]{
+		NumCounters: 1e6,     // number of keys to track frequency of
+		MaxCost:     1 << 28, // maximum cost of cache (256MB)
+		BufferItems: 64,      // number of keys per Get buffer
+		Metrics:     false,   // no metrics collection
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create semantic jobs cache: %w", err)
+	}
+
 	return &FirestoreClient{
-		Client:          fs,
-		jobListingCache: jobListingCache,
-		jobDetailCache:  jobDetailCache,
+		Client:            fs,
+		jobListingCache:   jobListingCache,
+		jobDetailCache:    jobDetailCache,
+		semanticJobsCache: semanticJobsCache,
 	}, nil
 }
 
@@ -113,6 +125,10 @@ func (fs *FirestoreClient) Close() error {
 
 	if fs.jobDetailCache != nil {
 		fs.jobDetailCache.Close()
+	}
+
+	if fs.semanticJobsCache != nil {
+		fs.semanticJobsCache.Close()
 	}
 
 	if fs.Client != nil {
