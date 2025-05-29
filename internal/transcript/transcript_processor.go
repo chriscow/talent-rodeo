@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"talent-rodeo/internal/smtp"
 
 	// Removing self-import of internal package
 	"talent-rodeo/assets"
@@ -46,6 +47,14 @@ func (u *userNotifier) OnSearchCompleted(task internal.SearchTask, totalJobs int
 	internal.SendPusherRedirect(u.publisher, u.userID, "/dashboard")
 }
 
+type SMTPConfig struct {
+	Host     string
+	Port     int
+	Username string
+	Password string
+	From     string
+}
+
 // ProcessCompletedCall updates the appointment after a successful call with the transcript summary.
 // It is called as a background task after the transcript is fully processed.
 //
@@ -61,7 +70,7 @@ func (u *userNotifier) OnSearchCompleted(task internal.SearchTask, totalJobs int
 //   - Save the search criteria to the user
 //
 // Saving a new search criteria triggers a new search.
-func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pusher.Client, queue internal.SearchQueue, logger *slog.Logger, dispatch *internal.JobEventDispatch, user *internal.User, appointment *internal.Appointment) {
+func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pusher.Client, queue internal.SearchQueue, logger *slog.Logger, dispatch *internal.JobEventDispatch, user *internal.User, appointment *internal.Appointment, smtpCfg *SMTPConfig) {
 	ctx := context.Background()
 	sentry.SetHubOnContext(ctx, hub)
 
@@ -239,10 +248,120 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 
 		internal.SendPusherRedirect(psh, user.ID, "/dashboard")
 	}
+
+	if smtpCfg != nil {
+		if err := GenerateRecapEmail(ctx, fs, user, transcript, *smtpCfg); err != nil {
+			logger.Error("failed to generate recap email", "error", err)
+			hub.CaptureException(err)
+			internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
+			return
+		}
+	}
+}
+
+func GenerateRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user *internal.User, transcript *internal.Transcript, cfg SMTPConfig) error {
+	mailer, err := smtp.NewMailer(cfg.Host, cfg.Port, cfg.Username, cfg.Password, cfg.From)
+	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"error_type": "smtp_mailer_new",
+		})
+		return err
+	}
+
+	promptData := map[string]any{
+		"FullName":   user.Name,
+		"FirstName":  user.FirstName,
+		"Transcript": transcript,
+	}
+
+	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/recap-email.001.txt")
+	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"error_type": "assets_read_file",
+		})
+		return fmt.Errorf("failed to read recap email template: %w", err)
+	}
+
+	prompt, err := tools.GeneratePrompt(tmpl, promptData)
+	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"error_type": "tools_generate_prompt",
+		})
+		return fmt.Errorf("failed to generate prompt for recap email: %w", err)
+	}
+
+	resp, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat))
+	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"error_type": "tools_ask",
+		})
+		return fmt.Errorf("failed to ask LLM for recap email body: %w", err)
+	}
+
+	bodyData, err := extractEmailData(ctx, resp)
+	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"error_type": "extract_email_data",
+		})
+		return fmt.Errorf("failed to extract email data: %w", err)
+	}
+
+	err = mailer.Send(user.Email, bodyData, "recap-email.html")
+	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"error_type": "smtp_mailer_send",
+		})
+		return fmt.Errorf("failed to send recap email: %w", err)
+	}
+
+	return nil
+}
+
+func extractEmailData(_ context.Context, data string) (map[string]any, error) {
+	if !strings.Contains(data, "<plain_email_body>") {
+		return nil, fmt.Errorf("failed to extract email content: <plain_email_body> tag not found")
+	}
+
+	start := strings.Index(data, "<plain_email_body>")
+	if start == -1 {
+		return nil, fmt.Errorf("failed to extract email content: <plain_email_body> tag not found")
+	}
+	end := strings.Index(data, "</plain_email_body>")
+	if end == -1 {
+		return nil, fmt.Errorf("failed to extract email content: </plain_email_body> tag not found")
+	}
+
+	plainBody := data[start+len("<plain_email_body>") : end]
+
+	if plainBody == "" {
+		return nil, fmt.Errorf("failed to extract email content: body is empty")
+	}
+
+	// If HTML body is present, extract it as well
+	if !strings.Contains(data, "<html_email_body>") {
+		return nil, fmt.Errorf("failed to extract email content: <html_email_body> tag not found")
+	}
+
+	htmlStart := strings.Index(data, "<html_email_body>")
+	if htmlStart == -1 {
+		return nil, fmt.Errorf("failed to extract email content: <html_email_body> tag not found")
+	}
+	htmlEnd := strings.Index(data, "</html_email_body>")
+	if htmlEnd == -1 {
+		return nil, fmt.Errorf("failed to extract email content: </html_email_body> tag not found")
+	}
+	htmlBody := data[htmlStart+len("<html_email_body>") : htmlEnd]
+	if htmlBody == "" {
+		return nil, fmt.Errorf("failed to extract email content: HTML body is empty")
+	}
+	return map[string]any{
+		"PlainBody": plainBody,
+		"HtmlBody":  htmlBody,
+	}, nil
 }
 
 // RecoverProcessingAppointments finds and reprocesses any appointments that were interrupted during processing
-func RecoverProcessingAppointments(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pusher.Client, logger *slog.Logger, dispatch *internal.JobEventDispatch, queue internal.SearchQueue) error {
+func RecoverProcessingAppointments(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pusher.Client, logger *slog.Logger, dispatch *internal.JobEventDispatch, queue internal.SearchQueue, smtpCfg *SMTPConfig) error {
 	ctx := context.Background()
 
 	logger = logger.With("pkg", "transcript.RecoverProcessingAppointments")
@@ -306,7 +425,7 @@ func RecoverProcessingAppointments(hub *sentry.Hub, fs *internal.FirestoreClient
 			"appointment-id", appointment.ID,
 			"user-id", appointment.UserID)
 
-		go ProcessCompletedCall(hub, fs, psh, queue, logger, dispatch, user, appointment)
+		go ProcessCompletedCall(hub, fs, psh, queue, logger, dispatch, user, appointment, smtpCfg)
 	}
 
 	return nil

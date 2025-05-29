@@ -164,11 +164,13 @@ func run(logger *slog.Logger) error {
 	flag.StringVar(&cfg.notifications.email, "notifications-email", "", "contact email address for error notifications")
 	flag.StringVar(&cfg.session.secretKey, "session-secret-key", "", "secret key for session cookie authentication")
 	flag.StringVar(&cfg.session.oldSecretKey, "session-old-secret-key", "", "previous secret key for session cookie authentication")
-	flag.StringVar(&cfg.smtp.host, "smtp-host", "example.smtp.host", "smtp host")
-	flag.IntVar(&cfg.smtp.port, "smtp-port", 25, "smtp port")
-	flag.StringVar(&cfg.smtp.username, "smtp-username", "example_username", "smtp username")
-	flag.StringVar(&cfg.smtp.password, "smtp-password", "pa55word", "smtp password")
-	flag.StringVar(&cfg.smtp.from, "smtp-from", "Example Name <no-reply@example.org>", "smtp sender")
+
+	flag.StringVar(&cfg.smtp.host, "smtp-host", "smtp.gmail.com", "smtp host")
+	flag.IntVar(&cfg.smtp.port, "smtp-port", 587, "smtp port")
+	flag.StringVar(&cfg.smtp.username, "smtp-username", "", "smtp username")
+	flag.StringVar(&cfg.smtp.password, "smtp-password", "", "smtp password")
+	flag.StringVar(&cfg.smtp.from, "smtp-from", "Shirely at Talent Rodeo <shirely@talent.rodeo>", "smtp sender")
+
 	flag.StringVar(&cfg.linkedin.clientID, "linkedin-client-id", "", "LinkedIn client ID")
 	flag.StringVar(&cfg.linkedin.clientSecret, "linkedin-client-secret", "", "LinkedIn client secret")
 	flag.BoolVar(&cfg.testing, "testing", false, "enable testing mode")
@@ -198,6 +200,14 @@ func run(logger *slog.Logger) error {
 	if cfg.session.secretKey == "" {
 		cfg.session.secretKey = os.Getenv("SESSION_SECRET")
 	}
+
+	if cfg.smtp.username == "" {
+		cfg.smtp.username = os.Getenv("SMTP_USERNAME")
+	}
+	if cfg.smtp.password == "" {
+		cfg.smtp.password = os.Getenv("SMTP_PASSWORD")
+	}
+
 	if cfg.linkedin.clientID == "" {
 		cfg.linkedin.clientID = os.Getenv("LINKEDIN_AUTH_CLIENT_ID")
 	}
@@ -370,7 +380,14 @@ func run(logger *slog.Logger) error {
 		return fmt.Errorf("failed to start services: %w", err)
 	}
 
-	if err := transcript.RecoverProcessingAppointments(sentry.CurrentHub(), FirestoreClient, pusherClient, logger, app.jobDispatch, app.searchProvider); err != nil {
+	smtpCfg := transcript.SMTPConfig{
+		Host:     app.config.smtp.host,
+		Port:     app.config.smtp.port,
+		Username: app.config.smtp.username,
+		Password: app.config.smtp.password,
+		From:     app.config.smtp.from,
+	}
+	if err := transcript.RecoverProcessingAppointments(sentry.CurrentHub(), FirestoreClient, pusherClient, logger, app.jobDispatch, app.searchProvider, &smtpCfg); err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"error_type": "transcript_recovery",
 		})
@@ -465,7 +482,18 @@ func checkEnv(logger *slog.Logger, envFile string) error {
 		"PINECONE_DENSE_INDEX_HOST", "PINECONE_SPARSE_INDEX_HOST", "PINECONE_API_KEY",
 
 		"SCRAPINGDOG_API_KEY",
-		"SESSION_SECRET", "SMTP_USERNAME", "SMTP_PASSWORD",
+		"SESSION_SECRET",
+
+		/*
+					SMTP_HOST="smtp.gmail.com"
+			SMTP_PORT="587"
+			SMTP_PASSWORD="dyvv xuge bbvp cisb"
+			SMTP_USERNAME="madcow@gmail.com"
+			# Example Name <no-reply@example.org>
+			SMTP_FROM="Shirely at Talent Rodeo <shirely@talent.rodeo>"
+		*/
+
+		"SMTP_USERNAME", "SMTP_PASSWORD",
 
 		"TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER",
 
