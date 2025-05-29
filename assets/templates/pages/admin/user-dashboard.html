@@ -272,7 +272,7 @@
 
 {{define "job-card"}}
 
-{{with .JobDetails}}
+{{with .JobDetail}}
 <article class="job-card">
     <hgroup>
         <h3>{{.Title}}</h3>
@@ -356,7 +356,7 @@
     </div>
 {{end}}
     <footer>
-        <small>Added {{.JobDetails.CreatedAt | humanDate}} &nbsp; | &nbsp; {{percentage .UserJob.Score 1}}</small>
+        <small>Added {{.JobDetail.CreatedAt | humanDate}} &nbsp; | &nbsp; {{percentage .UserJob.Score 1}}</small>
     </footer>
 </article>
 {{end}}

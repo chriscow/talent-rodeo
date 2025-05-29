@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/pinecone-io/go-pinecone/v3/pinecone"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // HybridSearchParams provides configuration options for hybrid semantic search
@@ -160,6 +161,11 @@ func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, crite
 		}
 	}
 
+	metaFilter, err := structpb.NewStruct(filter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create filter struct: %w", err)
+	}
+
 	denseVector, err := steeringQuery.GetDenseVector(ctx, client, PineconeEmbedDense)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get dense steering vector: %w", err)
@@ -171,7 +177,7 @@ func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, crite
 	}
 
 	denseResults, err := client.QueryByVector(ctx, denseIndex, JobDetailNamespace, denseVector,
-		WithTopK(topK*2), WithFilter(filter))
+		WithTopK(topK*2), WithMetadataFilter(metaFilter), WithFields([]string{"ID", "provider", "providerID", "title", "company", "location", "url", "postedDate", "text"}))
 	if err != nil {
 		return nil, fmt.Errorf("failed to search dense index: %w", err)
 	}
@@ -186,7 +192,7 @@ func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, crite
 		query += " " + *steeringQuery.MoveToward
 	}
 	sparseResults, err := client.SearchRecords(ctx, sparseIndex, JobDetailNamespace, query,
-		WithTopK(topK*2), WithFilter(filter))
+		WithTopK(topK*2), WithFilter(filter), WithFields([]string{"ID", "provider", "providerID", "title", "company", "location", "url", "postedDate", "text"}))
 	if err != nil {
 		return nil, fmt.Errorf("failed to search sparse index: %w", err)
 	}

@@ -27,11 +27,12 @@ type Pinecone struct {
 }
 
 type PineconeQueryOptions struct {
-	topK      int
-	fields    *[]string
-	filter    *map[string]any
-	sparseVec *pinecone.SparseValues
-	rerank    *pinecone.SearchRecordsRerank
+	topK           int
+	fields         *[]string
+	filter         map[string]any           // this is for `SearchRecords`
+	metadataFilter *pinecone.MetadataFilter // this is for `QueryByVectorValues`
+	sparseVec      *pinecone.SparseValues
+	rerank         *pinecone.SearchRecordsRerank
 }
 
 func WithTopK(topK int) func(*PineconeQueryOptions) {
@@ -62,9 +63,15 @@ result = index.query(vector=xq, top_k=5, filter={'tokens': {
 }})
 */
 // WithFilter allows you to filter the results based on metadata.
+func WithMetadataFilter(filter *pinecone.MetadataFilter) func(*PineconeQueryOptions) {
+	return func(q *PineconeQueryOptions) {
+		q.metadataFilter = filter
+	}
+}
+
 func WithFilter(filter map[string]any) func(*PineconeQueryOptions) {
 	return func(q *PineconeQueryOptions) {
-		q.filter = &filter
+		q.filter = filter
 	}
 }
 
@@ -211,10 +218,12 @@ func (p *Pinecone) QueryByVector(ctx context.Context, indexHost, namespace strin
 	}
 
 	res, err := index.QueryByVectorValues(ctx, &pinecone.QueryByVectorValuesRequest{
-		Vector:        queryVector,
-		TopK:          uint32(options.topK),
-		IncludeValues: false,
-		SparseValues:  options.sparseVec,
+		Vector:          queryVector,
+		MetadataFilter:  options.metadataFilter,
+		TopK:            uint32(options.topK),
+		IncludeValues:   false,
+		IncludeMetadata: true,
+		SparseValues:    options.sparseVec,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("querying by vector: %v", err)
@@ -241,7 +250,7 @@ func (p *Pinecone) SearchRecords(ctx context.Context, indexHost, namespace strin
 		Query: pinecone.SearchRecordsQuery{
 			TopK:   int32(options.topK),
 			Inputs: &map[string]any{"text": query},
-			Filter: options.filter,
+			Filter: &options.filter,
 		},
 		Fields: options.fields,
 		Rerank: options.rerank,
