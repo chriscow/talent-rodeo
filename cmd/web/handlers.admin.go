@@ -309,18 +309,20 @@ func (app *application) adminSearchJobs(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 	data := app.newTemplateData(r)
 
-	// Fetch all search criteria for the dropdown
-	criteriaList, err := internal.ListSearchCriteria(r.Context(), app.fs)
+	// Fetch all users for the dropdown
+	usersList, err := internal.ListUsers(r.Context(), app.fs, 100, 0)
 	if err != nil {
 		app.serverError(w, r, err)
 		return
 	}
-	data["SearchCriteriaList"] = criteriaList
+	data["UsersList"] = usersList
 
+	selectedUserID := ""
 	selectedCriteriaID := ""
 
 	// Default params
 	params := internal.DefaultHybridSearchParams()
+	var steeringQuery *internal.SteeringQuery
 
 	if r.Method == http.MethodPost {
 		if err := r.ParseForm(); err != nil {
@@ -328,11 +330,44 @@ func (app *application) adminSearchJobs(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		searchQuery := r.PostForm.Get("search_query")
 		topKStr := r.PostForm.Get("top_k")
+		selectedUserID = r.PostForm.Get("user_id")
 		selectedCriteriaID = r.PostForm.Get("criteria_id")
+		data["SelectedUserID"] = selectedUserID
 		data["SelectedCriteriaID"] = selectedCriteriaID
-		app.logger.Debug("adminSearchJobs", "selectedCriteriaID", selectedCriteriaID)
+		app.logger.Debug("adminSearchJobs", "selectedUserID", selectedUserID, "selectedCriteriaID", selectedCriteriaID)
+
+		// If a user is selected, get their steering query and subscriptions
+		if selectedUserID != "" {
+			userSteeringQuery, err := internal.GetUserSteeringQuery(ctx, app.fs, selectedUserID)
+			if err != nil {
+				app.logger.Warn("failed to get user steering query", "userID", selectedUserID, "error", err)
+				// Don't fail completely, just log warning and continue with form values
+			} else {
+				// Use user's steering query as the base, but allow form overrides
+				steeringQuery = userSteeringQuery
+			}
+
+			// Get user's subscriptions to populate criteria dropdown
+			subscriptions, err := internal.GetSubscriptionsForUser(ctx, app.fs, selectedUserID)
+			if err != nil {
+				app.logger.Warn("failed to get user subscriptions", "userID", selectedUserID, "error", err)
+			} else {
+				// Fetch the actual criteria details for each subscription
+				var userCriteria []internal.SearchCriteria
+				for _, sub := range subscriptions {
+					criteria, found, err := internal.GetSearchCriteria(ctx, app.fs, sub.CriteriaID)
+					if err != nil {
+						app.logger.Warn("failed to get criteria", "criteriaID", sub.CriteriaID, "error", err)
+						continue
+					}
+					if found {
+						userCriteria = append(userCriteria, *criteria)
+					}
+				}
+				data["UserCriteria"] = userCriteria
+			}
+		}
 
 		// Set default value if not provided
 		topK := 10
@@ -342,6 +377,53 @@ func (app *application) adminSearchJobs(w http.ResponseWriter, r *http.Request) 
 			if err != nil {
 				data["Error"] = "Invalid top_k value: " + err.Error()
 				topK = 10
+			}
+		}
+
+		// Parse SteeringQuery fields from form
+		steeringQueryText := strings.TrimSpace(r.PostForm.Get("steering_query"))
+		rerankQueryText := strings.TrimSpace(r.PostForm.Get("rerank_query"))
+		moveTowardText := strings.TrimSpace(r.PostForm.Get("move_toward"))
+		moveAwayText := strings.TrimSpace(r.PostForm.Get("move_away"))
+
+		// If no user steering query was loaded, or if form fields are provided, build from form
+		if steeringQuery == nil || steeringQueryText != "" {
+			// Use form values if provided, otherwise fall back to user's steering query
+			if steeringQueryText != "" {
+				if rerankQueryText == "" {
+					rerankQueryText = steeringQueryText
+				}
+
+				// Parse force values
+				forceToward := 0.8
+				if v := r.PostForm.Get("force_toward"); v != "" {
+					if f, err := strconv.ParseFloat(v, 64); err == nil {
+						forceToward = f
+					}
+				}
+
+				forceAway := 0.5
+				if v := r.PostForm.Get("force_away"); v != "" {
+					if f, err := strconv.ParseFloat(v, 64); err == nil {
+						forceAway = f
+					}
+				}
+
+				// Build steering query from form
+				steeringQuery = &internal.SteeringQuery{
+					Query:       steeringQueryText,
+					RerankQuery: rerankQueryText,
+					ForceToward: forceToward,
+					ForceAway:   forceAway,
+				}
+
+				// Set optional fields if provided
+				if moveTowardText != "" {
+					steeringQuery.MoveToward = &moveTowardText
+				}
+				if moveAwayText != "" {
+					steeringQuery.MoveAway = &moveAwayText
+				}
 			}
 		}
 
@@ -369,21 +451,26 @@ func (app *application) adminSearchJobs(w http.ResponseWriter, r *http.Request) 
 				params.RecencyHalfLife = f
 			}
 		}
+		if v := r.PostForm.Get("score_threshold"); v != "" {
+			if f, err := strconv.ParseFloat(v, 64); err == nil {
+				params.ScoreThreshold = f
+			}
+		}
 		// Add a boolean for enabling reranking
 		enableReranking := r.PostForm.Get("enable_reranking") == "on"
 		data["EnableReranking"] = enableReranking
 
-		data["SearchQuery"] = searchQuery
 		data["TopK"] = topK
 		data["HybridParams"] = params
+		data["SteeringQuery"] = steeringQuery
 		data["EnableReranking"] = enableReranking // Add to data for template rendering
 
-		if searchQuery != "" {
-
-			results, err := app.semanticSearchJobsWithParams(ctx, searchQuery, topK, selectedCriteriaID, params, enableReranking)
+		// Only run search if we have a valid steering query
+		if steeringQuery != nil && steeringQuery.Query != "" {
+			results, err := app.semanticSearchJobsWithParams(ctx, steeringQuery, topK, selectedCriteriaID, params, enableReranking)
 			if err != nil {
 				app.logger.Error("failed to search jobs", "error", err)
-				data["Error"] = "Failed to \tsearch jobs: " + err.Error()
+				data["Error"] = "Failed to search jobs: " + err.Error()
 			} else {
 				data["SearchResults"] = results
 			}
@@ -492,18 +579,9 @@ func (app *application) semanticSearchJobs(ctx context.Context, searchQuery stri
 	})
 }
 
-func (app *application) semanticSearchJobsWithParams(ctx context.Context, searchQuery string, topK int, selectedCriteriaID string, params *internal.HybridSearchParams, enableReranking bool) ([]internal.ScoredJobDetail, error) {
-	// TODO: Wire this to your new hybrid search implementation
-	// For now, just call the old function
-
-	// Create a steering query from the search string
-	steeringQuery := &internal.SteeringQuery{
-		Query:       searchQuery,
-		RerankQuery: searchQuery, // Use the same query for reranking
-	}
-
-	// Call the improved semantic search function
-	scoredJobs, err := internal.SemanticSearchJobs(ctx, steeringQuery, selectedCriteriaID, topK, params)
+func (app *application) semanticSearchJobsWithParams(ctx context.Context, steeringQuery *internal.SteeringQuery, topK int, selectedCriteriaID string, params *internal.HybridSearchParams, enableReranking bool) ([]internal.ScoredJobDetail, error) {
+	// Call the improved semantic search function - we don't filter by criteria anymore since we're using user steering queries
+	scoredJobs, err := internal.SemanticSearchJobs(ctx, steeringQuery, "", topK, params)
 	if err != nil {
 		return nil, fmt.Errorf("search failed: %w", err)
 	}
@@ -521,8 +599,14 @@ func (app *application) semanticSearchJobsWithParams(ctx context.Context, search
 			return scoredJobs, fmt.Errorf("failed to create pinecone client for reranking: %w", err)
 		}
 
+		// Use the RerankQuery from the steering query if available, otherwise use the main query
+		rerankQuery := steeringQuery.RerankQuery
+		if rerankQuery == "" {
+			rerankQuery = steeringQuery.Query
+		}
+
 		// Attempt reranking, but fall back to original results if it fails
-		rerankedJobs, err := internal.RerankResults(ctx, client, pointerJobs, searchQuery, topK, internal.PineconeRerankBGEv2M3)
+		rerankedJobs, err := internal.RerankResults(ctx, client, pointerJobs, rerankQuery, topK, internal.PineconeRerankBGEv2M3)
 		if err != nil {
 			app.logger.Error("reranking failed, using original results", "error", err)
 		} else {
