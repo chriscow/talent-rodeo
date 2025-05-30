@@ -170,7 +170,7 @@ func run(logger *slog.Logger) error {
 	flag.IntVar(&cfg.smtp.port, "smtp-port", 587, "smtp port")
 	flag.StringVar(&cfg.smtp.username, "smtp-username", "", "smtp username")
 	flag.StringVar(&cfg.smtp.password, "smtp-password", "", "smtp password")
-	flag.StringVar(&cfg.smtp.from, "smtp-from", "Shirely at Talent Rodeo <shirely@talent.rodeo>", "smtp sender")
+	flag.StringVar(&cfg.smtp.from, "smtp-from", "Shirely Hunter <shirely@talent.rodeo>", "smtp sender")
 
 	flag.StringVar(&cfg.linkedin.clientID, "linkedin-client-id", "", "LinkedIn client ID")
 	flag.StringVar(&cfg.linkedin.clientSecret, "linkedin-client-secret", "", "LinkedIn client secret")
