@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -217,6 +218,18 @@ func run(logger *slog.Logger) error {
 
 	if cfg.linkedin.clientID == "" || cfg.linkedin.clientSecret == "" {
 		return fmt.Errorf("LINKEDIN_AUTH_CLIENT_ID and LINKEDIN_AUTH_CLIENT_SECRET environment variables are required")
+	}
+
+	sentryDSN := os.Getenv("SENTRY_DSN")
+	if sentryDSN == "" {
+		return fmt.Errorf("SENTRY_DSN environment variable is required")
+	}
+
+	err := sentry.Init(sentry.ClientOptions{
+		Dsn: sentryDSN,
+	})
+	if err != nil {
+		log.Fatalf("sentry.Init: %s", err)
 	}
 
 	logger.Info("Starting HTTP server", "port", cfg.httpPort)

@@ -18,7 +18,7 @@ require (
 	firebase.google.com/go/v4 v4.15.2
 	github.com/ThreeDotsLabs/watermill v1.4.4
 	github.com/alexedwards/flow v0.1.0
-	github.com/chriscow/minds v0.0.8-0.20250530190108-e5b0a4eae6d2
+	github.com/chriscow/minds v0.0.8-0.20250530192353-64faec553f50
 	github.com/fatih/color v1.16.0
 	github.com/fumiama/go-docx v0.0.0-20241231153056-9f8f327c74a5
 	github.com/go-playground/form/v4 v4.2.1
@@ -69,7 +69,7 @@ require (
 	github.com/cheggaaa/pb v1.0.29
 	github.com/chriscow/minds/providers/gemini v0.0.5-0.20250303171538-dc7c074db869
 	github.com/chriscow/minds/providers/openai v0.0.5
-	github.com/chriscow/minds/tools v0.0.3-0.20250530190108-e5b0a4eae6d2
+	github.com/chriscow/minds/tools v0.0.3-0.20250530192353-64faec553f50
 	github.com/chriscow/vapi-go v0.0.0-20250527195805-6e2047355010
 	github.com/cloudflare/cloudflare-go v0.115.0
 	github.com/dgraph-io/ristretto/v2 v2.2.0
