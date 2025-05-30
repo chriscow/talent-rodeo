@@ -254,10 +254,6 @@ func (p *Processor) process(ctx context.Context) error {
 			continue
 		}
 
-		if criteria.SubscriberCount <= 0 {
-			p.logger.Warn("criteria has no subscribers", "id", criteria.ID)
-		}
-
 		eligibleCriteria = append(eligibleCriteria, criteria)
 	}
 

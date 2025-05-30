@@ -194,8 +194,14 @@ func (wm *WorkerManager) Pause(paused bool) {
 	}
 
 	oldValue := atomic.SwapInt32(&wm.pausedFlag, newValue)
-	if (oldValue == 1) != paused {
-		wm.logger.Info("worker pause state changed", "paused", paused)
+	oldPaused := (oldValue == 1)
+
+	if oldPaused != paused {
+		if paused {
+			wm.logger.Info(internal.BGYellow("scrapingdog workers paused"), "paused", paused)
+		} else {
+			wm.logger.Info(internal.BGGreen("scrapingdog workers resumed"), "paused", paused)
+		}
 	}
 }
 

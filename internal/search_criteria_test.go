@@ -131,12 +131,6 @@ func TestSearchCriteria(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() never searched error = %v", err)
 		}
-		// Set subscriber count to 1
-		created1.SubscriberCount = 1
-		err = UpdateSearchCriteria(ctx, client, created1)
-		if err != nil {
-			t.Fatalf("UpdateSearchCriteria() subscriber count error = %v", err)
-		}
 
 		// Create criteria searched more than 24 hours ago with subscribers
 		query2 := fmt.Sprintf("%s-old-search-%d", testPrefix, timestamp)
@@ -147,7 +141,6 @@ func TestSearchCriteria(t *testing.T) {
 		// Set LastSearchedAt to 25 hours ago and subscriber count to 2
 		oldTime := time.Now().Add(-25 * time.Hour)
 		created2.LastSearchedAt = &oldTime
-		created2.SubscriberCount = 2
 		err = UpdateSearchCriteria(ctx, client, created2)
 		if err != nil {
 			t.Fatalf("UpdateSearchCriteria() old search error = %v", err)
@@ -162,7 +155,6 @@ func TestSearchCriteria(t *testing.T) {
 		// Set LastSearchedAt to 1 hour ago and subscriber count to 3
 		recentTime := time.Now().Add(-1 * time.Hour)
 		created3.LastSearchedAt = &recentTime
-		created3.SubscriberCount = 3
 		err = UpdateSearchCriteria(ctx, client, created3)
 		if err != nil {
 			t.Fatalf("UpdateSearchCriteria() recent search error = %v", err)
@@ -174,12 +166,6 @@ func TestSearchCriteria(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() no subscribers error = %v", err)
 		}
-		// Explicitly set subscriber count to 0 (should be 0 by default, but being explicit)
-		created4.SubscriberCount = 0
-		err = UpdateSearchCriteria(ctx, client, created4)
-		if err != nil {
-			t.Fatalf("UpdateSearchCriteria() no subscribers error = %v", err)
-		}
 
 		// Create criteria searched more than 24 hours ago with NO subscribers
 		query5 := fmt.Sprintf("%s-old-search-no-subs-%d", testPrefix, timestamp)
@@ -190,7 +176,6 @@ func TestSearchCriteria(t *testing.T) {
 		// Set LastSearchedAt to 25 hours ago and subscriber count to 0
 		oldTime = time.Now().Add(-25 * time.Hour)
 		created5.LastSearchedAt = &oldTime
-		created5.SubscriberCount = 0
 		err = UpdateSearchCriteria(ctx, client, created5)
 		if err != nil {
 			t.Fatalf("UpdateSearchCriteria() old search no subscribers error = %v", err)
@@ -280,12 +265,6 @@ func TestSearchCriteria(t *testing.T) {
 			if c.ID == created1.ID || c.ID == created2.ID || c.ID == created3.ID ||
 				c.ID == created4.ID || c.ID == created5.ID {
 				continue
-			}
-
-			// Verify all results have subscribers
-			if c.SubscriberCount <= 0 {
-				t.Errorf("Found criteria %s with SubscriberCount = %d, all results should have SubscriberCount > 0",
-					c.ID, c.SubscriberCount)
 			}
 
 			// Verify all results need search (LastSearchedAt is nil or old)
