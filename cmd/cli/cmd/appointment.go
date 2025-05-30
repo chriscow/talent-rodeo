@@ -331,6 +331,11 @@ var sendRecapCmd = &cobra.Command{
 			return fmt.Errorf("failed to get appointment transcript: %w", err)
 		}
 
+		host := os.Getenv("SMTP_HOST")
+		if host == "" {
+			host = "smtp.gmail.com"
+		}
+
 		// Configure SMTP from environment variables
 		portStr := os.Getenv("SMTP_PORT")
 		if portStr == "" {
@@ -342,7 +347,7 @@ var sendRecapCmd = &cobra.Command{
 		}
 
 		cfg := transcript.SMTPConfig{
-			Host:     os.Getenv("SMTP_HOST"),
+			Host:     host,
 			Port:     port,
 			Username: os.Getenv("SMTP_USERNAME"),
 			Password: os.Getenv("SMTP_PASSWORD"),
@@ -350,8 +355,23 @@ var sendRecapCmd = &cobra.Command{
 		}
 
 		// Validate required SMTP configuration
-		if cfg.Host == "" || cfg.Username == "" || cfg.Password == "" || cfg.From == "" {
-			return fmt.Errorf("missing required SMTP configuration. Please set SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD, and SMTP_FROM environment variables")
+		if cfg.Host == "" {
+			return fmt.Errorf("SMTP_HOST environment variable is required")
+		}
+
+		if cfg.Username == "" {
+			return fmt.Errorf("SMTP_USERNAME environment variable is required")
+		}
+
+		if cfg.Password == "" {
+			return fmt.Errorf("SMTP_PASSWORD environment variable is required")
+		}
+
+		if cfg.From == "" {
+			return fmt.Errorf("SMTP_FROM environment variable is required")
+		}
+		if cfg.Port <= 0 {
+			return fmt.Errorf("SMTP_PORT environment variable must be a valid port number")
 		}
 
 		// Generate and send the recap email
