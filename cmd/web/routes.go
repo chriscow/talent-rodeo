@@ -95,6 +95,9 @@ func (app *application) routes() http.Handler {
 
 		mux.Group(func(mux *flow.Mux) {
 			mux.Use(app.requireSuperUser)
+			// Admin index page
+			mux.HandleFunc("/admin", app.adminIndex, "GET")
+			
 			// Add tasks routes
 			mux.HandleFunc("/admin/tasks", app.showTasksPage, "GET")
 			mux.HandleFunc("/admin/tasks/partial", app.getTasksPartial, "GET")
