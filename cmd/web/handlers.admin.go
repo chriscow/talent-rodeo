@@ -17,7 +17,9 @@ import (
 	"talent-rodeo/internal/utils"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/pinecone-io/go-pinecone/v3/pinecone"
+	"github.com/samber/lo"
 )
 
 func (app *application) adminVoice(w http.ResponseWriter, r *http.Request) {
@@ -682,11 +684,42 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 				showAllRatings := r.PostForm.Get("show_all") == "true"
 				pageSize := 10 // Show more jobs in admin view
 
-				// Get the job count for the selected status
+				// Parse current page for semantic search pagination
+				currentPage := 1
+				pageToken := r.PostForm.Get("page")
+				if pageToken != "" {
+					if parsedPage, err := strconv.Atoi(pageToken); err == nil && parsedPage > 0 {
+						currentPage = parsedPage
+					}
+				}
+
+				// Get the total count for the current status for pagination calculations
+				start := time.Now()
 				statusJobCount, err := internal.GetJobsCount(ctx, app.fs, selectedUser.ID, status, showAllRatings)
 				if err != nil {
-					app.logger.Warn("adminUserDashboard: failed to get job count", "error", err, "user_id", selectedUserID)
-					statusJobCount = 0
+					wrappedErr := fmt.Errorf("adminUserDashboard: failed to get job count for status %s: %w", status, err)
+					app.logger.Error("adminUserDashboard: failed to get job count", "error", err, "status", status, "user_id", selectedUserID)
+
+					internal.SentryReportError(ctx, wrappedErr, sentry.LevelError, map[string]string{
+						"error_type":  "database_retrieval",
+						"entity_type": "user_jobs_count",
+						"job_status":  string(status),
+						"user_id":     selectedUserID,
+					})
+
+					// Check if this is the missing collection/index error for new users
+					if strings.Contains(err.Error(), "failed to iterate jobs") ||
+						strings.Contains(err.Error(), "failed to get job count") {
+						// For new users without any jobs collection yet, set count to 0
+						statusJobCount = 0
+						data["FirestoreError"] = true
+					} else {
+						// For other errors, return server error
+						app.serverError(w, r, wrappedErr)
+						return
+					}
+				} else {
+					app.logger.Debug("adminUserDashboard: GetJobsCount took", "duration", time.Since(start).String(), "user_id", selectedUserID)
 				}
 
 				// Hybrid Approach: Use semantic search for "New" jobs, existing queries for other statuses
@@ -696,77 +729,166 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 
 				if status == internal.JobStatusNew {
 					// For "New" status, use semantic search with jobs that have no UserJob record
+					start = time.Now()
 
 					// Get user's subscriptions to find criteriaID for semantic search
 					subscriptions, err := internal.GetSubscriptionsForUser(ctx, app.fs, selectedUser.ID)
 					if err != nil {
-						app.logger.Warn("adminUserDashboard: failed to get subscriptions", "error", err, "user_id", selectedUserID)
-					} else if len(subscriptions) > 0 {
+						wrappedErr := fmt.Errorf("adminUserDashboard: failed to get user subscriptions: %w", err)
+						app.logger.Error("adminUserDashboard: failed to get user subscriptions", "error", err, "user_id", selectedUserID)
+						internal.SentryReportError(ctx, wrappedErr, sentry.LevelError, map[string]string{
+							"error_type":  "database_retrieval",
+							"entity_type": "user_subscriptions",
+							"user_id":     selectedUserID,
+						})
+						app.serverError(w, r, wrappedErr)
+						return
+					}
+
+					if len(subscriptions) > 0 {
 						// Use the first subscription's criteria for semantic search
 						criteriaID := subscriptions[0].CriteriaID
 
-						// Get semantic search results for the user
-						semanticJobs, err := internal.GetSemanticJobsForUser(ctx, app.fs, selectedUser, criteriaID, pageSize)
+						// Use a large topK for comprehensive semantic search results (cached for 1 hour)
+						const semanticSearchTopK = 500
+
+						var params *internal.HybridSearchParams = nil // use the default params
+
+						allSemanticJobs, err := internal.GetSemanticJobsForUser(ctx, app.fs, selectedUser, criteriaID, semanticSearchTopK, params)
 						if err != nil {
-							app.logger.Warn("adminUserDashboard: failed to get semantic jobs", "error", err, "user_id", selectedUserID)
-						} else {
-							// Filter semantic jobs to only include those without existing UserJob records
-							existingUserJobs, err := internal.ListUserJobs(ctx, app.fs, selectedUser.ID)
-							if err != nil {
-								app.logger.Warn("adminUserDashboard: failed to get existing user jobs for filtering", "error", err, "user_id", selectedUserID)
-								existingUserJobs = []internal.UserJob{} // Continue with empty list
-							}
+							wrappedErr := fmt.Errorf("adminUserDashboard: failed to get semantic jobs: %w", err)
+							app.logger.Error("adminUserDashboard: failed to get semantic jobs", "error", err, "user_id", selectedUserID)
+							internal.SentryReportError(ctx, wrappedErr, sentry.LevelError, map[string]string{
+								"error_type":  "semantic_search",
+								"entity_type": "semantic_jobs",
+								"criteria_id": criteriaID,
+								"user_id":     selectedUserID,
+							})
+							app.serverError(w, r, wrappedErr)
+							return
+						}
 
-							// Create a set of existing job IDs for fast lookup
-							existingJobIDs := make(map[string]bool)
-							for _, userJob := range existingUserJobs {
-								existingJobIDs[userJob.JobRef.ID] = true
-							}
+						// Calculate memory usage for debug logging
+						memoryUsage := calculateSemanticJobsMemory(allSemanticJobs)
+						app.logger.Debug("adminUserDashboard: semantic search memory usage",
+							"total_jobs", len(allSemanticJobs),
+							"memory_bytes", memoryUsage,
+							"memory_mb", memoryUsage/(1024*1024),
+							"user_id", selectedUserID)
 
-							// Add semantic jobs that don't have UserJob records, preserving order
-							for _, semanticJob := range semanticJobs {
-								if !existingJobIDs[semanticJob.JobDetail.ID] {
-									jobWithDetails := JobWithDetails{
-										ScoredJobDetail: semanticJob,
-										IsSemanticOnly:  true,
-									}
-									jobs[semanticJob.JobDetail.ID] = jobWithDetails
-									semanticJobsSlice = append(semanticJobsSlice, jobWithDetails)
-								}
+						// Filter semantic jobs to only include those without existing UserJob records
+						existingUserJobs, err := internal.ListUserJobs(ctx, app.fs, selectedUser.ID)
+						if err != nil {
+							app.logger.Warn("adminUserDashboard: failed to get existing user jobs for filtering", "error", err, "user_id", selectedUserID)
+							existingUserJobs = []internal.UserJob{} // Continue with empty list
+						}
+
+						// Create a set of existing job IDs for fast lookup
+						existingJobIDs := make(map[string]bool)
+						for _, userJob := range existingUserJobs {
+							existingJobIDs[userJob.JobRef.ID] = true
+						}
+
+						// Filter all semantic jobs to exclude those with UserJob records
+						var allFilteredJobs []internal.ScoredJobDetail
+						for _, scoredJob := range allSemanticJobs {
+							if !existingJobIDs[scoredJob.JobDetail.ID] {
+								allFilteredJobs = append(allFilteredJobs, scoredJob)
 							}
 						}
+
+						// Implement pagination through the filtered results
+						startIdx := (currentPage - 1) * pageSize
+						endIdx := startIdx + pageSize
+
+						if startIdx < len(allFilteredJobs) {
+							if endIdx > len(allFilteredJobs) {
+								endIdx = len(allFilteredJobs)
+							}
+
+							// Convert the paginated slice to JobWithDetails
+							for _, scoredJob := range allFilteredJobs[startIdx:endIdx] {
+								semanticJobsSlice = append(semanticJobsSlice, JobWithDetails{
+									ScoredJobDetail: scoredJob,
+									IsSemanticOnly:  true,
+								})
+							}
+						}
+
+						// Update statusJobCount to reflect actual filtered semantic results
+						statusJobCount = int64(len(allFilteredJobs))
+
+						app.logger.Debug("adminUserDashboard: semantic search completed",
+							"duration", time.Since(start).String(),
+							"total_semantic_jobs", len(allSemanticJobs),
+							"filtered_jobs", len(allFilteredJobs),
+							"page_jobs", len(semanticJobsSlice),
+							"current_page", currentPage,
+							"user_id", selectedUserID)
+					} else {
+						app.logger.Info("adminUserDashboard: user has no subscriptions, showing empty new jobs", "user_id", selectedUserID)
 					}
 				} else {
 					// For other statuses, use existing UserJob queries
-
-					// Get paginated jobs by status
-					userJobs, pageToken, err := internal.GetUserJobsSorted(ctx, app.fs, selectedUser.ID, status, pageSize, "", showAllRatings)
+					start = time.Now()
+					userJobs, _, err := internal.GetUserJobsSorted(ctx, app.fs, selectedUser.ID, internal.JobStatus(status), pageSize, pageToken, showAllRatings)
 					if err != nil {
-						app.logger.Warn("adminUserDashboard: failed to get user jobs", "error", err, "user_id", selectedUserID)
-						userJobs = []*internal.UserJob{}
-					}
-					nextPageToken = pageToken
+						wrappedErr := fmt.Errorf("adminUserDashboard: failed to get sorted user jobs: %w", err)
+						app.logger.Error("adminUserDashboard: failed to get sorted user jobs", "error", err, "user_id", selectedUserID)
 
-					// Get job details for UserJob records
-					jobIDs := make([]string, 0, len(userJobs))
+						internal.SentryReportError(ctx, wrappedErr, sentry.LevelError, map[string]string{
+							"error_type":  "database_retrieval",
+							"entity_type": "user_jobs",
+							"job_status":  string(status),
+							"user_id":     selectedUserID,
+						})
+
+						// Check if this is the missing collection/index error for new users
+						if strings.Contains(err.Error(), "failed to iterate user jobs") &&
+							(strings.Contains(err.Error(), "The query requires an index") ||
+								strings.Contains(err.Error(), "FailedPrecondition")) {
+							// For new users without any jobs collection yet, show a welcome message
+							data["FirestoreError"] = true
+							data["HasJobs"] = false
+							data["Jobs"] = nil
+						} else {
+							// For other errors, return server error
+							app.serverError(w, r, wrappedErr)
+							return
+						}
+					} else {
+						app.logger.Debug("adminUserDashboard: GetUserJobsSorted took", "duration", time.Since(start).String(), "user_id", selectedUserID)
+					}
+
 					for _, job := range userJobs {
-						jobIDs = append(jobIDs, job.JobRef.ID)
 						jobs[job.JobRef.ID] = JobWithDetails{
 							UserJob: job,
 						}
 					}
 
+					// Get job details for UserJob records
+					jobIDs := lo.Keys(jobs)
 					if len(jobIDs) > 0 {
 						jobDetails, err := internal.GetJobDetailsByIDs(ctx, app.fs, jobIDs)
 						if err != nil {
-							app.logger.Warn("adminUserDashboard: failed to get job details", "error", err, "user_id", selectedUserID)
-						} else {
-							// Merge job details into the jobs map (matching main dashboard approach)
-							for _, detail := range jobDetails {
-								if job, exists := jobs[detail.ID]; exists {
-									job.JobDetail = detail
-									jobs[detail.ID] = job
-								}
+							wrappedErr := fmt.Errorf("adminUserDashboard: failed to get job details by IDs: %w", err)
+							app.logger.Error("adminUserDashboard: failed to get job details by IDs", "error", err, "user_id", selectedUserID)
+							internal.SentryReportError(ctx, wrappedErr, sentry.LevelError, map[string]string{
+								"error_type":  "database_retrieval",
+								"entity_type": "job_details",
+								"job_ids":     strings.Join(jobIDs, ","),
+								"user_id":     selectedUserID,
+							})
+							app.serverError(w, r, wrappedErr)
+							return
+						}
+						// Merge job details into the jobs map
+						for _, detail := range jobDetails {
+							if job, exists := jobs[detail.ID]; exists {
+								job.JobDetail = detail
+								jobs[detail.ID] = job
+							} else {
+								app.logger.Warn("adminUserDashboard: job detail found without corresponding user job", "job_id", detail.ID, "user_id", selectedUserID)
 							}
 						}
 					}

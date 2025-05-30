@@ -217,7 +217,7 @@ func TestDashboardWithJobs(t *testing.T) {
 	// Create some test user jobs using the helper function
 	now := time.Now()
 	userJob1 := internal.CreateTestUserJob(t, it.Fs, it.User.ID, "test-job-1", internal.JobStatusNew, now)
-	userJob2 := internal.CreateTestUserJob(t, it.Fs, it.User.ID, "test-job-2", internal.JobStatusViewed, now)
+	userJob2 := internal.CreateTestUserJob(t, it.Fs, it.User.ID, "test-job-2", internal.JobStatusNew, now)
 
 	// Authenticate and navigate to dashboard
 	it.Authenticate()

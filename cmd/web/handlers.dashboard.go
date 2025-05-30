@@ -4,14 +4,57 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
 	"time"
+	"unsafe"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/samber/lo"
 )
+
+// calculateSemanticJobsMemory estimates the memory usage of semantic job results
+func calculateSemanticJobsMemory(jobs []internal.ScoredJobDetail) int {
+	if len(jobs) == 0 {
+		return 0
+	}
+
+	// Base struct size
+	baseSize := int(unsafe.Sizeof(internal.ScoredJobDetail{}))
+
+	// Estimate string field sizes
+	totalStringSize := 0
+	for _, job := range jobs {
+		totalStringSize += len(job.JobDetail.ID)
+		totalStringSize += len(job.JobDetail.Title)
+		totalStringSize += len(job.JobDetail.Company)
+		totalStringSize += len(job.JobDetail.Location)
+		totalStringSize += len(job.JobDetail.Description)
+		totalStringSize += len(job.JobDetail.URL)
+		totalStringSize += len(job.JobDetail.Provider)
+		totalStringSize += len(job.JobDetail.ProviderJobID)
+
+		// Estimate slice sizes (qualifications, requirements, etc.)
+		for _, qual := range job.JobDetail.Qualifications {
+			totalStringSize += len(qual)
+		}
+		if job.JobDetail.ExtractedData != nil {
+			totalStringSize += len(job.JobDetail.ExtractedData.Summary)
+			for _, req := range job.JobDetail.ExtractedData.Requirements {
+				totalStringSize += len(req)
+			}
+			for _, qual := range job.JobDetail.ExtractedData.Qualifications {
+				totalStringSize += len(qual)
+			}
+		}
+	}
+
+	// Total memory = (base struct size + average string overhead) * count
+	totalMemory := (baseSize + totalStringSize)
+	return totalMemory
+}
 
 // JobWithDetails combines UserJob with the job details, and can also handle ScoredJobDetail
 type JobWithDetails struct {
@@ -151,6 +194,14 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 	pageToken := r.URL.Query().Get("page")
 	pageSize := 5 // Fixed page size
 
+	// Parse current page for semantic search pagination
+	currentPage := 1
+	if pageToken != "" {
+		if parsedPage, err := strconv.Atoi(pageToken); err == nil && parsedPage > 0 {
+			currentPage = parsedPage
+		}
+	}
+
 	// Get the total count for the current status for pagination calculations
 	start := time.Now()
 	statusJobCount, err := internal.GetJobsCount(r.Context(), app.fs, user.ID, status, showAllRatings)
@@ -204,9 +255,13 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 		if len(subscriptions) > 0 {
 			// Use the first subscription's criteria for semantic search
 			criteriaID := subscriptions[0].CriteriaID
-			topK := pageSize // Use pageSize as topK for semantic search
 
-			semanticJobs, err := internal.GetSemanticJobsForUser(r.Context(), app.fs, user, criteriaID, topK)
+			// Use a large topK for comprehensive semantic search results (cached for 1 hour)
+			const semanticSearchTopK = 500
+
+			var params *internal.HybridSearchParams = nil // use the default params
+
+			allSemanticJobs, err := internal.GetSemanticJobsForUser(r.Context(), app.fs, user, criteriaID, semanticSearchTopK, params)
 			if err != nil {
 				wrappedErr := fmt.Errorf("showDashboard: failed to get semantic jobs: %w", err)
 				app.logger.Error("showDashboard: failed to get semantic jobs", "error", err)
@@ -218,6 +273,13 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 				app.serverError(w, r, wrappedErr)
 				return
 			}
+
+			// Calculate memory usage for debug logging
+			memoryUsage := calculateSemanticJobsMemory(allSemanticJobs)
+			app.logger.Debug("showDashboard: semantic search memory usage",
+				"total_jobs", len(allSemanticJobs),
+				"memory_bytes", memoryUsage,
+				"memory_mb", memoryUsage/(1024*1024))
 
 			// Filter semantic jobs to only include those without existing UserJob records
 			existingUserJobs, err := internal.ListUserJobs(r.Context(), app.fs, user.ID)
@@ -232,9 +294,25 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 				existingJobIDs[userJob.JobRef.ID] = true
 			}
 
-			// Add semantic jobs that don't have UserJob records, preserving order
-			for _, scoredJob := range semanticJobs {
+			// Filter all semantic jobs to exclude those with UserJob records
+			var allFilteredJobs []internal.ScoredJobDetail
+			for _, scoredJob := range allSemanticJobs {
 				if !existingJobIDs[scoredJob.JobDetail.ID] {
+					allFilteredJobs = append(allFilteredJobs, scoredJob)
+				}
+			}
+
+			// Implement pagination through the filtered results
+			startIdx := (currentPage - 1) * pageSize
+			endIdx := startIdx + pageSize
+
+			if startIdx < len(allFilteredJobs) {
+				if endIdx > len(allFilteredJobs) {
+					endIdx = len(allFilteredJobs)
+				}
+
+				// Convert the paginated slice to JobWithDetails
+				for _, scoredJob := range allFilteredJobs[startIdx:endIdx] {
 					semanticJobsSlice = append(semanticJobsSlice, JobWithDetails{
 						ScoredJobDetail: scoredJob,
 						IsSemanticOnly:  true,
@@ -242,7 +320,15 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			app.logger.Debug("showDashboard: semantic search completed", "duration", time.Since(start).String(), "found", len(semanticJobs), "new", len(semanticJobsSlice))
+			// Update statusJobCount to reflect actual filtered semantic results
+			statusJobCount = int64(len(allFilteredJobs))
+
+			app.logger.Debug("showDashboard: semantic search completed",
+				"duration", time.Since(start).String(),
+				"total_semantic_jobs", len(allSemanticJobs),
+				"filtered_jobs", len(allFilteredJobs),
+				"page_jobs", len(semanticJobsSlice),
+				"current_page", currentPage)
 		} else {
 			app.logger.Info("showDashboard: user has no subscriptions, showing empty new jobs")
 		}
@@ -310,15 +396,23 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Calculate pagination information
-	currentPage := 1
-	if pageToken != "" {
-		// If we have a page token, we're not on the first page
-		// The exact page number would require additional queries, so we just indicate > 1
-		currentPage = 2 // This is a simplification, actual page number would need more tracking
+	// Calculate pagination information for non-semantic results
+	if status != internal.JobStatusNew {
+		// Use the simple approach for UserJob pagination
+		if pageToken != "" {
+			currentPage = 2 // This is a simplification, actual page number would need more tracking
+		}
 	}
 
 	totalPages := (int(statusJobCount) + pageSize - 1) / pageSize // Ceiling division
+
+	// Calculate next page info for semantic search
+	if status == internal.JobStatusNew {
+		hasNextPage := currentPage*pageSize < int(statusJobCount)
+		if hasNextPage {
+			nextPageToken = strconv.Itoa(currentPage + 1)
+		}
+	}
 
 	// Add data to template
 	data["CurrentStatus"] = user.State.Status.Description()
@@ -336,7 +430,14 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 	data["ActiveStatus"] = string(status)
 	data["NextPageToken"] = nextPageToken
 	data["CurrentPageToken"] = pageToken
-	data["HasNextPage"] = nextPageToken != ""
+
+	// Set HasNextPage based on status type
+	if status == internal.JobStatusNew {
+		data["HasNextPage"] = nextPageToken != ""
+	} else {
+		data["HasNextPage"] = nextPageToken != ""
+	}
+
 	data["CurrentPage"] = currentPage
 	data["TotalPages"] = totalPages
 	data["TotalJobsForStatus"] = statusJobCount
@@ -346,8 +447,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 
 	// Map for display names of job statuses
 	data["StatusDisplayNames"] = map[string]string{
-		"new": "New Jobs",
-		// "viewed":   "Viewed Jobs",
+		"new":      "New Jobs",
 		"saved":    "Saved Jobs",
 		"applied":  "Applied Jobs",
 		"rejected": "Rejected Jobs",

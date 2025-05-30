@@ -170,7 +170,6 @@ func runDeleteCriteria(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return fmt.Errorf("failed to unsubscribe user %s from search criteria ID %s: %w", sub.UserID, id, err)
 			}
-			fmt.Printf("User %s unsubscribed from search criteria ID %s\n", sub.UserID, id)
 		}
 
 		for _, jobID := range jobIDs {
@@ -178,7 +177,6 @@ func runDeleteCriteria(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return fmt.Errorf("failed to unlink job ID %s from search criteria ID %s: %w", jobID, id, err)
 			}
-			fmt.Printf("Job ID %s unlinked from search criteria ID %s\n", jobID, id)
 		}
 
 		err = internal.DeleteSearchCriteriaTx(ctx, fs, tx, id)
