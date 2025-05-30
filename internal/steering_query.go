@@ -7,7 +7,9 @@ import (
 	"strings"
 	"talent-rodeo/assets"
 
+	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/tools"
+	"github.com/sashabaranov/go-openai"
 )
 
 // SteeringQuery encapsulates all parameters needed for semantic steering of queries
@@ -36,6 +38,10 @@ type SteeringQuery struct {
 func (sq SteeringQuery) Validate() error {
 	if sq.Query == "" {
 		return fmt.Errorf("query cannot be empty")
+	}
+
+	if sq.RerankQuery == "" {
+		return fmt.Errorf("rerank query cannot be empty")
 	}
 
 	// Validate ForceToward only if MoveToward is set
@@ -190,21 +196,62 @@ func GenerateSteeringQuery(ctx context.Context, transcript *Transcript, opts ...
 
 	prompt := string(tmpl) + `\n\n<transcript>` + transcript.String() + `</transcript>`
 
+	messages := minds.Messages{
+		{
+			Role:    openai.ChatMessageRoleSystem,
+			Content: string(tmpl),
+		},
+		{
+			Role:    openai.ChatMessageRoleUser,
+			Content: `<transcript>\n\n` + transcript.String() + `</transcript>`,
+		},
+	}
 	options := []tools.Option{
 		tools.WithModel(tools.DeepSeekChat),
 		tools.WithMaxTokens(8192),
+		tools.WithMessages(messages),
 	}
 
 	if len(opts) > 0 {
 		options = append(options, opts...)
 	}
 
-	data, err := tools.Ask(ctx, prompt, options...)
+	resp, err := tools.Ask(ctx, prompt, options...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to ask LLM: %w", err)
+		return nil, fmt.Errorf("failed to ask LLM for steering query: %w", err)
 	}
 
-	return extractSteeringQuery(ctx, data)
+	sq, err := extractSteeringQuery(ctx, resp)
+	if err != nil {
+		// try to fix the steering query if it failed to parse
+		fixMsgs := []minds.Message{
+			{
+				Role:    minds.RoleAssistant,
+				Content: resp,
+			},
+		}
+
+		messages = append(messages, fixMsgs...)
+		options = []tools.Option{
+			tools.WithModel(tools.DeepSeekChat),
+			tools.WithMaxTokens(8192),
+			tools.WithMessages(messages),
+		}
+		prompt = fmt.Sprintf(`The steering query produced is invalid. Error: %s
+		Please fix it and return a valid JSON object in the <answer> tags.`, err.Error())
+		resp, err = tools.Ask(ctx, prompt, options...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to ask LLM for steering query again: %w", err)
+		}
+		sq, err = extractSteeringQuery(ctx, resp)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract steering query after fix: %w", err)
+		}
+	}
+
+	sq.Validate()
+
+	return sq, nil
 }
 
 func extractSteeringQuery(ctx context.Context, data string) (*SteeringQuery, error) {
@@ -237,6 +284,10 @@ func extractSteeringQuery(ctx context.Context, data string) (*SteeringQuery, err
 
 	query.ForceToward = 0.8
 	query.ForceAway = 0.5
+
+	if err := query.Validate(); err != nil {
+		return nil, err
+	}
 
 	return &query, nil
 }
