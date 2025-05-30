@@ -693,6 +693,8 @@ github.com/chriscow/minds v0.0.8-0.20250530185232-580bad3c16a1 h1:BVuQJGVypgI1vO
 github.com/chriscow/minds v0.0.8-0.20250530185232-580bad3c16a1/go.mod h1:iznO9umfPFv30TzYbhmhSk5h1LiVPsNw//LX46AUH2k=
 github.com/chriscow/minds v0.0.8-0.20250530190108-e5b0a4eae6d2 h1:AG6BoQ8Hba3A4zR4xVgNInuDmCH4T3EiWY484sWyg/I=
 github.com/chriscow/minds v0.0.8-0.20250530190108-e5b0a4eae6d2/go.mod h1:iznO9umfPFv30TzYbhmhSk5h1LiVPsNw//LX46AUH2k=
+github.com/chriscow/minds v0.0.8-0.20250530192353-64faec553f50 h1:3wyguCsQTYCZqq3AdUlKPx7oBqY0xVxPSQZT1Nj49zk=
+github.com/chriscow/minds v0.0.8-0.20250530192353-64faec553f50/go.mod h1:iznO9umfPFv30TzYbhmhSk5h1LiVPsNw//LX46AUH2k=
 github.com/chriscow/minds/providers/gemini v0.0.5-0.20250303171538-dc7c074db869 h1:JYzasCLTj1sP34Xq+5fVJZz89qvPNdu/oq2FoGsBEyc=
 github.com/chriscow/minds/providers/gemini v0.0.5-0.20250303171538-dc7c074db869/go.mod h1:zHJ2ZVGxoiOVlsrRxigpGTqV0OlErkC1d/DfLfazeJU=
 github.com/chriscow/minds/providers/openai v0.0.5 h1:myTeCXszsKK+e7usfIbO5dBBb2+kgAF95yB5r51KX10=
@@ -701,6 +703,8 @@ github.com/chriscow/minds/tools v0.0.3-0.20250514162534-27df8006baa7 h1:52PT5GXv
 github.com/chriscow/minds/tools v0.0.3-0.20250514162534-27df8006baa7/go.mod h1:BJ00UsqPC+D6R5KeIQsoePb3eDe+aCJDMp09zC0LqLQ=
 github.com/chriscow/minds/tools v0.0.3-0.20250530190108-e5b0a4eae6d2 h1:Q0JMrr1Kd6OU8aLkZX4ItwEN0QNVPD3RJ5v4JXIGJBI=
 github.com/chriscow/minds/tools v0.0.3-0.20250530190108-e5b0a4eae6d2/go.mod h1:BJ00UsqPC+D6R5KeIQsoePb3eDe+aCJDMp09zC0LqLQ=
+github.com/chriscow/minds/tools v0.0.3-0.20250530192353-64faec553f50 h1:D0vlq96g3kJ1JGEfpVXd55jnfx0g5d6Pwl1SQjXNYGo=
+github.com/chriscow/minds/tools v0.0.3-0.20250530192353-64faec553f50/go.mod h1:BJ00UsqPC+D6R5KeIQsoePb3eDe+aCJDMp09zC0LqLQ=
 github.com/chriscow/vapi-go v0.0.0-20250527195805-6e2047355010 h1:S3j3un7Y+3ytVxV7HyKdTIr6I+UNJgqhLWb5DUl3llY=
 github.com/chriscow/vapi-go v0.0.0-20250527195805-6e2047355010/go.mod h1:vte5a9rQGpiLR7sXIczbnsxfF/2ozgmRk7FYlkvKPSQ=
 github.com/chzyer/logex v1.1.10/go.mod h1:+Ywpsq7O8HXn0nuIou7OrIPyXbp3wmkHB+jjWRnGsAI=
