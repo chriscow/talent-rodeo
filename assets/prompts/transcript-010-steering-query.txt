@@ -24,10 +24,12 @@ To complete this task, follow these steps:
 3. Determine the MoveToward concept:
    - Identify additional search terms or preferences mentioned by the user.
    - Look for positive aspects of jobs that the user expresses interest in.
+   - Looks for indications from the user if they want 100% remote work, on-site or hybrid
    - Combine these elements into a concise sentence that represents what the user wants to move toward in their job search.
 
 4. Determine the MoveAway concept:
    - Look for specific mentions of things the user wants to avoid in their job search.
+   - Looks for indications from the user if they **DO NOT** want 100% remote work, on-site or hybrid
    - Combine these elements into a concise sentence that represents what the user wants to move away from in their job search.
 
 5. Create the Reranking Query

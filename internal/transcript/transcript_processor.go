@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"talent-rodeo/internal/smtp"
 
@@ -195,8 +196,13 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 		// If a new criteria was created, we need to queue an immediate search.
 		// We also increase / broaden the first search for a new criteria.
 		//
-		criteria.MaxPages = internal.DefaultMaxPages * 5 // Increase the first search to get more results
-		criteria.ListingAge = internal.ListingAgeWeek    // Do a week instead of a day
+		maxPages := internal.DefaultMaxPages * 5 // Increase the first search to get more results
+		testing := os.Getenv("TESTING_MODE") == "true"
+		if testing {
+			maxPages = 2
+		}
+		criteria.MaxPages = maxPages
+		criteria.ListingAge = internal.ListingAgeWeek // Do a week instead of a day
 
 		logger.Debug("search criteria created", "user-id", user.ID, "criteria-id", criteria.ID)
 		jobSearch, err := internal.CreateSearchTask(ctx, fs, *criteria, "scrapingdog")
@@ -232,8 +238,6 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 		return
 	}
 
-	logger.Debug(internal.Green("✅ appointment processing completed"), "user-id", user.ID, "appointment-id", appointment.ID)
-
 	//
 	// Refresh user jobs - queries Pinecone for relevant jobs using an existing criteria
 	//
@@ -245,8 +249,6 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 		// 	hub.CaptureException(err)
 		// 	return
 		// }
-
-		internal.SendPusherRedirect(psh, user.ID, "/dashboard")
 	}
 
 	if smtpCfg != nil {
@@ -266,6 +268,9 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 		}
 		logger.Debug("recap email sent", "user-id", user.ID, "appointment-id", appointment.ID)
 	}
+
+	internal.SendPusherRedirect(psh, user.ID, "/dashboard")
+	logger.Debug(internal.Green("✅ appointment processing completed"), "user-id", user.ID, "appointment-id", appointment.ID)
 }
 
 func GenerateRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user *internal.User, transcript *internal.Transcript, cfg SMTPConfig) error {
@@ -463,7 +468,13 @@ func getOrCreateSearchCriteria(ctx context.Context, fs *internal.FirestoreClient
 		return criteria, false, nil
 	}
 
-	criteria, err = internal.CreateSearchCriteria(ctx, fs, steeringQuery, geoID, internal.DefaultMaxPages, internal.DefaultListingAge)
+	maxPages := internal.DefaultMaxPages
+	testing := os.Getenv("TESTING_MODE") == "true"
+	if testing {
+		maxPages = 2
+	}
+
+	criteria, err = internal.CreateSearchCriteria(ctx, fs, steeringQuery, geoID, maxPages, internal.DefaultListingAge)
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to create search criteria: %w", err)
 	}

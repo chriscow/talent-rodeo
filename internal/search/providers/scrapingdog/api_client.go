@@ -19,6 +19,8 @@ const (
 	SortByDay   SortBy = "day"   // Last 24 hours
 	SortByWeek  SortBy = "week"  // Last 7 days
 	SortByMonth SortBy = "month" // Last 30 days
+
+	DefaultSortBy SortBy = SortByDay // Default sort order
 )
 
 // APIClientInterface defines the interface for the API client

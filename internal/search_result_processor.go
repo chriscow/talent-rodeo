@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"github.com/getsentry/sentry-go"
 	"github.com/pinecone-io/go-pinecone/v3/pinecone"
 )
 
@@ -59,44 +61,37 @@ func (s *SearchResultProcessor) OnJobListing(jobSearch SearchTask, job JobListin
 func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, job JobDetail) {
 	s.logger.Info("OnJobDetail", "jobID", job.ProviderJobID)
 
-	//
-	// TODO: Do we care if the same job detail was found multiple times?
-	//
 	go func() {
-		// Check if link already exists before the transaction
 		ctx := context.Background()
-		linkID := fmt.Sprintf("%s_%s", jobSearch.Criteria.ID, job.ID)
-		linkRef := s.fs.Collection(JobCriteriaLinkCollection).Doc(linkID)
-		linkDoc, err := linkRef.Get(ctx)
-		linkExists := err == nil && linkDoc.Exists()
-
 		if err := ExtractJobDetailData(ctx, &job); err != nil {
 			s.logger.Error("failed to extract job detail data", "error", err, "jobID", job.ID)
+			SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+				"jobID":      job.ID,
+				"criteriaID": jobSearch.Criteria.ID,
+			})
+
 			return
 		}
 
 		// Transaction for data operations only
-		err = s.fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-			// 1. Save the job detail
+		err := s.fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 			if err := SaveJobDetailTx(ctx, s.fs, tx, &job); err != nil {
+				s.logger.Error("failed to save job detail", "error", err, "jobID", job.ID)
+				SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+					"jobID":      job.ID,
+					"criteriaID": jobSearch.Criteria.ID,
+				})
 				return fmt.Errorf("failed to save job detail: %w", err)
 			}
 
-			if err := AddJobDetailToSearchTaskTx(ctx, s.fs, tx, jobSearch.ID, job.ID); err != nil {
+			if err := LinkJobDetailToSearchTaskTx(ctx, s.fs, tx, jobSearch.ID, job.ID); err != nil {
+				s.logger.Error("failed to link job detail to search task", "error", err, "jobID", job.ID, "searchTaskID", jobSearch.ID)
+				SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+					"jobID":        job.ID,
+					"searchTaskID": jobSearch.ID,
+					"criteriaID":   jobSearch.Criteria.ID,
+				})
 				return fmt.Errorf("failed to add job detail to search task: %w", err)
-			}
-
-			// 2. Link the job detail to the criteria (only if it doesn't exist)
-			if !linkExists {
-				// Create the link directly without reading inside the transaction
-				link := JobDetailCriteriaLink{
-					CriteriaID: jobSearch.Criteria.ID,
-					JobID:      job.ID,
-					CreatedAt:  time.Now(),
-				}
-				if err := tx.Create(linkRef, &link); err != nil {
-					return fmt.Errorf("failed to create link: %w", err)
-				}
 			}
 
 			return nil
@@ -104,6 +99,15 @@ func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, job JobDetail)
 
 		if err != nil {
 			s.logger.Error("failed to save job detail and link", "error", err)
+			return
+		}
+
+		if _, err := s.UpsertJobDetailEmbeddings(ctx, jobSearch.Criteria.ID, []JobDetail{job}); err != nil {
+			s.logger.Error("failed to upsert job detail embeddings", "error", err, "jobID", job.ID)
+			SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+				"jobID":      job.ID,
+				"criteriaID": jobSearch.Criteria.ID,
+			})
 			return
 		}
 	}()
@@ -119,7 +123,14 @@ func (s *SearchResultProcessor) OnPageComplete(jobSearch SearchTask, page int, j
 		}
 	}
 
-	UpdateSearchTask(context.Background(), s.fs, &jobSearch)
+	if err := UpdateSearchTask(context.Background(), s.fs, &jobSearch); err != nil {
+		s.logger.Error("failed to update search task", "error", err)
+		SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
+			"criteriaID": jobSearch.Criteria.ID,
+			"page":       strconv.Itoa(page),
+		})
+		return
+	}
 }
 
 func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJobs int, errors []error) {
@@ -138,6 +149,11 @@ func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJob
 
 	ctx := context.Background()
 	if err := UpdateSearchTask(ctx, s.fs, &jobSearch); err != nil {
+		SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"criteriaID": jobSearch.Criteria.ID,
+			"totalJobs":  strconv.Itoa(totalJobs),
+			"errors":     strconv.Itoa(len(errors)),
+		})
 		s.logger.Error("failed to update search task", "error", err)
 	}
 
@@ -168,8 +184,6 @@ func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJob
 		s.logger.Error("failed to embed job details", "error", err)
 	}
 	s.logger.Info("embedded job details", "count", count)
-
-	// s.processSubscriptions(ctx, jobSearch)
 }
 
 func (s *SearchResultProcessor) UpsertJobDetailEmbeddings(ctx context.Context, criteriaID string, jobDetails []JobDetail) (int, error) {
