@@ -18,6 +18,41 @@ import (
 )
 
 // HybridSearchParams provides configuration options for hybrid semantic search
+// The ScoreFusion parameter allows users to choose how dense and sparse scores are combined.
+//
+// The following fusion methods are supported:
+//
+// Linear fusion (method="linear"):
+//   - Simple weighted average of dense and sparse scores
+//   - Best when both signals are reliable and complementary
+//   - Allows fine-tuning through weight adjustment
+//   - Most commonly used as a baseline approach
+//
+// Maximum fusion (method="max"):
+//   - Takes the highest score between dense and sparse
+//   - Useful when one signal is expected to be more reliable but we don't know which
+//   - Good for queries that might be either semantic or keyword-focused
+//   - Can help reduce false negatives but may increase false positives
+//
+// Minimum fusion (method="min"):
+//   - Takes the lowest score between dense and sparse
+//   - Conservative approach requiring agreement between both signals
+//   - Useful for high-precision requirements where false positives are costly
+//   - Can help reduce false positives but may increase false negatives
+//
+// Harmonic mean fusion (method="harmonic"):
+//   - Weighted harmonic mean of dense and sparse scores
+//   - Penalizes large differences between scores
+//   - Best when both signals should agree for high relevance
+//   - More conservative than linear fusion
+//   - Good for technical job matching where both semantic and keyword match matter
+//
+// Reciprocal Rank Fusion (method="reciprocal_rank_fusion"):
+//   - Based on rank position rather than raw scores
+//   - Robust to score scaling differences between methods
+//   - Handles outliers well
+//   - Good for merging results from very different scoring approaches
+//   - Uses constant k=60 to prevent high ranks from dominating
 type HybridSearchParams struct {
 	DenseWeight     float64 // Weight for dense results (0.0-1.0)
 	SparseWeight    float64 // Weight for sparse results (0.0-1.0)

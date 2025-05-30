@@ -120,6 +120,13 @@
 
 {{define "job-card"}}
 <article class="job-card">
+    <div style="display: none;">
+        <span class="job-id">{{.JobDetail.ProviderJobID}}</span>
+        <span class="dense-score">{{.ScoredJobDetail.DenseScore}}</span>
+        <span class="sparse-score">{{.ScoredJobDetail.SparseScore}}</span>
+        <span class="score">{{.ScoredJobDetail.Score}}</span>
+    </div>
+
     <hgroup>
         <h3>{{.JobDetail.Title}}</h3>
         <p class="company">{{.JobDetail.Company}} - <em>Posted {{.JobDetail.PostedDate | approxAge}}</em></p>
