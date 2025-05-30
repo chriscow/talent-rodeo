@@ -26,7 +26,6 @@ const (
 	// JobStatusUnprocessed is the initial status of a job detail when it is retrieved by the search provider.
 	JobStatusUnprocessed JobStatus = "unprocessed"
 	JobStatusNew         JobStatus = "new"
-	JobStatusViewed      JobStatus = "viewed"
 	JobStatusSaved       JobStatus = "saved"
 	JobStatusApplied     JobStatus = "applied"
 	JobStatusRejected    JobStatus = "rejected"
@@ -42,8 +41,6 @@ func ParseJobStatus(statusStr string) (JobStatus, bool) {
 	switch strings.ToLower(statusStr) {
 	case string(JobStatusNew):
 		return JobStatusNew, true
-	case string(JobStatusViewed):
-		return JobStatusViewed, true
 	case string(JobStatusSaved):
 		return JobStatusSaved, true
 	case string(JobStatusApplied):
@@ -63,7 +60,6 @@ type UserJob struct {
 	Score  float64 // Semantic search score, if applicable
 
 	// User interaction metadata
-	ViewedAt   *time.Time
 	SavedAt    *time.Time
 	AppliedAt  *time.Time
 	RejectedAt *time.Time
@@ -306,7 +302,6 @@ func GetAllJobStatusCounts(ctx context.Context, fs *FirestoreClient, userID stri
 	// Initialize the result map with all possible statuses set to 0
 	result := map[string]int64{
 		string(JobStatusNew):      0,
-		string(JobStatusViewed):   0,
 		string(JobStatusSaved):    0,
 		string(JobStatusApplied):  0,
 		string(JobStatusRejected): 0,
@@ -366,8 +361,6 @@ func StatusToDisplayName(status string) string {
 	switch status {
 	case string(JobStatusNew):
 		return "New"
-	case string(JobStatusViewed):
-		return "Viewed"
 	case string(JobStatusSaved):
 		return "Saved"
 	case string(JobStatusApplied):
@@ -389,8 +382,6 @@ func UpdateUserJobStatus(ctx context.Context, fs *FirestoreClient, userID, jobID
 
 	// Add timestamp based on status
 	switch status {
-	case JobStatusViewed:
-		updates = append(updates, firestore.Update{Path: "ViewedAt", Value: now})
 	case JobStatusSaved:
 		updates = append(updates, firestore.Update{Path: "SavedAt", Value: now})
 	case JobStatusApplied:
@@ -483,75 +474,6 @@ func DeleteAllUserJobsByPrefix(ctx context.Context, fs *FirestoreClient, prefix 
 	return deleted, nil
 }
 
-// RefreshUserJobs handles the semantic search and job creation for a single user.
-// It performs semantic search using the user's steering query against jobs matching the criteria,
-// and creates user-job links for jobs that the user doesn't already have.
-//
-// The function skips users without a steering query.
-// If no matching jobs are found for the user, it logs this and returns without error.
-// func RefreshUserJobs(ctx context.Context, fs *FirestoreClient, user *User, criteria SearchCriteria, threshold float64) error {
-// 	// Skip users without a steering query
-// 	if user.SteeringQuery == nil {
-// 		return fmt.Errorf("user %s has no steering query", user.ID)
-// 	}
-
-// 	// Search for jobs using the user's steering query and the criteria ID
-// 	params := DefaultHybridSearchParams()
-// 	scoredJobs, err := SemanticSearchJobs(ctx, user.SteeringQuery, criteria.ID, DefaultUserJobsTopK, params)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to search jobs for user %s: %w", user.ID, err)
-// 	}
-
-// 	if len(scoredJobs) == 0 {
-// 		return nil
-// 	}
-
-// 	// This only counts as one read.
-// 	jobs, err := ListUserJobs(ctx, fs, user.ID)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to list user jobs for user %s: %w", user.ID, err)
-// 	}
-
-// 	// Create a map of existing job IDs for quick lookup
-// 	existingJobIDs := make(map[string]UserJob, len(jobs))
-// 	for _, job := range jobs {
-// 		existingJobIDs[job.ID] = job
-// 	}
-
-// 	jobRefs := []UserJob{}
-
-// 	// Create a user job for each matching job
-// 	for _, scoredJob := range scoredJobs {
-
-// 		if scoredJob.Score < threshold {
-// 			// Skip jobs below the threshold
-// 			continue
-// 		}
-
-// 		jobID := scoredJob.JobDetail.ID
-
-// 		job := UserJob{
-// 			ID:            jobID,
-// 			Score:         scoredJob.Score,
-// 			JobRef:        fs.Collection(JobDetailsCollection).Doc(jobID),
-// 			CreatedAt:     time.Now(),
-// 			UpdatedAt:     time.Now(),
-// 			Status:        JobStatusNew, // TODO: Once we have LLM analysis, this will be set to JobStatusUnprocessed
-// 			IsRecommended: true,         // TODO: When we have LLM analysis, set this based on the analysis
-// 		}
-
-// 		// Check if the user already has this job
-// 		if _, exists := existingJobIDs[jobID]; exists {
-// 			continue // Skip if the job already exists
-// 		}
-
-// 		jobRefs = append(jobRefs, job)
-// 	}
-
-// 	// Create user jobs in batch
-// 	return CreateUserJobsBatch(ctx, fs, user.ID, jobRefs)
-// }
-
 // isYesRating checks if a rating contains "yes" (case insensitive)
 func isYesRating(rating string) bool {
 	rating = strings.ToLower(rating)
@@ -560,14 +482,20 @@ func isYesRating(rating string) bool {
 
 // GetSemanticJobsForUser retrieves semantic search results for a user with 1-hour caching
 // This function is used by the dashboard for the "New" job status tab
-func GetSemanticJobsForUser(ctx context.Context, fs *FirestoreClient, user *User, criteriaID string, topK int) ([]ScoredJobDetail, error) {
+func GetSemanticJobsForUser(ctx context.Context, fs *FirestoreClient, user *User, criteriaID string, topK int, params *HybridSearchParams) ([]ScoredJobDetail, error) {
 	// Skip users without a steering query
 	if user.SteeringQuery == nil {
 		return nil, fmt.Errorf("user %s has no steering query", user.ID)
 	}
 
-	// Create cache key based on user ID, criteria ID, and topK
-	cacheKey := fmt.Sprintf("semantic_jobs:%s:%s:%d", user.ID, criteriaID, topK)
+	// Create cache key based on user ID, criteria ID, topK, and params hash
+	paramsHash := "default"
+	if params != nil {
+		paramsHash = fmt.Sprintf("%.2f-%.2f-%.2f-%.2f-%.2f-%s",
+			params.DenseWeight, params.SparseWeight, params.RecencyWeight,
+			params.RecencyHalfLife, params.ScoreThreshold, params.ScoreFusion)
+	}
+	cacheKey := fmt.Sprintf("semantic_jobs:%s:%s:%d:%s", user.ID, criteriaID, topK, paramsHash)
 
 	// Check cache first
 	if cachedJobs, found := fs.semanticJobsCache.Get(cacheKey); found {
@@ -575,7 +503,9 @@ func GetSemanticJobsForUser(ctx context.Context, fs *FirestoreClient, user *User
 	}
 
 	// Cache miss - perform semantic search
-	params := DefaultHybridSearchParams()
+	if params == nil {
+		params = DefaultHybridSearchParams()
+	}
 	scoredJobs, err := SemanticSearchJobs(ctx, user.SteeringQuery, criteriaID, topK, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search jobs for user %s: %w", user.ID, err)
