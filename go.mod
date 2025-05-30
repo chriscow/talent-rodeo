@@ -18,7 +18,7 @@ require (
 	firebase.google.com/go/v4 v4.15.2
 	github.com/ThreeDotsLabs/watermill v1.4.4
 	github.com/alexedwards/flow v0.1.0
-	github.com/chriscow/minds v0.0.8-0.20250303171538-dc7c074db869
+	github.com/chriscow/minds v0.0.8-0.20250530181520-20db29a161e6
 	github.com/fatih/color v1.16.0
 	github.com/fumiama/go-docx v0.0.0-20241231153056-9f8f327c74a5
 	github.com/go-playground/form/v4 v4.2.1

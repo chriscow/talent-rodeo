@@ -8,7 +8,6 @@ import (
 	"talent-rodeo/assets"
 
 	"github.com/chriscow/minds/tools"
-	"github.com/getsentry/sentry-go"
 )
 
 // SteeringQuery encapsulates all parameters needed for semantic steering of queries
@@ -183,7 +182,8 @@ func (q *SteeringQuery) GetSparseVector(ctx context.Context, p *Pinecone, model 
 }
 
 func GenerateSteeringQuery(ctx context.Context, transcript *Transcript, opts ...tools.Option) (*SteeringQuery, error) {
-	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/transcript-010-steering-query.txt")
+	const promptFile = "prompts/transcript-010-steering-query.txt"
+	tmpl, err := assets.EmbeddedFiles.ReadFile(promptFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read steering query prompt: %w", err)
 	}
@@ -201,7 +201,6 @@ func GenerateSteeringQuery(ctx context.Context, transcript *Transcript, opts ...
 
 	data, err := tools.Ask(ctx, prompt, options...)
 	if err != nil {
-		SentryReportError(ctx, err, sentry.LevelError, nil)
 		return nil, fmt.Errorf("failed to ask LLM: %w", err)
 	}
 
@@ -232,8 +231,7 @@ func extractSteeringQuery(ctx context.Context, data string) (*SteeringQuery, err
 	if err != nil {
 		query, err = tools.StructuredAsk[SteeringQuery](ctx, "steering-query", "extract the data into this JSON structure\r\n"+string(data), tools.WithModel(tools.GPT41Nano))
 		if err != nil {
-			SentryReportError(ctx, err, sentry.LevelError, nil)
-			return nil, fmt.Errorf("failed to parse steering query: %w", err)
+			return nil, fmt.Errorf("LLM failed to parse steering query: %w", err)
 		}
 	}
 
