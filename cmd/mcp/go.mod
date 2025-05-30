@@ -14,7 +14,7 @@ replace (
 require (
 	cloud.google.com/go/firestore v1.18.0
 	firebase.google.com/go v3.13.0+incompatible
-	github.com/chriscow/minds v0.0.8-0.20250303171538-dc7c074db869
+	github.com/chriscow/minds v0.0.8-0.20250530190108-e5b0a4eae6d2
 	github.com/joho/godotenv v1.5.1
 	github.com/mark3labs/mcp-go v0.26.0
 	google.golang.org/api v0.234.0
@@ -71,7 +71,7 @@ require (
 	github.com/pusher/pusher-http-go/v5 v5.1.1 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/samber/lo v1.50.0 // indirect
-	github.com/sashabaranov/go-openai v1.39.1 // indirect
+	github.com/sashabaranov/go-openai v1.40.1 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.5.0 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
