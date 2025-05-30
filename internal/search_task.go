@@ -141,24 +141,8 @@ type JobDetailRef struct {
 	CreatedAt time.Time `firestore:"created_at"`
 }
 
-// AddJobDetailToSearch adds a JobDetail as a subcollection doc under a SearchTask.
-func AddJobDetailToSearchTask(ctx context.Context, fs *FirestoreClient, searchTaskID string, jobID string) error {
-	if searchTaskID == "" || jobID == "" {
-		return fmt.Errorf("searchTaskID and job.ID are required")
-	}
-
-	jobRef := fs.Collection(SearchTaskCollection).Doc(searchTaskID).Collection(JobDetailsCollection).Doc(jobID)
-	ref := JobDetailRef{
-		JobID:     jobID,
-		CreatedAt: time.Now().UTC(),
-	}
-
-	_, err := jobRef.Set(ctx, ref)
-	return err
-}
-
-// AddJobDetailToSearchTaskTx adds a JobDetail as a subcollection doc under a SearchTask.
-func AddJobDetailToSearchTaskTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, searchTaskID string, jobID string) error {
+// LinkJobDetailToSearchTaskTx adds a JobDetail as a subcollection doc under a SearchTask.
+func LinkJobDetailToSearchTaskTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, searchTaskID string, jobID string) error {
 	if searchTaskID == "" || jobID == "" {
 		return fmt.Errorf("searchTaskID and job.ID are required")
 	}
@@ -195,28 +179,3 @@ func GetJobIDsForSearchTask(ctx context.Context, fs *FirestoreClient, searchTask
 	}
 	return jobIDs, nil
 }
-
-// // ListJobDetailsForSearchTask lists all JobDetail docs for a given SearchTask ID from the subcollection.
-// func ListJobDetailsForSearchTask(ctx context.Context, fs *FirestoreClient, searchTaskID string) ([]*JobDetail, error) {
-// 	if searchTaskID == "" {
-// 		return nil, fmt.Errorf("searchTaskID is required")
-// 	}
-// 	colRef := fs.Collection(SearchTaskCollection).Doc(searchTaskID).Collection(JobDetailsCollection)
-// 	iter := colRef.Documents(ctx)
-// 	var jobs []*JobDetail
-// 	for {
-// 		doc, err := iter.Next()
-// 		if err == iterator.Done {
-// 			break
-// 		}
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 		var job JobDetail
-// 		if err := doc.DataTo(&job); err != nil {
-// 			return nil, err
-// 		}
-// 		jobs = append(jobs, &job)
-// 	}
-// 	return jobs, nil
-// }
