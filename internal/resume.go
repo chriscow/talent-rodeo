@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/tools"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
@@ -295,8 +296,14 @@ func getAnnotatedResume(ctx context.Context, resume Resume) (*annotatedResume, e
 	}
 
 	sysPrompt = append(sysPrompt, examples...)
+	msgs := minds.Messages{
+		{
+			Role:    minds.RoleSystem,
+			Content: string(sysPrompt),
+		},
+	}
 
-	analysis, err := tools.Ask(ctx, resume.RawText, tools.WithSystemMessage(string(sysPrompt)), tools.WithModel(tools.DeepSeekChat), tools.WithMaxTokens(4096))
+	analysis, err := tools.Ask(ctx, resume.RawText, tools.WithMessages(msgs), tools.WithModel(tools.DeepSeekChat), tools.WithMaxTokens(4096))
 	if err != nil {
 		return nil, fmt.Errorf("convertResume: failed to ask LLM: %w", err)
 	}
