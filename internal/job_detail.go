@@ -83,7 +83,7 @@ type JobDetailExtractedData struct {
 	Requirements        []string `json:"requirements" description:"Mandatory barriers to entry (e.g., degrees, legal requirements)"`
 	Skills              []string `json:"skills" description:"Technical/hard skills (tools, languages, systems)"`
 	Qualifications      []string `json:"qualifications" description:"Broader competencies (experience level, soft skills, industry knowledge)"`
-	BonusQualifications []string `json:"bonus_qualifications" description:"Secondary assets (e.g., familiarity with adjacent technologies)"`
+	BonusQualifications []string `json:"bonusQualifications" description:"Secondary assets (e.g., familiarity with adjacent technologies)"`
 }
 
 // Company contains information about the company posting the job.
@@ -293,21 +293,7 @@ func UnlinkJobDetailFromCriteriaTx(ctx context.Context, fs *FirestoreClient, tx 
 	linkID := fmt.Sprintf("%s_%s", criteriaID, jobID)
 
 	linkRef := fs.Collection(JobCriteriaLinkCollection).Doc(linkID)
-
-	// Check if the link exists
-	doc, err := tx.Get(linkRef)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return nil // Link does not exist, nothing to do
-		}
-		return err
-	}
-
-	if doc.Exists() {
-		return tx.Delete(linkRef)
-	}
-
-	return nil
+	return tx.Delete(linkRef)
 }
 
 // ListJobDetails retrieves all job details with optional limit and offset

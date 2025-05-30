@@ -214,6 +214,10 @@ func (p *Provider) SearchJobListings(ctx context.Context, criteria internal.Sear
 		}
 	}
 
+	if string(criteria.ListingAge) == "" {
+		criteria.ListingAge = internal.DefaultListingAge
+	}
+
 	// Call the API
 	jobListings, err := p.apiClient.SearchJobListings(ctx, criteria.Query, criteria.GeoID, page, SortBy(criteria.ListingAge))
 	if err != nil {

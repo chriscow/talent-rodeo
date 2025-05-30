@@ -416,6 +416,12 @@ func (wm *WorkerManager) processQueuedSearch(ctx context.Context, workerID int, 
 		"totalJobs", len(allJobs),
 		"errors", len(searchErrors))
 
+	now := time.Now().UTC()
+	searchJob.Status = internal.SearchTaskStatusCompleted
+	searchJob.PagesTotal = searchJob.Criteria.MaxPages
+	searchJob.PagesCompleted = searchJob.Criteria.MaxPages // All pages processed
+	searchJob.UpdatedAt = &now
+
 	// Update user's search status
 	if wm.eventHandler != nil {
 		wm.eventHandler.OnSearchCompleted(searchJob, len(allJobs), searchErrors)
