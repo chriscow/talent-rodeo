@@ -136,6 +136,23 @@ func UnsubscribeFromCriteria(ctx context.Context, fs *FirestoreClient, userID, c
 	return err
 }
 
+func UnsubscribeFromCriteriaTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, userID, criteriaID string) error {
+	// Validate inputs
+	if userID == "" {
+		return fmt.Errorf("user ID is required")
+	}
+	if criteriaID == "" {
+		return fmt.Errorf("criteria ID is required")
+	}
+
+	// Create subscription document ID
+	subscriptionID := funcs.Slugify(fmt.Sprintf("%s_%s", userID, criteriaID))
+
+	// Delete the subscription
+	subscriptionRef := fs.Collection(userCriteriaCollection).Doc(subscriptionID)
+	return tx.Delete(subscriptionRef)
+}
+
 // GetSubscriptionsForUser retrieves all criteria a user is subscribed to
 func GetSubscriptionsForUser(ctx context.Context, fs *FirestoreClient, userID string) ([]SearchCriteriaSubscription, error) {
 

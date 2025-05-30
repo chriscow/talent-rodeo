@@ -4,13 +4,35 @@
 <main class="container">
     <h1>Feature Flags</h1>
     
-    {{if .Error}}
-    <article class="error">Error: {{.Error}}</article>
-    {{end}}
-    
-    {{if .Success}}
-    <article class="success">{{.Success}}</article>
-    {{end}}
+    <section>
+        <h2>Current Status</h2>
+        <div class="grid">
+            <article>
+                <header>Search Scheduler</header>
+                <p>
+                    Status: <mark class="{{if .SearchSchedulerEnabled}}success{{else}}error{{end}}">
+                        {{if .SearchSchedulerEnabled}}Enabled{{else}}Disabled{{end}}
+                    </mark>
+                </p>
+            </article>
+            <article>
+                <header>Subscription Processor</header>
+                <p>
+                    Status: <mark class="{{if .SubscriptionProcessorEnabled}}success{{else}}error{{end}}">
+                        {{if .SubscriptionProcessorEnabled}}Enabled{{else}}Disabled{{end}}
+                    </mark>
+                </p>
+            </article>
+            <article>
+                <header>ScrapingDog Workers</header>
+                <p>
+                    Status: <mark class="{{if .ScrapingdogWorkersEnabled}}success{{else}}error{{end}}">
+                        {{if .ScrapingdogWorkersEnabled}}Enabled{{else}}Disabled{{end}}
+                    </mark>
+                </p>
+            </article>
+        </div>
+    </section>
     
     <form method="POST" autocomplete="off">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
@@ -39,31 +61,32 @@
                     Enable Subscription Processor
                 </label>
             </article>
+
+            <article>
+                <header>
+                    <h3>ScrapingDog Workers</h3>
+                    <p>Controls whether ScrapingDog workers process job search requests from the queue</p>
+                </header>
+                <label>
+                    <input type="checkbox" name="scrapingdog" value="true" {{if .ScrapingdogWorkersEnabled}}checked{{end}}>
+                    Enable ScrapingDog Workers
+                </label>
+            </article>
         </fieldset>
         
         <button type="submit">Update Feature Flags</button>
     </form>
     
-    <section>
-        <h2>Current Status</h2>
-        <div class="grid">
-            <article>
-                <header>Search Scheduler</header>
-                <p>
-                    Status: <mark class="{{if .SearchSchedulerEnabled}}success{{else}}error{{end}}">
-                        {{if .SearchSchedulerEnabled}}Enabled{{else}}Disabled{{end}}
-                    </mark>
-                </p>
-            </article>
-            <article>
-                <header>Subscription Processor</header>
-                <p>
-                    Status: <mark class="{{if .SubscriptionProcessorEnabled}}success{{else}}error{{end}}">
-                        {{if .SubscriptionProcessorEnabled}}Enabled{{else}}Disabled{{end}}
-                    </mark>
-                </p>
-            </article>
-        </div>
-    </section>
+
 </main>
+{{end}}
+
+{{define "page:scripts"}}
+<script>
+    //{{if .Error}} 
+    notyf.error('{{.Error}}');
+    //{{else if .Success}}
+    notyf.success('{{.Success}}');
+    //{{end}}
+</script>
 {{end}}

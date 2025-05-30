@@ -9,6 +9,7 @@ import (
 
 	"talent-rodeo/internal"
 
+	"cloud.google.com/go/firestore"
 	"github.com/spf13/cobra"
 )
 
@@ -20,14 +21,6 @@ var (
 )
 
 func init() {
-	// Find the search command that was added in search.go
-	searchCmd, _, err := RootCmd.Find([]string{"search"})
-	if err != nil {
-		// This should not happen as long as search.go is initialized first
-		fmt.Fprintf(os.Stderr, "Error: search command not found: %v\n", err)
-		return
-	}
-
 	// Create criteria command
 	criteriaCmd := &cobra.Command{
 		Use:   "criteria",
@@ -78,7 +71,7 @@ func init() {
 	criteriaCmd.AddCommand(listCmd, needsSearchCmd, createCmd, deleteCmd)
 
 	// Add criteria command to search command
-	searchCmd.AddCommand(criteriaCmd)
+	RootCmd.AddCommand(criteriaCmd)
 }
 
 func runListCriteria(cmd *cobra.Command, args []string) error {
@@ -159,14 +152,43 @@ func runDeleteCriteria(cmd *cobra.Command, args []string) error {
 	// Get ID from args
 	id := args[0]
 
-	// Delete search criteria
-	err = internal.DeleteSearchCriteria(ctx, fs, id)
+	subscribers, err := internal.GetCriteriaSubscribers(ctx, fs, id)
 	if err != nil {
-		return fmt.Errorf("failed to delete search criteria: %w", err)
+		return fmt.Errorf("failed to get subscribers for search criteria ID %s: %w", id, err)
 	}
 
-	fmt.Printf("Search criteria with ID %s deleted successfully\n", id)
-	return nil
+	jobIDs, err := internal.GetJobIDsForCriteria(ctx, fs, id)
+	if err != nil {
+		return fmt.Errorf("failed to get job IDs for search criteria ID %s: %w", id, err)
+	}
+
+	return fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+
+		for _, sub := range subscribers {
+			// Unsubscribe each user from the criteria
+			err = internal.UnsubscribeFromCriteriaTx(ctx, fs, tx, sub.UserID, id)
+			if err != nil {
+				return fmt.Errorf("failed to unsubscribe user %s from search criteria ID %s: %w", sub.UserID, id, err)
+			}
+			fmt.Printf("User %s unsubscribed from search criteria ID %s\n", sub.UserID, id)
+		}
+
+		for _, jobID := range jobIDs {
+			err = internal.UnlinkJobDetailFromCriteriaTx(ctx, fs, tx, jobID, id)
+			if err != nil {
+				return fmt.Errorf("failed to unlink job ID %s from search criteria ID %s: %w", jobID, id, err)
+			}
+			fmt.Printf("Job ID %s unlinked from search criteria ID %s\n", jobID, id)
+		}
+
+		err = internal.DeleteSearchCriteriaTx(ctx, fs, tx, id)
+		if err != nil {
+			return fmt.Errorf("failed to delete search criteria ID %s: %w", id, err)
+		}
+		fmt.Printf("Search criteria deleted successfully: %s\n", id)
+
+		return nil
+	})
 }
 
 func displayCriteria(criteria []internal.SearchCriteria, showAll bool) error {

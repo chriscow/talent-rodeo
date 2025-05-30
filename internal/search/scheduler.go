@@ -177,7 +177,7 @@ func (s *Scheduler) StartCriteriaSearch(ctx context.Context) {
 
 	if !s.Enabled() {
 		s.disableSearchSchedulingLogOnce.Do(func() {
-			s.logger.Info(internal.BGYellow("search scheduler disabled by feature flag"))
+			s.logger.Info(internal.BGYellow("search scheduler paused"))
 		})
 		return
 	}
