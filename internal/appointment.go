@@ -60,6 +60,8 @@ type Appointment struct {
 	FailedAt    *time.Time
 	Notes       *string
 
+	RecapSent bool // Whether the recap has been sent to the user
+
 	// New fields for storing promptLLM responses
 	// ExtractedData *ExtractedData
 }
