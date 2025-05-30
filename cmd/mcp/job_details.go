@@ -355,7 +355,7 @@ func searchJobDetailsHandler(ctx context.Context, request mcp.CallToolRequest) (
 		}
 
 		searchResults = append(searchResults, SearchResult{
-			JobDetail: job,
+			JobDetail: &job,
 			Score:     score,
 		})
 	}
