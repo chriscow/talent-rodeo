@@ -69,7 +69,14 @@ func (t *Transcript) Summarize(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("failed to create template: %w", err)
 	}
 
-	return tools.Ask(ctx, t.String(), tools.WithSystemMessage(string(systemPrompt)), tools.WithModel(tools.DeepSeekChat))
+	msgs := minds.Messages{
+		{
+			Role:    minds.RoleSystem,
+			Content: string(systemPrompt),
+		},
+	}
+
+	return tools.Ask(ctx, t.String(), tools.WithMessages(msgs), tools.WithModel(tools.DeepSeekChat))
 }
 
 func (t *Transcript) String() string {
