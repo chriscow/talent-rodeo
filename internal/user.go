@@ -174,6 +174,27 @@ func GetUsersByIDs(ctx context.Context, fs *FirestoreClient, ids []string) ([]*U
 	return users, nil
 }
 
+func GetUserSteeringQuery(ctx context.Context, fs *FirestoreClient, id string) (*SteeringQuery, error) {
+	doc, err := fs.Collection(usersCollection).Doc(id).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	var user User
+	if err := doc.DataTo(&user); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal user data: %w", err)
+	}
+
+	if user.SteeringQuery == nil {
+		return nil, fmt.Errorf("steering query not set for user %s", id)
+	}
+
+	return user.SteeringQuery, nil
+}
+
 func SetUserSteeringQuery(ctx context.Context, fs *FirestoreClient, id string, sq SteeringQuery) error {
 	// if the steering query is not valid, return an error
 	if err := sq.Validate(); err != nil {
