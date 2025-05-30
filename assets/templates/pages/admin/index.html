@@ -1,0 +1,103 @@
+{{define "title"}}Admin Dashboard{{end}}
+
+{{define "page:main"}}
+<main class="container">
+    <hgroup>
+        <h1>Admin Dashboard</h1>
+        <p>Administrative tools and management interface</p>
+    </hgroup>
+
+    <div class="grid">
+        <!-- Tasks Management -->
+        <article>
+            <header>
+                <h3>Tasks</h3>
+            </header>
+            <p>Monitor and manage background tasks, job processing, and system operations.</p>
+            <footer>
+                <a href="/admin/tasks" role="button">Manage Tasks</a>
+            </footer>
+        </article>
+
+        <!-- Voice Assistant -->
+        <article>
+            <header>
+                <h3>Voice Assistant</h3>
+            </header>
+            <p>Test and configure the AI voice assistant for different users and scenarios.</p>
+            <footer>
+                <a href="/admin/voice" role="button">Voice Admin</a>
+            </footer>
+        </article>
+
+        <!-- Feature Flags -->
+        <article>
+            <header>
+                <h3>Feature Flags</h3>
+            </header>
+            <p>Enable or disable system features including search scheduler, subscription processor, and workers.</p>
+            <footer>
+                <a href="/admin/feature-flags" role="button">Manage Flags</a>
+            </footer>
+        </article>
+    </div>
+
+    <div class="grid">
+        <!-- Job Search Tools -->
+        <article>
+            <header>
+                <h3>Search Jobs</h3>
+            </header>
+            <p>Search and analyze job listings using semantic search with configurable parameters.</p>
+            <footer>
+                <a href="/admin/search-jobs" role="button">Search Jobs</a>
+            </footer>
+        </article>
+
+        <!-- Compare Jobs -->
+        <article>
+            <header>
+                <h3>Compare Jobs</h3>
+            </header>
+            <p>Compare job listings side-by-side with similarity analysis and vector comparisons.</p>
+            <footer>
+                <a href="/admin/compare-jobs" role="button">Compare Jobs</a>
+            </footer>
+        </article>
+
+        <!-- User Dashboard -->
+        <article>
+            <header>
+                <h3>User Dashboard</h3>
+            </header>
+            <p>View and manage individual user dashboards, job statuses, and user-specific data.</p>
+            <footer>
+                <a href="/admin/user-dashboard" role="button">User Dashboard</a>
+            </footer>
+        </article>
+    </div>
+
+    <hr>
+
+    <section>
+        <h3>Quick Actions</h3>
+        <div class="grid">
+            <button onclick="window.location.href='/admin/tasks'" class="secondary">
+                View Active Tasks
+            </button>
+            <button onclick="window.location.href='/admin/feature-flags'" class="secondary">
+                Toggle Features
+            </button>
+            <button onclick="window.location.href='/admin/voice'" class="secondary">
+                Test Voice Assistant
+            </button>
+        </div>
+    </section>
+</main>
+{{end}}
+
+{{define "page:scripts"}}
+<script>
+    // Add any JavaScript for the admin dashboard here
+</script>
+{{end}}
