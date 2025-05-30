@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
 	"os"
 	"runtime"
@@ -11,6 +12,7 @@ import (
 	"talent-rodeo/internal/utils"
 	"time"
 
+	"github.com/lmittmann/tint"
 	"github.com/pinecone-io/go-pinecone/v3/pinecone"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -22,6 +24,7 @@ type HybridSearchParams struct {
 	ScoreFusion     string  // "linear", "max", "min", "harmonic", "reciprocal_rank_fusion"
 	RecencyWeight   float64 // Weight to apply to recency boosting (0.0-1.0)
 	RecencyHalfLife float64 // Half-life in days for recency decay
+	ScoreThreshold  float64 // Minimum score to consider a result relevant (0.0-1.0)
 }
 
 // DefaultHybridSearchParams returns a set of default parameters for hybrid search
@@ -32,6 +35,7 @@ func DefaultHybridSearchParams() *HybridSearchParams {
 		ScoreFusion:     "linear",
 		RecencyWeight:   0.2,
 		RecencyHalfLife: 30.0,
+		ScoreThreshold:  0.5,
 	}
 }
 
@@ -176,11 +180,15 @@ func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, crite
 		return nil, fmt.Errorf("PINECONE_DENSE_INDEX_HOST environment variable not set")
 	}
 
+	logger := slog.New(tint.NewHandler(os.Stdout, &tint.Options{Level: slog.LevelDebug}))
+	logger = logger.With("pkg", "internal.SemanticSearchJobs")
+
 	denseResults, err := client.QueryByVector(ctx, denseIndex, JobDetailNamespace, denseVector,
 		WithTopK(topK*2), WithMetadataFilter(metaFilter))
 	if err != nil {
 		return nil, fmt.Errorf("failed to search dense index: %w", err)
 	}
+	logger.Debug("dense search results", "count", len(denseResults.Matches))
 
 	sparseIndex := os.Getenv("PINECONE_SPARSE_INDEX_HOST")
 	if sparseIndex == "" {
@@ -196,13 +204,14 @@ func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, crite
 	if err != nil {
 		return nil, fmt.Errorf("failed to search sparse index: %w", err)
 	}
+	logger.Debug("sparse search results", "count", len(sparseResults.Result.Hits))
 
 	searchResult := &SearchResult{
 		DenseResults:  denseResults,
 		SparseResults: sparseResults,
 	}
 
-	return processSearchResults(ctx, searchResult, topK, params)
+	return processSearchResults(ctx, logger, searchResult, topK, params)
 }
 
 // RerankResults applies reranking to a list of scored job details using the Pinecone reranker.
@@ -271,7 +280,7 @@ func RerankResults(ctx context.Context, client *Pinecone, scoredMatches []*Score
 // processSearchResults processes raw search results from Pinecone and applies fusion scoring,
 // normalization, recency boosting, deduplication, and sorting.
 // The client parameter is optional and only needed when reranking is specified.
-func processSearchResults(_ context.Context, searchResult *SearchResult, topK int, params *HybridSearchParams) ([]ScoredJobDetail, error) {
+func processSearchResults(_ context.Context, logger *slog.Logger, searchResult *SearchResult, topK int, params *HybridSearchParams) ([]ScoredJobDetail, error) {
 	// Create maps to track scores from each source
 	denseScores := make(map[string]float32)
 	sparseScores := make(map[string]float32)
@@ -423,11 +432,18 @@ func processSearchResults(_ context.Context, searchResult *SearchResult, topK in
 		}
 	}
 
+	logger.Debug("deduplicated matches", "from", len(allMatches), "to", len(deduplicated))
+
 	// Create a sorted list of matches by combined score
 	scoredMatches := make([]*ScoredJobDetail, 0, len(deduplicated))
 	for _, match := range deduplicated {
+		if match.Score < params.ScoreThreshold {
+			continue // Skip matches below the score threshold
+		}
 		scoredMatches = append(scoredMatches, match)
 	}
+
+	logger.Debug("filtered matches", "from", len(deduplicated), "to", len(scoredMatches), "threshold", params.ScoreThreshold)
 
 	// Sort by combined score in descending order
 	sort.Slice(scoredMatches, func(i, j int) bool {
@@ -438,6 +454,8 @@ func processSearchResults(_ context.Context, searchResult *SearchResult, topK in
 	if len(scoredMatches) > topK {
 		scoredMatches = scoredMatches[:topK]
 	}
+
+	logger.Debug("final matches", "count", len(scoredMatches), "topK", topK)
 
 	// Create final results from sorted matches
 	results := make([]ScoredJobDetail, 0, len(scoredMatches))

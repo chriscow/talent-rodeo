@@ -13,13 +13,16 @@ package internal
 
 import (
 	"context"
+	"log/slog"
 	"math"
+	"os"
 	"sort"
 	"strings"
 	"talent-rodeo/internal/utils"
 	"testing"
 	"time"
 
+	"github.com/lmittmann/tint"
 	"github.com/pinecone-io/go-pinecone/v3/pinecone"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -776,8 +779,10 @@ func TestProcessSearchResults(t *testing.T) {
 					decayFactorNow, decayFactorYesterday, decayFactorNow-decayFactorYesterday)
 			}
 
+			logger := slog.New(tint.NewHandler(os.Stdout, &tint.Options{Level: slog.LevelDebug}))
+
 			// Call our test wrapper
-			results, err := processSearchResults(ctx, searchResult, tc.topK, tc.params)
+			results, err := processSearchResults(ctx, logger, searchResult, tc.topK, tc.params)
 			if err != nil {
 				t.Fatalf("Error processing search results: %v", err)
 			}
@@ -870,8 +875,10 @@ func TestProcessSearchResults(t *testing.T) {
 			RecencyHalfLife: 30.0,
 		}
 
+		logger := slog.New(tint.NewHandler(os.Stdout, &tint.Options{Level: slog.LevelDebug}))
+
 		// Process results with our test function
-		results, err := processSearchResults(ctx, searchResult, 10, params)
+		results, err := processSearchResults(ctx, logger, searchResult, 10, params)
 		if err != nil {
 			t.Fatalf("Error processing search results: %v", err)
 		}
