@@ -22,6 +22,14 @@ import (
 	"github.com/samber/lo"
 )
 
+func (app *application) adminIndex(w http.ResponseWriter, r *http.Request) {
+	data := app.newTemplateData(r)
+
+	if err := response.Page(w, http.StatusOK, data, "pages/admin/index.html"); err != nil {
+		app.serverError(w, r, err)
+	}
+}
+
 func (app *application) adminVoice(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	adminUser := contextGetAuthenticatedUser(r)
