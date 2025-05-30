@@ -18,6 +18,14 @@ import (
 	"github.com/samber/lo"
 )
 
+type SMTPConfig struct {
+	Host     string
+	Port     int
+	Username string
+	Password string
+	From     string
+}
+
 type userNotifier struct {
 	userID    string
 	publisher *pusher.Client
@@ -45,14 +53,6 @@ func (u *userNotifier) OnSearchCompleted(task internal.SearchTask, totalJobs int
 	fmt.Println("userNotifier:OnSearchCompleted", task, totalJobs, errors)
 	u.dispatch.Deregister(u.userID)
 	internal.SendPusherRedirect(u.publisher, u.userID, "/dashboard")
-}
-
-type SMTPConfig struct {
-	Host     string
-	Port     int
-	Username string
-	Password string
-	From     string
 }
 
 // ProcessCompletedCall updates the appointment after a successful call with the transcript summary.
@@ -256,6 +256,15 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 			internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
 			return
 		}
+
+		appointment.RecapSent = true
+		if err := internal.UpdateAppointment(ctx, fs, appointment); err != nil {
+			logger.Error("failed to update appointment with recap sent status", "error", err)
+			hub.CaptureException(err)
+			internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
+			return
+		}
+		logger.Debug("recap email sent", "user-id", user.ID, "appointment-id", appointment.ID)
 	}
 }
 

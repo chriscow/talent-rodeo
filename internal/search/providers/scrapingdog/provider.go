@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"talent-rodeo/internal"
+	"talent-rodeo/internal/cloudflare"
 	"talent-rodeo/internal/search"
 )
 
@@ -45,6 +47,10 @@ import (
 | 400 | Request failed. |
 */
 
+const (
+	WorkerSettingsKey = "scrapingdog"
+)
+
 // Provider implements the search.JobProvider and search.JobQueue interfaces
 type Provider struct {
 	apiClient     *APIClient
@@ -53,6 +59,7 @@ type Provider struct {
 	eventHandler  internal.JobEventHandler
 	logger        *slog.Logger
 	apiKey        string
+	kvClient      *cloudflare.KV
 }
 
 // ProviderOption configures the Provider
@@ -115,6 +122,15 @@ func NewProvider(apiKey string, logger *slog.Logger, opts ...ProviderOption) *Pr
 		opt(provider)
 	}
 
+	kv, err := cloudflare.NewKV()
+	if err != nil {
+		logger.Error("failed to create KV client", "error", err)
+		panic(fmt.Sprintf("failed to create KV client: %v", err))
+	}
+
+	// Set KV client and settings key
+	provider.kvClient = kv
+
 	// Create worker manager if not already set
 	if provider.workerManager == nil {
 		provider.workerManager = NewWorkerManager(
@@ -162,6 +178,20 @@ func (p *Provider) Validate(ctx context.Context) error {
 
 // StartWorkers starts background worker goroutines
 func (p *Provider) Start(ctx context.Context) error {
+	settings, err := p.getWorkerSettings(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get worker settings: %w", err)
+	}
+
+	currentPaused := p.workerManager.IsPaused()
+	if currentPaused != settings.Paused {
+		p.logger.Info(internal.BGYellow("updating worker pause state"), "paused", settings.Paused)
+		p.workerManager.Pause(settings.Paused)
+	}
+
+	// Start the settings updater
+	go p.startSettingsUpdater(ctx)
+
 	return p.workerManager.Start(ctx, DefaultConcurrency)
 }
 
@@ -242,4 +272,51 @@ func (p *Provider) QueueSearch(ctx context.Context, searchJob internal.SearchTas
 func (p *Provider) GetQueueDepth(ctx context.Context) (int, error) {
 	depth := p.workerManager.GetQueueDepth()
 	return depth, nil
+}
+
+// getWorkerSettings retrieves worker settings from CloudFlare KV
+func (p *Provider) getWorkerSettings(_ context.Context) (*WorkerSettings, error) {
+	// If no KV client configured, return default settings (not paused)
+	if p.kvClient == nil {
+		return &WorkerSettings{Paused: false}, nil
+	}
+
+	var settings WorkerSettings
+	if err := p.kvClient.Get(WorkerSettingsKey, &settings); err != nil {
+		if err == cloudflare.ErrNotFound {
+			// Return default settings if key doesn't exist
+			return &WorkerSettings{Paused: false}, nil
+		}
+		return &WorkerSettings{Paused: false}, err // Default to not paused on error
+	}
+
+	return &settings, nil
+}
+
+// startSettingsUpdater runs a background goroutine to check settings every 30 seconds
+func (p *Provider) startSettingsUpdater(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	p.logger.Info("starting settings updater")
+
+	for {
+		select {
+		case <-ctx.Done():
+			p.logger.Info("shutting down settings updater")
+			return
+		case <-ticker.C:
+			settings, err := p.getWorkerSettings(ctx)
+			if err != nil {
+				p.logger.Error("failed to get worker settings", "error", err)
+				continue
+			}
+
+			currentPaused := p.workerManager.IsPaused()
+			if currentPaused != settings.Paused {
+				p.logger.Info("updating worker pause state", "paused", settings.Paused)
+				p.workerManager.Pause(settings.Paused)
+			}
+		}
+	}
 }

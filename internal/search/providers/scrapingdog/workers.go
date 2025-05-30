@@ -51,6 +51,10 @@ type SearchProvider interface {
 	GetJobDetails(ctx context.Context, jobID string) (*internal.JobDetail, error)
 }
 
+type WorkerSettings struct {
+	Paused bool // Whether the workers should process the search queue
+}
+
 // WorkerManager handles background processing of search jobs
 type WorkerManager struct {
 	provider     SearchProvider
@@ -62,6 +66,8 @@ type WorkerManager struct {
 	shutdownFunc context.CancelFunc
 	shutdownFlag int32
 	eventHandler internal.JobEventHandler
+	// Pause control using atomic operations
+	pausedFlag int32 // 0 = not paused, 1 = paused
 }
 
 // WorkerOption configures the WorkerManager
@@ -180,6 +186,24 @@ func (wm *WorkerManager) GetQueueDepth() int {
 	return len(wm.searchQueue)
 }
 
+// Pause sets the pause state of the workers
+func (wm *WorkerManager) Pause(paused bool) {
+	var newValue int32
+	if paused {
+		newValue = 1
+	}
+
+	oldValue := atomic.SwapInt32(&wm.pausedFlag, newValue)
+	if (oldValue == 1) != paused {
+		wm.logger.Info("worker pause state changed", "paused", paused)
+	}
+}
+
+// IsPaused returns the current pause state
+func (wm *WorkerManager) IsPaused() bool {
+	return atomic.LoadInt32(&wm.pausedFlag) == 1
+}
+
 // startWorker runs a worker goroutine to process search requests
 func (wm *WorkerManager) startWorker(ctx context.Context, workerID int) {
 	logger := wm.logger.With("pkg", "scrapingdog", "workerID", workerID)
@@ -187,61 +211,67 @@ func (wm *WorkerManager) startWorker(ctx context.Context, workerID int) {
 	logger.Debug("starting worker")
 
 	for {
-		// Check if we should shut down
 		select {
 		case <-wm.shutdownCtx.Done():
 			logger.Info("shutting down worker")
 			return
 		default:
-			// Continue processing
-		}
+			// Check if paused
+			if atomic.LoadInt32(&wm.pausedFlag) == 1 {
+				time.Sleep(5 * time.Second)
+				continue
+			}
 
-		// Attempt to get a search request from the queue
-		var searchJob internal.SearchTask
-		var ok bool
+			// Attempt to get a search request from the queue
+			var searchJob internal.SearchTask
+			var ok bool
 
-		select {
-		case searchJob, ok = <-wm.searchQueue:
-			if !ok {
-				// Channel closed
-				logger.Info("search queue closed, worker exiting")
+			select {
+			case searchJob, ok = <-wm.searchQueue:
+				if !ok {
+					// Channel closed
+					logger.Info("search queue closed, worker exiting")
+					return
+				}
+			case <-wm.shutdownCtx.Done():
+				logger.Info("shutting down worker")
+				return
+			case <-time.After(1 * time.Second):
+				// Timeout to allow pause check
+				continue
+			}
+
+			// Acquire semaphore (limit concurrent processing)
+			select {
+			case wm.semaphore <- struct{}{}:
+				// Continue processing
+			case <-wm.shutdownCtx.Done():
+				logger.Info("shutting down worker")
 				return
 			}
-		case <-wm.shutdownCtx.Done():
-			logger.Info("shutting down worker")
-			return
-		}
 
-		// Acquire semaphore (limit concurrent processing)
-		select {
-		case wm.semaphore <- struct{}{}:
-			// Continue processing
-		case <-wm.shutdownCtx.Done():
-			logger.Info("shutting down worker")
-			return
-		}
+			// Process the search request
+			startTime := time.Now()
+			logger.Info("processing search",
+				"query", searchJob.Criteria.Query)
 
-		// Process the search request
-		startTime := time.Now()
-		logger.Info("processing search",
-			"query", searchJob.Criteria.Query)
+			err := wm.processQueuedSearch(ctx, workerID, searchJob)
 
-		err := wm.processQueuedSearch(ctx, workerID, searchJob)
+			// Release the semaphore
+			<-wm.semaphore
 
-		// Release the semaphore
-		<-wm.semaphore
-
-		// Log the result
-		duration := time.Since(startTime)
-		if err != nil {
-			logger.Error("failed to process search",
-				"query", searchJob.Criteria.Query,
-				"duration", duration,
-				"error", err)
-		} else {
-			logger.Info("completed search",
-				"query", searchJob.Criteria.Query,
-				"duration", duration)
+			// Log the result
+			duration := time.Since(startTime)
+			if err != nil {
+				logger.Error("failed to process search",
+					"query", searchJob.Criteria.Query,
+					"duration", duration,
+					"error", err)
+			} else {
+				logger.Info("completed search",
+					"query", searchJob.Criteria.Query,
+					"duration", duration)
+			}
 		}
 	}
 }
