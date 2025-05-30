@@ -18,7 +18,6 @@ Rules:
 Format your output in JSON
 
 <example_json_schema>
-```json
 {
     "summary": "string",
     "responsibilities": ["string"],
@@ -27,6 +26,52 @@ Format your output in JSON
     "qualifications": ["string"],
     "bonusQualifications": ["string"]
 }
-```
 </example_json_schema>
 
+<example_input>
+Help build the future of mental health access.Psychology Today is seeking a talented Full Stack Developer to join our mission-driven team. As the world's largest directory for mental health professionals, we connect over a million people daily to content or therapists, one meaningful match at a time.You’ll play a pivotal role in evolving our Therapy Directory platform, enhancing both the therapist experience and the tools that power it. From building modular frontends with Vue.js to crafting scalable backend systems on AWS serverless architecture, your work will have a direct impact on how people access mental health care.RequirementsPlease note: an in-person meeting or code challenge may be part of the process. Serious candidates only.What You’ll DoBuild and maintain federated frontends with Vue.js and a micro frontend architectureIntegrate seamlessly with AWS services like Lambda, AppSync (GraphQL), and API GatewayCollaborate with a fully remote, agile team of engineers, designers, and product leadersCreate performant, accessible, reusable UI componentsContribute to modern dev pipelines and CI/CD workflowsWhat We're Looking For3+ years in frontend or full stack developmentDeep experience with Vue.js and scalable frontend architectureExperience integrating frontends with AWS serverless backend services — ideally using GraphQL via AWS AppSync and RESTful APIs via API Gateway Some experience with Go (Golang) in backend systems is a plusA strong grasp of event-driven architecture, and how frontends can leverage asynchronous workflows for better performance and UXStrong communicator who thrives in remote-first environmentsBenefitsWhy Join Us?Work on a meaningful product improving access to mental health supportBe part of a smart, kind, and collaborative teamInfluence the architecture of a platform used by millionsCompetitive contractor compensation: $145K–$190K annuallyRemote-first, flexible work with PTO and bonus potential Please note: an in-person meeting or code challenge may be part of the process. Serious candidates only.
+</example_input>
+<example_response>
+{
+    "summary": "Full Stack Developer role focused on building and maintaining federated frontends and scalable backend systems for a mental health platform directory. Works with Vue.js micro frontend architecture and AWS serverless services to enhance therapist and user experiences in a remote-first environment.",
+    "responsibilities": [
+        "Build and maintain federated frontends with Vue.js and micro frontend architecture",
+        "Integrate seamlessly with AWS services like Lambda, AppSync (GraphQL), and API Gateway",
+        "Collaborate with remote, agile team of engineers, designers, and product leads",
+        "Create performant, accessible, reusable UI components",
+        "Contribute to modern dev pipelines and CI/CD workflows"
+    ],
+    "requirements": [
+        "3+ years in frontend or full stack development",
+        "Deep experience with Vue.js and scalable frontend architecture",
+        "Experience integrating frontends with AWS serverless backend services",
+        "Experience with GraphQL via AWS AppSync and RESTful APIs via API Gateway",
+        "Strong grasp of event-driven architecture",
+        "Understanding of how frontends leverage asynchronous workflows for performance and UX",
+        "Strong communication skills",
+        "Ability to thrive in remote-first environments"
+    ],
+    "skills": [
+        "Vue.js",
+        "Micro frontend architecture",
+        "AWS Lambda",
+        "AWS AppSync",
+        "GraphQL",
+        "API Gateway",
+        "RESTful APIs",
+        "Event-driven architecture",
+        "CI/CD workflows",
+        "UI component development",
+        "Remote collaboration"
+    ],
+    "qualifications": [
+        "Frontend development experience",
+        "Full stack development experience",
+        "AWS serverless backend services integration",
+        "Scalable frontend architecture experience"
+    ],
+    "bonusQualifications": [
+        "Experience with Go (Golang) in backend systems"
+    ]
+}
+</example_response>
