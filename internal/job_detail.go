@@ -285,6 +285,31 @@ func LinkJobDetailToCriteriaTx(ctx context.Context, fs *FirestoreClient, tx *fir
 	return tx.Create(linkRef, &link)
 }
 
+func UnlinkJobDetailFromCriteriaTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, criteriaID, jobID string) error {
+	if criteriaID == "" || jobID == "" {
+		return fmt.Errorf("criteriaID and jobID cannot be empty")
+	}
+
+	linkID := fmt.Sprintf("%s_%s", criteriaID, jobID)
+
+	linkRef := fs.Collection(JobCriteriaLinkCollection).Doc(linkID)
+
+	// Check if the link exists
+	doc, err := tx.Get(linkRef)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil // Link does not exist, nothing to do
+		}
+		return err
+	}
+
+	if doc.Exists() {
+		return tx.Delete(linkRef)
+	}
+
+	return nil
+}
+
 // ListJobDetails retrieves all job details with optional limit and offset
 func ListJobDetails(ctx context.Context, fs *FirestoreClient, limit int, offset int) ([]map[string]any, error) {
 	query := fs.Collection("job_details").OrderBy("CreatedAt", firestore.Desc)

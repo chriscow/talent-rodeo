@@ -11,6 +11,9 @@ import (
 	"talent-rodeo/internal/cloudflare"
 	"talent-rodeo/internal/funcs"
 	"talent-rodeo/internal/response"
+	"talent-rodeo/internal/search"
+	"talent-rodeo/internal/search/providers/scrapingdog"
+	"talent-rodeo/internal/subscription"
 	"talent-rodeo/internal/utils"
 	"time"
 
@@ -537,31 +540,44 @@ func (app *application) adminFeatureFlags(w http.ResponseWriter, r *http.Request
 	// Get current flag states
 	searchSchedulerEnabled := true       // Default to enabled
 	subscriptionProcessorEnabled := true // Default to enabled
+	scrapingdogWorkersEnabled := true    // Default to enabled
 
 	// Read search-scheduler flag
-	var searchFlag bool
-	if err := kv.Get("search-scheduler", &searchFlag); err != nil {
+	var ss search.SchedulerSettings
+	if err := kv.Get("search-scheduler", &ss); err != nil {
 		if err != cloudflare.ErrNotFound {
 			app.logger.Error("failed to get search-scheduler flag", "error", err)
 		}
 		// Keep default value if error or not found
 	} else {
-		searchSchedulerEnabled = searchFlag
+		searchSchedulerEnabled = ss.Enabled
 	}
 
 	// Read subscription-processor flag
-	var subscriptionFlag bool
-	if err := kv.Get("subscription-processor", &subscriptionFlag); err != nil {
+	var sp subscription.ProcessorSettings
+	if err := kv.Get("subscription-processor", &sp); err != nil {
 		if err != cloudflare.ErrNotFound {
 			app.logger.Error("failed to get subscription-processor flag", "error", err)
 		}
 		// Keep default value if error or not found
 	} else {
-		subscriptionProcessorEnabled = subscriptionFlag
+		subscriptionProcessorEnabled = sp.Enabled
+	}
+
+	// Read scrapingdog workers flag
+	var sd scrapingdog.WorkerSettings
+	if err := kv.Get("scrapingdog", &sd); err != nil {
+		if err != cloudflare.ErrNotFound {
+			app.logger.Error("failed to get scrapingdog flag", "error", err)
+		}
+		// Keep default value if error or not found
+	} else {
+		scrapingdogWorkersEnabled = !sd.Paused
 	}
 
 	data["SearchSchedulerEnabled"] = searchSchedulerEnabled
 	data["SubscriptionProcessorEnabled"] = subscriptionProcessorEnabled
+	data["ScrapingdogWorkersEnabled"] = scrapingdogWorkersEnabled
 
 	// Handle POST request for updating flags
 	if r.Method == http.MethodPost {
@@ -572,11 +588,13 @@ func (app *application) adminFeatureFlags(w http.ResponseWriter, r *http.Request
 			// Get checkbox values (unchecked = not present in form)
 			newSearchEnabled := r.PostForm.Get("search-scheduler") == "true"
 			newSubscriptionEnabled := r.PostForm.Get("subscription-processor") == "true"
+			newScrapingdogEnabled := r.PostForm.Get("scrapingdog") == "true"
 
 			var errors []string
 
 			// Update search-scheduler flag
-			if err := kv.Set("search-scheduler", newSearchEnabled, 0); err != nil {
+			ss.Enabled = newSearchEnabled
+			if err := kv.Set("search-scheduler", ss, 0); err != nil {
 				app.logger.Error("failed to set search-scheduler flag", "error", err)
 				errors = append(errors, "Failed to update search-scheduler: "+err.Error())
 			} else {
@@ -584,11 +602,21 @@ func (app *application) adminFeatureFlags(w http.ResponseWriter, r *http.Request
 			}
 
 			// Update subscription-processor flag
-			if err := kv.Set("subscription-processor", newSubscriptionEnabled, 0); err != nil {
+			sp.Enabled = newSubscriptionEnabled
+			if err := kv.Set("subscription-processor", sp, 0); err != nil {
 				app.logger.Error("failed to set subscription-processor flag", "error", err)
 				errors = append(errors, "Failed to update subscription-processor: "+err.Error())
 			} else {
 				app.logger.Info("updated subscription-processor flag", "enabled", newSubscriptionEnabled)
+			}
+
+			// Update scrapingdog flag
+			sd.Paused = !newScrapingdogEnabled // Invert the value for scrapingdog
+			if err := kv.Set("scrapingdog", sd, 0); err != nil {
+				app.logger.Error("failed to set scrapingdog flag", "error", err)
+				errors = append(errors, "Failed to update scrapingdog: "+err.Error())
+			} else {
+				app.logger.Info("updated scrapingdog flag", "enabled", newScrapingdogEnabled)
 			}
 
 			if len(errors) > 0 {
@@ -598,6 +626,7 @@ func (app *application) adminFeatureFlags(w http.ResponseWriter, r *http.Request
 				// Update the displayed values
 				data["SearchSchedulerEnabled"] = newSearchEnabled
 				data["SubscriptionProcessorEnabled"] = newSubscriptionEnabled
+				data["ScrapingdogWorkersEnabled"] = newScrapingdogEnabled
 			}
 		}
 	}

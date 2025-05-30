@@ -185,7 +185,6 @@ func (p *Provider) Start(ctx context.Context) error {
 
 	currentPaused := p.workerManager.IsPaused()
 	if currentPaused != settings.Paused {
-		p.logger.Info(internal.BGYellow("updating worker pause state"), "paused", settings.Paused)
 		p.workerManager.Pause(settings.Paused)
 	}
 
@@ -281,15 +280,17 @@ func (p *Provider) getWorkerSettings(_ context.Context) (*WorkerSettings, error)
 		return &WorkerSettings{Paused: false}, nil
 	}
 
+	// Read the scrapingdog flag from KV - when disabled, workers should be paused
 	var settings WorkerSettings
-	if err := p.kvClient.Get(WorkerSettingsKey, &settings); err != nil {
+	if err := p.kvClient.Get("scrapingdog", &settings); err != nil {
 		if err == cloudflare.ErrNotFound {
-			// Return default settings if key doesn't exist
+			// Return default settings if key doesn't exist (enabled by default)
 			return &WorkerSettings{Paused: false}, nil
 		}
 		return &WorkerSettings{Paused: false}, err // Default to not paused on error
 	}
 
+	// If scrapingdog is disabled in feature flags, pause the workers
 	return &settings, nil
 }
 

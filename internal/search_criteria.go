@@ -40,7 +40,6 @@ type SearchCriteria struct {
 	MaxPages        int
 	ListingAge      ListingAge // e.g., "day", "week", "month"
 	Error           string
-	SubscriberCount int
 	LastSearchedAt  *time.Time
 	LastSearchJobID string
 	LastPublishedAt *time.Time
@@ -61,12 +60,11 @@ func MakeSearchCriteriaID(query string, geoID string) string {
 
 func CreateSearchCriteria(ctx context.Context, fs *FirestoreClient, query, geoID string, maxPages int, age ListingAge) (*SearchCriteria, error) {
 	criteria := &SearchCriteria{
-		ID:              MakeSearchCriteriaID(query, geoID),
-		Query:           query,
-		GeoID:           geoID,
-		MaxPages:        maxPages,
-		ListingAge:      age,
-		SubscriberCount: 0,
+		ID:         MakeSearchCriteriaID(query, geoID),
+		Query:      query,
+		GeoID:      geoID,
+		MaxPages:   maxPages,
+		ListingAge: age,
 	}
 
 	_, err := fs.Collection(searchCriteriaCollection).Doc(criteria.ID).Create(ctx, criteria)
@@ -233,4 +231,8 @@ func DeleteSearchCriteria(ctx context.Context, fs *FirestoreClient, id string) e
 		return err
 	}
 	return nil
+}
+
+func DeleteSearchCriteriaTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, id string) error {
+	return tx.Delete(fs.Collection(searchCriteriaCollection).Doc(id))
 }

@@ -93,10 +93,9 @@ func TestProcessorIntegration(t *testing.T) {
 		}
 		if !found {
 			criteria := &internal.SearchCriteria{
-				ID:              "go-golang-103644278", // real criteria ID in pinecone
-				Query:           "Go (Golang)",
-				GeoID:           "us-ny-newyork",
-				SubscriberCount: 1,
+				ID:    "go-golang-103644278", // real criteria ID in pinecone
+				Query: "Go (Golang)",
+				GeoID: "us-ny-newyork",
 			}
 			_, err = fs.Collection(`search_criteria`).Doc(criteria.ID).Create(ctx, criteria)
 			if err != nil {
@@ -186,9 +185,6 @@ func TestProcessorIntegration(t *testing.T) {
 		recentTime := time.Now().Add(-12 * time.Hour)
 		criteria.LastSearchedAt = &recentTime
 
-		// Ensure SubscriberCount is 0
-		criteria.SubscriberCount = 0
-
 		// Update criteria
 		err = internal.UpdateSearchCriteria(ctx, fs, criteria)
 		if err != nil {
@@ -236,9 +232,6 @@ func TestProcessorIntegration(t *testing.T) {
 		// Set LastSearchedAt to a recent time
 		recentTime := time.Now().Add(-12 * time.Hour)
 		criteria.LastSearchedAt = &recentTime
-
-		// Ensure SubscriberCount is 1
-		criteria.SubscriberCount = 1
 
 		// Update criteria
 		err = internal.UpdateSearchCriteria(ctx, fs, criteria)
@@ -314,9 +307,6 @@ func TestProcessorIntegration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create test criteria: %v", err)
 		}
-
-		// Set SubscriberCount to 1
-		criteria.SubscriberCount = 1
 
 		// Set LastSearchedAt to a recent time
 		recentTime := time.Now().Add(-12 * time.Hour)

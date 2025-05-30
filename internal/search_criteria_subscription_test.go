@@ -89,10 +89,6 @@ func TestUserCriteriaSubscription(t *testing.T) {
 		if err := criteriaDoc.DataTo(&updatedCriteria); err != nil {
 			t.Fatalf("Failed to parse criteria data: %v", err)
 		}
-
-		if updatedCriteria.SubscriberCount != 1 {
-			t.Errorf("SubscriberCount = %v, want %v", updatedCriteria.SubscriberCount, 1)
-		}
 	})
 
 	t.Run("SubscribeUserToCriteria_EmptyUserID", func(t *testing.T) {
@@ -247,10 +243,6 @@ func TestUserCriteriaUnsubscribe(t *testing.T) {
 		var updatedCriteria SearchCriteria
 		if err := criteriaDoc.DataTo(&updatedCriteria); err != nil {
 			t.Fatalf("Failed to parse criteria data: %v", err)
-		}
-
-		if updatedCriteria.SubscriberCount != 0 {
-			t.Errorf("SubscriberCount = %v, want %v", updatedCriteria.SubscriberCount, 0)
 		}
 	})
 }
