@@ -419,10 +419,10 @@ func (app *application) adminSearchJobs(w http.ResponseWriter, r *http.Request) 
 
 				// Set optional fields if provided
 				if moveTowardText != "" {
-					steeringQuery.MoveToward = &moveTowardText
+					steeringQuery.MoveToward = moveTowardText
 				}
 				if moveAwayText != "" {
-					steeringQuery.MoveAway = &moveAwayText
+					steeringQuery.MoveAway = moveAwayText
 				}
 			}
 		}

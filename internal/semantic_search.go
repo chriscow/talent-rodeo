@@ -230,10 +230,7 @@ func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, crite
 		return nil, fmt.Errorf("PINECONE_SPARSE_INDEX_HOST environment variable not set")
 	}
 
-	query := steeringQuery.Query
-	if steeringQuery.MoveToward != nil {
-		query += " " + *steeringQuery.MoveToward
-	}
+	query := steeringQuery.Query + " " + steeringQuery.MoveToward
 	sparseResults, err := client.SearchRecords(ctx, sparseIndex, JobDetailNamespace, query,
 		WithTopK(topK*2), WithFilter(filter), WithFields([]string{"ID"}))
 	if err != nil {

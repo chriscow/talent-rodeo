@@ -4,10 +4,10 @@ Your goal is to analyze this transcript and create a steering query that accurat
 
 The steering query is structured with the following fields:
 
-1. Query: The one job title, skill or programming language we will search on (required)
-2. MoveToward: A concept to move results toward (optional)
-3. MoveAway: A concept to move results away from (optional)
-4. RerankingQuery: An all encompassing sentence that combines the concepts of Query, MoveToward and MoveAway (required)
+1. Query: The canonical form of the one main query term, job title or concept to base the search on. (required)
+2. MoveToward: The concept to steer the search results toward, expressed as a complete sentence. (required)
+3. MoveAway: The concept to steer the search results away from, expressed as a complete sentence. (required)
+4. RerankQuery: An all-encompassing query that combines the original query, MoveToward, and MoveAway concepts into a single query for reranking results. (required)
 
 To complete this task, follow these steps:
 
@@ -32,7 +32,7 @@ To complete this task, follow these steps:
    - Looks for indications from the user if they **DO NOT** want 100% remote work, on-site or hybrid
    - Combine these elements into a concise sentence that represents what the user wants to move away from in their job search.
 
-5. Create the Reranking Query
+5. Create the RerankQuery concept:
    - Combine Query, MoveToward concept and MoveAway concept into a concise query in sentence form to use for a reranking transformer to rerank the results.
 
 7. Create the final JSON output:
@@ -43,10 +43,10 @@ Your final output should be a JSON object containing only the steering query com
 
 <answer>
 {
-  "Query": "Canonical form of the main search term. Programming language or job title most likely",
-  "MoveToward": "Sentence describing what semantic concepts to move toward",
-  "MoveAway": "Sentence describing what semantic concepts to move away from",
-  "RerankingQuery": "All encompasing sentence that combines the concepts of Query, MoveToward and MoveAway"
+  "Query": "The canonical form of the one main query term, job title or concept to base the search towards.",
+  "MoveToward": "The concept to steer the search results toward, expressed as a complete sentence and is required.",
+  "MoveAway": "The concept to steer the search results away from, expressed as a complete sentence and is required.",
+  "RerankQuery": "An all-encompassing query that combines the original query, MoveToward, and MoveAway concepts into a single query for reranking results."
 }
 </answer>
 
