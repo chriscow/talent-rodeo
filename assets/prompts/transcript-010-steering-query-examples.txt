@@ -113,42 +113,67 @@ Goodbye.
         </transcript>
     </input>
     <output>
-<query_analysis>
-Let me analyze the transcript and resume to extract the key information:
+<query_construction>
 
-**Query Analysis:**
-The job seeker, Chris, has extensive software engineering experience and is specifically focused on backend development. In the transcript, he clearly states: "I really would like to focus on developing in Go back end services ideally, that work with LLMs" and "I think going LLM would capture it pretty well... I'd really like to focus on Go." His resume shows significant experience with Go across multiple recent positions. Since this is a software development career, it's best searched by specific skills rather than job title. The primary technical skill is Go (which should be written in canonical form as "Go (Golang)").
+a. Query:
+Relevant quotes:
+- "I'd really like to focus on developing in Go back end services ideally, that work with LLMs"
+- "I think going LLM would capture it pretty well"
+- "Your preference is to focus on Go and LLM related work"
+- Resume shows: "Stack: OpenAI, Python, Go, Flask, Google Cloud, Docker"
 
-**MoveToward Analysis:**
-Chris expresses several positive preferences:
-- "I really would like to focus on developing in Go back end services ideally, that work with LLMs"
+The job seeker explicitly states multiple times that they want to focus on Go backend development with LLMs. This is clearly a skills-based search since they're very specific about the technology stack. Go should be in canonical form as "Go (Golang)" to distinguish it from other meanings of "Go."
+
+b. MoveToward:
+Relevant quotes:
+- "I'd really like to focus on developing in Go back end services ideally, that work with LLMs"
 - "I think I would lean more towards, uh, a smaller company than, you know, something that's like a start up or something like that. Versus a large company"
-- He wants to work with LLMs and generative AI based on his experience and interests
 
-**MoveAway Analysis:**
-Chris clearly states what he wants to avoid:
-- "Well, I'm not really a strong front end developer, so I probably need to avoid uh, you know, front end development or front end frameworks"
-Since MoveAway should be written as if the user desires this concept (for negating vector search), I'll write it as "I want to work on front end development and front end frameworks"
+The job seeker wants Go backend development with LLMs at smaller companies/startups. Phrasing in first person: "I want to work on Go backend development with LLMs at smaller companies or startups"
 
-**RerankQuery:**
-Combining Go backend development, LLM work, startup environment, while avoiding frontend work.
+c. MoveAway:
+Relevant quotes:
+- "I'm not really a strong front end developer, so I probably need to avoid uh, you know, front end development or front end frameworks"
+- "I think I would lean more towards, uh, a smaller company... Versus a large company"
 
-**ExperienceLevel Analysis:**
-Looking at the options: internship, entry_level, associate, mid_senior_level, director
-Chris has 30 years of software engineering experience, has held CTO positions, managed teams of 15+ people, and has been in senior engineering and leadership roles. This clearly indicates "director" level experience.
+The job seeker wants to avoid front-end work and large companies. For dense vector search negation, I need to phrase this as if they desire it: "I want to do front-end development at large corporations"
 
-**WorkType Analysis:**
-Options: at_work, remote, hybrid
-Chris clearly states: "Uh, I think I'd just like to be fully remote" indicating his preference for remote work.
-</query_analysis>
+d. RerankQuery:
+Combining Query (Go backend with LLMs), MoveToward (smaller companies/startups), and MoveAway (avoiding front-end and large corporations): "Go backend developer working with LLMs at smaller companies, avoiding front-end development"
+
+e. ExperienceLevel:
+Relevant quotes:
+- Resume shows "30 Years of Software Engineering Leadership"
+- Multiple CTO and leadership positions
+- Recent role: "Backend Software Engineer, Generative AI"
+- Current focus on individual contributor work with Go/LLMs
+
+Options analysis:
+- internship: No, 30 years experience
+- entry_level: No, extensive leadership background
+- associate: No, too senior
+- mid_senior_level: Yes - despite leadership background, currently working as individual contributor and seeking backend developer roles
+- director: No - while they have director-level experience, they're specifically seeking individual contributor backend developer roles
+
+The job seeker has senior experience but is currently in and seeking individual contributor roles, making "mid_senior_level" the best fit.
+
+f. WorkType:
+Relevant quotes:
+- "Uh, I think I'd just like to be fully remote"
+- "Fully remote is your preference"
+- "If it was a really, really good role that was uh, pretty ideal, I would consider even moving if I had to"
+
+The job seeker clearly states a preference for fully remote work, though they show some flexibility for exceptional opportunities. The primary preference is remote.
+
+</query_construction>
 
 <answer>
 {
   "Query": "Go (Golang)",
-  "MoveToward": "I want to work on backend services with LLMs and generative AI at a smaller company or startup",
-  "MoveAway": "I want to work on front end development and front end frameworks",
-  "RerankQuery": "Go backend developer working with LLMs and generative AI at a startup, avoiding front end development",
-  "ExperienceLevel": "director",
+  "MoveToward": "I want to work on Go backend development with LLMs at smaller companies or startups",
+  "MoveAway": "I want to do front-end development at large corporations",
+  "RerankQuery": "Go backend developer working with LLMs at smaller companies, avoiding front-end development",
+  "ExperienceLevel": "mid_senior_level",
   "WorkType": "remote"
 }
 </answer>
@@ -231,61 +256,64 @@ I want to grow to the VP or the CHR role and have a voice at the table. Um, stra
         </transcript>
     </input>
     <output>
-<query_analysis>
-Let me analyze the transcript and resume to extract the key information:
+<query_construction>
 
-**Query Analysis:**
-The job seeker explicitly states multiple times they're looking for senior HR leadership roles. They mention: "head of people and culture or director of people or vice president or even a chief human resource officer" and later lists "Human resource manager, people and culture business partner, or human resource business partner, head of people and culture, or head of people, or director of human resources, vice president of human resources, chief human resource officer."
+a. Query:
+Relevant quotes from the transcript and resume:
+- "I would love to be in a head of people and culture or director of people or vice president or even a chief human resource officer"
+- "Human resource manager, uh, people and culture business partner, or human resource business partner, head of people and culture, or head of people, or director of human resources, vice president of human resources, chief human resource officer"
+- "I want to grow to the VP or the CHR role and have a voice at the table"
+- Resume shows extensive HR leadership experience across multiple organizations
 
-The most canonical form would be "Chief Human Resources Officer" as this represents the highest level they're targeting and encompasses the leadership scope they desire.
+Primary career field: Human Resources Leadership
+This is best searched by job title rather than technical skills, as the candidate is seeking leadership roles in HR/People Operations rather than focusing on specific technical competencies. The most appropriate job title would be "Head of People" as it encompasses the strategic leadership role they're seeking while being broad enough to capture various senior HR titles.
 
-**MoveToward Analysis:**
-From the transcript, the job seeker wants:
-- "I want to grow to the VP or the CHR role and have a voice at the table strategically"
+b. MoveToward:
+Relevant quotes:
 - "I would love to be matched with an organization that requires scale"
-- "I very much thrive in an ownership mindset attitude where you know, I'm just responsible for building things from scratch"
 - "I would love to be a part of an organization that is, you know, emerging. For example, tech or software or AI"
-- "a company that puts employees first and then encourages them to put customers first"
-- "I would love to continue to work in a leadership generalist capacity"
+- "I very much thrive in an ownership mindset attitude where you know, I'm just responsible for building things from scratch"
+- "I very much have specialized in you know, high growth and high scale"
+- "I want to grow to the VP or the CHR role and have a voice at the table strategically"
 
-**MoveAway Analysis:**
-The job seeker wants to avoid:
+The candidate wants strategic leadership roles in high-growth, scaling organizations, particularly in tech/software companies where they can build from scratch and have strategic influence.
+
+c. MoveAway:
+Relevant quotes:
 - "I would prefer to avoid areas that would shoehorn me into a particular specialization"
-- "I'm looking to avoid conditions where the organization very much is autocratic and doesn't really work together"
-- "I wanna avoid organizations that are caught up in a lot of bureaucracy or red tape"
-- "doesn't really care or put to put its people first"
+- "I'm looking to avoid, um, conditions where, you know, the organization very much is, um, autocratic"
+- "I wanna avoid organizations that, um, are caught up in in a lot of bureaucracy. Or red tape"
 
-Since MoveAway should be written as if the user desires these concepts (for negating vector search), I need to phrase this as: "I want to work in a specialized role with autocratic leadership, bureaucratic processes, and organizations that don't prioritize employee welfare"
+The candidate wants to avoid specialized roles and bureaucratic, autocratic environments. For the dense vector search negation, I'll phrase this as what they would want (specialization and bureaucracy) so it creates the proper negating vector.
 
-**RerankQuery:**
-Combining the Query (Chief Human Resources Officer), MoveToward (strategic leadership in scaling tech organizations with ownership mindset), and MoveAway (avoiding specialization and bureaucracy), the RerankQuery should be: "Chief Human Resources Officer role with strategic leadership responsibilities in scaling technology companies that foster ownership mindset and employee-first culture, avoiding specialized or bureaucratic environments"
+d. RerankQuery:
+Combining the strategic HR leadership focus, desire for high-growth tech companies with ownership culture, while avoiding specialization and bureaucracy.
 
-**ExperienceLevel Analysis:**
-Options: internship, entry_level, associate, mid_senior_level, director
+e. ExperienceLevel:
+Relevant quotes:
+- "I've been in strategic people leadership roles for all of my career"
+- "I want to grow to the VP or the CHR role and have a voice at the table"
+- Resume shows: "Head Operations & People" (current), "Director Human Resources" positions
+- 12+ years of HR experience managing up to 21,000 employees
 
-The resume shows:
-- 12+ years of experience
-- Current role as "Head Operations & People"
-- Previous role as "Director Human Resources"
-- Managing 500+ employees globally
-- Leading enterprise-wide projects, IPOs, M&As
+This is clearly director-level experience. The candidate is currently in head/director roles and seeking VP/CHRO positions, which indicates they're at the director experience level seeking advancement to executive roles.
 
-This clearly indicates "director" level experience.
+f. WorkType:
+Relevant quotes:
+- "I would prefer remote remote fully remote position"
+- "However, I'm open to applying to hybrid positions"
+- "So I'm based in Vancouver. However, if there is a job that requires me to relocate to the states, for example, or a different country, I am open to it"
 
-**WorkType Analysis:**
-Options: at_work, remote, hybrid
+Clear preference for remote work, though open to hybrid and relocation if needed.
 
-The job seeker states: "I would prefer remote remote fully remote position. However, I'm open to applying to hybrid positions that are based out of Bang or even on-site positions. Based out of Vancouver, BC."
-
-Their preference is clearly "remote" though they're open to other options.
-</query_analysis>
+</query_construction>
 
 <answer>
 {
-  "Query": "Chief Human Resources Officer",
-  "MoveToward": "I want strategic leadership responsibilities in scaling technology companies with ownership mindset and employee-first culture where I can build from scratch",
-  "MoveAway": "I want to work in a specialized role with autocratic leadership, bureaucratic processes, and organizations that don't prioritize employee welfare",
-  "RerankQuery": "Chief Human Resources Officer role with strategic leadership responsibilities in scaling technology companies that foster ownership mindset and employee-first culture, avoiding specialized or bureaucratic environments",
+  "Query": "Head of People",
+  "MoveToward": "I want to work in strategic leadership roles at high-growth tech companies where I can build from scratch and have ownership mindset",
+  "MoveAway": "I want to work in specialized roles at bureaucratic organizations with autocratic management",
+  "RerankQuery": "Head of People at high-growth tech companies with strategic leadership and ownership culture, avoiding specialized bureaucratic roles",
   "ExperienceLevel": "director",
   "WorkType": "remote"
 }
