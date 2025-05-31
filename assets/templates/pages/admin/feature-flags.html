@@ -2,7 +2,7 @@
 
 {{define "page:main"}}
 <main class="container">
-    <h1>Feature Flags</h1>
+    <h1>Feature Flags & Scheduling</h1>
     
     <section>
         <h2>Current Status</h2>
@@ -10,24 +10,38 @@
             <article>
                 <header>Search Scheduler</header>
                 <p>
-                    Status: <mark class="{{if .SearchSchedulerEnabled}}success{{else}}error{{end}}">
-                        {{if .SearchSchedulerEnabled}}Enabled{{else}}Disabled{{end}}
+                    Status: <mark class="{{if .SearchScheduler.Paused}}error{{else}}success{{end}}">
+                        {{if .SearchScheduler.Paused}}Paused{{else}}Active{{end}}
                     </mark>
                 </p>
+                <p><small>
+                    {{if and (eq .SearchScheduler.StartHour 0) (eq .SearchScheduler.EndHour 0)}}
+                        Running 24/7
+                    {{else}}
+                        Active hours: {{printf "%02d:00" .SearchScheduler.StartHour}} - {{printf "%02d:00" .SearchScheduler.EndHour}} UTC
+                    {{end}}
+                </small></p>
             </article>
             <article>
                 <header>Subscription Processor</header>
                 <p>
-                    Status: <mark class="{{if .SubscriptionProcessorEnabled}}success{{else}}error{{end}}">
-                        {{if .SubscriptionProcessorEnabled}}Enabled{{else}}Disabled{{end}}
+                    Status: <mark class="{{if .SubscriptionProcessor.Paused}}error{{else}}success{{end}}">
+                        {{if .SubscriptionProcessor.Paused}}Paused{{else}}Active{{end}}
                     </mark>
                 </p>
+                <p><small>
+                    {{if and (eq .SubscriptionProcessor.StartHour 0) (eq .SubscriptionProcessor.EndHour 0)}}
+                        Running 24/7
+                    {{else}}
+                        Active hours: {{printf "%02d:00" .SubscriptionProcessor.StartHour}} - {{printf "%02d:00" .SubscriptionProcessor.EndHour}} UTC
+                    {{end}}
+                </small></p>
             </article>
             <article>
                 <header>ScrapingDog Workers</header>
                 <p>
-                    Status: <mark class="{{if .ScrapingdogWorkersEnabled}}success{{else}}error{{end}}">
-                        {{if .ScrapingdogWorkersEnabled}}Enabled{{else}}Disabled{{end}}
+                    Status: <mark class="{{if .ScrapingdogWorkers.Paused}}error{{else}}success{{end}}">
+                        {{if .ScrapingdogWorkers.Paused}}Paused{{else}}Active{{end}}
                     </mark>
                 </p>
             </article>
@@ -38,17 +52,82 @@
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         
         <fieldset>
-            <legend>System Feature Flags</legend>
+            <legend>System Feature Flags & Scheduling</legend>
             
             <article>
                 <header>
                     <h3>Search Scheduler</h3>
                     <p>Controls whether the search scheduler processes search criteria automatically</p>
                 </header>
+                
                 <label>
-                    <input type="checkbox" name="search-scheduler" value="true" {{if .SearchSchedulerEnabled}}checked{{end}}>
-                    Enable Search Scheduler
+                    <input type="checkbox" name="search-scheduler-paused" value="true" {{if .SearchScheduler.Paused}}checked{{end}}>
+                    Pause Search Scheduler
                 </label>
+                
+                <div class="grid">
+                    <label>
+                        Start Hour (UTC)
+                        <select name="search-scheduler-start-hour">
+                            <option value="0" {{if eq .SearchScheduler.StartHour 0}}selected{{end}}>00:00</option>
+                            <option value="1" {{if eq .SearchScheduler.StartHour 1}}selected{{end}}>01:00</option>
+                            <option value="2" {{if eq .SearchScheduler.StartHour 2}}selected{{end}}>02:00</option>
+                            <option value="3" {{if eq .SearchScheduler.StartHour 3}}selected{{end}}>03:00</option>
+                            <option value="4" {{if eq .SearchScheduler.StartHour 4}}selected{{end}}>04:00</option>
+                            <option value="5" {{if eq .SearchScheduler.StartHour 5}}selected{{end}}>05:00</option>
+                            <option value="6" {{if eq .SearchScheduler.StartHour 6}}selected{{end}}>06:00</option>
+                            <option value="7" {{if eq .SearchScheduler.StartHour 7}}selected{{end}}>07:00</option>
+                            <option value="8" {{if eq .SearchScheduler.StartHour 8}}selected{{end}}>08:00</option>
+                            <option value="9" {{if eq .SearchScheduler.StartHour 9}}selected{{end}}>09:00</option>
+                            <option value="10" {{if eq .SearchScheduler.StartHour 10}}selected{{end}}>10:00</option>
+                            <option value="11" {{if eq .SearchScheduler.StartHour 11}}selected{{end}}>11:00</option>
+                            <option value="12" {{if eq .SearchScheduler.StartHour 12}}selected{{end}}>12:00</option>
+                            <option value="13" {{if eq .SearchScheduler.StartHour 13}}selected{{end}}>13:00</option>
+                            <option value="14" {{if eq .SearchScheduler.StartHour 14}}selected{{end}}>14:00</option>
+                            <option value="15" {{if eq .SearchScheduler.StartHour 15}}selected{{end}}>15:00</option>
+                            <option value="16" {{if eq .SearchScheduler.StartHour 16}}selected{{end}}>16:00</option>
+                            <option value="17" {{if eq .SearchScheduler.StartHour 17}}selected{{end}}>17:00</option>
+                            <option value="18" {{if eq .SearchScheduler.StartHour 18}}selected{{end}}>18:00</option>
+                            <option value="19" {{if eq .SearchScheduler.StartHour 19}}selected{{end}}>19:00</option>
+                            <option value="20" {{if eq .SearchScheduler.StartHour 20}}selected{{end}}>20:00</option>
+                            <option value="21" {{if eq .SearchScheduler.StartHour 21}}selected{{end}}>21:00</option>
+                            <option value="22" {{if eq .SearchScheduler.StartHour 22}}selected{{end}}>22:00</option>
+                            <option value="23" {{if eq .SearchScheduler.StartHour 23}}selected{{end}}>23:00</option>
+                        </select>
+                        <small>Hour to start processing (24-hour format)</small>
+                    </label>
+                    <label>
+                        End Hour (UTC)
+                        <select name="search-scheduler-end-hour">
+                            <option value="0" {{if eq .SearchScheduler.EndHour 0}}selected{{end}}>00:00</option>
+                            <option value="1" {{if eq .SearchScheduler.EndHour 1}}selected{{end}}>01:00</option>
+                            <option value="2" {{if eq .SearchScheduler.EndHour 2}}selected{{end}}>02:00</option>
+                            <option value="3" {{if eq .SearchScheduler.EndHour 3}}selected{{end}}>03:00</option>
+                            <option value="4" {{if eq .SearchScheduler.EndHour 4}}selected{{end}}>04:00</option>
+                            <option value="5" {{if eq .SearchScheduler.EndHour 5}}selected{{end}}>05:00</option>
+                            <option value="6" {{if eq .SearchScheduler.EndHour 6}}selected{{end}}>06:00</option>
+                            <option value="7" {{if eq .SearchScheduler.EndHour 7}}selected{{end}}>07:00</option>
+                            <option value="8" {{if eq .SearchScheduler.EndHour 8}}selected{{end}}>08:00</option>
+                            <option value="9" {{if eq .SearchScheduler.EndHour 9}}selected{{end}}>09:00</option>
+                            <option value="10" {{if eq .SearchScheduler.EndHour 10}}selected{{end}}>10:00</option>
+                            <option value="11" {{if eq .SearchScheduler.EndHour 11}}selected{{end}}>11:00</option>
+                            <option value="12" {{if eq .SearchScheduler.EndHour 12}}selected{{end}}>12:00</option>
+                            <option value="13" {{if eq .SearchScheduler.EndHour 13}}selected{{end}}>13:00</option>
+                            <option value="14" {{if eq .SearchScheduler.EndHour 14}}selected{{end}}>14:00</option>
+                            <option value="15" {{if eq .SearchScheduler.EndHour 15}}selected{{end}}>15:00</option>
+                            <option value="16" {{if eq .SearchScheduler.EndHour 16}}selected{{end}}>16:00</option>
+                            <option value="17" {{if eq .SearchScheduler.EndHour 17}}selected{{end}}>17:00</option>
+                            <option value="18" {{if eq .SearchScheduler.EndHour 18}}selected{{end}}>18:00</option>
+                            <option value="19" {{if eq .SearchScheduler.EndHour 19}}selected{{end}}>19:00</option>
+                            <option value="20" {{if eq .SearchScheduler.EndHour 20}}selected{{end}}>20:00</option>
+                            <option value="21" {{if eq .SearchScheduler.EndHour 21}}selected{{end}}>21:00</option>
+                            <option value="22" {{if eq .SearchScheduler.EndHour 22}}selected{{end}}>22:00</option>
+                            <option value="23" {{if eq .SearchScheduler.EndHour 23}}selected{{end}}>23:00</option>
+                        </select>
+                        <small>Hour to stop processing (24-hour format)</small>
+                    </label>
+                </div>
+                <small><em>Note: Set both start and end hour to 00:00 to run 24/7. Time window can cross midnight (e.g., 17:00-00:00).</em></small>
             </article>
             
             <article>
@@ -56,10 +135,75 @@
                     <h3>Subscription Processor</h3>
                     <p>Controls whether the subscription processor publishes job matches to users</p>
                 </header>
+                
                 <label>
-                    <input type="checkbox" name="subscription-processor" value="true" {{if .SubscriptionProcessorEnabled}}checked{{end}}>
-                    Enable Subscription Processor
+                    <input type="checkbox" name="subscription-processor-paused" value="true" {{if .SubscriptionProcessor.Paused}}checked{{end}}>
+                    Pause Subscription Processor
                 </label>
+                
+                <div class="grid">
+                    <label>
+                        Start Hour (UTC)
+                        <select name="subscription-processor-start-hour">
+                            <option value="0" {{if eq .SubscriptionProcessor.StartHour 0}}selected{{end}}>00:00</option>
+                            <option value="1" {{if eq .SubscriptionProcessor.StartHour 1}}selected{{end}}>01:00</option>
+                            <option value="2" {{if eq .SubscriptionProcessor.StartHour 2}}selected{{end}}>02:00</option>
+                            <option value="3" {{if eq .SubscriptionProcessor.StartHour 3}}selected{{end}}>03:00</option>
+                            <option value="4" {{if eq .SubscriptionProcessor.StartHour 4}}selected{{end}}>04:00</option>
+                            <option value="5" {{if eq .SubscriptionProcessor.StartHour 5}}selected{{end}}>05:00</option>
+                            <option value="6" {{if eq .SubscriptionProcessor.StartHour 6}}selected{{end}}>06:00</option>
+                            <option value="7" {{if eq .SubscriptionProcessor.StartHour 7}}selected{{end}}>07:00</option>
+                            <option value="8" {{if eq .SubscriptionProcessor.StartHour 8}}selected{{end}}>08:00</option>
+                            <option value="9" {{if eq .SubscriptionProcessor.StartHour 9}}selected{{end}}>09:00</option>
+                            <option value="10" {{if eq .SubscriptionProcessor.StartHour 10}}selected{{end}}>10:00</option>
+                            <option value="11" {{if eq .SubscriptionProcessor.StartHour 11}}selected{{end}}>11:00</option>
+                            <option value="12" {{if eq .SubscriptionProcessor.StartHour 12}}selected{{end}}>12:00</option>
+                            <option value="13" {{if eq .SubscriptionProcessor.StartHour 13}}selected{{end}}>13:00</option>
+                            <option value="14" {{if eq .SubscriptionProcessor.StartHour 14}}selected{{end}}>14:00</option>
+                            <option value="15" {{if eq .SubscriptionProcessor.StartHour 15}}selected{{end}}>15:00</option>
+                            <option value="16" {{if eq .SubscriptionProcessor.StartHour 16}}selected{{end}}>16:00</option>
+                            <option value="17" {{if eq .SubscriptionProcessor.StartHour 17}}selected{{end}}>17:00</option>
+                            <option value="18" {{if eq .SubscriptionProcessor.StartHour 18}}selected{{end}}>18:00</option>
+                            <option value="19" {{if eq .SubscriptionProcessor.StartHour 19}}selected{{end}}>19:00</option>
+                            <option value="20" {{if eq .SubscriptionProcessor.StartHour 20}}selected{{end}}>20:00</option>
+                            <option value="21" {{if eq .SubscriptionProcessor.StartHour 21}}selected{{end}}>21:00</option>
+                            <option value="22" {{if eq .SubscriptionProcessor.StartHour 22}}selected{{end}}>22:00</option>
+                            <option value="23" {{if eq .SubscriptionProcessor.StartHour 23}}selected{{end}}>23:00</option>
+                        </select>
+                        <small>Hour to start processing (24-hour format)</small>
+                    </label>
+                    <label>
+                        End Hour (UTC)
+                        <select name="subscription-processor-end-hour">
+                            <option value="0" {{if eq .SubscriptionProcessor.EndHour 0}}selected{{end}}>00:00</option>
+                            <option value="1" {{if eq .SubscriptionProcessor.EndHour 1}}selected{{end}}>01:00</option>
+                            <option value="2" {{if eq .SubscriptionProcessor.EndHour 2}}selected{{end}}>02:00</option>
+                            <option value="3" {{if eq .SubscriptionProcessor.EndHour 3}}selected{{end}}>03:00</option>
+                            <option value="4" {{if eq .SubscriptionProcessor.EndHour 4}}selected{{end}}>04:00</option>
+                            <option value="5" {{if eq .SubscriptionProcessor.EndHour 5}}selected{{end}}>05:00</option>
+                            <option value="6" {{if eq .SubscriptionProcessor.EndHour 6}}selected{{end}}>06:00</option>
+                            <option value="7" {{if eq .SubscriptionProcessor.EndHour 7}}selected{{end}}>07:00</option>
+                            <option value="8" {{if eq .SubscriptionProcessor.EndHour 8}}selected{{end}}>08:00</option>
+                            <option value="9" {{if eq .SubscriptionProcessor.EndHour 9}}selected{{end}}>09:00</option>
+                            <option value="10" {{if eq .SubscriptionProcessor.EndHour 10}}selected{{end}}>10:00</option>
+                            <option value="11" {{if eq .SubscriptionProcessor.EndHour 11}}selected{{end}}>11:00</option>
+                            <option value="12" {{if eq .SubscriptionProcessor.EndHour 12}}selected{{end}}>12:00</option>
+                            <option value="13" {{if eq .SubscriptionProcessor.EndHour 13}}selected{{end}}>13:00</option>
+                            <option value="14" {{if eq .SubscriptionProcessor.EndHour 14}}selected{{end}}>14:00</option>
+                            <option value="15" {{if eq .SubscriptionProcessor.EndHour 15}}selected{{end}}>15:00</option>
+                            <option value="16" {{if eq .SubscriptionProcessor.EndHour 16}}selected{{end}}>16:00</option>
+                            <option value="17" {{if eq .SubscriptionProcessor.EndHour 17}}selected{{end}}>17:00</option>
+                            <option value="18" {{if eq .SubscriptionProcessor.EndHour 18}}selected{{end}}>18:00</option>
+                            <option value="19" {{if eq .SubscriptionProcessor.EndHour 19}}selected{{end}}>19:00</option>
+                            <option value="20" {{if eq .SubscriptionProcessor.EndHour 20}}selected{{end}}>20:00</option>
+                            <option value="21" {{if eq .SubscriptionProcessor.EndHour 21}}selected{{end}}>21:00</option>
+                            <option value="22" {{if eq .SubscriptionProcessor.EndHour 22}}selected{{end}}>22:00</option>
+                            <option value="23" {{if eq .SubscriptionProcessor.EndHour 23}}selected{{end}}>23:00</option>
+                        </select>
+                        <small>Hour to stop processing (24-hour format)</small>
+                    </label>
+                </div>
+                <small><em>Note: Set both start and end hour to 00:00 to run 24/7. Time window can cross midnight (e.g., 17:00-00:00).</em></small>
             </article>
 
             <article>
@@ -68,13 +212,13 @@
                     <p>Controls whether ScrapingDog workers process job search requests from the queue</p>
                 </header>
                 <label>
-                    <input type="checkbox" name="scrapingdog" value="true" {{if .ScrapingdogWorkersEnabled}}checked{{end}}>
-                    Enable ScrapingDog Workers
+                    <input type="checkbox" name="scrapingdog-paused" value="true" {{if .ScrapingdogWorkers.Paused}}checked{{end}}>
+                    Pause ScrapingDog Workers
                 </label>
             </article>
         </fieldset>
         
-        <button type="submit">Update Feature Flags</button>
+        <button type="submit">Update Settings</button>
     </form>
     
 

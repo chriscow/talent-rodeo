@@ -631,47 +631,41 @@ func (app *application) adminFeatureFlags(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Get current flag states
-	searchSchedulerEnabled := true       // Default to enabled
-	subscriptionProcessorEnabled := true // Default to enabled
-	scrapingdogWorkersEnabled := true    // Default to enabled
+	// Initialize default settings
+	var ss search.SchedulerSettings = search.DefaultSchedulerSettings
+	var sp subscription.ProcessorSettings = subscription.DefaultSettings
+	var sd scrapingdog.WorkerSettings
 
 	// Read search-scheduler flag
-	var ss search.SchedulerSettings
 	if err := kv.Get("search-scheduler", &ss); err != nil {
 		if err != cloudflare.ErrNotFound {
 			app.logger.Error("failed to get search-scheduler flag", "error", err)
 		}
-		// Keep default value if error or not found
-	} else {
-		searchSchedulerEnabled = ss.Enabled
+		// Use default values if error or not found
+		ss = search.DefaultSchedulerSettings
 	}
 
 	// Read subscription-processor flag
-	var sp subscription.ProcessorSettings
 	if err := kv.Get("subscription-processor", &sp); err != nil {
 		if err != cloudflare.ErrNotFound {
 			app.logger.Error("failed to get subscription-processor flag", "error", err)
 		}
-		// Keep default value if error or not found
-	} else {
-		subscriptionProcessorEnabled = sp.Enabled
+		// Use default values if error or not found
+		sp = subscription.DefaultSettings
 	}
 
 	// Read scrapingdog workers flag
-	var sd scrapingdog.WorkerSettings
 	if err := kv.Get("scrapingdog", &sd); err != nil {
 		if err != cloudflare.ErrNotFound {
 			app.logger.Error("failed to get scrapingdog flag", "error", err)
 		}
 		// Keep default value if error or not found
-	} else {
-		scrapingdogWorkersEnabled = !sd.Paused
 	}
 
-	data["SearchSchedulerEnabled"] = searchSchedulerEnabled
-	data["SubscriptionProcessorEnabled"] = subscriptionProcessorEnabled
-	data["ScrapingdogWorkersEnabled"] = scrapingdogWorkersEnabled
+	// Pass the complete settings to the template
+	data["SearchScheduler"] = ss
+	data["SubscriptionProcessor"] = sp
+	data["ScrapingdogWorkers"] = sd
 
 	// Handle POST request for updating flags
 	if r.Method == http.MethodPost {
@@ -679,48 +673,58 @@ func (app *application) adminFeatureFlags(w http.ResponseWriter, r *http.Request
 			app.logger.Error("failed to parse form", "error", err)
 			data["Error"] = "Failed to parse form: " + err.Error()
 		} else {
-			// Get checkbox values (unchecked = not present in form)
-			newSearchEnabled := r.PostForm.Get("search-scheduler") == "true"
-			newSubscriptionEnabled := r.PostForm.Get("subscription-processor") == "true"
-			newScrapingdogEnabled := r.PostForm.Get("scrapingdog") == "true"
+			// Get form values
+			newSearchPaused := r.PostForm.Get("search-scheduler-paused") == "true"
+			newSubscriptionPaused := r.PostForm.Get("subscription-processor-paused") == "true"
+			newScrapingdogPaused := r.PostForm.Get("scrapingdog-paused") == "true"
+
+			// Parse time settings
+			searchStartHour, _ := strconv.Atoi(r.PostForm.Get("search-scheduler-start-hour"))
+			searchEndHour, _ := strconv.Atoi(r.PostForm.Get("search-scheduler-end-hour"))
+			subscriptionStartHour, _ := strconv.Atoi(r.PostForm.Get("subscription-processor-start-hour"))
+			subscriptionEndHour, _ := strconv.Atoi(r.PostForm.Get("subscription-processor-end-hour"))
 
 			var errors []string
 
-			// Update search-scheduler flag
-			ss.Enabled = newSearchEnabled
+			// Update search-scheduler settings
+			ss.Paused = newSearchPaused
+			ss.StartHour = searchStartHour
+			ss.EndHour = searchEndHour
 			if err := kv.Set("search-scheduler", ss, 0); err != nil {
-				app.logger.Error("failed to set search-scheduler flag", "error", err)
+				app.logger.Error("failed to set search-scheduler settings", "error", err)
 				errors = append(errors, "Failed to update search-scheduler: "+err.Error())
 			} else {
-				app.logger.Info("updated search-scheduler flag", "enabled", newSearchEnabled)
+				app.logger.Info("updated search-scheduler settings", "paused", newSearchPaused, "start_hour", searchStartHour, "end_hour", searchEndHour)
 			}
 
-			// Update subscription-processor flag
-			sp.Enabled = newSubscriptionEnabled
+			// Update subscription-processor settings
+			sp.Paused = newSubscriptionPaused
+			sp.StartHour = subscriptionStartHour
+			sp.EndHour = subscriptionEndHour
 			if err := kv.Set("subscription-processor", sp, 0); err != nil {
-				app.logger.Error("failed to set subscription-processor flag", "error", err)
+				app.logger.Error("failed to set subscription-processor settings", "error", err)
 				errors = append(errors, "Failed to update subscription-processor: "+err.Error())
 			} else {
-				app.logger.Info("updated subscription-processor flag", "enabled", newSubscriptionEnabled)
+				app.logger.Info("updated subscription-processor settings", "paused", newSubscriptionPaused, "start_hour", subscriptionStartHour, "end_hour", subscriptionEndHour)
 			}
 
 			// Update scrapingdog flag
-			sd.Paused = !newScrapingdogEnabled // Invert the value for scrapingdog
+			sd.Paused = newScrapingdogPaused
 			if err := kv.Set("scrapingdog", sd, 0); err != nil {
 				app.logger.Error("failed to set scrapingdog flag", "error", err)
 				errors = append(errors, "Failed to update scrapingdog: "+err.Error())
 			} else {
-				app.logger.Info("updated scrapingdog flag", "enabled", newScrapingdogEnabled)
+				app.logger.Info("updated scrapingdog flag", "paused", newScrapingdogPaused)
 			}
 
 			if len(errors) > 0 {
 				data["Error"] = strings.Join(errors, "; ")
 			} else {
 				data["Success"] = "Feature flags updated successfully"
-				// Update the displayed values
-				data["SearchSchedulerEnabled"] = newSearchEnabled
-				data["SubscriptionProcessorEnabled"] = newSubscriptionEnabled
-				data["ScrapingdogWorkersEnabled"] = newScrapingdogEnabled
+				// Update the displayed values with new settings
+				data["SearchScheduler"] = ss
+				data["SubscriptionProcessor"] = sp
+				data["ScrapingdogWorkers"] = sd
 			}
 		}
 	}
