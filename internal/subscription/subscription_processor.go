@@ -25,14 +25,18 @@ const (
 
 type ProcessorSettings struct {
 	Interval          time.Duration // Interval for processing subscriptions
-	Enabled           bool          // Whether the processor is enabled
+	Paused            bool          // Whether the processor is paused
 	JobThresholdScore float64       // Minimum job score to consider for publishing
+	StartHour         int           // Hour to start processing (24-hour format, UTC)
+	EndHour           int           // Hour to end processing (24-hour format, UTC)
 }
 
 var DefaultSettings = ProcessorSettings{
 	Interval:          DefaultTickInterval,
-	Enabled:           true, // Default to enabled
-	JobThresholdScore: 0.5,  // Default job score threshold
+	Paused:            false, // Default to not paused (active)
+	JobThresholdScore: 0.5,   // Default job score threshold
+	StartHour:         17,    // 17:00 UTC
+	EndHour:           0,     // 00:00 UTC (crosses midnight)
 }
 
 // Processor handles the periodic checking and publishing of search criteria subscriptions.
@@ -179,12 +183,17 @@ func (p *Processor) RefreshSettings() error {
 	if p.settings.Interval <= 0 {
 		p.settings.Interval = DefaultTickInterval
 	}
+	// Set default time window if not configured
+	if p.settings.StartHour == 0 && p.settings.EndHour == 0 {
+		p.settings.StartHour = DefaultSettings.StartHour
+		p.settings.EndHour = DefaultSettings.EndHour
+	}
 	if p.ticker != nil {
 		p.ticker.Stop()
 	}
 	p.ticker = time.NewTicker(p.settings.Interval)
 
-	p.logger.Info("refreshed subscription processor settings", "interval", p.settings.Interval, "enabled", p.settings.Enabled, "job_threshold_score", p.settings.JobThresholdScore)
+	p.logger.Info("refreshed subscription processor settings", "interval", p.settings.Interval, "paused", p.settings.Paused, "job_threshold_score", p.settings.JobThresholdScore)
 	return nil
 }
 
@@ -222,8 +231,16 @@ func (p *Processor) Stop() {
 // but do not stop the processing of other criteria.
 func (p *Processor) process(ctx context.Context) error {
 	p.RefreshSettings()
-	if !p.settings.Enabled {
-		p.logger.Info("subscription processor is disabled, skipping processing")
+	if p.settings.Paused {
+		p.logger.Info("subscription processor is paused, skipping processing")
+		return nil
+	}
+
+	if !p.IsWithinAllowedHours() {
+		p.logger.Debug("subscription processor outside allowed hours",
+			"start_hour", p.settings.StartHour,
+			"end_hour", p.settings.EndHour,
+			"current_time_utc", time.Now().UTC().Format("15:04"))
 		return nil
 	}
 
@@ -347,6 +364,31 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 
 	p.logger.Info("successfully processed criteria", "id", criteria.ID)
 	return nil
+}
+
+func (p *Processor) Paused() bool {
+	return p.settings.Paused
+}
+
+// IsWithinAllowedHours checks if the current time (UTC) is within the configured off-peak hours.
+// The time window can span midnight (e.g., 17:00-00:00).
+func (p *Processor) IsWithinAllowedHours() bool {
+	// Special case: if both are 0, run 24/7
+	if p.settings.StartHour == 0 && p.settings.EndHour == 0 {
+		return true
+	}
+
+	now := time.Now().UTC()
+	currentHour := now.Hour()
+
+	// Handle the case where the time window crosses midnight
+	if p.settings.StartHour > p.settings.EndHour {
+		// Window crosses midnight (e.g., 17:00-00:00)
+		return currentHour >= p.settings.StartHour || currentHour < p.settings.EndHour
+	} else {
+		// Window doesn't cross midnight (e.g., 09:00-17:00)
+		return currentHour >= p.settings.StartHour && currentHour < p.settings.EndHour
+	}
 }
 
 /*
