@@ -32,7 +32,6 @@ type SearchTask struct {
 	Status         SearchTaskStatus
 	Error          *string
 	PagesCompleted int
-	PagesTotal     int
 	CreatedAt      time.Time
 	UpdatedAt      *time.Time
 }
@@ -74,7 +73,6 @@ func CreateSearchTask(ctx context.Context, fs *FirestoreClient, criteria SearchC
 		Status:         SearchTaskStatusQueued,
 		CreatedAt:      nowUTC,
 		PagesCompleted: 0,
-		PagesTotal:     criteria.MaxPages,
 	}
 
 	_, err := fs.Collection(SearchTaskCollection).Doc(jobSearch.ID).Set(ctx, jobSearch)

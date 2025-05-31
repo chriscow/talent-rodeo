@@ -41,7 +41,7 @@ func NewSearchResultProcessor(fs *FirestoreClient, logger *slog.Logger) *SearchR
 }
 
 func (s *SearchResultProcessor) OnSearchStarted(jobSearch SearchTask) {
-	s.logger.Info("OnSearchStarted", "criteria", jobSearch.Criteria.GetSearchHash())
+	s.logger.Debug("OnSearchStarted", "criteria", jobSearch.Criteria.GetSearchHash())
 	ctx := context.Background()
 	if err := UpdateSearchTask(ctx, s.fs, &jobSearch); err != nil {
 		s.logger.Error("failed to update search task", "error", err)
@@ -50,7 +50,7 @@ func (s *SearchResultProcessor) OnSearchStarted(jobSearch SearchTask) {
 
 // search.JobEventHandler implementation
 func (s *SearchResultProcessor) OnJobListing(jobSearch SearchTask, job JobListing) {
-	s.logger.Info("OnJobListing", "job", job.ProviderJobID)
+	s.logger.Debug("OnJobListing", "job", job.ProviderJobID)
 
 	ctx := context.Background()
 	if err := SaveJobListing(ctx, s.fs, jobSearch, &job); err != nil {
@@ -59,10 +59,12 @@ func (s *SearchResultProcessor) OnJobListing(jobSearch SearchTask, job JobListin
 }
 
 func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, job JobDetail) {
-	s.logger.Info("OnJobDetail", "jobID", job.ProviderJobID)
+	s.logger.Debug("OnJobDetail", "jobID", job.ProviderJobID)
 
 	go func() {
 		ctx := context.Background()
+
+		s.logger.Debug("extracting job detail data", "jobID", job.ID, "criteriaID", jobSearch.Criteria.ID)
 		if err := ExtractJobDetailData(ctx, &job); err != nil {
 			s.logger.Error("failed to extract job detail data", "error", err, "jobID", job.ID)
 			SentryReportError(ctx, err, sentry.LevelError, map[string]string{
@@ -114,7 +116,7 @@ func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, job JobDetail)
 }
 
 func (s *SearchResultProcessor) OnPageComplete(jobSearch SearchTask, page int, jobsFound int, errors []error) {
-	s.logger.Info("OnPageComplete", "criteria", jobSearch.Criteria.ID, "page", page, "jobs_found", jobsFound, "errors", len(errors))
+	s.logger.Debug("OnPageComplete", "criteria", jobSearch.Criteria.ID, "page", page, "jobs_found", jobsFound, "errors", len(errors))
 
 	// Log any errors for this page
 	if len(errors) > 0 {
@@ -175,7 +177,7 @@ func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJob
 		return
 	}
 	if len(jobDetails) == 0 {
-		s.logger.Info("no job details found for criteria", "criteriaID", jobSearch.Criteria.ID)
+		s.logger.Warn("no job details found for criteria", "criteriaID", jobSearch.Criteria.ID)
 		return
 	}
 
@@ -183,7 +185,7 @@ func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJob
 	if err != nil {
 		s.logger.Error("failed to embed job details", "error", err)
 	}
-	s.logger.Info("embedded job details", "count", count)
+	s.logger.Debug("embedded job details", "count", count)
 }
 
 func (s *SearchResultProcessor) UpsertJobDetailEmbeddings(ctx context.Context, criteriaID string, jobDetails []JobDetail) (int, error) {

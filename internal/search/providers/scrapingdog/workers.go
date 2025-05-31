@@ -418,7 +418,6 @@ func (wm *WorkerManager) processQueuedSearch(ctx context.Context, workerID int, 
 
 	now := time.Now().UTC()
 	searchJob.Status = internal.SearchTaskStatusCompleted
-	searchJob.PagesTotal = searchJob.Criteria.MaxPages
 	searchJob.PagesCompleted = searchJob.Criteria.MaxPages // All pages processed
 	searchJob.UpdatedAt = &now
 

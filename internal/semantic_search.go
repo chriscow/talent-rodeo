@@ -65,12 +65,12 @@ type HybridSearchParams struct {
 // DefaultHybridSearchParams returns a set of default parameters for hybrid search
 func DefaultHybridSearchParams() *HybridSearchParams {
 	return &HybridSearchParams{
-		DenseWeight:     0.7,
-		SparseWeight:    0.3,
-		ScoreFusion:     "linear",
+		DenseWeight:     0.5,
+		SparseWeight:    0.5,
+		ScoreFusion:     "reciprocal_rank_fusion",
 		RecencyWeight:   0.2,
 		RecencyHalfLife: 30.0,
-		ScoreThreshold:  0.5,
+		ScoreThreshold:  0,
 	}
 }
 
@@ -230,7 +230,7 @@ func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, crite
 		return nil, fmt.Errorf("PINECONE_SPARSE_INDEX_HOST environment variable not set")
 	}
 
-	query := steeringQuery.Query + " " + steeringQuery.MoveToward
+	query := steeringQuery.MoveToward
 	sparseResults, err := client.SearchRecords(ctx, sparseIndex, JobDetailNamespace, query,
 		WithTopK(topK*2), WithFilter(filter), WithFields([]string{"ID"}))
 	if err != nil {
@@ -397,20 +397,23 @@ func processSearchResults(_ context.Context, logger *slog.Logger, searchResult *
 	}
 
 	// Normalize scores if there are more than 1 item
-	if len(denseScores) > 1 {
-		normalizedDense := normalizeScores(denseScores)
-		for id, score := range normalizedDense {
-			if match, ok := allMatches[id]; ok {
-				match.DenseScore = float64(score)
+	// Only normalize scores for methods that need it
+	if params.ScoreFusion != "reciprocal_rank_fusion" {
+		if len(denseScores) > 1 {
+			normalizedDense := normalizeScores(denseScores)
+			for id, score := range normalizedDense {
+				if match, ok := allMatches[id]; ok {
+					match.DenseScore = float64(score)
+				}
 			}
 		}
-	}
 
-	if len(sparseScores) > 1 {
-		normalizedSparse := normalizeScores(sparseScores)
-		for id, score := range normalizedSparse {
-			if match, ok := allMatches[id]; ok {
-				match.SparseScore = float64(score)
+		if len(sparseScores) > 1 {
+			normalizedSparse := normalizeScores(sparseScores)
+			for id, score := range normalizedSparse {
+				if match, ok := allMatches[id]; ok {
+					match.SparseScore = float64(score)
+				}
 			}
 		}
 	}

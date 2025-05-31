@@ -1,0 +1,230 @@
+<example-1>
+    <input>
+        <transcript>
+AI
+Hi there. I'm Shirley from Talent Rodeo. Is now a good time for a quick chat?
+User
+Yes.
+AI
+Great. Thank you, Chris. Just to let you know, I'm still learning how to have good conversations with humans. So please forgive me if I interrupt you, take an extra long pause, or make the occasional miss mistake. I'll do my best to make this conversation both fun and valuable for you. Sound good?
+User
+Sounds good.
+AI
+Thanks for being understanding, Chris. I had a chance to review your resume and was really impressed by your deep experience in software engineering and leadership. Especially your recent work with generative AI and distributed systems. Is there a particular position or project in your career that you're especially proud of or that best represents what you're looking for going forward. Maybe something your resume doesn't fully capture.
+User
+Well, I think my position at BusTech was especially interesting considering, uh, the interest in AI lately.
+AI
+That sounds intrigued.
+User
+Uh, I oh, sorry. Yeah. I
+AI
+No worries at all, Chris. Take your time. No rush here. I'd love to hear a bit more about your experience at Buzztech. Especially what made it stand out to you. Was there a particular challenge you solved or a project you really enjoyed working on there? You mentioned BusTech in the context of AI. Which definitely feels timely. It reminds me of how some companies used AI to completely transform their workflows. Sometimes in ways nobody anticipated at the start. Did you work on something cutting edge or unique while you were there?
+User
+Yes. I created an AI that could speak to CNC robots that would rivet a few slashes for 7 80 sevens together.
+AI
+Wow. That's genuinely fascinating, Chris. Building an AI that can communicate directly with CNC robots for assembling parts of Boeing 7 87 aircraft is both complex and high stakes. Not many people get to blend manufacturing, robotics, and AI at that level. It must have required super reliable systems and some creative problem solving. Can you share what the biggest challenge was in creating that system? For example, was it the communication between the AI and robots? Or perhaps making sure everything was safe and accurate on the factory floor? And out of curiosity, did you get to see the robots in action doing the riveting? That must have been quite a sight.
+User
+Uh, no. I didn't actually get to see it. I think that would have been really cool, but I think the biggest challenge was getting the AI to reliably output the code without mistakes.
+AI
+That makes a lot of sense, Chris. Making sure the AI generates accurate and reliable code. Especially when it controls something as critical as aircraft assembly. Has to be a huge challenge Even a small error could cause big problems. It's impressive you tackled that responsibility. It's interesting too. A lot of people think the hardest part is just building the AI. When in reality, it's about making it safe and consistent in real world applications. That reminds me of a story from 1 manufacturer who tested their their AI and simulation for months before trusting it with real factory machines. Are there any other experiences or roles? Maybe outside of the AI or manufacturing space that you feel would be helpful for me to know about when thinking about your ideal next position? Sometimes those side projects or earlier roles reveal unique strengths.
+User
+Uh, I created a voice AI using a Go back end. That would help people search for jobs.
+AI
+That's awesome, Chris. Building a voice AI for jobs searching really hits close to home for me. Using Go on the back end must have been interesting given how efficient Go can be for scalable systems. Voice interfaces are tricky. Getting them to understand intent, handle different accents, and respond naturally isn't easy at all. Plus, tying it all together for a helpful experience takes real engineering care. What inspired you to create that project? Did you focus more on the conversational side? The search technology, or connecting to real job systems? And out of curiosity, do you think voice driven job search will become the norm someday? Is it more of a complementary tool?
+User
+Think there's a lot of nuances that you can capture in a conversation that a resume doesn't necessarily convey.
+AI
+Absolutely, Chris. You make a great point. Resumes just can't capture the depth, intent, or soft skills that come out in a real conversation. Sometimes, the simple act of talking through ideas uncovers opportunities or strengths people didn't even realize they had. That's actually 1 reason I love these chats. I've read about studies where voice AI systems, uncovered things about candidates' experience or interests that even their CVs didn't show. It opens up more personal and relevant job matches. Based on what you've shared, it sounds like your ideal next position makes strong use of AI back end skills, and real world impact. Are there any other experiences or types of projects? Maybe in leadership, cloud architecture, or even domain infrastructure, that you want me to keep in mind as I search for roles for you?
+User
+No. I really would like to focus on developing in Go back end services ideally, that work with LLMs.
+AI
+Thank you for clarifying that, Chris. It's clear you want to focus on go back in development, ideally in projects that work closely with large language models and AI systems. That's a powerful combination. And there's definitely growing demand in that space. Based on your resume, it looks like I should focus on searching for Go roles especially those involving AI or LLMs. Does that sound right to you? Or would you like me to
+User
+Yeah. That's right. No. That's right. That's right.
+AI
+perfect. Thank you for confirming, Chris. Just to make sure I'm covering your bases, are there any other skills or technologies you want me to include in my search? For example, Python. C site. Distributed systems or databases, Or should I focus purely on Go and LLM related work?
+User
+I think going LLM would capture it pretty well. I do know Python, but I don't wanna focus necessarily on Python. But, uh, if if it's a requirement, then I uh, you know, I can do that. But I'd really like to focus on Go.
+AI
+Got it, Chris. Your preference is to focus on Go and LLM related work. But you're open to using Python only if it's a secondary requirement, not the main focus. That's helpful. Are there any aspects of job roles or certain types of tech work that you'd like to avoid? For example, front end development, DevOps heavy roles, constant context switching, or maybe working with older programming languages or outdated systems. Let me know so I can filter out anything you'd prefer to skip.
+User
+Well, I'm not really a strong front end developer, so I probably need to avoid uh, you know, front end development or front end frameworks.
+AI
+Thanks for being clear
+User
+But, uh, uh, no. Go ahead. I think I was done.
+AI
+That Thanks, Chris. Just wanted to make sure I wasn't cutting you off. Sometimes I jump in too early. So to confirm, you'd like to avoid roles involving front end development or front end frameworks. Is there anything else you'd like to steer clear of? Like DevOps, heavy meetings, or working mostly with legacy systems or is just avoiding front end work the main thing for you?
+User
+I think that'll do it.
+AI
+Perfect. Thanks, Chris. I'll make sure to avoid front end focused roles when searching for you. Let's chat briefly about location. Where are you currently located?
+User
+Uh, I'm in Tucson, Arizona.
+AI
+Tucson, that's great. Thanks for sharing. You know, Tucson isn't just about the desert and heat. A lot of people don't realize it's home to 1 of the world's best collections of telescopes on Mount Lemmon. Plus, there's the annual gem and mineral show, which brings people from all over the globe. Are you looking mainly for remote roles? Or would you consider in office or hybrid opportunities in any particular cities? We focus on positions in the top 20 largest US metro areas. Or fully remote roles.
+User
+Uh, I think I'd just like to be fully remote.
+AI
+Got it. Fully remote is your preference. That makes sense. Especially with your deep experience and focus on back end go development. A lot of companies today are offering high caliber remote roles, so that opens up more possibilities for you. How flexible are you if something truly outstanding came up that was hybrid or occasionally in office, say, in a nearby metro area like Phoenix or even for out? Or is your remote preference pretty firm?
+User
+If it was a really, really good role that was uh, pretty ideal, I would consider even moving if I had to.
+AI
+That's really helpful to know, Chris.
+User
+But
+AI
+That's really help
+User
+yeah. Go ahead.
+AI
+Thank you, Chris. Appreciate your flexibility, and your patience as I sometimes make these abrupt transitions. Let me summarize. Just to make sure I'm understanding your priorities. You're looking for fully remote roles, but for the right opportunity, you'd be open to hybrid or possibly even relocating. Your main focus is back end go development, especially with work that involves LLMs, or generative AI. You want to avoid front end work and front end frameworks. And you're okay with some Python if it's a secondary tech. Does that sound accurate? And is there anything important about your
+User
+Yeah.
+AI
+Great. Is there
+User
+That sounds right. That's perfect.
+AI
+Wonderful, Chris. Is there anything else important about your job search or preferences that we haven't covered yet? Anything at all that would help me find the very best fit for you?
+User
+Uh, I think I would lean more towards, uh, a smaller company than, you know, something that's like a start up or something like that. Versus a large company.
+AI
+That's a great detail, Chris. You'd prefer to work with a smaller company, maybe a startup or a more agile team rather than a large corporation. That definitely helps me narrow down the search and target organizations where you can have a real impact impact and be closer to the action. I've noticed many folks with a strong technical and leadership background like yours thrive in those dynamic hands on environments. Thank you so much for your time today, Chris. We'll be searching through thousands of jobs we'll only present the best matches on your dashboard. I'll also follow-up with an email summary of our conversation. Please feel free to reply if you have any updates to your search or want to fine tune your preferences even more. It's been a pleasure chatting with you. I hope we find something really exciting for you soon.
+User
+Thanks. Bye.
+AI
+Goodbye.
+        </transcript>
+    </input>
+    <output>
+Looking at this transcript, I need to analyze Chris's job search preferences and create a steering query based on his explicit statements.
+
+**Analysis:**
+
+1. **Main Query**: The AI suggested "Go roles especially those involving AI or LLMs" and Chris confirmed "Yeah. That's right. No. That's right. That's right." Later, Chris clarified "I think going LLM would capture it pretty well" when asked about additional skills. The canonical form would be "Go (Golang)" for the programming language.
+
+2. **MoveToward**: Chris expressed several positive preferences:
+   - "I really would like to focus on developing in Go back end services ideally, that work with LLMs"
+   - "I think I'd just like to be fully remote" 
+   - "I think I would lean more towards, uh, a smaller company than, you know, something that's like a start up or something like that. Versus a large company"
+
+3. **MoveAway**: Chris specifically mentioned wanting to avoid:
+   - "Well, I'm not really a strong front end developer, so I probably need to avoid uh, you know, front end development or front end frameworks"
+
+4. **RerankQuery**: Combines all elements into a comprehensive search statement.
+
+<answer>
+{
+  "Query": "Go (Golang)",
+  "MoveToward": "I want backend services working with LLMs, fully remote positions at smaller companies or startups",
+  "MoveAway": "I want frontend development and frontend frameworks",
+  "RerankQuery": "Go backend developer position working with LLMs at a small company or startup, fully remote, avoiding frontend development"
+}
+</answer>
+    </output>
+</example-1>
+<example-2>
+    <input>
+        <transcript>
+AI
+Hi there. I'm Shirley from Talent Rodeo. Is now a good time for a quick chat?
+User
+Sure.
+AI
+Great. Thank you. Just a heads up, I'm still learning how to have good conversations with humans. So I might interrupt you. Take an extra long pause, or make mistakes sometimes. I'll do my best to make this conversation fun and valuable for you. Sound good?
+User
+Amazing.
+AI
+Perfect. I reviewed your resume and was impressed by your experience, especially in transitioning a major contract workforce to part time employees across the USA and Canada. Is there 1 particular position or experience you're especially proud of or that best represents what you're looking for next? Which your resume might not fully capture.
+User
+Uh, I've been in strategic people leadership roles for all of my career. So the 1 highlight of my career has been being a director for multiple organizations, including startups, And the fact is that I've worked in numerous acquisitions So the next company that I'm looking for I would love to be in a head of people and culture or director of people or vice president or even a chief human resource officer. As my next job.
+AI
+That's fantastic. Your vast experience with startups and acquisitions must have provided unique insights. Are there any other roles or experiences worth mentioning that would help me better understand your ideal next position?
+User
+Yes. I have significant experience across human resources, culture building, operations, marketing, event management, and admin positions. I've also managed budgets. So I would love for my next position to be able to be at a leadership level, uh, in the c suite, and I'm able to work with a tech or a software as a service company that is positioned on a global scale. The countries that I have managed over in my career are USA. Canada, Australia, India, Philippines, the UK. So I have a lot of global experience, so I would love to be matched with an organization that requires scale.
+AI
+That global experience is incredibly valuable. We support remote positions or roles located in the top 20 largest US metropolitan areas. Are you looking for remote roles, or do you prefer us specific metro area?
+User
+I would prefer remote remote fully remote position. However, I'm open to applying to hybrid positions that are based out of Bang or even on-site positions. Based out of Vancouver, BC.
+AI
+Great to know your flexible with remote and hybrid positions. How flexible are you with this location preference if a compelling opportunity arises?
+User
+So I'm based in Vancouver. However, if there is a job that requires me to relocate to the states, for example, or a different country, I am open to it.
+AI
+Understood. What specific job titles or roles are you targeting in your next position?
+User
+Human resource manager, uh, people and culture business partner, or human resource business partner, head of people and culture, or head of people, or director of human resources, vice president of human resources, chief human resource officer. Human resource business partner.
+AI
+That's a comprehensive list of titles reflecting leadership in HR. What are the core skills or technologies you want to use or develop further in your next role?
+User
+So I do not particularly work with, uh, technologies. Other than in an area where I use say, the HRI assistant. So I have a large tech stack that's mentioned on my resume. So ADP, BambooHR, Ceridian, Dayforce, UKG, Lever, Rippling, Deal.
+AI
+You have a
+User
+SAP, and more. Workday, So I have a lot of, um, HR systems that I've worked with.
+AI
+You've worked with an impressive array of HRIS platforms. Are there any specific systems or skills from this list that you'd like to focus on or develop further? Or are you open to exploring new tools as well?
+User
+I'm open to exploring mutual.
+AI
+It's great that you're open to exploring new tools. You mentioned several roles. Like head of people and culture. How important is it for you to work in a role with a strategic focus on culture building and leadership?
+User
+Extremely important.
+AI
+Culture building is certainly a key strength of yours. Are there related responsibilities or even areas you'd prefer to avoid in your next role?
+User
+Um, I would prefer to avoid areas that would shoehorn me into a particular specialization. I want to continue to work in a leadership generalist capacity rather than specialize on in any particular area? However, if the pay is right, I'm willing to work towards that as well.
+AI
+Got it. You prefer maintaining a broad strategic overview in leadership, but you're open to specialization if the opportunity and compensation align well. What kind of company culture or team dynamics do you thrive in?
+User
+So I very much thrive in an ownership mindset attitude where you know, I'm just responsible for building things. From scratch and and, you know, the management is very much open to your idea to growing fast to building high performance teams where people take ownership and have that growth mindset.
+AI
+That ownership mindset combined with building high performance teams really resonates. Are there specific types of project or challenges you're eager to take on in your next role?
+User
+Definitely. I would say, uh, I very much have specialized in you know, high growth and high scale. So for example, I dealt with multiple acquisitions. I've dealt with funding rounds, I've dealt with IPO I've dealt with a merger. So there's a lot of growth and scale involved. I also am an expert in cross border compliance. And as well as, you know, enterprise wide organizational projects. So anything related to tech, anything related to change, anything related to transformation, So my portfolio is basically a specialization of all of those skills. So for my next role when it comes to people and culture, I would love to be a part of an organization that is, you know, emerging. For example, tech or software or AI or private equity for banking and finance, say, for example, or any sort of tech or software related industry. I'm also open to pharma and health care because that's has what been my experience in the past as well, as well as education. Um, but, yes, those are sort of the specializations that I have cultivated and I would love if my next role is also, you know, very similar uh, or matches those areas.
+AI
+That's an impressive range of skills. Especially in managing large scale projects like acquisitions and mergers. What work environments or conditions are you specifically looking to avoid?
+User
+I'm looking to avoid, um, conditions where, you know, the organization very much is, um, autocratic and, you know, doesn't, uh, really work together or doesn't really care or put to put its people first because I very much am a big believer in having people come together and work together in an organization that cares about the about its employees first. Because only when your employees are in a good place can they serve your customers really well. I think a company that puts employees um, first and then encourages them to put customers first is would be an amazing fit for me. I wanna avoid organizations that, um, are caught up in in a lot of bureaucracy. Or red tape or don't really care about giving their employees the best of benefits.
+AI
+It's clear that a people first culture is very important to you. What are your primary motivations for seeking a new opportunity right now?
+User
+I am currently working for a confidential organization in the, uh, tech area where I'm working on multiple mergers and acquisitions across the globe. However, as it's sits within the organization, um, I'm a bit worried about how my role is going to pan out, and I don't think I'm a good culture fit for this particular organization. So I'm looking to move to an organization where, um, I would be a better culture fit.
+AI
+It sounds like finding a company with a better cultural fit is a key driver in your current job search. Looking ahead, what goals or milestones are most important to you professionally?
+User
+I want to grow to the VP or the CHR role and have a voice at the table. Um, strategically. I've had that for a number of years. However, um, I even though people say job titles don't really matter, they effectively do in the long run, especially when it comes to leadership and the broader organization at large. So I would love to carve my name out and help and grow and scale an organization and be you know, known for putting in a remarkable
+        </transcript>
+    </input>
+    <output>
+Looking at this transcript, I need to analyze the user's job search preferences and create a steering query based on their explicit statements.
+
+**Analysis:**
+
+1. **Main Query**: The user clearly stated multiple target roles: "Human resource manager, uh, people and culture business partner, or human resource business partner, head of people and culture, or head of people, or director of human resources, vice president of human resources, chief human resource officer. Human resource business partner." The most encompassing canonical term would be "Human Resources".
+
+2. **MoveToward**: The user expressed several positive preferences:
+   - "I would prefer remote remote fully remote position"
+   - "I would love to be matched with an organization that requires scale"
+   - "I would love to be a part of an organization that is, you know, emerging. For example, tech or software or AI"
+   - "I want to grow to the VP or the CHR role and have a voice at the table strategically"
+   - "anything related to tech, anything related to change, anything related to transformation"
+
+3. **MoveAway**: The user specifically mentioned wanting to avoid:
+   - "I would prefer to avoid areas that would shoehorn me into a particular specialization"
+   - "I'm looking to avoid, um, conditions where, you know, the organization very much is, um, autocratic"
+   - "I wanna avoid organizations that, um, are caught up in in a lot of bureaucracy. Or red tape"
+
+4. **RerankQuery**: Combines all elements into a comprehensive search statement.
+
+<answer>
+{
+  "Query": "Human Resources",
+  "MoveToward": "I want fully remote VP or CHRO leadership roles at emerging tech, software, or AI companies with global scale and strategic transformation opportunities",
+  "MoveAway": "I want specialized roles in autocratic organizations with bureaucracy and red tape",
+  "RerankQuery": "Human Resources VP or CHRO leadership position at emerging tech or software company, fully remote with global scale and strategic transformation opportunities, avoiding specialized roles in bureaucratic organizations"
+}
+</answer>
+    </output>
+</example-2>

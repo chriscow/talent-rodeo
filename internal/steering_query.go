@@ -12,16 +12,21 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
+const (
+	DefaultForceToward = 0.9 // Default strength to steer toward the target concept
+	DefaultForceAway   = 0.8 // Default strength to steer away from the avoid concept
+)
+
 // SteeringQuery encapsulates all parameters needed for semantic steering of queries
 type SteeringQuery struct {
 	// Query is the main concept or search term (required)
 	Query string `description:"The canonical form of the one main query term, job title or concept to base the search on."`
 
 	// MoveToward is a concept as a complete sentence to move results toward
-	MoveToward string `description:"The concept to steer the search results toward, expressed as a complete sentence and is required."`
+	MoveToward string `description:"The concept to steer the search results toward, expressed as a first person complete sentence and is required."`
 
 	// MoveAway is a concept as a complete sentence to move results away from
-	MoveAway string `description:"The concept to steer the search results away from, expressed as a complete sentence and is required."`
+	MoveAway string `description:"The concept to steer the search results away from, expressed as a first person complete sentence and is required."`
 
 	// ForceToward determines how strongly to move toward the target concept (0.0-1.0)
 	// Only used if MoveToward is set
@@ -33,7 +38,7 @@ type SteeringQuery struct {
 
 	// RerankQuery is an all encompassing query expressed as one or more complete sentences
 	// combining the original query, MoveToward, and MoveAway concepts.
-	RerankQuery string `description:"An all-encompassing query that combines the original query, MoveToward, and MoveAway concepts into a single query for reranking results."`
+	RerankQuery string `description:"An all-encompassing query that combines the original query, MoveToward, and MoveAway concepts into a single first person sentence for reranking results."`
 }
 
 // Validate checks if the steering query parameters are valid
@@ -176,21 +181,20 @@ func (q *SteeringQuery) GetSparseVector(ctx context.Context, p *Pinecone, model 
 
 func GenerateSteeringQuery(ctx context.Context, transcript *Transcript, opts ...tools.Option) (*SteeringQuery, error) {
 	const promptFile = "prompts/transcript-010-steering-query.txt"
-	tmpl, err := assets.EmbeddedFiles.ReadFile(promptFile)
+	const exampleFile = "prompts/transcript-010-steering-query-examples.txt"
+	prompt, err := assets.EmbeddedFiles.ReadFile(promptFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read steering query prompt: %w", err)
 	}
-
-	prompt := string(tmpl) + `\n\n<transcript>` + transcript.String() + `</transcript>`
+	examples, err := assets.EmbeddedFiles.ReadFile(exampleFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read steering query examples: %w", err)
+	}
 
 	messages := minds.Messages{
 		{
 			Role:    openai.ChatMessageRoleSystem,
-			Content: string(tmpl),
-		},
-		{
-			Role:    openai.ChatMessageRoleUser,
-			Content: `<transcript>\n\n` + transcript.String() + `</transcript>`,
+			Content: string(prompt) + "\n\n" + string(examples),
 		},
 	}
 	options := []tools.Option{
@@ -203,40 +207,24 @@ func GenerateSteeringQuery(ctx context.Context, transcript *Transcript, opts ...
 		options = append(options, opts...)
 	}
 
-	origResp, err := tools.Ask(ctx, prompt, options...)
+	origResp, err := tools.Ask(ctx, `<transcript>\n\n`+transcript.String()+`</transcript>`, options...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to ask LLM for steering query: %w", err)
 	}
 
 	sq, err := extractSteeringQuery(ctx, origResp)
 	if err != nil {
-		// try to fix the steering query if it failed to parse
-		fixMsgs := []minds.Message{
-			{
-				Role:    minds.RoleAssistant,
-				Content: origResp,
-			},
-		}
-
-		messages = append(messages, fixMsgs...)
-		options = []tools.Option{
-			tools.WithModel(tools.DeepSeekChat),
-			tools.WithMaxTokens(8192),
-			tools.WithMessages(messages),
-		}
-		prompt = fmt.Sprintf(`The steering query produced is invalid. Error: %s
-		Please fix it and return a valid JSON object in the <answer> tags.`, err.Error())
-		revisedResp, err := tools.Ask(ctx, prompt, options...)
-		if err != nil {
-			return nil, fmt.Errorf("failed to ask LLM for steering query again: %w", err)
-		}
-		sq, err = extractSteeringQuery(ctx, revisedResp)
 		if err != nil {
 			return nil, fmt.Errorf("failed to extract steering query after fix: %w", err)
 		}
 	}
 
-	sq.Validate()
+	if err := sq.Validate(); err != nil {
+		return nil, fmt.Errorf("steering query validation failed: %w", err)
+	}
+
+	sq.ForceToward = DefaultForceToward
+	sq.ForceAway = DefaultForceAway
 
 	return sq, nil
 }

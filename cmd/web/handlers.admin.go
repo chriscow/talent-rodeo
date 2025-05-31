@@ -333,9 +333,15 @@ func (app *application) adminSearchJobs(w http.ResponseWriter, r *http.Request) 
 		topKStr := r.PostForm.Get("top_k")
 		selectedUserID = r.PostForm.Get("user_id")
 		selectedCriteriaID = r.PostForm.Get("criteria_id")
+		previousUserID := r.PostForm.Get("previous_user_id") // Hidden field to track previous selection
+
 		data["SelectedUserID"] = selectedUserID
 		data["SelectedCriteriaID"] = selectedCriteriaID
-		app.logger.Debug("adminSearchJobs", "selectedUserID", selectedUserID, "selectedCriteriaID", selectedCriteriaID)
+		app.logger.Debug("adminSearchJobs", "selectedUserID", selectedUserID, "selectedCriteriaID", selectedCriteriaID, "previousUserID", previousUserID)
+
+		// Determine if the user selection changed
+		userChanged := selectedUserID != previousUserID
+		app.logger.Debug("user selection check", "userChanged", userChanged, "selectedUserID", selectedUserID, "previousUserID", previousUserID)
 
 		// If a user is selected, get their steering query and subscriptions
 		if selectedUserID != "" {
@@ -344,8 +350,13 @@ func (app *application) adminSearchJobs(w http.ResponseWriter, r *http.Request) 
 				app.logger.Warn("failed to get user steering query", "userID", selectedUserID, "error", err)
 				// Don't fail completely, just log warning and continue with form values
 			} else {
-				// Use user's steering query as the base, but allow form overrides
-				steeringQuery = userSteeringQuery
+				// Only use user's steering query if user changed, otherwise keep form values
+				if userChanged {
+					steeringQuery = userSteeringQuery
+					app.logger.Debug("using user steering query due to user change")
+				} else {
+					app.logger.Debug("keeping existing steering query - same user")
+				}
 			}
 
 			// Get user's subscriptions to populate criteria dropdown
@@ -386,9 +397,52 @@ func (app *application) adminSearchJobs(w http.ResponseWriter, r *http.Request) 
 		moveTowardText := strings.TrimSpace(r.PostForm.Get("move_toward"))
 		moveAwayText := strings.TrimSpace(r.PostForm.Get("move_away"))
 
-		// If no user steering query was loaded, or if form fields are provided, build from form
-		if steeringQuery == nil || steeringQueryText != "" {
-			// Use form values if provided, otherwise fall back to user's steering query
+		// Only use form values to override if user didn't change and form has steering values
+		// If user changed, we want to use the user's steering query (already set above)
+		hasFormSteeringValues := steeringQueryText != "" || rerankQueryText != "" || moveTowardText != "" || moveAwayText != ""
+
+		if !userChanged && hasFormSteeringValues {
+			// Same user with form values - use form values to override
+			app.logger.Debug("using form steering query values - same user with edits")
+			if steeringQueryText != "" {
+				if rerankQueryText == "" {
+					rerankQueryText = steeringQueryText
+				}
+
+				// Parse force values
+				forceToward := 0.8
+				if v := r.PostForm.Get("force_toward"); v != "" {
+					if f, err := strconv.ParseFloat(v, 64); err == nil {
+						forceToward = f
+					}
+				}
+
+				forceAway := 0.5
+				if v := r.PostForm.Get("force_away"); v != "" {
+					if f, err := strconv.ParseFloat(v, 64); err == nil {
+						forceAway = f
+					}
+				}
+
+				// Build steering query from form
+				steeringQuery = &internal.SteeringQuery{
+					Query:       steeringQueryText,
+					RerankQuery: rerankQueryText,
+					ForceToward: forceToward,
+					ForceAway:   forceAway,
+				}
+
+				// Set optional fields if provided
+				if moveTowardText != "" {
+					steeringQuery.MoveToward = moveTowardText
+				}
+				if moveAwayText != "" {
+					steeringQuery.MoveAway = moveAwayText
+				}
+			}
+		} else if !userChanged && selectedUserID == "" && hasFormSteeringValues {
+			// No user selected but form has values - use form values
+			app.logger.Debug("using form steering query values - no user selected")
 			if steeringQueryText != "" {
 				if rerankQueryText == "" {
 					rerankQueryText = steeringQueryText
@@ -426,6 +480,7 @@ func (app *application) adminSearchJobs(w http.ResponseWriter, r *http.Request) 
 				}
 			}
 		}
+		// If user changed, steeringQuery is already set to the new user's query above
 
 		// Parse HybridSearchParams fields from form
 		if v := r.PostForm.Get("dense_weight"); v != "" {

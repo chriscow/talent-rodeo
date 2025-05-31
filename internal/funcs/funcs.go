@@ -59,6 +59,8 @@ var TemplateFuncs = template.FuncMap{
 	"add": func(a, b int) int {
 		return a + b
 	},
+	"rrfPercentage": rrfPercentage,
+	"rrfStars":      rrfStars,
 	"sub": func(a, b int) int {
 		return a - b
 	},
@@ -398,4 +400,77 @@ func marshalJSON(v any) (template.JS, error) {
 		return "", err
 	}
 	return template.JS(b), nil
+}
+
+// rrfPercentage converts RRF + recency scores to 0-100% for user display
+//
+// Score ranges for different recency weight settings:
+//
+//	Recency Weight 0.0: 0.0328 - 0.0661 (pure RRF, no recency boost)
+//	Recency Weight 0.1: 0.0295 - 0.1594 (light recency boost)
+//	Recency Weight 0.2: 0.0262 - 0.2528 (default recency boost) ← CURRENT
+//	Recency Weight 0.3: 0.0230 - 0.3461 (heavy recency boost)
+//
+// Current configuration uses recency weight 0.2 with half-life 30.0 days
+func rrfPercentage(score float64) int {
+	minScore := 0.0262 // Minimum: low RRF + no recency boost (recency weight 0.2)
+	maxScore := 0.2528 // Maximum: high RRF + full recency boost (recency weight 0.2)
+
+	if score <= minScore {
+		return 0
+	}
+	if score >= maxScore {
+		return 100
+	}
+
+	percentage := ((score - minScore) / (maxScore - minScore)) * 100
+	return int(math.Round(percentage))
+}
+
+// rrfStars converts RRF + recency scores to star ratings for user display
+//
+// Uses the same score ranges as rrfPercentage for consistency:
+//
+//	Recency Weight 0.0: 0.0328 - 0.0661 (pure RRF, no recency boost)
+//	Recency Weight 0.1: 0.0295 - 0.1594 (light recency boost)
+//	Recency Weight 0.2: 0.0262 - 0.2528 (default recency boost) ← CURRENT
+//	Recency Weight 0.3: 0.0230 - 0.3461 (heavy recency boost)
+//
+// Star thresholds based on percentage within current range:
+//
+//	★★★★★ (5 stars): 90-100% (scores 0.2302-0.2528 for weight 0.2)
+//	★★★★☆ (4 stars): 70-89%  (scores 0.1844-0.2301 for weight 0.2)
+//	★★★☆☆ (3 stars): 50-69%  (scores 0.1395-0.1843 for weight 0.2)
+//	★★☆☆☆ (2 stars): 30-49%  (scores 0.0942-0.1394 for weight 0.2)
+//	★☆☆☆☆ (1 star):  10-29%  (scores 0.0489-0.0941 for weight 0.2)
+//	☆☆☆☆☆ (0 stars): 0-9%    (scores 0.0262-0.0488 for weight 0.2)
+func rrfStars(score float64) string {
+	// Use same range as rrfPercentage: 0.0262 to 0.2528
+	minScore := 0.0262
+	maxScore := 0.2528
+
+	// Calculate percentage to determine star rating
+	var percentage float64
+	if score <= minScore {
+		percentage = 0
+	} else if score >= maxScore {
+		percentage = 100
+	} else {
+		percentage = ((score - minScore) / (maxScore - minScore)) * 100
+	}
+
+	switch {
+	case percentage >= 90: // 90-100%
+		return "★★★★★"
+	case percentage >= 70: // 70-89%
+		return "★★★★☆"
+	case percentage >= 50: // 50-69%
+		return "★★★☆☆"
+	case percentage >= 30: // 30-49%
+		return "★★☆☆☆"
+	case percentage >= 10: // 10-29%
+		return "★☆☆☆☆"
+	default: // 0-9%
+		return "☆☆☆☆☆"
+	}
 }
