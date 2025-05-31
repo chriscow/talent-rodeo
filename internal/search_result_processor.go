@@ -16,7 +16,7 @@ import (
 
 const (
 	JobDetailNamespace         = "job-details" // Pinecone namespace for job details
-	MaxConcurrentJobProcessing = 5             // Maximum number of concurrent job detail processing goroutines
+	MaxConcurrentJobProcessing = 10            // Maximum number of concurrent job detail processing goroutines
 )
 
 // JobProcessor is an interface that defines the methods for processing new job details
