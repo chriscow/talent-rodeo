@@ -162,6 +162,11 @@ func runDeleteCriteria(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get job IDs for search criteria ID %s: %w", id, err)
 	}
 
+	searchTasks, err := internal.GetSearchTasksForCriteria(ctx, fs, id)
+	if err != nil {
+		return fmt.Errorf("failed to get search tasks for search criteria ID %s: %w", id, err)
+	}
+
 	return fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 
 		for _, sub := range subscribers {
@@ -176,6 +181,37 @@ func runDeleteCriteria(cmd *cobra.Command, args []string) error {
 			err = internal.UnlinkJobDetailFromCriteriaTx(ctx, fs, tx, jobID, id)
 			if err != nil {
 				return fmt.Errorf("failed to unlink job ID %s from search criteria ID %s: %w", jobID, id, err)
+			}
+
+		}
+
+		for _, searchTask := range searchTasks {
+			err = internal.DeleteSearchTaskTx(ctx, fs, tx, searchTask.ID)
+			if err != nil {
+				return fmt.Errorf("failed to delete search task ID %s for search criteria ID %s: %w", searchTask.ID, id, err)
+			}
+		}
+
+		if len(jobIDs) > 0 {
+			denseHost := os.Getenv("PINECONE_DENSE_INDEX_HOST")
+			if denseHost == "" {
+				return fmt.Errorf("PINECONE_DENSE_INDEX_HOST is not set")
+			}
+
+			sparseHost := os.Getenv("PINECONE_SPARSE_INDEX_HOST")
+			if sparseHost == "" {
+				return fmt.Errorf("PINECONE_SPARSE_INDEX_HOST is not set")
+			}
+
+			pc, err := internal.NewPineconeClient()
+			if err != nil {
+				return fmt.Errorf("failed to create Pinecone client: %w", err)
+			}
+			if err := pc.DeleteRecords(ctx, denseHost, "job-details", jobIDs); err != nil {
+				return fmt.Errorf("failed to delete records from Pinecone: %w", err)
+			}
+			if err := pc.DeleteRecords(ctx, sparseHost, "job-details", jobIDs); err != nil {
+				return fmt.Errorf("failed to delete records from Pinecone: %w", err)
 			}
 		}
 
