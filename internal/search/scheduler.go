@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	defaultSearchTickInterval = 24 * time.Hour
+	defaultSearchTickInterval = 5 * time.Minute
 	SchedulerSettingsKey      = "search-scheduler"
 )
 
@@ -23,13 +23,17 @@ type Mailer interface {
 }
 
 type SchedulerSettings struct {
-	Enabled  bool
-	Interval time.Duration
+	Paused    bool
+	Interval  time.Duration
+	StartHour int // Hour to start processing (24-hour format, UTC)
+	EndHour   int // Hour to end processing (24-hour format, UTC)
 }
 
 var DefaultSchedulerSettings = SchedulerSettings{
-	Enabled:  true,
-	Interval: defaultSearchTickInterval,
+	Paused:    false, // Default to not paused (active)
+	Interval:  defaultSearchTickInterval,
+	StartHour: 17, // 17:00 UTC
+	EndHour:   0,  // 00:00 UTC (crosses midnight)
 }
 
 // The search scheduler determines which SearchCriteria need to be processed.
@@ -128,6 +132,11 @@ func (s *Scheduler) RefreshSettings() error {
 	if s.settings.Interval <= 0 {
 		s.settings.Interval = defaultSearchTickInterval
 	}
+	// Set default time window if not configured
+	if s.settings.StartHour == 0 && s.settings.EndHour == 0 {
+		s.settings.StartHour = DefaultSchedulerSettings.StartHour
+		s.settings.EndHour = DefaultSchedulerSettings.EndHour
+	}
 	s.ticker.Reset(s.settings.Interval)
 	return nil
 }
@@ -167,18 +176,47 @@ func (s *Scheduler) run(ctx context.Context) {
 	}
 }
 
-func (s *Scheduler) Enabled() bool {
-	return s.settings.Enabled
+func (s *Scheduler) Paused() bool {
+	return s.settings.Paused
+}
+
+// IsWithinAllowedHours checks if the current time (UTC) is within the configured off-peak hours.
+// The time window can span midnight (e.g., 17:00-00:00).
+func (s *Scheduler) IsWithinAllowedHours() bool {
+	// Special case: if both are 0, run 24/7
+	if s.settings.StartHour == 0 && s.settings.EndHour == 0 {
+		return true
+	}
+
+	now := time.Now().UTC()
+	currentHour := now.Hour()
+
+	// Handle the case where the time window crosses midnight
+	if s.settings.StartHour > s.settings.EndHour {
+		// Window crosses midnight (e.g., 17:00-00:00)
+		return currentHour >= s.settings.StartHour || currentHour < s.settings.EndHour
+	} else {
+		// Window doesn't cross midnight (e.g., 09:00-17:00)
+		return currentHour >= s.settings.StartHour && currentHour < s.settings.EndHour
+	}
 }
 
 // StartCriteriaSearch finds criteria that need searches performed
 func (s *Scheduler) StartCriteriaSearch(ctx context.Context) {
 	s.RefreshSettings()
 
-	if !s.Enabled() {
+	if s.settings.Paused {
 		s.disableSearchSchedulingLogOnce.Do(func() {
 			s.logger.Info(internal.BGYellow("search scheduler paused"))
 		})
+		return
+	}
+
+	if !s.IsWithinAllowedHours() {
+		s.logger.Debug("search scheduler outside allowed hours",
+			"start_hour", s.settings.StartHour,
+			"end_hour", s.settings.EndHour,
+			"current_time_utc", time.Now().UTC().Format("15:04"))
 		return
 	}
 
@@ -248,7 +286,12 @@ func (s *Scheduler) notifyAdmin(_ context.Context, user *internal.User, err erro
 
 // RecoverIncompleteSearches finds and requeues any users that were previously queued but not completed
 func (s *Scheduler) RecoverIncompleteSearches() error {
-	if !s.Enabled() {
+	if s.settings.Paused {
+		return nil
+	}
+
+	if !s.IsWithinAllowedHours() {
+		s.logger.Debug("skipping recovery of incomplete searches - outside allowed hours")
 		return nil
 	}
 
