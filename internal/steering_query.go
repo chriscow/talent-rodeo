@@ -15,23 +15,25 @@ import (
 // SteeringQuery encapsulates all parameters needed for semantic steering of queries
 type SteeringQuery struct {
 	// Query is the main concept or search term (required)
-	Query string
+	Query string `description:"The canonical form of the one main query term, job title or concept to base the search on."`
 
-	// MoveToward is an optional concept to move results toward
-	MoveToward *string
+	// MoveToward is a concept as a complete sentence to move results toward
+	MoveToward string `description:"The concept to steer the search results toward, expressed as a complete sentence and is required."`
 
-	// MoveAway is an optional concept to move results away from
-	MoveAway *string
+	// MoveAway is a concept as a complete sentence to move results away from
+	MoveAway string `description:"The concept to steer the search results away from, expressed as a complete sentence and is required."`
 
 	// ForceToward determines how strongly to move toward the target concept (0.0-1.0)
 	// Only used if MoveToward is set
-	ForceToward float64
+	ForceToward float64 `description:"A value between 0.0 and 1.0 indicating how strongly to steer the search results toward the MoveToward concept."`
 
 	// ForceAway determines how strongly to move away from the avoid concept (0.0-1.0)
 	// Only used if MoveAway is set
-	ForceAway float64
+	ForceAway float64 `description:"A value between 0.0 and 1.0 indicating how strongly to steer the search results away from the MoveAway concept."`
 
-	RerankQuery string
+	// RerankQuery is an all encompassing query expressed as one or more complete sentences
+	// combining the original query, MoveToward, and MoveAway concepts.
+	RerankQuery string `description:"An all-encompassing query that combines the original query, MoveToward, and MoveAway concepts into a single query for reranking results."`
 }
 
 // Validate checks if the steering query parameters are valid
@@ -45,12 +47,12 @@ func (sq SteeringQuery) Validate() error {
 	}
 
 	// Validate ForceToward only if MoveToward is set
-	if sq.MoveToward != nil && (sq.ForceToward == 0 || sq.ForceToward > 1) {
+	if sq.ForceToward == 0 || sq.ForceToward > 1 {
 		return fmt.Errorf("ForceToward must be between 0.0 and 1.0, got %f", sq.ForceToward)
 	}
 
 	// Validate ForceAway only if MoveAway is set
-	if sq.MoveAway != nil && (sq.ForceAway == 0 || sq.ForceAway > 1) {
+	if sq.ForceAway == 0 || sq.ForceAway > 1 {
 		return fmt.Errorf("ForceAway must be between 0.0 and 1.0, got %f", sq.ForceAway)
 	}
 
@@ -84,7 +86,7 @@ func NewSteeringQuery(query string, model PineconeEmbedModel, opts ...SteeringOp
 // WithMoveToward sets the concept to move toward
 func WithMoveToward(concept string, force float64) SteeringOption {
 	return func(sq *SteeringQuery) {
-		sq.MoveToward = &concept
+		sq.MoveToward = concept
 		sq.ForceToward = force
 	}
 }
@@ -92,7 +94,7 @@ func WithMoveToward(concept string, force float64) SteeringOption {
 // WithMoveAway sets the concept to move away from
 func WithMoveAway(concept string, force float64) SteeringOption {
 	return func(sq *SteeringQuery) {
-		sq.MoveAway = &concept
+		sq.MoveAway = concept
 		sq.ForceAway = force
 	}
 }
@@ -105,13 +107,7 @@ func (q *SteeringQuery) GetDenseVector(ctx context.Context, p *Pinecone, model P
 	}
 
 	// Build the list of texts to embed
-	texts := []string{q.Query}
-	if q.MoveToward != nil {
-		texts = append(texts, *q.MoveToward)
-	}
-	if q.MoveAway != nil {
-		texts = append(texts, *q.MoveAway)
-	}
+	texts := []string{q.Query, q.MoveToward, q.MoveAway}
 
 	// Create embeddings for all concepts in one call
 	embedResp, err := p.CreateEmbeddings(ctx, texts, model, PineconeInputTypeQuery)
@@ -140,33 +136,24 @@ func (q *SteeringQuery) GetDenseVector(ctx context.Context, p *Pinecone, model P
 	copy(modifiedVector, queryVector)
 
 	// Apply steering toward concept if specified
-	if q.MoveToward != nil {
-		idx := 1
-		if embeddings[idx].Values == nil {
-			return nil, fmt.Errorf("embedding for MoveToward is nil")
-		}
+	if embeddings[1].Values == nil {
+		return nil, fmt.Errorf("embedding for MoveToward is nil")
+	}
 
-		towardVector := *embeddings[idx].Values
-		for i := range modifiedVector {
-			// Add a portion of the difference between toward vector and query vector
-			modifiedVector[i] += float32(q.ForceToward) * (towardVector[i] - queryVector[i])
-		}
+	towardVector := *embeddings[1].Values
+	for i := range modifiedVector {
+		// Add a portion of the difference between toward vector and query vector
+		modifiedVector[i] += float32(q.ForceToward) * (towardVector[i] - queryVector[i])
 	}
 
 	// Apply steering away from concept if specified
-	if q.MoveAway != nil {
-		idx := 1
-		if q.MoveToward != nil {
-			idx = 2
-		}
-		if embeddings[idx].Values == nil {
-			return nil, fmt.Errorf("embedding for MoveAway is nil")
-		}
-		awayVector := *embeddings[idx].Values
-		for i := range modifiedVector {
-			// Subtract a portion of the difference between away vector and query vector
-			modifiedVector[i] -= float32(q.ForceAway) * (awayVector[i] - queryVector[i])
-		}
+	if embeddings[2].Values == nil {
+		return nil, fmt.Errorf("embedding for MoveAway is nil")
+	}
+	awayVector := *embeddings[2].Values
+	for i := range modifiedVector {
+		// Subtract a portion of the difference between away vector and query vector
+		modifiedVector[i] -= float32(q.ForceAway) * (awayVector[i] - queryVector[i])
 	}
 
 	modifiedVector = normalizeVector(modifiedVector)
@@ -216,18 +203,18 @@ func GenerateSteeringQuery(ctx context.Context, transcript *Transcript, opts ...
 		options = append(options, opts...)
 	}
 
-	resp, err := tools.Ask(ctx, prompt, options...)
+	origResp, err := tools.Ask(ctx, prompt, options...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to ask LLM for steering query: %w", err)
 	}
 
-	sq, err := extractSteeringQuery(ctx, resp)
+	sq, err := extractSteeringQuery(ctx, origResp)
 	if err != nil {
 		// try to fix the steering query if it failed to parse
 		fixMsgs := []minds.Message{
 			{
 				Role:    minds.RoleAssistant,
-				Content: resp,
+				Content: origResp,
 			},
 		}
 
@@ -239,11 +226,11 @@ func GenerateSteeringQuery(ctx context.Context, transcript *Transcript, opts ...
 		}
 		prompt = fmt.Sprintf(`The steering query produced is invalid. Error: %s
 		Please fix it and return a valid JSON object in the <answer> tags.`, err.Error())
-		resp, err = tools.Ask(ctx, prompt, options...)
+		revisedResp, err := tools.Ask(ctx, prompt, options...)
 		if err != nil {
 			return nil, fmt.Errorf("failed to ask LLM for steering query again: %w", err)
 		}
-		sq, err = extractSteeringQuery(ctx, resp)
+		sq, err = extractSteeringQuery(ctx, revisedResp)
 		if err != nil {
 			return nil, fmt.Errorf("failed to extract steering query after fix: %w", err)
 		}
@@ -252,6 +239,22 @@ func GenerateSteeringQuery(ctx context.Context, transcript *Transcript, opts ...
 	sq.Validate()
 
 	return sq, nil
+}
+
+// cleanJSONFromMarkdown removes markdown code block markers and trims whitespace
+func cleanJSONFromMarkdown(data string) string {
+	data = strings.TrimSpace(data)
+
+	// Remove opening markdown code block
+	data = strings.TrimPrefix(data, "```json")
+	data = strings.TrimPrefix(data, "```")
+
+	data = strings.TrimSpace(data)
+
+	// Remove closing markdown code block
+	data = strings.TrimSuffix(data, "```")
+
+	return strings.TrimSpace(data)
 }
 
 func extractSteeringQuery(ctx context.Context, data string) (*SteeringQuery, error) {
@@ -271,14 +274,37 @@ func extractSteeringQuery(ctx context.Context, data string) (*SteeringQuery, err
 		}
 		// Extract the JSON data between the tags
 		data = data[start+len("<answer>") : end]
+
 	}
+
+	data = cleanJSONFromMarkdown(data)
 
 	var query SteeringQuery
 	err := json.Unmarshal([]byte(data), &query)
 	if err != nil {
-		query, err = tools.StructuredAsk[SteeringQuery](ctx, "steering-query", "extract the data into this JSON structure\r\n"+string(data), tools.WithModel(tools.GPT41Nano))
+		schema, _ := tools.GenerateJSONSchema(query)
+		jsonB, _ := json.MarshalIndent(schema, "", "  ")
+		prompt := `
+The steering query produced in this data is invalid. Error: "%s"
+
+Remember that all fields are requred. Please fix it and return a valid JSON object in this example format:
+
+%s
+
+Extract the data below into a JSON structure:
+
+%s`
+
+		query, err = tools.StructuredAsk[SteeringQuery](ctx, "steering-query", fmt.Sprintf(prompt, err.Error(), string(jsonB), data), tools.WithModel(tools.GPT41Mini))
 		if err != nil {
 			return nil, fmt.Errorf("LLM failed to parse steering query: %w", err)
+		}
+
+		if err := query.Validate(); err != nil {
+			query, err = tools.StructuredAsk[SteeringQuery](ctx, "steering-query", fmt.Sprintf(prompt, err.Error(), string(jsonB), data), tools.WithModel(tools.GPT41Mini))
+			if err != nil {
+				return nil, fmt.Errorf("LLM failed to parse steering query: %w", err)
+			}
 		}
 	}
 
