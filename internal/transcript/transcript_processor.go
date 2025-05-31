@@ -158,7 +158,7 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 	// Get work preferences
 	//
 	internal.SendPusherMessage(psh, user.ID, "Determining your work preferences", nil)
-	logger.Debug("getting work preferences", "user-id", user.ID, "appointment-id", appointment.ID, "locations-count", len(locations))
+	logger.Debug("extracting GeoID from transcript", "user-id", user.ID, "appointment-id", appointment.ID, "locations-count", len(locations))
 	if err := getWorkPreferences(ctx, fs, transcript, locations, user); err != nil {
 		logger.Error("failed to get work preferences", "error", err, "user-id", user.ID, "appointment-id", appointment.ID)
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
