@@ -171,7 +171,7 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 		internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
 		return
 	}
-	logger.Debug("work preferences extracted", "user-id", user.ID, "appointment-id", appointment.ID, "has-preferences", user.WorkPreferences != nil)
+	logger.Debug("work preferences extracted", "user-id", user.ID, "appointment-id", appointment.ID, "has-preferences", user.LocationPreference != nil)
 
 	//
 	// Generate steering query
@@ -195,16 +195,16 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 	//
 	// Subscribe the user to the generated SearchCriteria
 	//
-	logger.Debug("validating user data", "user-id", user.ID, "appointment-id", appointment.ID, "has-steering-query", user.SteeringQuery != nil, "has-work-preferences", user.WorkPreferences != nil)
-	if user.SteeringQuery == nil || user.WorkPreferences == nil {
-		logger.Error("user steering query or work preferences not found", "user-id", user.ID, "has-steering-query", user.SteeringQuery != nil, "has-work-preferences", user.WorkPreferences != nil)
+	logger.Debug("validating user data", "user-id", user.ID, "appointment-id", appointment.ID, "has-steering-query", user.SteeringQuery != nil, "has-work-preferences", user.LocationPreference != nil)
+	if user.SteeringQuery == nil || user.LocationPreference == nil {
+		logger.Error("user steering query or work preferences not found", "user-id", user.ID, "has-steering-query", user.SteeringQuery != nil, "has-work-preferences", user.LocationPreference != nil)
 		internal.SentryReportError(ctx, fmt.Errorf("user steering query or work preferences not found"), sentry.LevelError, map[string]string{
 			"user_id":              user.ID,
 			"appointment_id":       appointment.ID,
 			"user_email":           user.Email,
 			"call_id":              *appointment.CallID,
 			"has_steering_query":   fmt.Sprintf("%t", user.SteeringQuery != nil),
-			"has_work_preferences": fmt.Sprintf("%t", user.WorkPreferences != nil),
+			"has_work_preferences": fmt.Sprintf("%t", user.LocationPreference != nil),
 			"step":                 "validate user data",
 		})
 		internal.ProcessAppointmentFailed(ctx, fs, user, appointment, fmt.Errorf("user steering query or work preferences not found"))
@@ -607,19 +607,20 @@ func RecoverProcessingAppointments(hub *sentry.Hub, fs *internal.FirestoreClient
 }
 
 func getOrCreateSearchCriteria(ctx context.Context, fs *internal.FirestoreClient, user *internal.User) (*internal.SearchCriteria, bool, error) {
-	if user.SteeringQuery == nil || user.WorkPreferences == nil {
+	if user.SteeringQuery == nil || user.LocationPreference == nil {
 		return nil, false, fmt.Errorf("user steering query or work preferences not found")
 	}
 
-	steeringQuery := user.SteeringQuery.Query
-	workPreferences := *user.WorkPreferences
+	sq := user.SteeringQuery
+	q := user.SteeringQuery.Query
+	locPref := *user.LocationPreference
 
-	geoID, err := internal.ExtractGeoID(ctx, fs, workPreferences)
+	geoID, err := internal.ExtractGeoID(ctx, fs, locPref)
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to extract geo id: %w", err)
 	}
 
-	id := internal.MakeSearchCriteriaID(steeringQuery, geoID)
+	id := internal.MakeSearchCriteriaID(q, geoID, sq.WorkType, sq.ExperienceLevel)
 	criteria, found, err := internal.GetSearchCriteria(ctx, fs, id)
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to get search criteria: %w", err)
@@ -635,7 +636,7 @@ func getOrCreateSearchCriteria(ctx context.Context, fs *internal.FirestoreClient
 		maxPages = 2
 	}
 
-	criteria, err = internal.CreateSearchCriteria(ctx, fs, steeringQuery, geoID, maxPages, internal.DefaultListingAge)
+	criteria, err = internal.CreateSearchCriteria(ctx, fs, q, geoID, sq.WorkType, sq.ExperienceLevel, maxPages, internal.DefaultListingAge)
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to create search criteria: %w", err)
 	}
@@ -699,7 +700,7 @@ func getWorkPreferences(ctx context.Context, fs *internal.FirestoreClient, trans
 		return fmt.Errorf("getWorkPreferences: failed to extract work preferences: %w", err)
 	}
 
-	user.WorkPreferences = prefs
+	user.LocationPreference = prefs
 	if err := internal.SetUserWorkPreferences(ctx, fs, user.ID, *prefs); err != nil {
 		return fmt.Errorf("getWorkPreferences: failed to update appointment with work preferences: %w", err)
 	}

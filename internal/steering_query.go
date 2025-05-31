@@ -22,6 +22,14 @@ type SteeringQuery struct {
 	// Query is the main concept or search term (required)
 	Query string `description:"The canonical form of the one main query term, job title or concept to base the search on."`
 
+	// This parameter will help you filter out the jobs based on the experience required to apply for the job.
+	// Possible Values - internship, entry_level, associate, mid_senior_level & director.
+	ExperienceLevel ExperienceLevel `description:"The experience level to filter results by" enum:"internship, entry_level, associate, mid_senior_level, director"`
+
+	// This parameter will help you filter out the jobs based on their working model.
+	// Possible Values - at_work, remote,  & hybrid.
+	WorkType WorkType `description:"The work type to filter results by" enum:"at_work, remote, hybrid"`
+
 	// MoveToward is a concept as a complete sentence to move results toward
 	MoveToward string `description:"The concept to steer the search results toward, expressed as a first person complete sentence and is required."`
 
