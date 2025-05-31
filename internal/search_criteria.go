@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"os"
 	"talent-rodeo/internal/funcs"
 	"time"
 
@@ -83,13 +84,33 @@ func MakeSearchCriteriaID(query, geoID string, workType WorkType, expLevel Exper
 	return funcs.Slugify(fmt.Sprintf("%s-%s-%s-%s", query, geoID, workType, expLevel))
 }
 
-func CreateSearchCriteria(ctx context.Context, fs *FirestoreClient, query, geoID string, jobType WorkType, expLevel ExperienceLevel, maxPages int, age ListingAge) (*SearchCriteria, error) {
+func CreateSearchCriteria(ctx context.Context, fs *FirestoreClient, query, geoID string, workType WorkType, expLevel ExperienceLevel, maxPages int, age ListingAge) (*SearchCriteria, error) {
+	if query == "" {
+		return nil, fmt.Errorf("query cannot be empty")
+	}
+	if geoID == "" {
+		return nil, fmt.Errorf("geoID cannot be empty")
+	}
+	if maxPages <= 0 {
+		maxPages = DefaultMaxPages // Use default if not specified
+	}
+	if age == "" {
+		age = DefaultListingAge // Use default if not specified
+	}
+	if workType == "" {
+		return nil, fmt.Errorf("workType cannot be empty")
+	}
+	if expLevel == "" {
+		return nil, fmt.Errorf("experienceLevel cannot be empty")
+	}
 	criteria := &SearchCriteria{
-		ID:         MakeSearchCriteriaID(query, geoID, jobType, expLevel),
-		Query:      query,
-		GeoID:      geoID,
-		MaxPages:   maxPages,
-		ListingAge: age,
+		ID:              MakeSearchCriteriaID(query, geoID, workType, expLevel),
+		Query:           query,
+		GeoID:           geoID,
+		MaxPages:        maxPages,
+		ListingAge:      age,
+		WorkType:        workType,
+		ExperienceLevel: expLevel,
 	}
 
 	_, err := fs.Collection(searchCriteriaCollection).Doc(criteria.ID).Create(ctx, criteria)
@@ -223,7 +244,8 @@ func ListSearchCriteria(ctx context.Context, fs *FirestoreClient) ([]SearchCrite
 }
 
 func GetJobIDsForCriteria(ctx context.Context, fs *FirestoreClient, criteriaID string) ([]string, error) {
-	iter := fs.Collection(JobCriteriaLinkCollection).WhereEntity(firestore.PropertyFilter{Path: "CriteriaID", Operator: "==", Value: criteriaID}).Documents(ctx)
+	// Query the subcollection under search_criteria/{criteriaID}/job_details/
+	iter := fs.Collection(searchCriteriaCollection).Doc(criteriaID).Collection(JobDetailsCollection).Documents(ctx)
 	defer iter.Stop()
 
 	var jobs []string
@@ -233,16 +255,22 @@ func GetJobIDsForCriteria(ctx context.Context, fs *FirestoreClient, criteriaID s
 			if err == iterator.Done {
 				break // End of results
 			}
-			return nil, fmt.Errorf("failed iterating job_criteria_links: %w", err)
+			return nil, fmt.Errorf("failed iterating job_details subcollection: %w", err)
 		}
-		jobs = append(jobs, doc.Data()["JobID"].(string))
+
+		var link JobDetailCriteriaLink
+		if err := doc.DataTo(&link); err != nil {
+			return nil, fmt.Errorf("failed to parse job detail link: %w", err)
+		}
+		jobs = append(jobs, link.JobID)
 	}
 
 	return jobs, nil
 }
 
 func GetJobIDsForCriteriaCreatedAfter(ctx context.Context, fs *FirestoreClient, criteriaID string, createdAfter time.Time) ([]string, error) {
-	iter := fs.Collection(JobCriteriaLinkCollection).WhereEntity(firestore.PropertyFilter{Path: "CriteriaID", Operator: "==", Value: criteriaID}).WhereEntity(firestore.PropertyFilter{Path: "CreatedAt", Operator: ">", Value: createdAfter}).Documents(ctx)
+	// Query the subcollection under search_criteria/{criteriaID}/job_details/ with CreatedAt filter
+	iter := fs.Collection(searchCriteriaCollection).Doc(criteriaID).Collection(JobDetailsCollection).WhereEntity(firestore.PropertyFilter{Path: "CreatedAt", Operator: ">", Value: createdAfter}).Documents(ctx)
 	defer iter.Stop()
 
 	var jobs []string
@@ -252,9 +280,14 @@ func GetJobIDsForCriteriaCreatedAfter(ctx context.Context, fs *FirestoreClient, 
 			if err == iterator.Done {
 				break // End of results
 			}
-			return nil, fmt.Errorf("failed iterating job_criteria_links: %w", err)
+			return nil, fmt.Errorf("failed iterating job_details subcollection: %w", err)
 		}
-		jobs = append(jobs, doc.Data()["JobID"].(string))
+
+		var link JobDetailCriteriaLink
+		if err := doc.DataTo(&link); err != nil {
+			return nil, fmt.Errorf("failed to parse job detail link: %w", err)
+		}
+		jobs = append(jobs, link.JobID)
 	}
 
 	return jobs, nil
@@ -268,14 +301,78 @@ func UpdateSearchCriteria(ctx context.Context, fs *FirestoreClient, criteria *Se
 	return nil
 }
 
+// DeleteSearchCriteria deletes a search criteria and all related data:
+// - Unsubscribes all users from the criteria
+// - Unlinks all job details from the criteria
+// - Deletes all search tasks associated with the criteria
 func DeleteSearchCriteria(ctx context.Context, fs *FirestoreClient, id string) error {
-	_, err := fs.Collection(searchCriteriaCollection).Doc(id).Delete(ctx)
+	subscribers, err := GetCriteriaSubscribers(ctx, fs, id)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get subscribers for search criteria ID %s: %w", id, err)
 	}
-	return nil
-}
 
-func DeleteSearchCriteriaTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, id string) error {
-	return tx.Delete(fs.Collection(searchCriteriaCollection).Doc(id))
+	jobIDs, err := GetJobIDsForCriteria(ctx, fs, id)
+	if err != nil {
+		return fmt.Errorf("failed to get job IDs for search criteria ID %s: %w", id, err)
+	}
+
+	searchTasks, err := GetSearchTasksForCriteria(ctx, fs, id)
+	if err != nil {
+		return fmt.Errorf("failed to get search tasks for search criteria ID %s: %w", id, err)
+	}
+
+	return fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+
+		for _, sub := range subscribers {
+			err = UnsubscribeFromCriteriaTx(ctx, fs, tx, sub.UserID, id)
+			if err != nil {
+				return fmt.Errorf("failed to unsubscribe user %s from search criteria ID %s: %w", sub.UserID, id, err)
+			}
+		}
+
+		for _, jobID := range jobIDs {
+			err = UnlinkJobDetailFromCriteriaTx(ctx, fs, tx, jobID, id)
+			if err != nil {
+				return fmt.Errorf("failed to unlink job ID %s from search criteria ID %s: %w", jobID, id, err)
+			}
+
+		}
+
+		for _, searchTask := range searchTasks {
+			err = DeleteSearchTaskTx(ctx, fs, tx, searchTask.ID)
+			if err != nil {
+				return fmt.Errorf("failed to delete search task ID %s for search criteria ID %s: %w", searchTask.ID, id, err)
+			}
+		}
+
+		if len(jobIDs) > 0 {
+			denseHost := os.Getenv("PINECONE_DENSE_INDEX_HOST")
+			if denseHost == "" {
+				return fmt.Errorf("PINECONE_DENSE_INDEX_HOST is not set")
+			}
+
+			sparseHost := os.Getenv("PINECONE_SPARSE_INDEX_HOST")
+			if sparseHost == "" {
+				return fmt.Errorf("PINECONE_SPARSE_INDEX_HOST is not set")
+			}
+
+			pc, err := NewPineconeClient()
+			if err != nil {
+				return fmt.Errorf("failed to create Pinecone client: %w", err)
+			}
+			if err := pc.DeleteRecords(ctx, denseHost, "job-details", jobIDs); err != nil {
+				return fmt.Errorf("failed to delete records from Pinecone: %w", err)
+			}
+			if err := pc.DeleteRecords(ctx, sparseHost, "job-details", jobIDs); err != nil {
+				return fmt.Errorf("failed to delete records from Pinecone: %w", err)
+			}
+		}
+
+		err = tx.Delete(fs.Collection(searchCriteriaCollection).Doc(id))
+		if err != nil {
+			return fmt.Errorf("failed to delete search criteria ID %s: %w", id, err)
+		}
+
+		return nil
+	})
 }

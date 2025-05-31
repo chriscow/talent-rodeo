@@ -9,18 +9,17 @@ import (
 
 	"talent-rodeo/internal"
 
-	"cloud.google.com/go/firestore"
 	"github.com/spf13/cobra"
 )
 
 var (
-	criteriaQueryFlag         string
-	criteriaGeoIDFlag         string
-	criteriaMaxPagesFlag      int
-	criteriaWorkTypeFlag      string
-	criteriaExperienceFlag    string
-	criteriaListingAgeFlag    string
-	criteriaAllFlag           bool
+	criteriaQueryFlag      string
+	criteriaGeoIDFlag      string
+	criteriaMaxPagesFlag   int
+	criteriaWorkTypeFlag   string
+	criteriaExperienceFlag string
+	criteriaListingAgeFlag string
+	criteriaAllFlag        bool
 )
 
 func init() {
@@ -179,80 +178,16 @@ func runDeleteCriteria(cmd *cobra.Command, args []string) error {
 	}
 	defer fs.Close()
 
-	// Get ID from args
-	id := args[0]
+	// Get criteria ID from arguments
+	criteriaID := args[0]
 
-	subscribers, err := internal.GetCriteriaSubscribers(ctx, fs, id)
-	if err != nil {
-		return fmt.Errorf("failed to get subscribers for search criteria ID %s: %w", id, err)
+	// Delete search criteria and all related data
+	if err := internal.DeleteSearchCriteria(ctx, fs, criteriaID); err != nil {
+		return fmt.Errorf("failed to delete search criteria with ID %s: %w", criteriaID, err)
 	}
 
-	jobIDs, err := internal.GetJobIDsForCriteria(ctx, fs, id)
-	if err != nil {
-		return fmt.Errorf("failed to get job IDs for search criteria ID %s: %w", id, err)
-	}
-
-	searchTasks, err := internal.GetSearchTasksForCriteria(ctx, fs, id)
-	if err != nil {
-		return fmt.Errorf("failed to get search tasks for search criteria ID %s: %w", id, err)
-	}
-
-	return fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-
-		for _, sub := range subscribers {
-			// Unsubscribe each user from the criteria
-			err = internal.UnsubscribeFromCriteriaTx(ctx, fs, tx, sub.UserID, id)
-			if err != nil {
-				return fmt.Errorf("failed to unsubscribe user %s from search criteria ID %s: %w", sub.UserID, id, err)
-			}
-		}
-
-		for _, jobID := range jobIDs {
-			err = internal.UnlinkJobDetailFromCriteriaTx(ctx, fs, tx, jobID, id)
-			if err != nil {
-				return fmt.Errorf("failed to unlink job ID %s from search criteria ID %s: %w", jobID, id, err)
-			}
-
-		}
-
-		for _, searchTask := range searchTasks {
-			err = internal.DeleteSearchTaskTx(ctx, fs, tx, searchTask.ID)
-			if err != nil {
-				return fmt.Errorf("failed to delete search task ID %s for search criteria ID %s: %w", searchTask.ID, id, err)
-			}
-		}
-
-		if len(jobIDs) > 0 {
-			denseHost := os.Getenv("PINECONE_DENSE_INDEX_HOST")
-			if denseHost == "" {
-				return fmt.Errorf("PINECONE_DENSE_INDEX_HOST is not set")
-			}
-
-			sparseHost := os.Getenv("PINECONE_SPARSE_INDEX_HOST")
-			if sparseHost == "" {
-				return fmt.Errorf("PINECONE_SPARSE_INDEX_HOST is not set")
-			}
-
-			pc, err := internal.NewPineconeClient()
-			if err != nil {
-				return fmt.Errorf("failed to create Pinecone client: %w", err)
-			}
-			if err := pc.DeleteRecords(ctx, denseHost, "job-details", jobIDs); err != nil {
-				return fmt.Errorf("failed to delete records from Pinecone: %w", err)
-			}
-			if err := pc.DeleteRecords(ctx, sparseHost, "job-details", jobIDs); err != nil {
-				return fmt.Errorf("failed to delete records from Pinecone: %w", err)
-			}
-		}
-
-		err = internal.DeleteSearchCriteriaTx(ctx, fs, tx, id)
-		if err != nil {
-			return fmt.Errorf("failed to delete search criteria ID %s: %w", id, err)
-		}
-		fmt.Printf("Search criteria deleted successfully: %s\n", id)
-
-		return nil
-	})
+	fmt.Printf("Search criteria with ID %s deleted successfully\n", criteriaID)
+	return nil
 }
 
 func displayCriteria(criteria []internal.SearchCriteria, showAll bool) error {
