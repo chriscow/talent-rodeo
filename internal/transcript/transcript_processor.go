@@ -612,6 +612,9 @@ func getOrCreateSearchCriteria(ctx context.Context, fs *internal.FirestoreClient
 	}
 
 	sq := user.SteeringQuery
+	if sq.Query == "" || sq.WorkType == "" || sq.ExperienceLevel == "" {
+		return nil, false, fmt.Errorf("steering query is incomplete: %v", sq)
+	}
 	q := user.SteeringQuery.Query
 	locPref := *user.LocationPreference
 

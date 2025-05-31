@@ -55,6 +55,22 @@ func (sq SteeringQuery) Validate() error {
 		return fmt.Errorf("query cannot be empty")
 	}
 
+	if sq.ExperienceLevel == "" {
+		return fmt.Errorf("experience level cannot be empty")
+	}
+
+	if sq.WorkType == "" {
+		return fmt.Errorf("work type cannot be empty")
+	}
+
+	if sq.MoveToward == "" {
+		return fmt.Errorf("MoveToward cannot be empty")
+	}
+
+	if sq.MoveAway == "" {
+		return fmt.Errorf("MoveAway cannot be empty")
+	}
+
 	if sq.RerankQuery == "" {
 		return fmt.Errorf("rerank query cannot be empty")
 	}

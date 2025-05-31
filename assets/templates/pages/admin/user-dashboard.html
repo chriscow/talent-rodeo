@@ -296,12 +296,13 @@
 
 
     <div class="job-content">
-        {{with .JobDetail.ExtractedData.Summary}}
+        {{with .JobDetail.ExtractedData}}
+        {{with .Summary}}
         <div class="summary">
             <p>{{.}}</p>
         </div>
         {{end}}
-        {{with .JobDetail.ExtractedData.Responsibilities}}
+        {{with .Responsibilities}}
         <div class="responsibilities">
             <h4>Responsibilities</h4>
             <ul>
@@ -311,7 +312,7 @@
             </ul>
         </div>
         {{end}}
-        {{with .JobDetail.ExtractedData.Skills}}
+        {{with .Skills}}
         <div class="skills">
             <h4>Skills</h4>
             <ul>
@@ -321,7 +322,7 @@
             </ul>
         </div>
         {{end}}
-        {{with .JobDetail.ExtractedData.Requirements}}
+        {{with .Requirements}}
         <div class="requirements">
             <h4>Requirements</h4>
             <ul>
@@ -329,9 +330,9 @@
                 <li>{{.}}</li>
                 {{end}}
             </ul>
-        {{end}}
         </div>
-        {{with .JobDetail.ExtractedData.Qualifications}}
+        {{end}}
+        {{with .Qualifications}}
         <div class="qualifications">
             <h4>Qualifications</h4>
             <ul>
@@ -341,7 +342,7 @@
             </ul>
         </div>
         {{end}}
-        {{with .JobDetail.ExtractedData.BonusQualifications}}
+        {{with .BonusQualifications}}
         <div class="bonus-qualifications">
             <h4>Bonus Qualifications</h4>
             <ul>
@@ -350,6 +351,7 @@
                 {{end}}
             </ul>
         </div>
+        {{end}}
         {{end}}
     </div>
     <footer>

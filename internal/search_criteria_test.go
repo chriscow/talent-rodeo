@@ -399,34 +399,39 @@ func TestSearchCriteria(t *testing.T) {
 			t.Fatalf("CreateSearchCriteria() error = %v", err)
 		}
 
-		// Create test job-criteria links in Firestore
+		// Create test job-criteria links in Firestore using the new subcollection structure
 		jobID1 := fmt.Sprintf("job1-%d", timestamp)
 		jobID2 := fmt.Sprintf("job2-%d", timestamp)
 
-		// Create links between jobs and criteria
+		// Create links between jobs and criteria using subcollections
 		ctx := context.Background()
-		_, err = client.Collection("job_criteria_links").Doc(fmt.Sprintf("%s-%s", criteria.ID, jobID1)).
+		linkID1 := fmt.Sprintf("%s_%s", criteria.ID, jobID1)
+		linkID2 := fmt.Sprintf("%s_%s", criteria.ID, jobID2)
+
+		_, err = client.Collection("search_criteria").Doc(criteria.ID).Collection("job_details").Doc(linkID1).
 			Create(ctx, map[string]interface{}{
 				"CriteriaID": criteria.ID,
 				"JobID":      jobID1,
+				"CreatedAt":  time.Now(),
 			})
 		if err != nil {
 			t.Fatalf("Failed to create job-criteria link 1: %v", err)
 		}
 
-		_, err = client.Collection("job_criteria_links").Doc(fmt.Sprintf("%s-%s", criteria.ID, jobID2)).
+		_, err = client.Collection("search_criteria").Doc(criteria.ID).Collection("job_details").Doc(linkID2).
 			Create(ctx, map[string]interface{}{
 				"CriteriaID": criteria.ID,
 				"JobID":      jobID2,
+				"CreatedAt":  time.Now(),
 			})
 		if err != nil {
 			t.Fatalf("Failed to create job-criteria link 2: %v", err)
 		}
 
-		// Test cleanup for job_criteria_links
+		// Test cleanup for job_details subcollection
 		t.Cleanup(func() {
-			client.Collection("job_criteria_links").Doc(fmt.Sprintf("%s-%s", criteria.ID, jobID1)).Delete(ctx)
-			client.Collection("job_criteria_links").Doc(fmt.Sprintf("%s-%s", criteria.ID, jobID2)).Delete(ctx)
+			client.Collection("search_criteria").Doc(criteria.ID).Collection("job_details").Doc(linkID1).Delete(ctx)
+			client.Collection("search_criteria").Doc(criteria.ID).Collection("job_details").Doc(linkID2).Delete(ctx)
 		})
 
 		// Get job IDs for criteria

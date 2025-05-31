@@ -109,8 +109,6 @@ func (c *APIClient) SearchJobListings(ctx context.Context, query, location strin
 	q.Set("page", strconv.Itoa(page))
 	baseURL.RawQuery = q.Encode()
 
-	c.logger.Debug("URL", "url", baseURL.String())
-
 	// Create request
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL.String(), nil)
 	if err != nil {
