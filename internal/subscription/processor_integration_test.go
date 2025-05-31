@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"talent-rodeo/internal"
+
+	"cloud.google.com/go/firestore"
 )
 
 func TestProcessorIntegration(t *testing.T) {
@@ -126,14 +128,23 @@ func TestProcessorIntegration(t *testing.T) {
 			Description: "We are looking for a software engineer with 3+ years of experience in Go and cloud technologies.",
 			URL:         "https://www.scrapingdog.com/jobs/software-engineer",
 		}
-		err = internal.SaveJobDetail(ctx, fs, jobDetail)
-		if err != nil {
-			t.Fatalf("Failed to create test job detail: %v", err)
-		}
 
-		err = internal.LinkJobDetailToCriteria(ctx, fs, criteria.ID, jobDetail.ID)
+		err = fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+			err = internal.SaveJobDetailTx(ctx, fs, tx, jobDetail)
+			if err != nil {
+				t.Fatalf("Failed to create test job detail: %v", err)
+			}
+
+			err = internal.LinkJobDetailToCriteriaTx(ctx, fs, tx, criteria.ID, jobDetail.ID)
+			if err != nil {
+				t.Fatalf("Failed to link job detail to criteria: %v", err)
+			}
+
+			return nil
+		})
+
 		if err != nil {
-			t.Fatalf("Failed to link job detail to criteria: %v", err)
+			t.Fatalf("Failed to set up test job detail: %v", err)
 		}
 
 		// Start the processor
