@@ -331,7 +331,7 @@ func DeleteSearchCriteria(ctx context.Context, fs *FirestoreClient, id string) e
 		}
 
 		for _, jobID := range jobIDs {
-			err = UnlinkJobDetailFromCriteriaTx(ctx, fs, tx, jobID, id)
+			err = UnlinkJobDetailFromCriteriaTx(ctx, fs, tx, id, jobID)
 			if err != nil {
 				return fmt.Errorf("failed to unlink job ID %s from search criteria ID %s: %w", jobID, id, err)
 			}
