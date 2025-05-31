@@ -25,7 +25,8 @@ const (
 
 // SearchTask represents a queued job search with a provider.
 type SearchTask struct {
-	ID             string
+	ID string
+	// Snapshot of the search criteria used for this task
 	Criteria       SearchCriteria
 	Provider       string
 	Status         SearchTaskStatus
@@ -34,6 +35,11 @@ type SearchTask struct {
 	PagesTotal     int
 	CreatedAt      time.Time
 	UpdatedAt      *time.Time
+}
+
+type JobDetailRef struct {
+	JobID     string    `firestore:"job_id"`
+	CreatedAt time.Time `firestore:"created_at"`
 }
 
 var ErrSearchTaskExists = errors.New("search task already exists")
@@ -136,11 +142,6 @@ func SetSearchTaskStatus(ctx context.Context, fs *FirestoreClient, id string, st
 	return err
 }
 
-type JobDetailRef struct {
-	JobID     string    `firestore:"job_id"`
-	CreatedAt time.Time `firestore:"created_at"`
-}
-
 // LinkJobDetailToSearchTaskTx adds a JobDetail as a subcollection doc under a SearchTask.
 func LinkJobDetailToSearchTaskTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, searchTaskID string, jobID string) error {
 	if searchTaskID == "" || jobID == "" {
@@ -178,4 +179,59 @@ func GetJobIDsForSearchTask(ctx context.Context, fs *FirestoreClient, searchTask
 		jobIDs = append(jobIDs, job.JobID)
 	}
 	return jobIDs, nil
+}
+
+func GetSearchTasksForCriteria(ctx context.Context, fs *FirestoreClient, criteriaID string) ([]SearchTask, error) {
+	if criteriaID == "" {
+		return nil, fmt.Errorf("criteriaID is required")
+	}
+
+	iter := fs.Collection(SearchTaskCollection).Where("Criteria.ID", "==", criteriaID).Documents(ctx)
+
+	var searchTasks []SearchTask
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		searchTask := SearchTask{}
+		if err = doc.DataTo(&searchTask); err != nil {
+			return nil, err
+		}
+		searchTasks = append(searchTasks, searchTask)
+	}
+
+	return searchTasks, nil
+}
+
+func DeleteSearchTaskTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, searchTaskID string) error {
+	if searchTaskID == "" {
+		return fmt.Errorf("searchTaskID is required")
+	}
+
+	// Delete all job details subcollection documents
+	jobDetailsCol := fs.Collection(SearchTaskCollection).Doc(searchTaskID).Collection(JobDetailsCollection)
+	iter := jobDetailsCol.Documents(ctx)
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("error iterating job details: %w", err)
+		}
+		if err := tx.Delete(doc.Ref); err != nil {
+			return fmt.Errorf("failed to delete job detail %s: %w", doc.Ref.ID, err)
+		}
+	}
+
+	// Delete the main search task document
+	if err := tx.Delete(fs.Collection(SearchTaskCollection).Doc(searchTaskID)); err != nil {
+		return fmt.Errorf("failed to delete search task: %w", err)
+	}
+
+	return nil
 }
