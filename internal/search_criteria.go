@@ -96,7 +96,7 @@ func GetSearchCriteria(ctx context.Context, fs *FirestoreClient, id string) (*Se
 
 // GetSearchCriteriaNeedsSearch retrieves all search criteria from Firestore
 // that either have never been searched (LastSearchedAt is nil) or haven't
-// been searched in the last 24 hours.
+// been searched in the last 24 hours, and don't already have incomplete search tasks.
 func GetSearchCriteriaNeedsSearch(ctx context.Context, fs *FirestoreClient) ([]SearchCriteria, error) {
 	ids, err := ListSubscribedCriteriaIDs(ctx, fs)
 	if err != nil {
@@ -105,6 +105,18 @@ func GetSearchCriteriaNeedsSearch(ctx context.Context, fs *FirestoreClient) ([]S
 	if len(ids) == 0 {
 		// No subscribed criteria, return empty slice
 		return []SearchCriteria{}, nil
+	}
+
+	// Get incomplete search tasks to exclude criteria that are already being processed
+	incompleteTasks, err := GetIncompleteSearchTasks(ctx, fs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get incomplete search tasks: %w", err)
+	}
+
+	// Create a set of criteria IDs that already have incomplete tasks
+	excludedCriteriaIDs := make(map[string]bool)
+	for _, task := range incompleteTasks {
+		excludedCriteriaIDs[task.Criteria.ID] = true
 	}
 
 	coll := fs.Collection(searchCriteriaCollection)
@@ -142,6 +154,12 @@ func GetSearchCriteriaNeedsSearch(ctx context.Context, fs *FirestoreClient) ([]S
 			// For now, return the error to avoid partial results.
 			return nil, fmt.Errorf("failed parsing criteria data (ID: %s): %w", doc.Ref.ID, err)
 		}
+
+		// Skip criteria that already have incomplete search tasks
+		if excludedCriteriaIDs[criteria.ID] {
+			continue
+		}
+
 		items = append(items, criteria)
 	}
 

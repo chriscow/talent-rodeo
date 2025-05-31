@@ -353,13 +353,7 @@
         {{end}}
     </div>
     <footer>
-        <small>Added {{.JobDetail.CreatedAt | humanDate}} &nbsp; | &nbsp; 
-        {{if .IsSemanticOnly}}
-            {{percentage .ScoredJobDetail.Score 1}}
-        {{else}}
-            {{percentage .UserJob.Score 1}}
-        {{end}}
-        </small>
+        <small>Added {{.JobDetail.CreatedAt | humanDate}} &nbsp; | &nbsp; {{rrfPercentage .ScoredJobDetail.Score}}% match &nbsp; | &nbsp; {{.ScoredJobDetail.Score}} &nbsp; | &nbsp; {{rrfStars .ScoredJobDetail.Score}}</small>
     </footer>
 </article>
 {{end}}

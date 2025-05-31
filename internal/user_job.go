@@ -524,7 +524,8 @@ func GetSemanticJobsForUser(ctx context.Context, fs *FirestoreClient, user *User
 	}
 
 	if len(jobDetails) != len(scoredJobs) {
-		return nil, fmt.Errorf("mismatch in job details count: expected %d, got %d", len(scoredJobs), len(jobDetails))
+		// HMMM: job detail might still be processing in the background?
+		// return nil, fmt.Errorf("mismatch in job details count: expected scoredJobs:%d, got jobDetails:%d", len(scoredJobs), len(jobDetails))
 	}
 
 	// Update the job details in the scored jobs

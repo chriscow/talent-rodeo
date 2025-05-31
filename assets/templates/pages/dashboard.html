@@ -208,7 +208,7 @@
         {{end}}
     </div>
     <footer>
-        <small>Added {{.JobDetail.CreatedAt | humanDate}} &nbsp; | &nbsp; {{percentage .ScoredJobDetail.Score 1}}</small>
+        <small>Added {{.JobDetail.CreatedAt | humanDate}} &nbsp; | &nbsp; {{rrfPercentage .ScoredJobDetail.Score}}% match</small>
     </footer>
 </article>
 {{end}}

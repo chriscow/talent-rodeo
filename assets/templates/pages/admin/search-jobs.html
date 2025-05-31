@@ -87,6 +87,7 @@
     
     <form method="POST" autocomplete="off">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <input type="hidden" name="previous_user_id" value="{{.SelectedUserID}}">
         <label for="user_id">Select User</label>
         <select name="user_id" id="user_id" onchange="this.form.submit()">
             <option value="">-- Any User (Use Form Values) --</option>

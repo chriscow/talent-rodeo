@@ -137,7 +137,7 @@ func (c *APIClient) SearchJobListings(ctx context.Context, query, location strin
 
 // GetJobDetails retrieves detailed information for a specific job
 func (c *APIClient) GetJobDetails(ctx context.Context, jobID string) (LinkedInJobDetail, error) {
-	c.logger.Debug("getting job details", "jobID", jobID)
+	c.logger.Debug("getting job details from scrapingdog", "jobID", jobID)
 
 	// Construct URL with jobid parameter
 	baseURL, err := url.Parse(c.baseURL)
@@ -153,11 +153,6 @@ func (c *APIClient) GetJobDetails(ctx context.Context, jobID string) (LinkedInJo
 	params.Add("job_id", jobID)
 
 	baseURL.RawQuery = params.Encode()
-
-	// Log constructed URL at info level so it's visible in test output
-	c.logger.Debug("constructed URL for job details",
-		"job_id", jobID,
-		"url", baseURL.String())
 
 	// Create request
 	req, err := http.NewRequestWithContext(ctx, "GET", baseURL.String(), nil)
