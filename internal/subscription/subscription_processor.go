@@ -323,7 +323,7 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 	}
 
 	if len(jobIDs) == 0 {
-		p.logger.Info("No new jobs found for criteria, skipping", "id", criteria.ID)
+		p.logger.Info("no new jobs found for criteria, skipping", "id", criteria.ID)
 		return nil
 	}
 
