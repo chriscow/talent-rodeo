@@ -4,7 +4,22 @@ You will be provided with two pieces of information: the job seeker's resume and
 
 Your task is to analyze these documents and extract the following information:
 
-1. Query: The main job title or concept to base the search on, in its canonical form.
+1. Query: The canonical form of the programming language, primary technology stack, job title or concept to base the search on.
+
+To determine the query:
+   A. Identify the primary career field of the individual.
+   B. Determine if this career is typically best searched by specific skills or by job title. Consider the following guidelines:
+      - Software development and highly technical fields are often best searched by specific skills.
+      - Most other careers are typically best searched by job title.
+
+   C. If the career is best searched by skills:
+      i. Identify the individual's primary technical skill or tool (e.g., a programming language like Python, Java, or Go).
+      ii. Ensure this is a core skill, not an ancillary one like a database system or cloud provider.
+
+   D. If the career is best searched by job title:
+      i. Identify the most appropriate job title based on the individual's experience and qualifications.
+
+
 2. MoveToward: A phrase describing what the job seeker wants in a position.
 3. MoveAway: A phrase describing what the job seeker wants to avoid in a position.
 4. RerankQuery: A comprehensive query combining the original query, MoveToward, and MoveAway concepts.
@@ -20,7 +35,9 @@ Follow these steps to complete the task:
    b. Determine the MoveToward concept based on positive preferences expressed by the job seeker.
       - List specific quotes that indicate what the job seeker wants in a position.
    c. Determine the MoveAway concept based on aspects the job seeker wants to avoid.
+      **IMPORTANT** The MoveAway string is used to create a negating vector in a dense vector search. For this reason, MoveAway should be written as if the user desires this concept.
       - List specific quotes that indicate what the job seeker wants to avoid.
+      - Write the MoveAway concept in the first person as if the user desires it.
    d. Create a RerankQuery by combining the Query, MoveToward, and MoveAway concepts into a concise sentence.
       - Explain how you've incorporated each element into the RerankQuery.
    e. Determine the ExperienceLevel based on the resume and conversation.
