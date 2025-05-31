@@ -173,7 +173,10 @@ func TestProcessorIntegration(t *testing.T) {
 		// Create test criteria with no subscribers
 		criteriaQuery := fmt.Sprintf("%s-no-subs", testPrefix)
 		geoID := "us-ny-newyork"
-		criteria, err := internal.CreateSearchCriteria(ctx, fs, criteriaQuery, geoID, 2, internal.DefaultListingAge)
+		workPref := internal.WorkTypeAtWork
+		expLvl := internal.ExperienceLevelEntryLevel
+
+		criteria, err := internal.CreateSearchCriteria(ctx, fs, criteriaQuery, geoID, workPref, expLvl, 2, internal.DefaultListingAge)
 		if err != nil {
 			t.Fatalf("Failed to create test criteria: %v", err)
 		}
@@ -224,7 +227,9 @@ func TestProcessorIntegration(t *testing.T) {
 		// Create test criteria with no recent jobs
 		criteriaQuery := fmt.Sprintf("%s-no-jobs", testPrefix)
 		geoID := "us-ca-losangeles"
-		criteria, err := internal.CreateSearchCriteria(ctx, fs, criteriaQuery, geoID, 2, internal.DefaultListingAge)
+		workType := internal.WorkTypeRemote
+		expLevel := internal.ExperienceLevelEntryLevel
+		criteria, err := internal.CreateSearchCriteria(ctx, fs, criteriaQuery, geoID, workType, expLevel, 2, internal.DefaultListingAge)
 		if err != nil {
 			t.Fatalf("Failed to create test criteria: %v", err)
 		}
@@ -303,7 +308,9 @@ func TestProcessorIntegration(t *testing.T) {
 		// Create test criteria that has been published recently
 		criteriaQuery := fmt.Sprintf("%s-recent-pub", testPrefix)
 		geoID := "us-fl-miami"
-		criteria, err := internal.CreateSearchCriteria(ctx, fs, criteriaQuery, geoID, 2, internal.DefaultListingAge)
+		workType := internal.WorkTypeHybrid
+		expLevel := internal.ExperienceLevelEntryLevel
+		criteria, err := internal.CreateSearchCriteria(ctx, fs, criteriaQuery, geoID, workType, expLevel, 2, internal.DefaultListingAge)
 		if err != nil {
 			t.Fatalf("Failed to create test criteria: %v", err)
 		}

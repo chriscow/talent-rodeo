@@ -46,8 +46,8 @@ type User struct {
 
 	State UserState
 
-	SteeringQuery   *SteeringQuery
-	WorkPreferences *string
+	SteeringQuery      *SteeringQuery
+	LocationPreference *string
 
 	Tier            UserTier
 	CompletedAt     *time.Time

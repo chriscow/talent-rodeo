@@ -30,9 +30,11 @@ func TestSearchCriteria(t *testing.T) {
 		geoID := "us-wa-seattle"
 		maxPages := 5
 		age := ListingAgeMonth
+		workType := WorkTypeRemote
+		expLevel := ExperienceLevelEntryLevel
 
 		// Create search criteria
-		created, err := CreateSearchCriteria(ctx, client, query, geoID, maxPages, age)
+		created, err := CreateSearchCriteria(ctx, client, query, geoID, workType, expLevel, maxPages, age)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() error = %v", err)
 		}
@@ -86,9 +88,11 @@ func TestSearchCriteria(t *testing.T) {
 		geoID := "us-ca-sanfrancisco"
 		maxPages := 3
 		age := ListingAgeMonth
+		workType := WorkTypeHybrid
+		expLevel := ExperienceLevelEntryLevel
 
 		// Create search criteria
-		created, err := CreateSearchCriteria(ctx, client, query, geoID, maxPages, age)
+		created, err := CreateSearchCriteria(ctx, client, query, geoID, workType, expLevel, maxPages, age)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() error = %v", err)
 		}
@@ -127,14 +131,18 @@ func TestSearchCriteria(t *testing.T) {
 		// Create criteria that needs search (never searched) with subscribers
 		timestamp := time.Now().UnixNano()
 		query1 := fmt.Sprintf("%s-never-searched-%d", testPrefix, timestamp)
-		created1, err := CreateSearchCriteria(ctx, client, query1, "us-ny-newyork", 2, ListingAgeMonth)
+		workType1 := WorkTypeRemote
+		expLevel1 := ExperienceLevelEntryLevel
+		created1, err := CreateSearchCriteria(ctx, client, query1, "us-ny-newyork", workType1, expLevel1, 2, ListingAgeMonth)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() never searched error = %v", err)
 		}
 
 		// Create criteria searched more than 24 hours ago with subscribers
 		query2 := fmt.Sprintf("%s-old-search-%d", testPrefix, timestamp)
-		created2, err := CreateSearchCriteria(ctx, client, query2, "us-tx-austin", 2, ListingAgeMonth)
+		workType2 := WorkTypeAtWork
+		expLevel2 := ExperienceLevelEntryLevel
+		created2, err := CreateSearchCriteria(ctx, client, query2, "us-tx-austin", workType2, expLevel2, 2, ListingAgeMonth)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() old search error = %v", err)
 		}
@@ -148,7 +156,9 @@ func TestSearchCriteria(t *testing.T) {
 
 		// Create criteria searched recently (should not need search) with subscribers
 		query3 := fmt.Sprintf("%s-recent-search-%d", testPrefix, timestamp)
-		created3, err := CreateSearchCriteria(ctx, client, query3, "us-fl-miami", 2, ListingAgeMonth)
+		workType3 := WorkTypeHybrid
+		expLevel3 := ExperienceLevelEntryLevel
+		created3, err := CreateSearchCriteria(ctx, client, query3, "us-fl-miami", workType3, expLevel3, 2, ListingAgeMonth)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() recent search error = %v", err)
 		}
@@ -162,14 +172,18 @@ func TestSearchCriteria(t *testing.T) {
 
 		// Create criteria that needs search (never searched) with NO subscribers
 		query4 := fmt.Sprintf("%s-never-searched-no-subs-%d", testPrefix, timestamp)
-		created4, err := CreateSearchCriteria(ctx, client, query4, "us-il-chicago", 2, ListingAgeMonth)
+		workType4 := WorkTypeRemote
+		expLevel4 := ExperienceLevelEntryLevel
+		created4, err := CreateSearchCriteria(ctx, client, query4, "us-il-chicago", workType4, expLevel4, 2, ListingAgeMonth)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() no subscribers error = %v", err)
 		}
 
 		// Create criteria searched more than 24 hours ago with NO subscribers
 		query5 := fmt.Sprintf("%s-old-search-no-subs-%d", testPrefix, timestamp)
-		created5, err := CreateSearchCriteria(ctx, client, query5, "us-ga-atlanta", 2, ListingAgeMonth)
+		workType5 := WorkTypeAtWork
+		expLevel5 := ExperienceLevelEntryLevel
+		created5, err := CreateSearchCriteria(ctx, client, query5, "us-ga-atlanta", workType5, expLevel5, 2, ListingAgeMonth)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() old search no subscribers error = %v", err)
 		}
@@ -292,14 +306,18 @@ func TestSearchCriteria(t *testing.T) {
 
 		// Create first criteria
 		query1 := fmt.Sprintf("%s-all-1-%d", testPrefix, timestamp)
-		created1, err := CreateSearchCriteria(ctx, client, query1, "us-wa-seattle", 3, ListingAgeMonth)
+		workType1 := WorkTypeRemote
+		expLevel1 := ExperienceLevelEntryLevel
+		created1, err := CreateSearchCriteria(ctx, client, query1, "us-wa-seattle", workType1, expLevel1, 3, ListingAgeMonth)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() for GetAll test error = %v", err)
 		}
 
 		// Create second criteria
 		query2 := fmt.Sprintf("%s-all-2-%d", testPrefix, timestamp)
-		created2, err := CreateSearchCriteria(ctx, client, query2, "us-ca-sanfrancisco", 4, ListingAgeMonth)
+		workType2 := WorkTypeHybrid
+		expLevel2 := ExperienceLevelEntryLevel
+		created2, err := CreateSearchCriteria(ctx, client, query2, "us-ca-sanfrancisco", workType2, expLevel2, 4, ListingAgeMonth)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() for GetAll test error = %v", err)
 		}
@@ -329,7 +347,9 @@ func TestSearchCriteria(t *testing.T) {
 		// Create a criteria to delete
 		timestamp := time.Now().UnixNano()
 		query := fmt.Sprintf("%s-delete-%d", testPrefix, timestamp)
-		created, err := CreateSearchCriteria(ctx, client, query, "us-co-denver", 5, ListingAgeMonth)
+		workType := WorkTypeRemote
+		expLevel := ExperienceLevelEntryLevel
+		created, err := CreateSearchCriteria(ctx, client, query, "us-co-denver", workType, expLevel, 5, ListingAgeMonth)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() for DeleteSearchCriteria test error = %v", err)
 		}
@@ -371,8 +391,10 @@ func TestSearchCriteria(t *testing.T) {
 		query := fmt.Sprintf("%s-jobtests-%d", testPrefix, timestamp)
 		geoID := "us-co-denver"
 		maxPages := 2
+		workType := WorkTypeRemote
+		expLevel := ExperienceLevelEntryLevel
 
-		criteria, err := CreateSearchCriteria(ctx, client, query, geoID, maxPages, ListingAgeMonth)
+		criteria, err := CreateSearchCriteria(ctx, client, query, geoID, workType, expLevel, maxPages, ListingAgeMonth)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() error = %v", err)
 		}

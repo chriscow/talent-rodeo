@@ -14,10 +14,13 @@ import (
 )
 
 var (
-	criteriaQueryFlag    string
-	criteriaGeoIDFlag    string
-	criteriaMaxPagesFlag int
-	criteriaAllFlag      bool
+	criteriaQueryFlag         string
+	criteriaGeoIDFlag         string
+	criteriaMaxPagesFlag      int
+	criteriaWorkTypeFlag      string
+	criteriaExperienceFlag    string
+	criteriaListingAgeFlag    string
+	criteriaAllFlag           bool
 )
 
 func init() {
@@ -56,6 +59,9 @@ func init() {
 	createCmd.Flags().StringVarP(&criteriaQueryFlag, "query", "q", "", "Search query (required)")
 	createCmd.Flags().StringVarP(&criteriaGeoIDFlag, "geo-id", "g", "103644278", "Geographic ID for location (defaults to 'Remote')")
 	createCmd.Flags().IntVarP(&criteriaMaxPagesFlag, "max-pages", "p", 5, "Maximum number of pages to search")
+	createCmd.Flags().StringVarP(&criteriaWorkTypeFlag, "work-type", "w", "remote", "Work type: at_work, remote, or hybrid (default: remote)")
+	createCmd.Flags().StringVarP(&criteriaExperienceFlag, "experience-level", "e", "entry_level", "Experience level: internship, entry_level, associate, mid_senior_level, or director (default: entry_level)")
+	createCmd.Flags().StringVarP(&criteriaListingAgeFlag, "listing-age", "l", "day", "Listing age: day, week, or month (default: day)")
 	createCmd.MarkFlagRequired("query")
 
 	// 'delete' subcommand
@@ -124,13 +130,37 @@ func runCreateCriteria(cmd *cobra.Command, args []string) error {
 	}
 	defer fs.Close()
 
-	// geoID, err := internal.GetGeoID(ctx, fs, criteriaGeoIDFlag)
-	// if err != nil {
-	// 	return fmt.Errorf("failed to get geo ID: %w", err)
-	// }
+	// Convert string flags to appropriate types
+	workType := internal.WorkType(criteriaWorkTypeFlag)
+	experienceLevel := internal.ExperienceLevel(criteriaExperienceFlag)
+	listingAge := internal.ListingAge(criteriaListingAgeFlag)
+
+	// Validate work type
+	switch workType {
+	case internal.WorkTypeAtWork, internal.WorkTypeRemote, internal.WorkTypeHybrid:
+		// valid
+	default:
+		return fmt.Errorf("invalid work type: %s. Must be one of: at_work, remote, hybrid", criteriaWorkTypeFlag)
+	}
+
+	// Validate experience level
+	switch experienceLevel {
+	case internal.ExperienceLevelInternship, internal.ExperienceLevelEntryLevel, internal.ExperienceLevelAssociate, internal.ExperienceLevelMidSeniorLevel, internal.ExperienceLevelDirector:
+		// valid
+	default:
+		return fmt.Errorf("invalid experience level: %s. Must be one of: internship, entry_level, associate, mid_senior_level, director", criteriaExperienceFlag)
+	}
+
+	// Validate listing age
+	switch listingAge {
+	case internal.ListingAgeDay, internal.ListingAgeWeek, internal.ListingAgeMonth:
+		// valid
+	default:
+		return fmt.Errorf("invalid listing age: %s. Must be one of: day, week, month", criteriaListingAgeFlag)
+	}
 
 	// Create search criteria
-	criteria, err := internal.CreateSearchCriteria(ctx, fs, criteriaQueryFlag, criteriaGeoIDFlag, criteriaMaxPagesFlag, internal.ListingAgeDay)
+	criteria, err := internal.CreateSearchCriteria(ctx, fs, criteriaQueryFlag, criteriaGeoIDFlag, workType, experienceLevel, criteriaMaxPagesFlag, listingAge)
 	if err != nil {
 		return fmt.Errorf("failed to create search criteria: %w", err)
 	}
@@ -236,16 +266,16 @@ func displayCriteria(criteria []internal.SearchCriteria, showAll bool) error {
 
 	// Print header
 	if showAll {
-		fmt.Fprintln(w, "ID\tQuery\tGeo ID\tMax Pages\tLast Searched\tError")
+		fmt.Fprintln(w, "ID\tQuery\tGeo ID\tWork Type\tExp Level\tMax Pages\tListing Age\tLast Searched\tError")
 	} else {
-		fmt.Fprintln(w, "ID\tQuery\tGeo ID\tMax Pages")
+		fmt.Fprintln(w, "ID\tQuery\tGeo ID\tWork Type\tExp Level\tMax Pages\tListing Age")
 	}
 
 	// Print separator
 	if showAll {
-		fmt.Fprintln(w, "----\t-----\t------\t---------\t-------------\t-----")
+		fmt.Fprintln(w, "----\t-----\t------\t---------\t---------\t---------\t-----------\t-------------\t-----")
 	} else {
-		fmt.Fprintln(w, "----\t-----\t------\t---------")
+		fmt.Fprintln(w, "----\t-----\t------\t---------\t---------\t---------\t-----------")
 	}
 
 	// Print criteria
@@ -255,10 +285,10 @@ func displayCriteria(criteria []internal.SearchCriteria, showAll bool) error {
 			if c.LastSearchedAt != nil {
 				lastSearched = c.LastSearchedAt.Format(time.RFC3339)
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\n",
-				c.ID, c.Query, c.GeoID, c.MaxPages, lastSearched, c.Error)
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\t%s\n",
+				c.ID, c.Query, c.GeoID, c.WorkType, c.ExperienceLevel, c.MaxPages, c.ListingAge, lastSearched, c.Error)
 		} else {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%d\n", c.ID, c.Query, c.GeoID, c.MaxPages)
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%d\t%s\n", c.ID, c.Query, c.GeoID, c.WorkType, c.ExperienceLevel, c.MaxPages, c.ListingAge)
 		}
 	}
 

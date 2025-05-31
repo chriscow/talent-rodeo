@@ -211,8 +211,8 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 
 	t.Run("missing steering query", func(t *testing.T) {
 		user := &internal.User{
-			ID:              "test-criteria-user-1",
-			WorkPreferences: internal.StringPtr("Remote work in San Francisco"),
+			ID:                 "test-criteria-user-1",
+			LocationPreference: internal.StringPtr("Remote work in San Francisco"),
 			// SteeringQuery is nil
 		}
 
@@ -257,7 +257,7 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 			SteeringQuery: &internal.SteeringQuery{
 				Query: "software engineer python",
 			},
-			WorkPreferences: internal.StringPtr("Remote work in San Francisco"),
+			LocationPreference: internal.StringPtr("Remote work in San Francisco"),
 		}
 
 		criteria, _, err := getOrCreateSearchCriteria(ctx, client, user)
@@ -278,7 +278,7 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 			SteeringQuery: &internal.SteeringQuery{
 				Query: "software engineer python",
 			},
-			WorkPreferences: internal.StringPtr("Remote work in San Francisco"),
+			LocationPreference: internal.StringPtr("Remote work in San Francisco"),
 		}
 
 		// Create criteria first time
