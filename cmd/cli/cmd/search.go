@@ -14,12 +14,6 @@ import (
 )
 
 var (
-	searchQueryFlag      string
-	searchGeoIDFlag      string
-	searchJobTypeFlag    []string
-	searchExperienceFlag []string
-	searchWorkTypeFlag   string
-	searchMaxPagesFlag   int
 	searchCriteriaIDFlag string
 )
 
@@ -108,13 +102,6 @@ Common GeoIDs:
 		RunE: runSearch,
 	}
 
-	// Add flags
-	queueCmd.Flags().StringVarP(&searchQueryFlag, "query", "q", "", "Search query")
-	queueCmd.Flags().StringVarP(&searchGeoIDFlag, "geo-id", "g", "", "Geographic ID for location")
-	queueCmd.Flags().StringSliceVarP(&searchJobTypeFlag, "job-type", "j", nil, "Job types (temporary,contract,volunteer,full_time,part_time)")
-	queueCmd.Flags().StringSliceVarP(&searchExperienceFlag, "experience", "e", nil, "Experience levels (internship,entry_level,associate,mid_senior_level,director)")
-	queueCmd.Flags().StringVarP(&searchWorkTypeFlag, "work-type", "w", "", "Work type (at_work,remote,hybrid)")
-	queueCmd.Flags().IntVarP(&searchMaxPagesFlag, "max-pages", "p", 1, "Maximum number of pages to search")
 	queueCmd.Flags().StringVarP(&searchCriteriaIDFlag, "criteria-id", "c", "", "ID of saved search criteria to use")
 
 	// Add subcommands to search command
@@ -132,52 +119,30 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	var criteria internal.SearchCriteria
 
 	// If criteriaID is provided, load the saved criteria
-	if searchCriteriaIDFlag != "" {
-		// Create Firestore client
-		fs, err := internal.NewFirestoreClient(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to create Firestore client: %w", err)
-		}
-		defer fs.Close()
-
-		// Get the criteria by ID
-		savedCriteria, found, err := internal.GetSearchCriteria(ctx, fs, searchCriteriaIDFlag)
-		if err != nil {
-			return fmt.Errorf("failed to get saved criteria with ID %s: %w", searchCriteriaIDFlag, err)
-		}
-		if !found {
-			return fmt.Errorf("saved criteria with ID %s not found", searchCriteriaIDFlag)
-		}
-
-		criteria = *savedCriteria
-		logger.Info("Using saved search criteria",
-			"criteria_id", searchCriteriaIDFlag,
-			"query", criteria.Query,
-			"geo_id", criteria.GeoID)
-	} else {
-		// Ensure required parameters are provided if not using a saved criteria
-		if searchQueryFlag == "" {
-			return fmt.Errorf("query is required when not using a saved criteria")
-		}
-		if searchGeoIDFlag == "" {
-			return fmt.Errorf("geo-id is required when not using a saved criteria")
-		}
-
-		criteria = internal.SearchCriteria{
-			Query:      searchQueryFlag,
-			GeoID:      searchGeoIDFlag,
-			JobType:    searchJobTypeFlag,
-			Experience: searchExperienceFlag,
-			WorkType:   &searchWorkTypeFlag,
-			MaxPages:   searchMaxPagesFlag,
-		}
+	if searchCriteriaIDFlag == "" {
+		return fmt.Errorf("criteria-id is required to load saved search criteria")
 	}
-
+	// Create Firestore client
 	fs, err := internal.NewFirestoreClient(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create Firestore client: %w", err)
 	}
 	defer fs.Close()
+
+	// Get the criteria by ID
+	savedCriteria, found, err := internal.GetSearchCriteria(ctx, fs, searchCriteriaIDFlag)
+	if err != nil {
+		return fmt.Errorf("failed to get saved criteria with ID %s: %w", searchCriteriaIDFlag, err)
+	}
+	if !found {
+		return fmt.Errorf("saved criteria with ID %s not found", searchCriteriaIDFlag)
+	}
+
+	criteria = *savedCriteria
+	logger.Info("Using saved search criteria",
+		"criteria_id", searchCriteriaIDFlag,
+		"query", criteria.Query,
+		"geo_id", criteria.GeoID)
 
 	// Create JobSink (no JobProcessor for MVP)
 	jobSink := internal.NewSearchResultProcessor(fs, logger)

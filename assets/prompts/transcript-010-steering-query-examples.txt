@@ -1,5 +1,20 @@
 <example-1>
     <input>
+        <resume>
+Chris Cowherd425-829-5443       [](https://github.com/chriscow) [](mailto:madcow@gmail.com)     [](https://www.linkedin.com/in/chriscowherd/)Software Engineering Leader------------30 Years of Software Engineering LeadershipExtensive experience in a technical leadership role Engineering manager and hands-on contributor Thought leader, inventor and implementer of protocol standards and systemsStrategic, analytical and highly personable, with a collaborative, inclusive leadership styleAdept at seeing the big picture, building strong teams and driving positive outcomesTransparent  •  Trustworthy  •  Inclusive  • Accessible  •  PassionateCore CompetenciesSoftware DevelopmentRisk ManagementPrivacy Compliance IT Platform DevelopmentCloud Native ExpertiseTeam Building / LeadershipInformation SecurityAI & Data AnalyticsTechnology Diligence & Audits Financial IntegrationAcquisition & TransitionStrategic PlanningTooling & AutomationVendor ManagementProfessional SummaryBackend Software Engineer, Generative AI 
+BlestX Ventures, LLC - Redmond, WA      2023 - PresentPrivate research integrating generative AI for manufacturing processesChief Technology Officer 
+i2 Holdings dba Ambassador Software - Seattle, WA       2020 - 2022Private equity funded SaaS company executing roll-up strategy in marketing technology AI & AnalyticsPrincipal Software EngineerStahurricane LLC - Bellevue, WA 2018 – 2021Venture vehicle for ex-CEO of Donuts & eNom.  Chief Technology OfficerDonuts Inc. - Bellevue, WA  2012 - 2018World’s largest top-level domain registry operator  Senior Engineering Manager, R&DDemand Media (RightSide / Leaf Group) - Kirkland, WA   2008 – 2012Content & media generation, monetizationSoftware Engineering ManagereNom, Inc - Redmond, WA       2000 – 2008Wholesale white-label platform for domains, email, and SSLProfessional DetailsBackend Software Engineer, Generative AI 
+BlestX Ventures, LLC - Redmond, WA      2023 - PresentPrivate research integrating generative AI for manufacturing processesStack: OpenAI, Python, Go, Flask, Google Cloud, DockerIntegrate OpenAI technology Hand-crafted PDF parsing and ingestion Retrieval augmented generation (RAG) w/ Weaviate & PineconePrompt engineeringReranking results with cross-encodersExpand search surface area with synthesized dataCustomized workflow with extensive LLM function callingDistributed LLM agent coordinationFine tuning to optimize output of code generationChief Technology Officer 
+i2 Holdings dba Ambassador Software - Seattle, WA       2020 - 2022Private equity funded SaaS company executing roll-up strategy in marketing technology AI & AnalyticsStack: Python, Go, PostgreSQL, Django, Google Cloud, AWS, Docker, GDPR, CCPA & SOC2 ComplianceUltimate responsibility to protect, secure and advance all company technology assetsLeader and champion for 18 geographically distributed engineers; onshore, nearshore and offshoreCustomer driven product owner, product roadmap development, strategic planningFull lifecycle owner and leader for design, development, testing, deployment and maintenanceCoach and mentor for team career development and personal growth Reliable project execution and delivery time after time through careful planning, tracking and expectation managementPrincipal Software EngineerStahurricane LLC - Bellevue, WA        2018 – 2021Venture vehicle for ex-CEO of Donuts & eNom.  Stack: Go, Python, C#, CUDA, HLSL Compute Shaders, Unity, Google Cloud, AWS, DockerR&D software design & development of VR and mathematical researchDesigned and developed distributed system to explore and visualize difficult to solve mathematical areas using cloud GPUs (see: [](https://zeta-machine.chriscowherd.com/))Designed and developed distributed cloud-native system to perform ML inference at scale (see: [](https://github.com/chriscow/cloud-scanner-go))Designed and developed distributed brute force system to discover fundamental constants (see: [](https://github.com/chriscow/ramanujan-machine))Designed and developed application in Unity to use GPUs to visualize and explore higher dimension structures (12 dimension) and project those down to 4-dimensions then a 2-dimensional plane
+Chief Technology OfficerDonuts Inc. - Bellevue, WA      2012 - 2018World’s largest top-level domain registry operator  Stack: Python, Go, C#, PostgreSQL, Django, Google Cloud, AWS, Docker, GDPR ComplianceProvide critical functionality for proper functioning of the Internet naming infrastructureManage full lifecycle for Internet-critical software systems, quality assurance, network & opsScale growth while maintaining ICANN mandated uptime for global Internet infrastructureSuccessfully launched and operated over 200 TLDs without incidentGrew 600x from ‘13 – ’16; named #1 on Deloitte Fast 500 as fastest growing company in No. AmericaKey responsibilities:Corporate Technology  /  Product Development  /  Incident Management  /  Risk ManagementOperations, security, budgeting, technology audits, business continuity and M&A diligenceTeam building and leadership in and across organizationsManagement Portfolio: (15 direct reports, organization of 45)Platform DevelopmentQuality assuranceCorporate IT & facilities Production engineeringTooling and automationData warehousing, analytics & AIBusiness intelligenceOperations & technical supportFinancial backend integration Corporate & Physical SecuritySenior Engineering Manager, R&DDemand Media (RightSide / Leaf Group) - Kirkland, WA  2008 – 2012Content & media generation, monetizationStack: C#, SQL Server, RedisLeader, manager and mentor for 12 cross-discipline engineersDevelop many successful POCs by fostering creativity and input from all team membersFull SDLC using agile methodologies and continuous integrationDesign and initial implementation of the world's largest domain name registrySoftware Engineering ManagereNom, Inc - Redmond, WA       2000 – 2008Wholesale white-label platform for domains, email, and SSLStack: C++, C#, SQL ServerSoftware Engineering Mgr               2004 - 2008Principal Software Engineer          2000 – 2004Managed and coached team of 7 engineers while individual contributorDevised scalable server architectures for long running services such as DNS Networking and Internet protocol development for DNS, SMTP, POP, IMAP etc.Designed scalable, fault tolerant systems Guided and mentored team through uncertainty
+Microsoft, Redmond, WA          1997 - 2000Software Design Engineer World class development experience, including key contributions to early stages of Internet Explorer, Windows and OfficeAdvanced Semiconductor, Phoenix, AZ   1994 - 1996Programmer / Analyst Designed and developed tools for managing engineering changes to semiconductor processing equipmentPatentsU.S. Patent # US11552923B2Whitelist domain name registryU.S. Patent # US20160173440A1Communication using dns repurposing
+
+U.S. Patent # US20150100507A1
+Domain Protected Marks List Service
+
+U.S. Patent # US20080273077
+Virtual Video Message Answering Machine PlatformU.S. Patent # US20080281676Methods and Systems to Facilitate Keyword Bid Arbitrage with Multiple Advertisement Placement ProvidersEducationGlendale College  -  Mathematics / Computer Science    1996
+        </resume>
         <transcript>
 AI
 Hi there. I'm Shirley from Talent Rodeo. Is now a good time for a quick chat?
@@ -98,34 +113,52 @@ Goodbye.
         </transcript>
     </input>
     <output>
-Looking at this transcript, I need to analyze Chris's job search preferences and create a steering query based on his explicit statements.
+<query_analysis>
+Looking at the transcript and resume to extract key information for the job search query:
 
-**Analysis:**
+**Query Analysis:**
+The job seeker Chris explicitly states: "I really would like to focus on developing in Go back end services ideally, that work with LLMs." This clearly indicates the main query should be "Go (Golang) Backend Developer" with LLM focus. His resume shows extensive Go experience and current work with generative AI.
 
-1. **Main Query**: The AI suggested "Go roles especially those involving AI or LLMs" and Chris confirmed "Yeah. That's right. No. That's right. That's right." Later, Chris clarified "I think going LLM would capture it pretty well" when asked about additional skills. The canonical form would be "Go (Golang)" for the programming language.
+**MoveToward Analysis:**
+From the transcript, Chris expresses several positive preferences:
+- "I really would like to focus on developing in Go back end services ideally, that work with LLMs"
+- "I think I would lean more towards, uh, a smaller company than, you know, something that's like a start up or something like that. Versus a large company"
+- His resume shows extensive experience with LLMs, generative AI, and distributed systems
 
-2. **MoveToward**: Chris expressed several positive preferences:
-   - "I really would like to focus on developing in Go back end services ideally, that work with LLMs"
-   - "I think I'd just like to be fully remote" 
-   - "I think I would lean more towards, uh, a smaller company than, you know, something that's like a start up or something like that. Versus a large company"
+**MoveAway Analysis:**
+Chris clearly states what he wants to avoid:
+- "Well, I'm not really a strong front end developer, so I probably need to avoid uh, you know, front end development or front end frameworks"
+- He wants to avoid large companies in favor of smaller companies/startups
 
-3. **MoveAway**: Chris specifically mentioned wanting to avoid:
-   - "Well, I'm not really a strong front end developer, so I probably need to avoid uh, you know, front end development or front end frameworks"
+**RerankQuery:**
+Combining the main query (Go backend with LLMs), what he wants (smaller companies, AI/LLM work), and what he wants to avoid (frontend work, large companies).
 
-4. **RerankQuery**: Combines all elements into a comprehensive search statement.
+**ExperienceLevel Analysis:**
+Options: internship, entry_level, associate, mid_senior_level, director
+Chris has 30 years of software engineering leadership experience, has been a CTO multiple times, managed teams of 15+ people, and held senior engineering positions. This clearly indicates "director" level experience.
+
+**WorkType Analysis:**
+Options: at_work, remote, hybrid
+Chris explicitly states: "Uh, I think I'd just like to be fully remote" and confirms this preference throughout the conversation, though he's open to exceptional opportunities that might require relocation.
+</query_analysis>
 
 <answer>
 {
-  "Query": "Go (Golang)",
-  "MoveToward": "I want backend services working with LLMs, fully remote positions at smaller companies or startups",
-  "MoveAway": "I want frontend development and frontend frameworks",
-  "RerankQuery": "Go backend developer position working with LLMs at a small company or startup, fully remote, avoiding frontend development"
+  "Query": "Go (Golang) Backend Developer with LLM experience",
+  "MoveToward": "I want to work on Go backend services with LLMs at a smaller company or startup",
+  "MoveAway": "I want to avoid frontend development and large corporations",
+  "RerankQuery": "Go backend developer working with LLMs at smaller companies, avoiding frontend development and large corporations",
+  "ExperienceLevel": "director",
+  "WorkType": "remote"
 }
 </answer>
     </output>
 </example-1>
 <example-2>
     <input>
+        <resume>
+Vijaya Bhat                                          Canadian citizen with work authorization in USA and India Phone: (236) 878-4708                         Email: vjbht8@gmail.com                        Location: Vancouver                        Time Zone: PST   EXPERIENCE   Head Operations & People, Hoot                                                                                                                                                                                  2020 - Present Fractional expertise for sustainable solutions-focused organizations SaaS, Tech, and E-Commerce ● Currently transitioning a major contract workforce into part-time employees for the edTech across 15 states (and counting)  in the USA and all of Canada managing people & culture, regulatory requirements, benefits and 401k, E-Verify, payroll, OSHA, immigration sponsorships, and creation of employee handbooks ● Manage an employee base of 500+ employees and 5 reports across NAM (US, Canada), APAC (India, Philippines, Australia), and UK ● Lead workforce strategy, talent management and development, DEI, talent acquisition, employee relations and engagement, total rewards, employer branding, performance management, employee health & benefits, cross-border compliance, marketing, and operations ● Developed and delivered an engagement strategy for a fully async global team with 50% increased engagement and reduced attrition ● Setup legal entities and expanded across the USA in 15 states and Canada across 9 provinces ● Scale teams for hyper-growth and provide strategic business partnering for Engineering, Finance, GTM, HR, Marketing, Product, R&D, Sales, and Tech to drive operations by creating systems, developing processes, and liaising with vendors ● Manage and implement HRIS, ATS, benefits portals, PEO & EOR, and other enterprise-wide organizational projects ● Collaborated with the Executive Team to create a compelling EVP by developing and executing strategies to enhance the employer brand and thus attract top talent by communicating it across various channels ● Oversee employee relations matters, including investigations, complaints, corrective actions, and documentation in compliance with federal, state, and provincial labour laws and reporting requirements ● Mentor senior leadership in creating a high-performing culture by building partnerships and data-driven decision-making  Director Human Resources, VSOCC                                                                                                                                                                             2022 - Present Empowering children and families to reach their full potential  Education ● Direct the people & culture strategy for 16 locations, 350+ employees union and management, and 2 reports with over 15 million USD in revenue ● Lead talent acquisition, onboarding and orientation, corporate governance, employee engagement, HR technology, workplace injury and disability management, training and development, performance management, payroll, and total rewards ● Partnered with the C-suite and Board of Directors to develop organizational strategy and objectives ● Introduced DEI as a key strategic focus within the organization, creating a roadmap to integrate it into other strategic areas ● Established a robust succession pipeline, reducing external hiring turnaround times by 50% and internal recruitment time by 77% ● Overhauled the performance management and learning systems introducing tech, increased participation, and an eNPS > 60 ● Designed a total rewards strategy, created HR policy and process frameworks, and developed the company culture ● Implemented automated onboarding and orientation process with document collection, compliance, benefits management, 30-60-90 day checklists, and remote hands-oﬀ training combined with on-site training ● Transitioned to Microso Oﬀice 365 and migrated existing oﬀline setup to Sharepoint for ease of use, access, and facilitation between departments  Profile Summary: I’m driven to make people’s lives better especially when it comes to transforming how we experience work and foster connections. I pride myself on finding agile ways to meet an organization’s most important resource - talent - by translating business goals into tangible people outcomes. A human resources leader with over 12 years of experience in strategic people management - I’ve worked across NAM (USA and Canada), APAC (India, Australia, and Philippines), EMEA (UK) in diﬀerent industries - simplifying operations, solving complex problems with creativity, utilizing technology to aid people processes,building trusting relationships, and data-driven decision making. Instrumental in managing workforce expansion initiatives from a solitary hire to overseeing teams of over 21,000 employees, both union and non-union.   Special Skills: IPO, M&A, Enterprise-wide organizational and tech projects, and change management  Education & Certification: MBA in Human Resources, BS in Information Technology, CPHR  Experience Sectors: Tech, SaaS, Healthcare, Financial Services, Non-Profits, Consulting  Technologies Used: Adobe Suite, ADP WFN, Asana, Ashby, BambooHR, Dayforce, FigJam, Google Suite, Greenhouse, Gusto, Jira, Monday, Microso Oﬀice, Notion, Push Operations, Rippling, SAP, Slack, UKG, Wagepoint, Workday, Zoho, Zoom  ● Executed initiatives promoting employee well-being, resulting in an 85% reduction in workplace injuries through training, collaboration, and cultural change eﬀorts ● Led negotiations with the Union on collective bargaining agreements and provided expert advice on employee relations - legislation, policies, and procedures ● Advocated and executed an immigration sponsorship support program to help employees achieve permanent residency ● Negotiated extensive benefits including introduction of a health-spending account as part of employer branding eﬀorts  Generalist Human Resources, Neighbourly                                                                                                                                                                  2021 -  2022    Startup network of community pharmacies  Healthcare  ● Led workforce planning, recruitment, mergers, acquisitions, HR policies, processes, performance management, employee relations, and workplace safety for front store and pharmacy operations across Canada with 82 million USD revenue country-wide, 56 locations, and 1200+ employees ● Successfully managed 2 acquisitions - a 6-store brand and a singular store brand, optimizing operations and overseeing the transition of 110 employees, and supported another 20-store acquisition, scaling the company over 34% ● Managed full-cycle recruitment for 600+ hires including job postings, pre-screens, interview setup, interviewing, reference checks, job oﬀers, onboarding, promotions, extensions, terminations, and oﬀboarding ● Spearheaded strategic HR initiatives with organizational change management in collaboration with Regional Directors and VP of Ops ● Supported Eastern provinces in the absence of the HR Generalist to storefronts and pharmacies, eﬀectively managing all of Canada ● Created a company handbook consolidating various documents for improved onboarding ● Collaborated with legal counsel on Employment Standards, Worksafe BC, and Human Rights Tribunal issues to ensure regulatory compliance and mitigate risks  Specialist Marketing, WorkBC                                                                                                                                                                                               2019 - 2020  Provincial government employment program  Employment Services ● Full-cycle recruitment for notable organizations including Amazon, Microso, TAG (Telus), Shaw, Rogers, The Universal Group, Blackbird, Sunrise Soya, and more; eﬀectively partnering with over 50 employers and placing over 800 candidates ● Led recruitment, employer branding, job fairs (21 with 3000+ attendees), training and development, workshops, and labour market research reports for 30+ job coaches and job developers with over 30 million USD in revenue ● Managed remote workforce transition during COVID through the acquisition of Zoom, training for 45 staﬀ, creating user manuals, policies, GIFs,  and videos ● Directed the marketing strategy, outreach, events, campaigns, social media, SEO, website content, and marketing, and designed creatives (photos, videos, blog posts, posters, infographics, prints, GIFs, and podcasts) ● Built a talent database of over 8000 candidates across Western Canada ● Increased social media reach by 200% through campaigning, data analysis, and audience engagement ● Setup various workshops, social events, and internal meetings to improve employee engagement, teamwork, and communication ● Oﬀice administration including vendor management, health & safety, and oﬀice supplies  Manager Human Resources, HDFC Life                                                                                                                                                                            2016 - 2019 Long-term life insurance provider Financial Services  ● CoE Lead for employee relations, HR policies & processes, communication, corporate governance, and HR technology projects PAN-India managing a scaling workforce from over 18,000 to over 21,000 employees with 34 billion USD revenue, 450 locations, and 5 reports.  ● Managed talent acquisition, talent management, employee engagement, employee relations, learning and development, social media & oﬀline marketing, performance management, total rewards, onboarding, and oﬀboarding for the brand’s campus-to-corporate sales program for 3000+ trainees and employees, scaling the program by 100%. ● Led enterprise-wide organizational projects for IPO, merger, ATS, chatbot, and other special projects ● Implemented employee self-service mobile app (including designing the UI+UX) and migrated employee life-cycle activities of leaves, attendance, reimbursements, medical claims, and whistleblower and sexual harassment complaints reporting to the app. ● Saved the company over $120,000 through reconciliation of social security benefits payments ● Designed and presented HR dashboards to senior management and the Board of Directors ● Increased hiring by 20% through social media and oﬀline marketing and engagement ● Reduced organization-wide attrition by 10% through engagement initiatives  ● Led employer brand analysis project developing an EVP that resulted in a company rebranding exercise ● Designed matrixed structure for people operations leading to the formation of a dedicated country-wide and corporate talent acquisition team ● Executed the annual rewards program of 2018 end-to-end with a direct team of 2 and 56 dotted line reports for over 3000 attendees  Consultant Human Resources, Roche                                                                                                                                                                                 2015-2015 Transforming healthcare to improve lives Healthcare ● Led impact and eﬀectiveness assessment for the L&D department using the Kirkpatrick model on career progression and business outcomes with over 1 billion USD revenue, and over 500 employees. ● Oversaw the enhancement and development of learning strategy, programs, materials, and tools ● Managed employer branding, EVP development, and HRIS migration ● The project was showcased at the Roche Global HR Roundtable  Recruiter Technical, Accelya Kale                                                                                                                                                                             2015 - 2015  Leading global soware provider to the airline industry SaaS ● Led full-cycle recruitment process for 80 entry-level soware engineer and QA positions for the organization with over 1.2 billion USD in revenue and over 1500 employees ● Revamped the HRIS system, enhancing candidate application management  Facilitator & Manager, VCTS                                                                                                                 2012 - 2014 Low-cost STEM coaching institute for Olympiads  Education ● Led recruitment, training, program, and operations for a team of 12 staﬀ ● Prepared course methodologies and exam schedules, supervised exams, and maintained secure testing environments with fair assessment practices ● Delivered workshops on eﬀective teaching, instructional techniques, and classroom management to staﬀ ● Collaborated with colleagues to create unit plans with diﬀerentiated instruction to cater to student needs  Analyst & Trainer, Datamatics                                                                                                               2011 - 2011 Consulting and digital services Technology ● Trained contact centre staﬀ on devices, equipment, scripts, operations, privacy & data collection laws, and customer service with over 1 billion in revenue and over 1300 employees ● Collected customer data by coordinating with team leads, supervised calls, and prepared reports    
+        </resume>
         <transcript>
 AI
 Hi there. I'm Shirley from Talent Rodeo. Is now a good time for a quick chat?
@@ -198,32 +231,47 @@ I want to grow to the VP or the CHR role and have a voice at the table. Um, stra
         </transcript>
     </input>
     <output>
-Looking at this transcript, I need to analyze the user's job search preferences and create a steering query based on their explicit statements.
+<query_analysis>
+Looking at the transcript and resume to extract key information for the job search query:
 
-**Analysis:**
+**Query Analysis:**
+The job seeker Vijaya clearly states multiple target roles: "head of people and culture or director of people or vice president or even a chief human resource officer." She also mentions "Human resource manager, uh, people and culture business partner, or human resource business partner, head of people and culture, or head of people, or director of human resources, vice president of human resources, chief human resource officer." The most canonical form that captures her senior leadership focus would be "Head of People and Culture" or "Chief Human Resources Officer" - I'll go with "Head of People and Culture" as it encompasses the strategic culture-building aspect she emphasizes.
 
-1. **Main Query**: The user clearly stated multiple target roles: "Human resource manager, uh, people and culture business partner, or human resource business partner, head of people and culture, or head of people, or director of human resources, vice president of human resources, chief human resource officer. Human resource business partner." The most encompassing canonical term would be "Human Resources".
+**MoveToward Analysis:**
+From the transcript, Vijaya expresses several positive preferences:
+- "I would love to be in a head of people and culture or director of people or vice president or even a chief human resource officer"
+- "I would love to be matched with an organization that requires scale"
+- "I want to continue to work in a leadership generalist capacity"
+- "I very much thrive in an ownership mindset attitude where you know, I'm just responsible for building things from scratch"
+- "I would love to be a part of an organization that is, you know, emerging. For example, tech or software or AI"
+- "I wanna work with a tech or a software as a service company that is positioned on a global scale"
 
-2. **MoveToward**: The user expressed several positive preferences:
-   - "I would prefer remote remote fully remote position"
-   - "I would love to be matched with an organization that requires scale"
-   - "I would love to be a part of an organization that is, you know, emerging. For example, tech or software or AI"
-   - "I want to grow to the VP or the CHR role and have a voice at the table strategically"
-   - "anything related to tech, anything related to change, anything related to transformation"
+**MoveAway Analysis:**
+Vijaya clearly states what she wants to avoid:
+- "I would prefer to avoid areas that would shoehorn me into a particular specialization"
+- "I'm looking to avoid, um, conditions where, you know, the organization very much is, um, autocratic"
+- "I wanna avoid organizations that, um, are caught up in in a lot of bureaucracy. Or red tape or don't really care about giving their employees the best of benefits"
 
-3. **MoveAway**: The user specifically mentioned wanting to avoid:
-   - "I would prefer to avoid areas that would shoehorn me into a particular specialization"
-   - "I'm looking to avoid, um, conditions where, you know, the organization very much is, um, autocratic"
-   - "I wanna avoid organizations that, um, are caught up in in a lot of bureaucracy. Or red tape"
+**RerankQuery:**
+Combining her main query (Head of People and Culture), what she wants (global scale tech companies, ownership mindset, generalist leadership), and what she wants to avoid (autocratic culture, bureaucracy, specialization).
 
-4. **RerankQuery**: Combines all elements into a comprehensive search statement.
+**ExperienceLevel Analysis:**
+Options: internship, entry_level, associate, mid_senior_level, director
+Vijaya has 12+ years of HR experience, has been Head of Operations & People, Director of Human Resources, managed teams across multiple countries, handled IPOs, M&As, and managed 500+ employees. She's clearly at the "director" level based on her extensive leadership experience and current roles.
+
+**WorkType Analysis:**
+Options: at_work, remote, hybrid
+Vijaya states: "I would prefer remote remote fully remote position. However, I'm open to applying to hybrid positions that are based out of Bang or even on-site positions. Based out of Vancouver, BC." Her preference is clearly "remote" though she's open to other arrangements.
+</query_analysis>
 
 <answer>
 {
-  "Query": "Human Resources",
-  "MoveToward": "I want fully remote VP or CHRO leadership roles at emerging tech, software, or AI companies with global scale and strategic transformation opportunities",
-  "MoveAway": "I want specialized roles in autocratic organizations with bureaucracy and red tape",
-  "RerankQuery": "Human Resources VP or CHRO leadership position at emerging tech or software company, fully remote with global scale and strategic transformation opportunities, avoiding specialized roles in bureaucratic organizations"
+  "Query": "Head of People and Culture",
+  "MoveToward": "I want to work in a leadership generalist capacity at a global scale tech or SaaS company with an ownership mindset culture that builds things from scratch",
+  "MoveAway": "I want to avoid autocratic organizations with bureaucracy and red tape that would shoehorn me into specialization",
+  "RerankQuery": "Head of People and Culture at global scale tech companies with ownership mindset, avoiding autocratic bureaucratic environments and specialization roles",
+  "ExperienceLevel": "director",
+  "WorkType": "remote"
 }
 </answer>
     </output>

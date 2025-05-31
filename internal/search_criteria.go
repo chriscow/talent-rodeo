@@ -15,6 +15,8 @@ import (
 )
 
 type ListingAge string
+type WorkType string
+type ExperienceLevel string
 
 const (
 	DefaultMaxPages          = 5
@@ -25,6 +27,16 @@ const (
 	ListingAgeMonth ListingAge = "month" // Last 30 days
 
 	DefaultListingAge ListingAge = ListingAgeDay // Default to "day" if not specified
+
+	WorkTypeAtWork WorkType = "at_work" // Jobs that require physical presence at the workplace
+	WorkTypeRemote WorkType = "remote"  // Jobs that can be done from anywhere
+	WorkTypeHybrid WorkType = "hybrid"  // Jobs that have a mix of remote and in-office work
+
+	ExperienceLevelInternship     ExperienceLevel = "internship"
+	ExperienceLevelEntryLevel     ExperienceLevel = "entry_level"
+	ExperienceLevelAssociate      ExperienceLevel = "associate"
+	ExperienceLevelMidSeniorLevel ExperienceLevel = "mid_senior_level"
+	ExperienceLevelDirector       ExperienceLevel = "director"
 )
 
 // SearchCriteria defines the parameters used to search for jobs.
@@ -34,9 +46,8 @@ type SearchCriteria struct {
 	ID              string
 	Query           string
 	GeoID           string
-	JobType         []string
-	Experience      []string
-	WorkType        *string
+	WorkType        WorkType        // e.g., "at_work", "remote", "hybrid"
+	ExperienceLevel ExperienceLevel // e.g., "internship", "entry_level", "mid_senior_level", etc.
 	MaxPages        int
 	ListingAge      ListingAge // e.g., "day", "week", "month"
 	Error           string
@@ -46,21 +57,35 @@ type SearchCriteria struct {
 }
 
 func (c SearchCriteria) GetSearchHash() string {
+	type hashfields struct {
+		Query           string
+		GeoID           string
+		JobType         string
+		ExperienceLevel string
+	}
+
+	hf := hashfields{
+		Query:           c.Query,
+		GeoID:           c.GeoID,
+		JobType:         string(c.WorkType),
+		ExperienceLevel: string(c.ExperienceLevel),
+	}
+
 	// serialize the criteria to a json string and get the SHA256 hash
-	json, err := json.Marshal(c)
+	json, err := json.Marshal(hf)
 	if err != nil {
 		return ""
 	}
 	return fmt.Sprintf("%x", sha256.Sum256(json))
 }
 
-func MakeSearchCriteriaID(query string, geoID string) string {
-	return funcs.Slugify(fmt.Sprintf("%s-%s", query, geoID))
+func MakeSearchCriteriaID(query, geoID string, workType WorkType, expLevel ExperienceLevel) string {
+	return funcs.Slugify(fmt.Sprintf("%s-%s-%s-%s", query, geoID, workType, expLevel))
 }
 
-func CreateSearchCriteria(ctx context.Context, fs *FirestoreClient, query, geoID string, maxPages int, age ListingAge) (*SearchCriteria, error) {
+func CreateSearchCriteria(ctx context.Context, fs *FirestoreClient, query, geoID string, jobType WorkType, expLevel ExperienceLevel, maxPages int, age ListingAge) (*SearchCriteria, error) {
 	criteria := &SearchCriteria{
-		ID:         MakeSearchCriteriaID(query, geoID),
+		ID:         MakeSearchCriteriaID(query, geoID, jobType, expLevel),
 		Query:      query,
 		GeoID:      geoID,
 		MaxPages:   maxPages,

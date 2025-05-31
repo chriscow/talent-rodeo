@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"talent-rodeo/internal"
 	"time"
 )
 
@@ -83,7 +84,7 @@ func NewAPIClient(apiKey string, opts ...APIOption) *APIClient {
 }
 
 // SearchJobListings searches for jobs with the given criteria
-func (c *APIClient) SearchJobListings(ctx context.Context, query, location string, page int, sortBy SortBy) ([]LinkedInJobListing, error) {
+func (c *APIClient) SearchJobListings(ctx context.Context, query, location string, jobType internal.WorkType, expLevel internal.ExperienceLevel, page int, sortBy SortBy) ([]LinkedInJobListing, error) {
 	c.logger.Info("searching for job listings",
 		"query", query,
 		"location", location,
@@ -101,6 +102,10 @@ func (c *APIClient) SearchJobListings(ctx context.Context, query, location strin
 	q.Set("field", query)
 	q.Set("geoid", location)
 	q.Set("sort_by", string(sortBy)) // day (last 24 hours), week (last 7 days), month (last 30 days)
+
+	q.Set("job_type", string(jobType))   // optional, can be empty
+	q.Set("exp_level", string(expLevel)) // optional, can be empty
+
 	q.Set("page", strconv.Itoa(page))
 	baseURL.RawQuery = q.Encode()
 

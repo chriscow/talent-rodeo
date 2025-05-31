@@ -219,7 +219,7 @@ func (p *Provider) SearchJobListings(ctx context.Context, criteria internal.Sear
 	}
 
 	// Call the API
-	jobListings, err := p.apiClient.SearchJobListings(ctx, criteria.Query, criteria.GeoID, page, SortBy(criteria.ListingAge))
+	jobListings, err := p.apiClient.SearchJobListings(ctx, criteria.Query, criteria.GeoID, criteria.WorkType, criteria.ExperienceLevel, page, SortBy(criteria.ListingAge))
 	if err != nil {
 		return nil, fmt.Errorf("API search failed: %w", err)
 	}
