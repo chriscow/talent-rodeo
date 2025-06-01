@@ -104,12 +104,6 @@ func (app *application) routes() http.Handler {
 
 			mux.HandleFunc("/admin/voice", app.adminVoice, "GET", "POST")
 
-			// Register compare jobs admin page
-			mux.HandleFunc("/admin/compare-jobs", app.adminCompareJobs, "GET", "POST")
-
-			// Add new admin search-jobs route
-			mux.HandleFunc("/admin/search-jobs", app.adminSearchJobs, "GET", "POST")
-
 			// Add feature flags admin page
 			mux.HandleFunc("/admin/feature-flags", app.adminFeatureFlags, "GET", "POST")
 

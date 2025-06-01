@@ -13,20 +13,6 @@
         </ul>
     </nav>
 
-    <header>
-        {{if .TestMode}}
-        <div>
-            <div class="rating-filter">
-                <label>
-                    <input type="checkbox" id="show-all-ratings" {{if .ShowAllRatings}}checked{{end}}>
-                    Show all jobs (including non-recommended)
-                </label>
-            </div>
-        </div>
-        {{end}}
-        </div>
-    </header>
-
     <!-- Status updates during job search -->
     {{if .SearchError}}
     <article id="search-error" class="notice error">
@@ -50,11 +36,7 @@
         </header>
         
         {{if .Jobs}}
-            <div class="jobs-grid">
-                {{range .Jobs}}
-                    {{template "job-card" .}}
-                {{end}}
-            </div>
+            {{template "job-grid" .}}
             
             <!-- Pagination controls -->
             <nav class="pagination">
@@ -118,103 +100,6 @@
 </section>
 {{end}}
 
-{{define "job-card"}}
-<article class="job-card">
-    <div style="display: none;">
-        <span class="job-id">{{.JobDetail.ProviderJobID}}</span>
-        <span class="dense-score">{{.ScoredJobDetail.DenseScore}}</span>
-        <span class="sparse-score">{{.ScoredJobDetail.SparseScore}}</span>
-        <span class="score">{{.ScoredJobDetail.Score}}</span>
-    </div>
-
-    <hgroup>
-        <h3>{{.JobDetail.Title}}</h3>
-        <p class="company">{{.JobDetail.Company}} - <em>Posted {{.JobDetail.PostedDate | approxAge}}</em></p>
-    </hgroup>
-    <div>
-        <span>
-    {{if .JobDetail.URL}}
-    <a href="{{.JobDetail.URL}}" target="_blank">View Job</a>
-    {{end}}
-    {{if .JobDetail.ApplyURL}}
-    &nbsp;&nbsp;<a href="{{.JobDetail.ApplyURL}}" target="_blank">Apply Now</a>
-    {{end}}
-    </span>
-    </div>
-    <br />
-<!-- 
-    <details>&nbsp;
-         <summary>Rating: N/A</summary>
-        <p>[analysis]</p> 
-    </details>
--->
-
-
-    <div class="job-content">
-        {{with .JobDetail.ExtractedData}}
-        {{with .Summary}}
-        <div class="summary">
-            <p>{{.}}</p>
-        </div>
-        {{end}}
-        {{with .Responsibilities}}
-        <div class="responsibilities">
-            <h4>Responsibilities</h4>
-            <ul>
-                {{range .}}
-                <li>{{.}}</li>
-                {{end}}
-            </ul>
-        </div>
-        {{end}}
-        {{with .Skills}}
-        <div class="skills">
-            <h4>Skills</h4>
-            <ul>
-                {{range .}}
-                <li>{{.}}</li>
-                {{end}}
-            </ul>
-        </div>
-        {{end}}
-        {{with .Requirements}}
-        <div class="requirements">
-            <h4>Requirements</h4>
-            <ul>
-                {{range .}}
-                <li>{{.}}</li>
-                {{end}}
-            </ul>
-        </div>
-        {{end}}
-        {{with .Qualifications}}
-        <div class="qualifications">
-            <h4>Qualifications</h4>
-            <ul>
-                {{range .}}
-                <li>{{.}}</li>
-                {{end}}
-            </ul>
-        </div>
-        {{end}}
-        {{with .BonusQualifications}}
-        <div class="bonus-qualifications">
-            <h4>Bonus Qualifications</h4>
-            <ul>
-                {{range .}}
-                <li>{{.}}</li>
-                {{end}}
-            </ul>
-        </div>
-        {{end}}
-        {{end}}
-    </div>
-    <footer>
-        <small>Added {{.JobDetail.CreatedAt | humanDate}} &nbsp; | &nbsp; {{rrfStars .ScoredJobDetail.Score}}</small>
-    </footer>
-</article>
-{{end}}
-
 {{define "page:scripts"}}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
@@ -258,6 +143,7 @@
 {{end}}
 
 {{define "page:styles"}}
+{{template "job-styles" .}}
 <style>
     /* Status tabs navigation */
     .job-status-tabs ul {
@@ -281,91 +167,6 @@
     .job-status-tabs a {
         text-decoration: none;
         color: var(--primary);
-    }
-    
-    /* Jobs grid */
-    .jobs-grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 1rem;
-        margin-bottom: 1.5rem;
-    }
-    
-    @media (max-width: 768px) {
-        .jobs-grid {
-            grid-template-columns: 1fr;
-        }
-    }
-    
-    /* Job cards */
-    .job-card {
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-        border: 1px solid var(--muted-border-color);
-        border-radius: var(--border-radius);
-        padding: 1rem;
-    }
-    
-    .job-card header {
-        margin-bottom: 1rem;
-    }
-    
-    .job-card h3 {
-        margin: 0;
-        font-size: 1.2rem;
-    }
-    
-    .job-card .company {
-        margin: 0.25rem 0 0;
-        color: var(--primary);
-        font-weight: 500;
-    }
-    
-    .job-content {
-        flex-grow: 1;
-        overflow: hidden;
-    }
-    
-    .job-card .summary {
-        margin-bottom: 1rem;
-        max-height: 150px;
-        overflow-y: auto;
-    }
-    
-    .job-card .requirements h4,
-    .job-card .qualifications h4,
-    .job-card .responsibilities h4,
-    .job-card .skills h4,
-    .job-card .bonus-qualifications h4 {
-        font-size: 1rem;
-        margin-bottom: 0.5rem;
-    }
-    
-    .job-card .requirements ul,
-    .job-card .qualifications ul,
-    .job-card .responsibilities ul,
-    .job-card .skills ul,
-    .job-card .bonus-qualifications ul {
-        list-style: none;
-        padding-left: 0;
-        margin: 0;
-        max-height: 200px;
-        overflow-y: auto;
-    }
-    
-    .job-card .requirements li,
-    .job-card .qualifications li,
-    .job-card .responsibilities li,
-    .job-card .skills li,
-    .job-card .bonus-qualifications li {
-        margin-bottom: 0.25rem;
-    }
-    
-    .job-card footer {
-        margin-top: 1rem;
-        font-size: 0.875rem;
-        color: var(--muted-color);
     }
     
     /* Pagination */
