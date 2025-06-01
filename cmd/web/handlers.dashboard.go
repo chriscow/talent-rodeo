@@ -154,15 +154,6 @@ func dashboardValidateUserStatus(r *http.Request) (*internal.User, error) {
 		return nil, fmt.Errorf("user ID is empty")
 	}
 
-	if user.State.Status < internal.UserStatusCallScheduled {
-		internal.SentryReportError(r.Context(), fmt.Errorf("user has not onboarded"), sentry.LevelError, map[string]string{
-			"user_status": user.State.Status.String(),
-			"error_type":  "user_not_onboarded",
-			"entity_type": "user",
-		})
-		return nil, fmt.Errorf("user has not onboarded")
-	}
-
 	internal.SentrySetScope(r.Context(), map[string]any{
 		"user_status": user.State.Status.String(),
 	})
