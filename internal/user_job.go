@@ -482,20 +482,30 @@ func isYesRating(rating string) bool {
 
 // GetSemanticJobsForUser retrieves semantic search results for a user with 1-hour caching
 // This function is used by the dashboard for the "New" job status tab
-func GetSemanticJobsForUser(ctx context.Context, fs *FirestoreClient, user *User, criteriaID string, topK int, params *HybridSearchParams) ([]ScoredJobDetail, error) {
-	// Skip users without a steering query
-	if user.SteeringQuery == nil {
-		return nil, fmt.Errorf("user %s has no steering query", user.ID)
+func GetSemanticJobsForUser(ctx context.Context, fs *FirestoreClient, userID string, steeringQuery *SteeringQuery, criteriaID string, topK int, params *HybridSearchParams) ([]ScoredJobDetail, error) {
+	// Skip requests without a steering query
+	if steeringQuery == nil {
+		return nil, fmt.Errorf("user %s has no steering query", userID)
 	}
 
-	// Create cache key based on user ID, criteria ID, topK, and params hash
+	// Create cache key based on user ID, criteria ID, topK, params hash, and steering query hash
 	paramsHash := "default"
 	if params != nil {
 		paramsHash = fmt.Sprintf("%.2f-%.2f-%.2f-%.2f-%.2f-%s",
 			params.DenseWeight, params.SparseWeight, params.RecencyWeight,
 			params.RecencyHalfLife, params.ScoreThreshold, params.ScoreFusion)
 	}
-	cacheKey := fmt.Sprintf("semantic_jobs:%s:%s:%d:%s", user.ID, criteriaID, topK, paramsHash)
+
+	// Include steering query in cache key to handle custom queries
+	steeringHash := fmt.Sprintf("%s|%s|%.2f|%.2f", steeringQuery.Query, steeringQuery.RerankQuery, steeringQuery.ForceToward, steeringQuery.ForceAway)
+	if steeringQuery.MoveToward != "" {
+		steeringHash += "|" + steeringQuery.MoveToward
+	}
+	if steeringQuery.MoveAway != "" {
+		steeringHash += "|" + steeringQuery.MoveAway
+	}
+
+	cacheKey := fmt.Sprintf("semantic_jobs:%s:%s:%d:%s:%s", userID, criteriaID, topK, paramsHash, steeringHash)
 
 	// Check cache first
 	if cachedJobs, found := fs.semanticJobsCache.Get(cacheKey); found {
@@ -506,9 +516,9 @@ func GetSemanticJobsForUser(ctx context.Context, fs *FirestoreClient, user *User
 	if params == nil {
 		params = DefaultHybridSearchParams()
 	}
-	scoredJobs, err := SemanticSearchJobs(ctx, user.SteeringQuery, criteriaID, topK, params)
+	scoredJobs, err := SemanticSearchJobs(ctx, steeringQuery, criteriaID, topK, params)
 	if err != nil {
-		return nil, fmt.Errorf("failed to search jobs for user %s: %w", user.ID, err)
+		return nil, fmt.Errorf("failed to search jobs for user %s: %w", userID, err)
 	}
 
 	jobMap := map[string]ScoredJobDetail{}

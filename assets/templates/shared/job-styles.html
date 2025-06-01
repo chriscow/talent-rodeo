@@ -1,0 +1,99 @@
+{{define "job-styles"}}
+<style>
+    /* Jobs grid */
+    .jobs-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    @media (max-width: 768px) {
+        .jobs-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+    
+    /* Job cards */
+    .job-card {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        border: 1px solid var(--muted-border-color);
+        border-radius: var(--border-radius);
+        padding: 1rem;
+    }
+    
+    .job-card header {
+        margin-bottom: 1rem;
+    }
+    
+    .job-card h3 {
+        margin: 0;
+        font-size: 1.2rem;
+    }
+    
+    .job-card .company {
+        margin: 0.25rem 0 0;
+        color: var(--primary);
+        font-weight: 500;
+    }
+    
+    .job-content {
+        flex-grow: 1;
+        overflow: hidden;
+    }
+    
+    .job-card .summary {
+        margin-bottom: 1rem;
+        max-height: 150px;
+        overflow-y: auto;
+    }
+    
+    .job-card .requirements h4,
+    .job-card .qualifications h4,
+    .job-card .responsibilities h4,
+    .job-card .skills h4,
+    .job-card .bonus-qualifications h4 {
+        font-size: 1rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .job-card .requirements ul,
+    .job-card .qualifications ul,
+    .job-card .responsibilities ul,
+    .job-card .skills ul,
+    .job-card .bonus-qualifications ul {
+        list-style: none;
+        padding-left: 0;
+        margin: 0;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+    
+    .job-card .requirements li,
+    .job-card .qualifications li,
+    .job-card .responsibilities li,
+    .job-card .skills li,
+    .job-card .bonus-qualifications li {
+        margin-bottom: 0.25rem;
+    }
+    
+    .job-card footer {
+        margin-top: 1rem;
+        font-size: 0.875rem;
+        color: var(--muted-color);
+    }
+    
+    /* Admin debug info */
+    .admin-debug {
+        background: #f0f0f0;
+        color: #333;
+        padding: 0.5rem;
+        margin-bottom: 1rem;
+        border-radius: 0.25rem;
+        font-size: 0.85rem;
+        border: 1px solid #ddd;
+    }
+</style>
+{{end}}

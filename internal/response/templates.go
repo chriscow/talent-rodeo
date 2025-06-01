@@ -37,6 +37,7 @@ func NewTemplateCache() (TemplateCache, error) {
 					patterns := []string{
 						"templates/base.html",
 						"templates/partials/*.html",
+						"templates/shared/*.html",
 						filepath.Join("templates/pages", name, subpage.Name()),
 					}
 
@@ -54,6 +55,7 @@ func NewTemplateCache() (TemplateCache, error) {
 		patterns := []string{
 			"templates/base.html",
 			"templates/partials/*.html",
+			"templates/shared/*.html",
 			filepath.Join("templates/pages", name),
 		}
 
@@ -74,7 +76,7 @@ func Partial(w http.ResponseWriter, status int, data any, partialPath string) er
 
 func PartialWithHeaders(w http.ResponseWriter, status int, data any, headers http.Header, partialPath string) error {
 	// For partials, we only need the partial template and any shared partials
-	patterns := []string{"partials/*.html", partialPath}
+	patterns := []string{"partials/*.html", "shared/*.html", partialPath}
 
 	// Get the template name from the path
 	// e.g., "templates/partials/messages_list.html" -> "messages_list"
@@ -88,7 +90,7 @@ func Page(w http.ResponseWriter, status int, data any, pagePath string) error {
 }
 
 func PageWithHeaders(w http.ResponseWriter, status int, data any, headers http.Header, pagePath string) error {
-	patterns := []string{"base.html", "partials/*.html", pagePath}
+	patterns := []string{"base.html", "partials/*.html", "shared/*.html", pagePath}
 
 	return NamedTemplateWithHeaders(w, status, data, headers, "base", patterns...)
 }
@@ -146,7 +148,7 @@ func Render(w http.ResponseWriter, status int, data any, templatePath string, op
 		opts = &RenderOptions{}
 	}
 
-	patterns := []string{"partials/*.html", templatePath}
+	patterns := []string{"partials/*.html", "shared/*.html", templatePath}
 
 	// If a layout is specified, include it and use it as the entry point
 	templateName := strings.TrimSuffix(filepath.Base(templatePath), ".html")

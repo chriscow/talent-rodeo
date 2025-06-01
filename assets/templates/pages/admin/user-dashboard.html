@@ -11,6 +11,7 @@
     
     <form method="POST" autocomplete="off">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <input type="hidden" name="previous_user_id" value="{{.SelectedUserID}}">
         
         <div class="grid">
             <div>
@@ -46,7 +47,104 @@
             {{end}}
         </div>
         
-        <button type="submit">View User Dashboard</button>
+        {{if .SelectedUser}}
+        <!-- Steering Query Parameters -->
+        <details>
+            <summary><strong>Steering Query Parameters</strong></summary>
+            <p><em>Adjust these parameters to experiment with different search configurations for this user.</em></p>
+            <div class="grid">
+                <div>
+                    <label for="steering_query">Main Query</label>
+                    <input type="text" name="steering_query" id="steering_query" 
+                           value="{{with .SteeringQuery}}{{.Query}}{{end}}" 
+                           placeholder="e.g., Go Developer">
+                </div>
+                <div>
+                    <label for="rerank_query">Rerank Query</label>
+                    <input type="text" name="rerank_query" id="rerank_query" 
+                           value="{{with .SteeringQuery}}{{.RerankQuery}}{{end}}" 
+                           placeholder="Complete sentence for reranking">
+                </div>
+            </div>
+            <div class="grid">
+                <div>
+                    <label for="move_toward">Move Toward</label>
+                    <textarea name="move_toward" id="move_toward" rows="2" placeholder="Concepts to move search results toward">{{with .SteeringQuery}}{{.MoveToward}}{{end}}</textarea>
+                </div>
+                <div>
+                    <label for="move_away">Move Away</label>
+                    <textarea name="move_away" id="move_away" rows="2" placeholder="Concepts to move search results away from">{{with .SteeringQuery}}{{.MoveAway}}{{end}}</textarea>
+                </div>
+            </div>
+            <div class="grid">
+                <div>
+                    <label for="force_toward">Force Toward</label>
+                    <input type="number" step="0.01" min="0" max="1" name="force_toward" id="force_toward" 
+                           value="{{with .SteeringQuery}}{{printf "%.2f" .ForceToward}}{{else}}0.80{{end}}">
+                </div>
+                <div>
+                    <label for="force_away">Force Away</label>
+                    <input type="number" step="0.01" min="0" max="1" name="force_away" id="force_away" 
+                           value="{{with .SteeringQuery}}{{printf "%.2f" .ForceAway}}{{else}}0.80{{end}}">
+                </div>
+            </div>
+        </details>
+        
+        <!-- Hybrid Search Parameters -->
+        <details>
+            <summary><strong>Hybrid Search Parameters</strong></summary>
+            <div class="grid">
+                <div>
+                    <label for="dense_weight">Dense Weight</label>
+                    <input type="number" step="0.01" min="0" max="1" name="dense_weight" id="dense_weight" 
+                           value="{{with .HybridParams}}{{printf "%.2f" .DenseWeight}}{{else}}0.50{{end}}">
+                </div>
+                <div>
+                    <label for="sparse_weight">Sparse Weight</label>
+                    <input type="number" step="0.01" min="0" max="1" name="sparse_weight" id="sparse_weight" 
+                           value="{{with .HybridParams}}{{printf "%.2f" .SparseWeight}}{{else}}0.50{{end}}">
+                </div>
+                <div>
+                    <label for="score_fusion">Score Fusion Method</label>
+                    <select name="score_fusion" id="score_fusion">
+                        <option value="linear" {{if eq .HybridParams.ScoreFusion "linear"}}selected{{end}}>Linear</option>
+                        <option value="max" {{if eq .HybridParams.ScoreFusion "max"}}selected{{end}}>Maximum</option>
+                        <option value="min" {{if eq .HybridParams.ScoreFusion "min"}}selected{{end}}>Minimum</option>
+                        <option value="harmonic" {{if eq .HybridParams.ScoreFusion "harmonic"}}selected{{end}}>Harmonic Mean</option>
+                        <option value="reciprocal_rank_fusion" {{if eq .HybridParams.ScoreFusion "reciprocal_rank_fusion"}}selected{{end}}>Reciprocal Rank Fusion</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="recency_weight">Recency Weight</label>
+                    <input type="number" step="0.01" min="0" max="1" name="recency_weight" id="recency_weight" 
+                           value="{{with .HybridParams}}{{printf "%.2f" .RecencyWeight}}{{else}}0.20{{end}}">
+                </div>
+                <div>
+                    <label for="recency_half_life">Recency Half-Life (days)</label>
+                    <input type="number" step="1" min="1" name="recency_half_life" id="recency_half_life" 
+                           value="{{with .HybridParams}}{{printf "%.0f" .RecencyHalfLife}}{{else}}30{{end}}">
+                </div>
+                <div>
+                    <label for="score_threshold">Score Threshold</label>
+                    <input type="number" step="0.01" min="0" max="1" name="score_threshold" id="score_threshold" 
+                           value="{{with .HybridParams}}{{printf "%.2f" .ScoreThreshold}}{{else}}0.00{{end}}">
+                </div>
+                <div>
+                    <label for="top_k">Top K Results</label>
+                    <input type="number" min="1" max="100" name="top_k" id="top_k" 
+                           value="{{if .TopK}}{{.TopK}}{{else}}10{{end}}">
+                </div>
+                <div>
+                    <div class="checkbox-container">
+                        <input type="checkbox" name="enable_reranking" id="enable_reranking" {{if .EnableReranking}}checked{{end}}>
+                        <label for="enable_reranking">Enable Reranking</label>
+                    </div>
+                </div>
+            </div>
+        </details>
+        {{end}}
+        
+        <button type="submit">{{if .SelectedUser}}Update Dashboard{{else}}View User Dashboard{{end}}</button>
     </form>
     
     {{if .SelectedUser}}
@@ -80,11 +178,7 @@
             </header>
             
             {{if .Jobs}}
-                <div class="jobs-grid">
-                    {{range .Jobs}}
-                        {{template "job-card" .}}
-                    {{end}}
-                </div>
+                {{template "job-grid" .}}
                 
                 {{if .HasNextPage}}
                 <article class="notice">
@@ -126,6 +220,42 @@
     .user-dashboard header p {
         color: var(--muted-color);
         font-size: 0.9rem;
+    }
+    
+    /* Form sections styling */
+    details {
+        border: 1px solid var(--muted-border-color);
+        border-radius: 0.5rem;
+        padding: 1rem;
+        margin: 1rem 0;
+        background: var(--card-background-color);
+    }
+
+    details summary {
+        cursor: pointer;
+        margin-bottom: 1rem;
+        font-weight: 600;
+        color: var(--primary);
+    }
+
+    details[open] summary {
+        margin-bottom: 1.5rem;
+    }
+
+    .checkbox-container {
+        display: flex;
+        align-items: center;
+        cursor: pointer;
+        margin-top: 0.5rem;
+    }
+    
+    .checkbox-container input[type="checkbox"] {
+        margin-right: 0.5rem;
+    }
+    
+    .checkbox-container span {
+        font-size: 0.9rem;
+        color: var(--muted-color);
     }
     
     /* Job status tabs navigation */
@@ -266,96 +396,4 @@
         color: var(--del-color);
     }
 </style>
-{{end}}
-
-
-
-{{define "job-card"}}
-<article class="job-card">
-    <hgroup>
-        <h3>{{.JobDetail.Title}}</h3>
-        <p class="company">{{.JobDetail.Company}} - <em>Posted {{.JobDetail.PostedDate | approxAge}}</em></p>
-    </hgroup>
-    <div>
-        <span>
-    {{if .JobDetail.URL}}
-    <a href="{{.JobDetail.URL}}" target="_blank">View Job</a>
-    {{end}}
-    {{if .JobDetail.ApplyURL}}
-    &nbsp;&nbsp;<a href="{{.JobDetail.ApplyURL}}" target="_blank">Apply Now</a>
-    {{end}}
-    </span>
-    </div>
-    <br />
-<!-- 
-    <details>&nbsp;
-         <summary>Rating: N/A</summary>
-        <p>[analysis]</p> 
-    </details>
--->
-
-
-    <div class="job-content">
-        {{with .JobDetail.ExtractedData}}
-        {{with .Summary}}
-        <div class="summary">
-            <p>{{.}}</p>
-        </div>
-        {{end}}
-        {{with .Responsibilities}}
-        <div class="responsibilities">
-            <h4>Responsibilities</h4>
-            <ul>
-                {{range .}}
-                <li>{{.}}</li>
-                {{end}}
-            </ul>
-        </div>
-        {{end}}
-        {{with .Skills}}
-        <div class="skills">
-            <h4>Skills</h4>
-            <ul>
-                {{range .}}
-                <li>{{.}}</li>
-                {{end}}
-            </ul>
-        </div>
-        {{end}}
-        {{with .Requirements}}
-        <div class="requirements">
-            <h4>Requirements</h4>
-            <ul>
-                {{range .}}
-                <li>{{.}}</li>
-                {{end}}
-            </ul>
-        </div>
-        {{end}}
-        {{with .Qualifications}}
-        <div class="qualifications">
-            <h4>Qualifications</h4>
-            <ul>
-                {{range .}}
-                <li>{{.}}</li>
-                {{end}}
-            </ul>
-        </div>
-        {{end}}
-        {{with .BonusQualifications}}
-        <div class="bonus-qualifications">
-            <h4>Bonus Qualifications</h4>
-            <ul>
-                {{range .}}
-                <li>{{.}}</li>
-                {{end}}
-            </ul>
-        </div>
-        {{end}}
-        {{end}}
-    </div>
-    <footer>
-        <small>Added {{.JobDetail.CreatedAt | humanDate}} &nbsp; | &nbsp; {{rrfPercentage .ScoredJobDetail.Score}}% match &nbsp; | &nbsp; {{.ScoredJobDetail.Score}} &nbsp; | &nbsp; {{rrfStars .ScoredJobDetail.Score}}</small>
-    </footer>
-</article>
 {{end}}
