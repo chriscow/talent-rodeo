@@ -20,6 +20,9 @@ Make sure the email is concise but informative. It should only contain the body 
 Generate your email response in two formats: plain and html.
 Enclose each email in the appropriate <plain_email_body> and <html_email_body> tags.
 
+The URL for the website is: https://talent.rodeo
+You should include a reference to it so users have the link handy.
+
 Here's an example of how your response should be structured:
 
 <plain_email_body>
