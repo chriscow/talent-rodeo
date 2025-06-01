@@ -361,7 +361,7 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 
 	if smtpCfg != nil {
 		logger.Debug("generating recap email", "user-id", user.ID, "appointment-id", appointment.ID)
-		if err := GenerateRecapEmail(ctx, fs, user, transcript, *smtpCfg); err != nil {
+		if err := GenerateRecapEmail(ctx, fs, user, transcript, *smtpCfg, logger); err != nil {
 			logger.Error("failed to generate recap email", "error", err, "user-id", user.ID, "appointment-id", appointment.ID)
 			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 				"user_id":        user.ID,
@@ -396,7 +396,7 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 	logger.Debug(internal.Green("✅ appointment processing completed"), "user-id", user.ID, "appointment-id", appointment.ID)
 }
 
-func GenerateRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user *internal.User, transcript *internal.Transcript, cfg SMTPConfig) error {
+func GenerateRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user *internal.User, transcript *internal.Transcript, cfg SMTPConfig, logger *slog.Logger) error {
 	mailer, err := smtp.NewMailer(cfg.Host, cfg.Port, cfg.Username, cfg.Password, cfg.From)
 	if err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
@@ -440,6 +440,7 @@ func GenerateRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user 
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"error_type": "extract_email_data",
 		})
+		logger.Error("failed to extract email data", "error", err, "user-id", user.ID, "resp", resp)
 		return fmt.Errorf("failed to extract email data: %w", err)
 	}
 
