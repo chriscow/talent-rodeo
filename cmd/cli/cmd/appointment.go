@@ -374,9 +374,11 @@ var sendRecapCmd = &cobra.Command{
 			return fmt.Errorf("SMTP_PORT environment variable must be a valid port number")
 		}
 
+		logger := slog.New(tint.NewHandler(os.Stdout, &tint.Options{Level: slog.LevelDebug}))
+
 		// Generate and send the recap email
 		fmt.Printf("Sending recap email for appointment %s to %s...\n", appointmentID, user.Email)
-		err = transcript.GenerateRecapEmail(ctx, fs, user, appointmentTranscript, cfg)
+		err = transcript.GenerateRecapEmail(ctx, fs, user, appointmentTranscript, cfg, logger)
 		if err != nil {
 			return fmt.Errorf("failed to generate and send recap email: %w", err)
 		}

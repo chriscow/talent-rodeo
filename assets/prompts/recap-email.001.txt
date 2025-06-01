@@ -17,7 +17,8 @@ email to provide suggestions on how to refine their search results, such as:
 
 Make sure the email is concise but informative. It should only contain the body of the email.
 
-Enclose your entire email response within <plain_email_body> tags.
+Generate your email response in two formats: plain and html.
+Enclose each email in the appropriate <plain_email_body> and <html_email_body> tags.
 
 Here's an example of how your response should be structured:
 
@@ -29,11 +30,11 @@ Here's an example of how your response should be structured:
 Best regards,
 Shirely
 AI Job Search Assistant - Talent Rodeo
+"They put HIRE in my name for good reason"
 </plain_email_body>
 
 <html_email_body>
 <p>{{.FirstName}}</p>
-<br />
 [Body of the HTML version of the email]
 
 </html_email_body>
