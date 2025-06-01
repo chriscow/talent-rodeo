@@ -252,7 +252,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 
 			var params *internal.HybridSearchParams = nil // use the default params
 
-			allSemanticJobs, err := internal.GetSemanticJobsForUser(r.Context(), app.fs, user, criteriaID, semanticSearchTopK, params)
+			allSemanticJobs, err := internal.GetSemanticJobsForUser(r.Context(), app.fs, user.ID, user.SteeringQuery, criteriaID, semanticSearchTopK, params)
 			if err != nil {
 				wrappedErr := fmt.Errorf("showDashboard: failed to get semantic jobs: %w", err)
 				app.logger.Error("showDashboard: failed to get semantic jobs", "error", err)

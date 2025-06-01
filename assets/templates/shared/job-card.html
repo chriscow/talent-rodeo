@@ -1,0 +1,124 @@
+{{define "job-card"}}
+<article class="job-card">
+    <!-- Determine context: check if we have ScoredJobDetail fields directly (admin) or nested in JobWithDetails (dashboard) -->
+    {{$isAdmin := false}}
+    {{$isDirect := false}}
+    
+    {{/* Try to access DenseScore directly - if it exists, we're in admin context with ScoredJobDetail */}}
+    {{if .DenseScore}}
+        {{$isDirect = true}}
+        {{$isAdmin = true}}
+    {{end}}
+    
+    {{if $isAdmin}}
+    <!-- Admin-only debug info -->
+    <button class="outline secondary" disabled>
+        <strong>Debug Info:</strong>
+        Dense: {{printf "%.4f" .DenseScore}} | 
+        Sparse: {{printf "%.4f" .SparseScore}} | 
+        Combined: {{printf "%.4f" .Score}} |
+        Job ID: {{.JobDetail.ID}}
+    </button>
+    <hr />
+    {{end}}
+    
+    <div style="display: none;">
+        {{if .DenseScore}}
+        <!-- Direct ScoredJobDetail access -->
+        <span class="job-id">{{.JobDetail.ProviderJobID}}</span>
+        <span class="dense-score">{{.DenseScore}}</span>
+        <span class="sparse-score">{{.SparseScore}}</span>
+        <span class="score">{{.Score}}</span>
+        {{else}}
+        <!-- Nested ScoredJobDetail access -->
+        <span class="job-id">{{.JobDetail.ProviderJobID}}</span>
+        <span class="dense-score">{{.ScoredJobDetail.DenseScore}}</span>
+        <span class="sparse-score">{{.ScoredJobDetail.SparseScore}}</span>
+        <span class="score">{{.ScoredJobDetail.Score}}</span>
+        {{end}}
+    </div>
+
+    <hgroup>
+        <h3>{{.JobDetail.Title}}</h3>
+        <p class="company">{{.JobDetail.Company}} - <em>Posted {{.JobDetail.PostedDate | approxAge}}</em></p>
+    </hgroup>
+    <div>
+        <span>
+        {{if .JobDetail.URL}}
+        <a href="{{.JobDetail.URL}}" target="_blank">View Job</a>
+        {{end}}
+        {{if .JobDetail.ApplyURL}}
+        &nbsp;&nbsp;<a href="{{.JobDetail.ApplyURL}}" target="_blank">Apply Now</a>
+        {{end}}
+        </span>
+    </div>
+    <br />
+
+    <div class="job-content">
+    {{with .JobDetail.ExtractedData}}
+        {{with .Summary}}
+        <div class="summary">
+            <p>{{.}}</p>
+        </div>
+        {{end}}
+        {{with .Responsibilities}}
+        <div class="responsibilities">
+            <h4>Responsibilities</h4>
+            <ul>
+                {{range .}}
+                <li>{{.}}</li>
+                {{end}}
+            </ul>
+        </div>
+        {{end}}
+        {{with .Skills}}
+        <div class="skills">
+            <h4>Skills</h4>
+            <ul>
+                {{range .}}
+                <li>{{.}}</li>
+                {{end}}
+            </ul>
+        </div>
+        {{end}}
+        {{with .Requirements}}
+        <div class="requirements">
+            <h4>Requirements</h4>
+            <ul>
+                {{range .}}
+                <li>{{.}}</li>
+                {{end}}
+            </ul>
+        </div>
+        {{end}}
+        {{with .Qualifications}}
+        <div class="qualifications">
+            <h4>Qualifications</h4>
+            <ul>
+                {{range .}}
+                <li>{{.}}</li>
+                {{end}}
+            </ul>
+        </div>
+        {{end}}
+        {{with .BonusQualifications}}
+        <div class="bonus-qualifications">
+            <h4>Bonus Qualifications</h4>
+            <ul>
+                {{range .}}
+                <li>{{.}}</li>
+                {{end}}
+            </ul>
+        </div>
+        {{end}}
+    {{end}}
+    </div>
+    <footer>
+        {{if .Score}}
+        <small>Added {{.JobDetail.CreatedAt | humanDate}} &nbsp; | &nbsp; {{rrfStars .Score}}</small>
+        {{else}}
+        <small>Added {{.JobDetail.CreatedAt | humanDate}} &nbsp; | &nbsp; {{rrfStars .ScoredJobDetail.Score}}</small>
+        {{end}}
+    </footer>
+</article>
+{{end}}
