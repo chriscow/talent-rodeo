@@ -180,7 +180,7 @@ func (p *HybridSearchParams) Validate() *HybridSearchParams {
 //  5. Deduplicates and sorts results
 //
 // If params is nil, default parameters will be used.
-func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, criteriaID string, topK int, params *HybridSearchParams) ([]ScoredJobDetail, error) {
+func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, criteria SearchCriteria, topK int, params *HybridSearchParams) ([]ScoredJobDetail, error) {
 	if params == nil {
 		params = DefaultHybridSearchParams()
 	} else {
@@ -193,11 +193,16 @@ func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, crite
 	}
 
 	// Build filter map
-	filter := map[string]any{}
-	if criteriaID != "" {
-		filter["criteriaID"] = map[string]any{
-			"$eq": criteriaID,
-		}
+	filter := map[string]any{
+		"criteriaID": map[string]any{
+			"$eq": criteria.ID,
+		},
+		"workType": map[string]any{
+			"$eq": criteria.WorkType,
+		},
+		"experience": map[string]any{
+			"$eq": criteria.ExperienceLevel,
+		},
 	}
 
 	metaFilter, err := structpb.NewStruct(filter)
