@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="auto">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Card Feedback Demo</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/picocss/1.5.7/pico.min.css">
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.13.3/cdn.min.js"></script>
+    <style>
+        .job-section {
+            margin-bottom: 2rem;
+        }
+        
+        .feedback-item {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-radius: 4px;
+            transition: background-color 0.2s ease;
+        }
+        
+        .feedback-item:hover {
+            background-color: var(--pico-muted-color);
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+        }
+        
+        .feedback-buttons {
+            display: flex;
+            margin-left: 0.75rem;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            flex-shrink: 0;
+        }
+        
+        .feedback-item:hover .feedback-buttons {
+            opacity: 1;
+        }
+        
+        .feedback-buttons button {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.8rem;
+            margin: 0;
+            border: 1px solid var(--pico-muted-border-color);
+            background: var(--pico-background-color);
+            color: var(--pico-color);
+            cursor: pointer;
+        }
+        
+        .feedback-buttons button:first-child {
+            border-right: none;
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+        
+        .feedback-buttons button:last-child {
+            border-top-left-radius: 0;
+            border-bottom-left-radius: 0;
+        }
+        
+        .feedback-buttons button.active-like {
+            background: var(--pico-primary-background);
+            color: var(--pico-primary-inverse);
+            border-color: var(--pico-primary-border);
+        }
+        
+        .feedback-buttons button.active-dislike {
+            background: var(--pico-del-color);
+            color: white;
+            border-color: var(--pico-del-color);
+        }
+        
+        .feedback-buttons button:hover:not(.active-like):not(.active-dislike) {
+            background: var(--pico-secondary-background);
+            border-color: var(--pico-secondary-border);
+        }
+        
+        .item-text {
+            flex: 0 1 auto;
+        }
+        
+        .theme-toggle {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 100;
+        }
+        
+        /* Theme-specific icon visibility */
+        .light-theme-icon,
+        .dark-theme-icon {
+            display: inline-block;
+        }
+        
+        /* Hide dark theme icons in light mode */
+        html[data-theme="light"] .dark-theme-icon,
+        html:not([data-theme]) .dark-theme-icon {
+            display: none;
+        }
+        
+        html[data-theme="light"] .light-theme-icon,
+        html:not([data-theme]) .light-theme-icon {
+            display: inline-block;
+        }
+        
+        /* Hide light theme icons in dark mode */
+        html[data-theme="dark"] .light-theme-icon {
+            display: none;
+        }
+        
+        html[data-theme="dark"] .dark-theme-icon {
+            display: inline-block;
+        }
+        
+        /* Auto theme detection for systems without explicit theme attribute */
+        @media (prefers-color-scheme: dark) {
+            html:not([data-theme]) .light-theme-icon {
+                display: none;
+            }
+            
+            html:not([data-theme]) .dark-theme-icon {
+                display: inline-block;
+            }
+        }
+        
+        @media (prefers-color-scheme: light) {
+            html:not([data-theme]) .dark-theme-icon {
+                display: none;
+            }
+            
+            html:not([data-theme]) .light-theme-icon {
+                display: inline-block;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="theme-toggle">
+        <button onclick="toggleTheme()" class="outline secondary">🌓 Theme</button>
+    </div>
+
+    <div class="container" x-data="jobFeedback()">
+        <header>
+            <h1>Job Position: Senior Software Developer</h1>
+            <p><em>Hover over any item below and provide feedback by clicking the like/dislike buttons</em></p>
+        </header>
+
+        <main>
+            <section class="job-section">
+                <h2>Key Responsibilities</h2>
+                <ul>
+                    <li class="feedback-item" 
+                        @mouseenter="currentHover = 'resp-1'" 
+                        @mouseleave="currentHover = null">
+                        <span class="item-text">Design and develop scalable web applications using modern frameworks</span>
+                        <div class="feedback-buttons" role="group">
+                            <button type="button" 
+                                    :class="{ 'active-like': feedback['resp-1'] === 'like' }"
+                                    @click="toggleFeedback('resp-1', 'like')">
+                                <img class="light-theme-icon" src="/static/img/thumbs-up.24px.light-theme.svg" alt="Like" width="16" height="16">
+                                <img class="dark-theme-icon" src="/static/img/thumbs-up.24px.dark-theme.svg" alt="Like" width="16" height="16">
+                            </button>
+                            <button type="button" 
+                                    :class="{ 'active-dislike': feedback['resp-1'] === 'dislike' }"
+                                    @click="toggleFeedback('resp-1', 'dislike')">
+                                <img class="light-theme-icon" src="/static/img/thumbs-down.24px.light-theme.svg" alt="Dislike" width="16" height="16">
+                                <img class="dark-theme-icon" src="/static/img/thumbs-down.24px.dark-theme.svg" alt="Dislike" width="16" height="16">
+                            </button>
+                        </div>
+                    </li>
+                    <li class="feedback-item" 
+                        @mouseenter="currentHover = 'resp-2'" 
+                        @mouseleave="currentHover = null">
+                        <span class="item-text">Collaborate with cross-functional teams to define and implement new features</span>
+                        <div class="feedback-buttons" role="group">
+                            <button type="button" 
+                                    :class="{ 'active-like': feedback['resp-2'] === 'like' }"
+                                    @click="toggleFeedback('resp-2', 'like')">
+                                <img class="light-theme-icon" src="/static/img/thumbs-up.24px.light-theme.svg" alt="Like" width="16" height="16">
+                                <img class="dark-theme-icon" src="/static/img/thumbs-up.24px.dark-theme.svg" alt="Like" width="16" height="16">
+                            </button>
+                            <button type="button" 
+                                    :class="{ 'active-dislike': feedback['resp-2'] === 'dislike' }"
+                                    @click="toggleFeedback('resp-2', 'dislike')">
+                                <img class="light-theme-icon" src="/static/img/thumbs-down.24px.light-theme.svg" alt="Dislike" width="16" height="16">
+                                <img class="dark-theme-icon" src="/static/img/thumbs-down.24px.dark-theme.svg" alt="Dislike" width="16" height="16">
+                            </button>
+                        </div>
+                    </li>
+                    <li class="feedback-item" 
+                        @mouseenter="currentHover = 'resp-3'" 
+                        @mouseleave="currentHover = null">
+                        <span class="item-text">Participate in code reviews and maintain high code quality standards</span>
+                        <div class="feedback-buttons" role="group">
+                            <button type="button" 
+                                    :class="{ 'active-like': feedback['resp-3'] === 'like' }"
+                                    @click="toggleFeedback('resp-3', 'like')">
+                                <img class="light-theme-icon" src="/static/img/thumbs-up.24px.light-theme.svg" alt="Like" width="16" height="16">
+                                <img class="dark-theme-icon" src="/static/img/thumbs-up.24px.dark-theme.svg" alt="Like" width="16" height="16">
+                            </button>
+                            <button type="button" 
+                                    :class="{ 'active-dislike': feedback['resp-3'] === 'dislike' }"
+                                    @click="toggleFeedback('resp-3', 'dislike')">
+                                <img class="light-theme-icon" src="/static/img/thumbs-down.24px.light-theme.svg" alt="Dislike" width="16" height="16">
+                                <img class="dark-theme-icon" src="/static/img/thumbs-down.24px.dark-theme.svg" alt="Dislike" width="16" height="16">
+                            </button>
+                        </div>
+                    </li>
+                </ul>
+            </section>
+
+            <section class="job-section">
+                <h2>Required Skills</h2>
+                <ul>
+                    <li class="feedback-item" 
+                        @mouseenter="currentHover = 'skill-1'" 
+                        @mouseleave="currentHover = null">
+                        <span class="item-text">5+ years experience with Go programming language</span>
+                        <div class="feedback-buttons" role="group">
+                            <button type="button" 
+                                    :class="{ 'active-like': feedback['skill-1'] === 'like' }"
+                                    @click="toggleFeedback('skill-1', 'like')">
+                                <img class="light-theme-icon" src="/static/img/thumbs-up.24px.light-theme.svg" alt="Like" width="16" height="16">
+                                <img class="dark-theme-icon" src="/static/img/thumbs-up.24px.dark-theme.svg" alt="Like" width="16" height="16">
+                            </button>
+                            <button type="button" 
+                                    :class="{ 'active-dislike': feedback['skill-1'] === 'dislike' }"
+                                    @click="toggleFeedback('skill-1', 'dislike')">
+                                <img class="light-theme-icon" src="/static/img/thumbs-down.24px.light-theme.svg" alt="Dislike" width="16" height="16">
+                                <img class="dark-theme-icon" src="/static/img/thumbs-down.24px.dark-theme.svg" alt="Dislike" width="16" height="16">
+                            </button>
+                        </div>
+                    </li>
+                    <li class="feedback-item" 
+                        @mouseenter="currentHover = 'skill-2'" 
+                        @mouseleave="currentHover = null">
+                        <span class="item-text">Strong experience with PostgreSQL and database design</span>
+                        <div class="feedback-buttons" role="group">
+                            <button type="button" 
+                                    :class="{ 'active-like': feedback['skill-2'] === 'like' }"
+                                    @click="toggleFeedback('skill-2', 'like')">
+                                <img class="light-theme-icon" src="/static/img/thumbs-up.24px.light-theme.svg" alt="Like" width="16" height="16">
+                                <img class="dark-theme-icon" src="/static/img/thumbs-up.24px.dark-theme.svg" alt="Like" width="16" height="16">
+                            </button>
+                            <button type="button" 
+                                    :class="{ 'active-dislike': feedback['skill-2'] === 'dislike' }"
+                                    @click="toggleFeedback('skill-2', 'dislike')">
+                                <img class="light-theme-icon" src="/static/img/thumbs-down.24px.light-theme.svg" alt="Dislike" width="16" height="16">
+                                <img class="dark-theme-icon" src="/static/img/thumbs-down.24px.dark-theme.svg" alt="Dislike" width="16" height="16">
+                            </button>
+                        </div>
+                    </li>
+                    <li class="feedback-item" 
+                        @mouseenter="currentHover = 'skill-3'" 
+                        @mouseleave="currentHover = null">
+                        <span class="item-text">Experience with HTMX and vanilla JavaScript (no React required)</span>
+                        <div class="feedback-buttons" role="group">
+                            <button type="button" 
+                                    :class="{ 'active-like': feedback['skill-3'] === 'like' }"
+                                    @click="toggleFeedback('skill-3', 'like')">
+                                <img class="light-theme-icon" src="/static/img/thumbs-up.24px.light-theme.svg" alt="Like" width="16" height="16">
+                                <img class="dark-theme-icon" src="/static/img/thumbs-up.24px.dark-theme.svg" alt="Like" width="16" height="16">
+                            </button>
+                            <button type="button" 
+                                    :class="{ 'active-dislike': feedback['skill-3'] === 'dislike' }"
+                                    @click="toggleFeedback('skill-3', 'dislike')">
+                                <img class="light-theme-icon" src="/static/img/thumbs-down.24px.light-theme.svg" alt="Dislike" width="16" height="16">
+                                <img class="dark-theme-icon" src="/static/img/thumbs-down.24px.dark-theme.svg" alt="Dislike" width="16" height="16">
+                            </button>
+                        </div>
+                    </li>
+                </ul>
+            </section>
+
+            <section class="job-section">
+                <h2>Qualifications</h2>
+                <ul>
+                    <li class="feedback-item" 
+                        @mouseenter="currentHover = 'qual-1'" 
+                        @mouseleave="currentHover = null">
+                        <span class="item-text">Bachelor's degree in Computer Science or related field</span>
+                        <div class="feedback-buttons" role="group">
+                            <button type="button" 
+                                    :class="{ 'active-like': feedback['qual-1'] === 'like' }"
+                                    @click="toggleFeedback('qual-1', 'like')">
+                                <img class="light-theme-icon" src="/static/img/thumbs-up.24px.light-theme.svg" alt="Like" width="16" height="16">
+                                <img class="dark-theme-icon" src="/static/img/thumbs-up.24px.dark-theme.svg" alt="Like" width="16" height="16">
+                            </button>
+                            <button type="button" 
+                                    :class="{ 'active-dislike': feedback['qual-1'] === 'dislike' }"
+                                    @click="toggleFeedback('qual-1', 'dislike')">
+                                <img class="light-theme-icon" src="/static/img/thumbs-down.24px.light-theme.svg" alt="Dislike" width="16" height="16">
+                                <img class="dark-theme-icon" src="/static/img/thumbs-down.24px.dark-theme.svg" alt="Dislike" width="16" height="16">
+                            </button>
+                        </div>
+                    </li>
+                    <li class="feedback-item" 
+                        @mouseenter="currentHover = 'qual-2'" 
+                        @mouseleave="currentHover = null">
+                        <span class="item-text">Experience with cloud platforms (AWS, GCP, or Azure)</span>
+                        <div class="feedback-buttons" role="group">
+                            <button type="button" 
+                                    :class="{ 'active-like': feedback['qual-2'] === 'like' }"
+                                    @click="toggleFeedback('qual-2', 'like')">
+                                <img class="light-theme-icon" src="/static/img/thumbs-up.24px.light-theme.svg" alt="Like" width="16" height="16">
+                                <img class="dark-theme-icon" src="/static/img/thumbs-up.24px.dark-theme.svg" alt="Like" width="16" height="16">
+                            </button>
+                            <button type="button" 
+                                    :class="{ 'active-dislike': feedback['qual-2'] === 'dislike' }"
+                                    @click="toggleFeedback('qual-2', 'dislike')">
+                                <img class="light-theme-icon" src="/static/img/thumbs-down.24px.light-theme.svg" alt="Dislike" width="16" height="16">
+                                <img class="dark-theme-icon" src="/static/img/thumbs-down.24px.dark-theme.svg" alt="Dislike" width="16" height="16">
+                            </button>
+                        </div>
+                    </li>
+                </ul>
+            </section>
+        </main>
+
+        <footer>
+            <details>
+                <summary>View Current Feedback Data</summary>
+                <pre x-text="JSON.stringify(feedback, null, 2)"></pre>
+            </details>
+        </footer>
+    </div>
+
+    <script>
+        function jobFeedback() {
+            return {
+                currentHover: null,
+                feedback: {},
+                
+                toggleFeedback(itemId, type) {
+                    // If clicking the same type that's already active, remove it
+                    if (this.feedback[itemId] === type) {
+                        delete this.feedback[itemId];
+                    } else {
+                        // Otherwise, set the new feedback type
+                        this.feedback[itemId] = type;
+                    }
+                    
+                    // In a real app, you'd send this to your backend here
+                    console.log('Feedback updated:', { itemId, type: this.feedback[itemId] || 'none' });
+                }
+            }
+        }
+        
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+        }
+    </script>
+</body>
+</html>

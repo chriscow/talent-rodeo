@@ -36,7 +36,7 @@ func init() {
 	listJobsCmd.Flags().BoolVar(&jobsUpsertFlag, "upsert", false, "Upsert job details to Pinecone")
 
 	updateJobCmd.Flags().StringP("id", "i", "", "Job ID to update")
-	updateJobCmd.Flags().StringP("status", "s", "", "Update job status (viewed, saved, applied, rejected)")
+	updateJobCmd.Flags().StringP("status", "s", "", "Update job status (viewed, saved, applied, archived)")
 	updateJobCmd.Flags().StringP("notes", "n", "", "Update job notes")
 
 	deleteJobCmd.Flags().StringP("id", "i", "", "Job ID to delete")

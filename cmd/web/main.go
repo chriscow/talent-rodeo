@@ -16,6 +16,7 @@ import (
 
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/auth"
+	"talent-rodeo/internal/feedback"
 	"talent-rodeo/internal/search"
 	"talent-rodeo/internal/search/providers/scrapingdog"
 	"talent-rodeo/internal/smtp"
@@ -138,6 +139,7 @@ type application struct {
 	mailer                *smtp.Mailer
 	pusher                *pusher.Client
 	jobDispatch           *internal.JobEventDispatch
+	feedbackProcessor     *feedback.Processor
 	sessionManager        *scs.SessionManager
 	searchProvider        *scrapingdog.Provider
 	searchScheduler       *search.Scheduler
@@ -553,7 +555,7 @@ func checkEnv(logger *slog.Logger, envFile string) error {
 }
 
 // setupSessionManager initializes and returns a configured session manager.
-func setupSessionManager(cfg config, FirestoreClient *internal.FirestoreClient, logger *slog.Logger) (*scs.SessionManager, error) {
+func setupSessionManager(cfg config, FirestoreClient *internal.FirestoreClient, _ *slog.Logger) (*scs.SessionManager, error) {
 	keyPairs := [][]byte{[]byte(cfg.session.secretKey), nil}
 	if cfg.session.oldSecretKey != "" {
 		keyPairs = append(keyPairs, []byte(cfg.session.oldSecretKey), nil)
@@ -576,6 +578,12 @@ func setupSessionManager(cfg config, FirestoreClient *internal.FirestoreClient, 
 }
 
 func (app *application) startServices(ctx context.Context) error {
+
+	app.feedbackProcessor = feedback.NewProcessor(app.fs, app.logger)
+	if err := app.feedbackProcessor.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start feedback processor: %w", err)
+	}
+
 	app.subscriptionProcessor = subscription.NewProcessor(app.fs, app.logger)
 
 	app.jobDispatch = internal.NewJobEventDispatch()

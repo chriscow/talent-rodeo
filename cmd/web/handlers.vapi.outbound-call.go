@@ -55,7 +55,7 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 					internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 						"action": "update_user_status_tx",
 						"userID": user.ID,
-						"status": string(internal.UserStatusError),
+						"status": errStr,
 					})
 					return fmt.Errorf("failed to update user: %w", err)
 				}
@@ -65,6 +65,7 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 						"action": "update_appointment_tx",
 						"userID": user.ID,
 						"status": string(internal.AppointmentStatusFailed),
+						"error":  errStr,
 					})
 					return fmt.Errorf("failed to update appointment: %w", err)
 				}

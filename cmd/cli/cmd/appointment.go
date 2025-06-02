@@ -213,6 +213,38 @@ var reprocessCmd = &cobra.Command{
 			return fmt.Errorf("appointment ID is required")
 		}
 
+		var cfg *transcript.SMTPConfig
+		if sendRecap {
+			portStr := os.Getenv("SMTP_PORT")
+			if portStr == "" {
+				portStr = "587" // default SMTP port
+			}
+			port, err := strconv.Atoi(portStr)
+			if err != nil {
+				return fmt.Errorf("invalid SMTP_PORT environment variable: %w", err)
+			}
+
+			if os.Getenv("SMTP_HOST") == "" {
+				return fmt.Errorf("SMTP_HOST environment variable is required")
+			}
+			if os.Getenv("SMTP_USERNAME") == "" {
+				return fmt.Errorf("SMTP_USERNAME environment variable is required")
+			}
+			if os.Getenv("SMTP_PASSWORD") == "" {
+				return fmt.Errorf("SMTP_PASSWORD environment variable is required")
+			}
+			if os.Getenv("SMTP_FROM") == "" {
+				return fmt.Errorf("SMTP_FROM environment variable is required")
+			}
+			cfg = &transcript.SMTPConfig{
+				Host:     os.Getenv("SMTP_HOST"),
+				Port:     port,
+				Username: os.Getenv("SMTP_USERNAME"),
+				Password: os.Getenv("SMTP_PASSWORD"),
+				From:     os.Getenv("SMTP_FROM"),
+			}
+		}
+
 		fmt.Printf("Started reprocessing appointment %s\n", appointmentID)
 
 		// Initialize Firestore client
@@ -244,25 +276,6 @@ var reprocessCmd = &cobra.Command{
 		dispatch := internal.NewJobEventDispatch()
 		dispatch.Register(userID, internal.NewSearchResultProcessor(fs, logger))
 		queue := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), logger, scrapingdog.WithJobEventHandler(dispatch))
-
-		var cfg *transcript.SMTPConfig
-		if sendRecap {
-			portStr := os.Getenv("SMTP_PORT")
-			if portStr == "" {
-				portStr = "587" // default SMTP port
-			}
-			port, err := strconv.Atoi(portStr)
-			if err != nil {
-				return fmt.Errorf("invalid SMTP_PORT environment variable: %w", err)
-			}
-			cfg = &transcript.SMTPConfig{
-				Host:     os.Getenv("SMTP_HOST"),
-				Port:     port,
-				Username: os.Getenv("SMTP_USERNAME"),
-				Password: os.Getenv("SMTP_PASSWORD"),
-				From:     os.Getenv("SMTP_FROM"),
-			}
-		}
 
 		transcript.ProcessCompletedCall(hub, fs, nil, queue, logger, dispatch, user, appointment, cfg)
 

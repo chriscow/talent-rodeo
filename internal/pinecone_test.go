@@ -80,11 +80,6 @@ func TestGetSteeringVector(t *testing.T) {
 			}
 
 			if !tt.wantErr {
-				// Verify the vector has values and is properly normalized
-				if sq == nil {
-					t.Errorf("SteeringQuery is nil")
-					return
-				}
 
 				// Check vector length (should be non-zero)
 				vector, err := sq.GetDenseVector(ctx, p, tt.model)

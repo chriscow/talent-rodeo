@@ -56,7 +56,7 @@ Available Commands:
 Flags:
 - `--user`: User ID (required for user-specific operations)
 - `--id`: Job ID for updates/deletion
-- `--status`: Update job status (viewed, saved, applied, rejected)
+- `--status`: Update job status (viewed, saved, applied, archived)
 - `--notes`: Update notes for job
 - `--prefix`: Prefix for bulk deletion
 - `--limit`: Maximum number of items to return (default: 100)

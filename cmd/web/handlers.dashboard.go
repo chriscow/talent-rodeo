@@ -179,9 +179,6 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 		status = internal.JobStatusNew
 	}
 
-	// If this is true, we show all ratings not just the "IsRecommended" ones
-	showAllRatings := r.URL.Query().Get("show_all") == "true"
-
 	pageToken := r.URL.Query().Get("page")
 	pageSize := 5 // Fixed page size
 
@@ -195,7 +192,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 
 	// Get the total count for the current status for pagination calculations
 	start := time.Now()
-	statusJobCount, err := internal.GetJobsCount(r.Context(), app.fs, user.ID, status, showAllRatings)
+	statusJobCount, err := internal.GetJobsCount(r.Context(), app.fs, user.ID, status)
 	if err != nil {
 		wrappedErr := fmt.Errorf("showDashboard: failed to get job count for status %s: %w", status, err)
 		app.logger.Error("showDashboard: failed to get job count", "error", err, "status", status)
@@ -326,7 +323,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// For other statuses, use existing UserJob queries
 		start = time.Now()
-		userJobs, _, err := internal.GetUserJobsSorted(r.Context(), app.fs, user.ID, internal.JobStatus(status), pageSize, pageToken, showAllRatings)
+		userJobs, _, err := internal.GetUserJobsSorted(r.Context(), app.fs, user.ID, internal.JobStatus(status), pageSize, pageToken)
 		if err != nil {
 			wrappedErr := fmt.Errorf("showDashboard: failed to get sorted user jobs: %w", err)
 			app.logger.Error("showDashboard: failed to get sorted user jobs", "error", err)
@@ -414,8 +411,13 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 		data["HasJobs"] = len(semanticJobsSlice) > 0 || statusJobCount > 0
 		data["Jobs"] = semanticJobsSlice
 	} else {
+		// Convert jobs map to slice for template consumption
+		jobsSlice := make([]JobWithDetails, 0, len(jobs))
+		for _, job := range jobs {
+			jobsSlice = append(jobsSlice, job)
+		}
 		data["HasJobs"] = len(jobs) > 0 || statusJobCount > 0
-		data["Jobs"] = jobs
+		data["Jobs"] = jobsSlice
 	}
 
 	data["ActiveStatus"] = string(status)
@@ -441,11 +443,40 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 		"new":      "New Jobs",
 		"saved":    "Saved Jobs",
 		"applied":  "Applied Jobs",
-		"rejected": "Rejected Jobs",
+		"archived": "Archived Jobs",
 	}
 
-	// Add showAllRatings to template data
-	data["ShowAllRatings"] = showAllRatings
+	// Get user feedback for the current jobs to maintain state between refreshes
+	var jobIDs []string
+	if status == internal.JobStatusNew {
+		for _, job := range semanticJobsSlice {
+			jobIDs = append(jobIDs, job.GetID())
+		}
+	} else {
+		for jobID := range jobs {
+			jobIDs = append(jobIDs, jobID)
+		}
+	}
+
+	if len(jobIDs) > 0 {
+		userFeedback, err := internal.GetUserFeedbackForJobIDs(r.Context(), app.fs, user.ID, jobIDs)
+		if err != nil {
+			app.logger.Warn("Failed to get user feedback for jobs", "error", err, "user_id", user.ID)
+			userFeedback = []*internal.UserFeedback{} // Continue with empty feedback
+		}
+
+		// Convert feedback to a map for easy template access
+		feedbackMap := make(map[string]map[string]string) // jobID -> itemID -> feedbackType
+		for _, feedback := range userFeedback {
+			if feedbackMap[feedback.JobID] == nil {
+				feedbackMap[feedback.JobID] = make(map[string]string)
+			}
+			feedbackMap[feedback.JobID][feedback.ItemID] = string(feedback.FeedbackType)
+		}
+		data["UserFeedback"] = feedbackMap
+	} else {
+		data["UserFeedback"] = make(map[string]map[string]string)
+	}
 
 	if err := response.Page(w, http.StatusOK, data, "pages/dashboard.html"); err != nil {
 		app.serverError(w, r, fmt.Errorf("failed to render dashboard page: %w", err))

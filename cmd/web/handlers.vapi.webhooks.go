@@ -112,7 +112,7 @@ func (app *application) handleVapiWebhook(w http.ResponseWriter, r *http.Request
 	}
 }
 
-func saveWebhookPayload(msgType string, body []byte, logger *slog.Logger, fs *internal.FirestoreClient) {
+func saveWebhookPayload(msgType string, body []byte, logger *slog.Logger, _ *internal.FirestoreClient) {
 	// Skip if saving is not enabled or if in testing mode
 	if os.Getenv("SAVE_WEBHOOK_PAYLOADS") != "true" {
 		logger.Debug("skipping webhook payload save - saving not enabled")

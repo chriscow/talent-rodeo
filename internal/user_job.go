@@ -28,7 +28,7 @@ const (
 	JobStatusNew         JobStatus = "new"
 	JobStatusSaved       JobStatus = "saved"
 	JobStatusApplied     JobStatus = "applied"
-	JobStatusRejected    JobStatus = "rejected"
+	JobStatusArchived    JobStatus = "archived"
 
 	// DefaultUserJobsTopK is the number of top jobs to return from semantic search
 	DefaultUserJobsTopK = 100
@@ -45,8 +45,8 @@ func ParseJobStatus(statusStr string) (JobStatus, bool) {
 		return JobStatusSaved, true
 	case string(JobStatusApplied):
 		return JobStatusApplied, true
-	case string(JobStatusRejected):
-		return JobStatusRejected, true
+	case string(JobStatusArchived):
+		return JobStatusArchived, true
 	default:
 		return JobStatusNew, false
 	}
@@ -62,7 +62,7 @@ type UserJob struct {
 	// User interaction metadata
 	SavedAt    *time.Time
 	AppliedAt  *time.Time
-	RejectedAt *time.Time
+	ArchivedAt *time.Time
 	Notes      string
 
 	// Reference to the job_details document
@@ -76,9 +76,6 @@ type UserJob struct {
 	// SearchHash string
 	CreatedAt time.Time
 	UpdatedAt time.Time
-
-	// Whether the job is recommended (has a Yes rating)
-	IsRecommended bool
 }
 
 type JobAnalysis struct {
@@ -196,15 +193,10 @@ func ListUserJobs(ctx context.Context, fs *FirestoreClient, userID string) ([]Us
 }
 
 // GetUserJobsSorted retrieves user jobs with a specific status and supports paging
-func GetUserJobsSorted(ctx context.Context, fs *FirestoreClient, userID string, status JobStatus, pageSize int, pageToken string, showAllRatings bool) ([]*UserJob, string, error) {
+func GetUserJobsSorted(ctx context.Context, fs *FirestoreClient, userID string, status JobStatus, pageSize int, pageToken string) ([]*UserJob, string, error) {
 	// Create base query for jobs with the specified status
 	baseQuery := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).
 		Where("Status", "==", string(status))
-
-	// Add IsRecommended filter if not showing all ratings
-	if !showAllRatings {
-		baseQuery = baseQuery.Where("IsRecommended", "==", true)
-	}
 
 	// Add ordering after filters
 	baseQuery = baseQuery.OrderBy("Score", firestore.Desc)
@@ -262,18 +254,13 @@ func GetUserJobsSorted(ctx context.Context, fs *FirestoreClient, userID string, 
 }
 
 // GetJobsCount returns the count of jobs with the specified status for a user
-func GetJobsCount(ctx context.Context, fs *FirestoreClient, userID string, status JobStatus, showAllRatings bool) (int64, error) {
+func GetJobsCount(ctx context.Context, fs *FirestoreClient, userID string, status JobStatus) (int64, error) {
 	if userID == "" {
 		return 0, fmt.Errorf("user ID is required")
 	}
 
 	query := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).
 		Where("Status", "==", string(status))
-
-	// Add IsRecommended filter if not showing all ratings
-	if !showAllRatings {
-		query = query.Where("IsRecommended", "==", true)
-	}
 
 	// Use the more efficient aggregation query
 	aggregationQuery := query.NewAggregationQuery().WithCount("count")
@@ -294,7 +281,7 @@ func GetJobsCount(ctx context.Context, fs *FirestoreClient, userID string, statu
 }
 
 // GetAllJobStatusCounts returns a map with counts for all job statuses for a user
-func GetAllJobStatusCounts(ctx context.Context, fs *FirestoreClient, userID string, showAllRatings bool) (map[string]int64, error) {
+func GetAllJobStatusCounts(ctx context.Context, fs *FirestoreClient, userID string) (map[string]int64, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID is required")
 	}
@@ -304,12 +291,12 @@ func GetAllJobStatusCounts(ctx context.Context, fs *FirestoreClient, userID stri
 		string(JobStatusNew):      0,
 		string(JobStatusSaved):    0,
 		string(JobStatusApplied):  0,
-		string(JobStatusRejected): 0,
+		string(JobStatusArchived): 0,
 	}
 
 	// Get counts for each status
 	for status := range result {
-		count, err := GetJobsCount(ctx, fs, userID, JobStatus(status), showAllRatings)
+		count, err := GetJobsCount(ctx, fs, userID, JobStatus(status))
 		if err != nil {
 			return nil, fmt.Errorf("failed to get count for status %s: %w", status, err)
 		}
@@ -349,10 +336,9 @@ func UserHasAnyJobs(ctx context.Context, fs *FirestoreClient, userID string) (bo
 func GetJobStatuses() []string {
 	return []string{
 		"New",
-		"Viewed",
 		"Saved",
 		"Applied",
-		"Rejected",
+		"Archived",
 	}
 }
 
@@ -365,8 +351,8 @@ func StatusToDisplayName(status string) string {
 		return "Saved"
 	case string(JobStatusApplied):
 		return "Applied"
-	case string(JobStatusRejected):
-		return "Rejected"
+	case string(JobStatusArchived):
+		return "Archived"
 	default:
 		return status
 	}
@@ -386,8 +372,8 @@ func UpdateUserJobStatus(ctx context.Context, fs *FirestoreClient, userID, jobID
 		updates = append(updates, firestore.Update{Path: "SavedAt", Value: now})
 	case JobStatusApplied:
 		updates = append(updates, firestore.Update{Path: "AppliedAt", Value: now})
-	case JobStatusRejected:
-		updates = append(updates, firestore.Update{Path: "RejectedAt", Value: now})
+	case JobStatusArchived:
+		updates = append(updates, firestore.Update{Path: "ArchivedAt", Value: now})
 	}
 
 	_, err := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Doc(jobID).Update(ctx, updates)
@@ -472,12 +458,6 @@ func DeleteAllUserJobsByPrefix(ctx context.Context, fs *FirestoreClient, prefix 
 	}
 
 	return deleted, nil
-}
-
-// isYesRating checks if a rating contains "yes" (case insensitive)
-func isYesRating(rating string) bool {
-	rating = strings.ToLower(rating)
-	return strings.Contains(rating, "yes")
 }
 
 // GetSemanticJobsForUser retrieves semantic search results for a user with 1-hour caching

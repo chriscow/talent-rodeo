@@ -33,12 +33,19 @@
                 </ul>
             </details>
         </li>
-        {{if .User}}
+    {{if .User}}
         {{if .TestingMode}}
         <li>
             <form method="POST" action="/testing/reset-user-state" style="margin: 0;">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                 <button type="submit" class="outline secondary" style="margin: 0;">Reset Test State</button>
+            </form>
+        </li>
+        {{end}}
+        {{if .User.IsSuperUser}}
+        <li>
+            <form method="GET" action="/admin" style="margin: 0;">
+                <button type="submit" class="outline secondary" style="margin: 0;">Admin</button>
             </form>
         </li>
         {{end}}
@@ -50,7 +57,7 @@
         </li>
         <li><a href="/profile"><img src="{{.User.AvatarURL}}" alt="avatar"
                     style="border-radius: 50%; height:50px;" /></a></li>
-        {{end}}
+    {{end}}
     </ul>
 </nav>
 {{end}}
