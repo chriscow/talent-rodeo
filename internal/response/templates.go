@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"maps"
 	"talent-rodeo/assets"
 	"talent-rodeo/internal/funcs"
 )
@@ -126,9 +127,7 @@ func NamedTemplateWithHeaders(w http.ResponseWriter, status int, data any, heade
 	}
 
 	// Add headers and write response
-	for key, value := range headers {
-		w.Header()[key] = value
-	}
+	maps.Copy(w.Header(), headers)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 	_, err = buf.WriteTo(w)

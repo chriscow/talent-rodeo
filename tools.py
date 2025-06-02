@@ -270,7 +270,7 @@ def check_user_jobs(user_id):
         if 'job_ref' in job_dict:
             job_dict['job_ref'] = str(job_dict['job_ref'])
         # Convert timestamps to strings
-        for field in ['created_at', 'updated_at', 'viewed_at', 'saved_at', 'applied_at', 'rejected_at']:
+        for field in ['CreatedAt', 'UpdatedAt', 'SavedAt', 'AppliedAt', 'ArchivedAt']:
             if field in job_dict and job_dict[field] is not None:
                 job_dict[field] = job_dict[field].isoformat()
         job_data.append(job_dict)

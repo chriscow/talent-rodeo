@@ -194,7 +194,7 @@ func TestDashboardMainView(t *testing.T) {
 	t.Logf("Dashboard content for user with no jobs: %s", content)
 
 	// Should see job status navigation elements
-	jobStatuses := []string{"New", "Viewed", "Saved", "Applied", "Rejected"}
+	jobStatuses := []string{"New", "Viewed", "Saved", "Applied", "Archived"}
 	for _, status := range jobStatuses {
 		// Note: These might not be visible if there are no jobs, but the structure should be there
 		t.Logf("Checking for job status: %s", status)
@@ -264,7 +264,7 @@ func TestDashboardJobStatusFiltering(t *testing.T) {
 		{"viewed", "/dashboard?status=viewed"},
 		{"saved", "/dashboard?status=saved"},
 		{"applied", "/dashboard?status=applied"},
-		{"rejected", "/dashboard?status=rejected"},
+		{"archived", "/dashboard?status=archived"},
 	}
 
 	it.Authenticate()

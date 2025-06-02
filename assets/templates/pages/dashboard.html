@@ -5,7 +5,7 @@
         <ul>
             {{range $index, $status := .JobStatuses}}
                 <li {{if eq $.ActiveStatus (lowercase $status)}}class="active"{{end}}>
-                    <a href="/dashboard?status={{lowercase $status}}{{if $.ShowAllRatings}}&show_all=true{{end}}{{if $.TestMode}}&test_mode={{$.TestMode}}{{end}}">
+                    <a href="/dashboard?status={{lowercase $status}}{{if $.TestMode}}&test_mode={{$.TestMode}}{{end}}">
                         {{$status}} Jobs
                     </a>
                 </li>
@@ -41,12 +41,12 @@
             <!-- Pagination controls -->
             <nav class="pagination">
                 
-                    <a href="/dashboard?status={{.ActiveStatus}}{{if .ShowAllRatings}}&show_all=true{{end}}{{if .TestMode}}&test_mode={{.TestMode}}{{end}}" role="button" class="outline" {{if eq .CurrentPageToken ""}}disabled{{end}}>
+                    <a href="/dashboard?status={{.ActiveStatus}}{{if .TestMode}}&test_mode={{.TestMode}}{{end}}" role="button" class="outline" {{if eq .CurrentPageToken ""}}disabled{{end}}>
                         First Page
                     </a>
                 
                 {{if .HasNextPage}}
-                    <a href="/dashboard?status={{.ActiveStatus}}&page={{.NextPageToken}}{{if .ShowAllRatings}}&show_all=true{{end}}{{if .TestMode}}&test_mode={{.TestMode}}{{end}}" 
+                    <a href="/dashboard?status={{.ActiveStatus}}&page={{.NextPageToken}}{{if .TestMode}}&test_mode={{.TestMode}}{{end}}" 
                        role="button" class="outline">
                         Next Page
                     </a>
@@ -54,26 +54,8 @@
             </nav>
         {{else}}
             <article class="notice">
-                {{if .IsSearching}}
-                    <p>A job search is currently in progress. Results will appear here as they are found.</p>
-                {{else if .FirestoreError}}
-                    <p>Welcome! Your job search will begin soon. 
-                    {{if .NextSearchTime.Before .CurrentTime}}
-                        A search will run shortly.
-                    {{else if eq .NextSearchTime.IsZero false}}
-                        The first search is scheduled for <span class="next-search-time" data-timestamp="{{.NextSearchTime.Unix}}">{{.NextSearchTime.Format "Jan 02, 2006 at 3:04 PM"}}</span>.
-                    {{else}}
-                        Check back soon for matching jobs!
-                    {{end}}
-                    </p>
-                {{else if not .HasJobs}}
-                    <p>No {{.ActiveStatus}} jobs yet. 
-                       {{if .NextSearchTime.Before .CurrentTime}}
-                           A new search will run shortly. Check back soon!
-                       {{else if eq .NextSearchTime.IsZero false}}
-                           The next search is scheduled for <span class="next-search-time" data-timestamp="{{.NextSearchTime.Unix}}">{{.NextSearchTime.Format "Jan 02, 2006 at 3:04 PM"}}</span>.
-                       {{end}}
-                    </p>
+                {{if .FirestoreError}}
+                    <p>Welcome! Your job search will begin soon.</p>
                 {{else}}
                     <p>No {{.ActiveStatus}} jobs found.</p>
                 {{end}}
@@ -84,6 +66,7 @@
 
 <!-- Add user data for browser functionality -->
 <div data-next-search-time="{{.NextSearchTime.Unix}}" hidden></div>
+<div data-user-feedback="{{.UserFeedback | json}}" hidden></div>
 {{end}}
 
 {{define "waitlist-opt-out"}}
@@ -123,22 +106,121 @@
                 });
                 element.textContent = `${formattedDate} at ${formattedTime}`;
             }
-        });
-        
-        // Add event listener for the rating filter checkbox
-        const showAllRatingsCheckbox = document.getElementById('show-all-ratings');
-        if (showAllRatingsCheckbox) {
-            showAllRatingsCheckbox.addEventListener('change', function() {
-                const url = new URL(window.location);
-                if (this.checked) {
-                    url.searchParams.set('show_all', 'true');
-                } else {
-                    url.searchParams.delete('show_all');
-                }
-                window.location.href = url.toString();
-            });
-        }
+        });        
     });
+
+    // AlpineJS function for job feedback
+    function jobFeedback() {
+        return {
+            currentHover: null,
+            feedback: {}, // This will be initialized with server data
+            
+            init() {
+                // Initialize feedback state from server data
+                const userFeedback = JSON.parse(document.querySelector('[data-user-feedback]').dataset.userFeedback || '{}');
+                const jobId = this.$el.getAttribute('data-job-id');
+                
+                if (userFeedback[jobId]) {
+                    this.feedback = userFeedback[jobId];
+                }
+            },
+            
+            toggleFeedback(itemId, type) {
+                const jobCard = this.$el.closest('[data-job-id]') || this.$el;
+                const jobId = jobCard.getAttribute('data-job-id');
+                const itemElement = jobCard.querySelector(`[data-item-id="${itemId}"]`);
+                const itemText = itemElement?.querySelector('.item-text')?.textContent?.trim() || '';
+                
+                // Get current active status from the page
+                const activeTab = document.querySelector('.job-status-tabs li.active a');
+                const currentStatus = activeTab ? activeTab.textContent.trim().replace(' Jobs', '').toLowerCase() : 'new';
+                
+                // If clicking the same type that's already active, remove it (deselect)
+                if (this.feedback[itemId] === type) {
+                    delete this.feedback[itemId];
+                    
+                    // For job-title feedback on Saved/Archived tabs, show transition message
+                    if (itemId === 'job-title' && (currentStatus === 'saved' || currentStatus === 'archived')) {
+                        this.showJobTransition(jobCard, 'New', 'moved back to');
+                    }
+                    
+                    // Send deselection to backend via HTMX
+                    if (jobId) {
+                        htmx.ajax('POST', '/feedback/job', {
+                            values: { 
+                                job_id: jobId, 
+                                item_id: itemId, 
+                                item_text: itemText,
+                                feedback_type: type
+                            }
+                        });
+                    }
+                } else {
+                    // Otherwise, set the new feedback type
+                    this.feedback[itemId] = type;
+                    
+                    // For job-title feedback, show transition message
+                    if (itemId === 'job-title') {
+                        const targetStatus = type === 'like' ? 'Saved' : 'Archived';
+                        this.showJobTransition(jobCard, targetStatus, 'moved to');
+                    }
+                    
+                    // Send feedback to backend via HTMX
+                    if (jobId) {
+                        htmx.ajax('POST', '/feedback/job', {
+                            values: { 
+                                job_id: jobId, 
+                                item_id: itemId, 
+                                item_text: itemText,
+                                feedback_type: type
+                            }
+                        });
+                    }
+                }
+            },
+            
+            showJobTransition(jobCard, targetStatus, action) {
+                // Add fade-out class to start animation
+                jobCard.classList.add('job-transitioning');
+                
+                // Wait for fade-out to complete, then replace content
+                setTimeout(() => {
+                    const jobTitle = jobCard.querySelector('.job-title-feedback .item-text')?.textContent || 'Job';
+                    
+                    jobCard.innerHTML = `
+                        <div class="job-transition-message">
+                            <div class="transition-icon">
+                                ${targetStatus === 'Saved' ? '💾' : targetStatus === 'Archived' ? '📁' : '✨'}
+                            </div>
+                            <h3>${jobTitle}</h3>
+                            <p class="transition-text">This job has been ${action} <strong>${targetStatus}</strong></p>
+                            <small class="transition-hint">
+                                ${targetStatus === 'New' ? 'You can find it in the New tab' : `You can find it in the ${targetStatus} tab`}
+                            </small>
+                        </div>
+                    `;
+                    
+                    // Add fade-in class
+                    jobCard.classList.add('job-transitioned');
+                    
+                    // Auto-hide after a few seconds
+                    setTimeout(() => {
+                        jobCard.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+                        jobCard.style.opacity = '0';
+                        jobCard.style.transform = 'scale(0.95)';
+                        
+                        setTimeout(() => {
+                            jobCard.style.display = 'none';
+                        }, 500);
+                    }, 3000);
+                    
+                }, 300); // Match the CSS transition duration
+            }
+        }
+    }
+    
+    // Make function globally available for Alpine.js
+    window.jobFeedback = jobFeedback;
 </script>
 {{end}}
 
@@ -169,6 +251,63 @@
         color: var(--primary);
     }
     
+    /* Job transition animations */
+    .job-transitioning {
+        opacity: 0.3;
+        transform: scale(0.98);
+        transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+    
+    .job-transitioned {
+        opacity: 1;
+        transform: scale(1);
+        transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+    
+    .job-transition-message {
+        text-align: center;
+        padding: 2rem;
+        background: var(--card-background-color);
+        border-radius: var(--border-radius);
+        border: 2px solid var(--primary);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .transition-icon {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        animation: bounce 0.6s ease-in-out;
+    }
+    
+    .job-transition-message h3 {
+        color: var(--primary);
+        margin-bottom: 0.5rem;
+        font-size: 1.2rem;
+    }
+    
+    .transition-text {
+        margin-bottom: 0.5rem;
+        font-size: 1rem;
+        color: var(--color);
+    }
+    
+    .transition-hint {
+        color: var(--muted-color);
+        font-style: italic;
+    }
+    
+    @keyframes bounce {
+        0%, 20%, 50%, 80%, 100% {
+            transform: translateY(0);
+        }
+        40% {
+            transform: translateY(-10px);
+        }
+        60% {
+            transform: translateY(-5px);
+        }
+    }
+
     /* Pagination */
     .pagination {
         display: flex;
@@ -250,6 +389,7 @@
     .current-state {
         margin-top: 5px;
         color: #555;
+        opacity: 0.1;
     }
 </style>
 {{end}}

@@ -238,9 +238,7 @@ func GenerateSteeringQuery(ctx context.Context, transcript *Transcript, opts ...
 
 	sq, err := extractSteeringQuery(ctx, origResp)
 	if err != nil {
-		if err != nil {
-			return nil, fmt.Errorf("failed to extract steering query after fix: %w", err)
-		}
+		return nil, fmt.Errorf("failed to extract steering query after fix: %w", err)
 	}
 
 	if err := sq.Validate(); err != nil {

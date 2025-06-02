@@ -1,0 +1,31 @@
+{{define "job-section"}}
+{{if .Items}}
+<section>
+    <h4>{{.Title}}</h4>
+    <ul>
+        {{range $index, $item := .Items}}
+        <li class="feedback-item"
+            data-item-id="{{$.Prefix}}-{{$index}}"
+            @mouseenter="currentHover = '{{$.Prefix}}-{{$index}}'" 
+            @mouseleave="currentHover = null">
+            <span class="item-text">{{$item}}</span>
+            <div class="feedback-buttons" role="group">
+                <button class="secondary outline"
+                        :class="{ 'active-like': feedback['{{$.Prefix}}-{{$index}}'] === 'like' }"
+                        @click="toggleFeedback('{{$.Prefix}}-{{$index}}', 'like')">
+                    <img class="light-theme-icon" src="/static/img/thumbs-up.24px.light-theme.svg" alt="Like" width="16" height="16">
+                    <img class="dark-theme-icon" src="/static/img/thumbs-up.24px.dark-theme.svg" alt="Like" width="16" height="16">
+                </button>
+                <button class="secondary outline"
+                        :class="{ 'active-dislike': feedback['{{$.Prefix}}-{{$index}}'] === 'dislike' }"
+                        @click="toggleFeedback('{{$.Prefix}}-{{$index}}', 'dislike')">
+                    <img class="light-theme-icon" src="/static/img/thumbs-down.24px.light-theme.svg" alt="Dislike" width="16" height="16">
+                    <img class="dark-theme-icon" src="/static/img/thumbs-down.24px.dark-theme.svg" alt="Dislike" width="16" height="16">
+                </button>
+            </div>
+        </li>
+        {{end}}
+    </ul>
+</section>
+{{end}}
+{{end}} 
