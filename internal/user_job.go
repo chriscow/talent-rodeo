@@ -485,6 +485,14 @@ func GetSemanticJobsForUser(ctx context.Context, fs *FirestoreClient, userID str
 		steeringHash += "|" + steeringQuery.MoveAway
 	}
 
+	criteria, found, err := GetSearchCriteria(ctx, fs, criteriaID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get criteria by ID %s: %w", criteriaID, err)
+	}
+	if !found {
+		return nil, fmt.Errorf("criteria with ID %s not found", criteriaID)
+	}
+
 	cacheKey := fmt.Sprintf("semantic_jobs:%s:%s:%d:%s:%s", userID, criteriaID, topK, paramsHash, steeringHash)
 
 	// Check cache first
@@ -496,7 +504,7 @@ func GetSemanticJobsForUser(ctx context.Context, fs *FirestoreClient, userID str
 	if params == nil {
 		params = DefaultHybridSearchParams()
 	}
-	scoredJobs, err := SemanticSearchJobs(ctx, steeringQuery, criteriaID, topK, params)
+	scoredJobs, err := SemanticSearchJobs(ctx, steeringQuery, *criteria, topK, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search jobs for user %s: %w", userID, err)
 	}

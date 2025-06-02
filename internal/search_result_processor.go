@@ -12,6 +12,7 @@ import (
 	"cloud.google.com/go/firestore"
 	"github.com/getsentry/sentry-go"
 	"github.com/pinecone-io/go-pinecone/v3/pinecone"
+	"github.com/samber/lo"
 )
 
 const (
@@ -138,7 +139,7 @@ func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, job JobDetail)
 			return
 		}
 
-		if _, err := s.UpsertJobDetailEmbeddings(ctx, jobSearch.Criteria.ID, []JobDetail{job}); err != nil {
+		if _, err := s.UpsertJobDetailEmbeddings(ctx, jobSearch.Criteria, []JobDetail{job}); err != nil {
 			s.logger.Error("failed to upsert job detail embeddings", "error", err, "jobID", job.ID)
 			SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 				"jobID":      job.ID,
@@ -200,7 +201,7 @@ func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJob
 	UpdateSearchCriteria(ctx, s.fs, &criteria)
 }
 
-func (s *SearchResultProcessor) UpsertJobDetailEmbeddings(ctx context.Context, criteriaID string, jobDetails []JobDetail) (int, error) {
+func (s *SearchResultProcessor) UpsertJobDetailEmbeddings(ctx context.Context, criteria SearchCriteria, jobDetails []JobDetail) (int, error) {
 	client, err := NewPineconeClient()
 	if err != nil {
 		return 0, fmt.Errorf("failed to create pinecone client: %w", err)
@@ -211,42 +212,42 @@ func (s *SearchResultProcessor) UpsertJobDetailEmbeddings(ctx context.Context, c
 		return 0, fmt.Errorf("PINECONE_DENSE_INDEX_HOST is not set, skipping job detail embedding")
 	}
 
-	sparseIndex := os.Getenv("PINECONE_SPARSE_INDEX_HOST")
-	if sparseIndex == "" {
-		return 0, fmt.Errorf("PINECONE_SPARSE_INDEX_HOST is not set, skipping job detail embedding")
-	}
-
 	if len(jobDetails) == 0 {
 		return 0, nil
 	}
 
-	records := make([]*pinecone.IntegratedRecord, len(jobDetails))
-	for i, detail := range jobDetails {
-		records[i] = &pinecone.IntegratedRecord{
-			"_id":           detail.ID,
-			"provider":      detail.Provider,
-			"providerJobID": detail.ProviderJobID,
-			"criteriaID":    criteriaID,
-			"text":          detail.Description, //  this is what gets embedded
-			"postedDate":    detail.PostedDate,
-			"title":         detail.Title,
-			"company":       detail.Company,
-			"location":      detail.Location,
-			"url":           detail.URL,
+	records := map[string][]*pinecone.IntegratedRecord{}
+	for _, detail := range jobDetails {
+		// if the key doesn't exist, create a new slice
+		if _, exists := records[detail.JobFunction]; !exists {
+			records[detail.JobFunction] = []*pinecone.IntegratedRecord{}
 		}
+		records[detail.JobFunction] = append(records[detail.JobFunction], &pinecone.IntegratedRecord{
+			"_id":        detail.ID,
+			"provider":   detail.Provider,
+			"criteriaID": criteria.ID,
+			"text":       detail.Description, //  this is what gets embedded
+			"postedDate": detail.PostedDate,
+			"title":      detail.Title,
+			"company":    detail.Company,
+			"workType":   criteria.WorkType,
+			"experience": criteria.ExperienceLevel,
+			"location":   detail.Location,
+		})
 	}
 
-	denseCount, err := client.UpsertRecords(context.Background(), denseIndex, JobDetailNamespace, records, false)
-	if err != nil {
-		return 0, fmt.Errorf("failed to upsert records to Pinecone: %w", err)
-	}
+	errs := []error{}
+	count := 0
 
-	sparseCount, err := client.UpsertRecords(context.Background(), sparseIndex, JobDetailNamespace, records, true)
-	if err != nil {
-		return 0, fmt.Errorf("failed to upsert records to Pinecone: %w", err)
-	}
+	keys := lo.Keys(records)
+	for _, key := range keys {
+		denseCount, err := client.UpsertRecords(context.Background(), denseIndex, key, records[key], false)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("failed to upsert records to Pinecone: %w", err))
+		}
 
-	count := denseCount + sparseCount
+		count += denseCount
+	}
 
 	return count, nil
 }
