@@ -137,7 +137,7 @@ func (j *JobDetail) GetCacheKey() string {
 	return fmt.Sprintf("%s:%s", j.Provider, j.ProviderJobID)
 }
 
-func initJobDetail(ctx context.Context, fs *FirestoreClient, job *JobDetail) {
+func initJobDetail(_ context.Context, _ *FirestoreClient, job *JobDetail) {
 	if job == nil {
 		return
 	}

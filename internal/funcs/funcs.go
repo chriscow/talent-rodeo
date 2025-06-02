@@ -90,6 +90,9 @@ var TemplateFuncs = template.FuncMap{
 		}
 		return dict, nil
 	},
+
+	// Sequence functions
+	"seq": seq,
 }
 
 func formatTime(format string, t time.Time) string {
@@ -473,4 +476,17 @@ func rrfStars(score float64) string {
 	default: // 0-9%
 		return "☆☆☆☆☆"
 	}
+}
+
+// seq generates a sequence of integers from start to end (inclusive)
+func seq(start, end int) []int {
+	if start > end {
+		return []int{}
+	}
+
+	result := make([]int, end-start+1)
+	for i := range result {
+		result[i] = start + i
+	}
+	return result
 }

@@ -45,6 +45,21 @@
                     </mark>
                 </p>
             </article>
+            <article>
+                <header>Feedback Processor</header>
+                <p>
+                    Status: <mark class="{{if .FeedbackProcessor.Paused}}error{{else}}success{{end}}">
+                        {{if .FeedbackProcessor.Paused}}Paused{{else}}Active{{end}}
+                    </mark>
+                </p>
+                <p><small>
+                    {{if and (eq .FeedbackProcessor.StartHour 0) (eq .FeedbackProcessor.EndHour 0)}}
+                        Running 24/7
+                    {{else}}
+                        Active hours: {{printf "%02d:00" .FeedbackProcessor.StartHour}} - {{printf "%02d:00" .FeedbackProcessor.EndHour}} UTC
+                    {{end}}
+                </small></p>
+            </article>
         </div>
     </section>
     
@@ -216,12 +231,42 @@
                     Pause ScrapingDog Workers
                 </label>
             </article>
+
+            <article>
+                <header>
+                    <h3>Feedback Processor</h3>
+                    <p>Controls whether the feedback processor analyzes user feedback and updates steering queries</p>
+                </header>
+                <label>
+                    <input type="checkbox" name="feedback-processor-paused" value="true" {{if .FeedbackProcessor.Paused}}checked{{end}}>
+                    Pause Feedback Processor
+                </label>
+                <div class="grid">
+                    <label>
+                        Start Hour (UTC)
+                        <select name="feedback-processor-start-hour">
+                            {{range $h := (seq 0 23)}}
+                            <option value="{{$h}}" {{if eq $.FeedbackProcessor.StartHour $h}}selected{{end}}>{{printf "%02d:00" $h}}</option>
+                            {{end}}
+                        </select>
+                        <small>Hour to start processing (24-hour format)</small>
+                    </label>
+                    <label>
+                        End Hour (UTC)
+                        <select name="feedback-processor-end-hour">
+                            {{range $h := (seq 0 23)}}
+                            <option value="{{$h}}" {{if eq $.FeedbackProcessor.EndHour $h}}selected{{end}}>{{printf "%02d:00" $h}}</option>
+                            {{end}}
+                        </select>
+                        <small>Hour to stop processing (24-hour format)</small>
+                    </label>
+                </div>
+                <small><em>Note: Set both start and end hour to 00:00 to run 24/7. Time window can cross midnight (e.g., 17:00-00:00).</em></small>
+            </article>
         </fieldset>
         
         <button type="submit">Update Settings</button>
     </form>
-    
-
 </main>
 {{end}}
 

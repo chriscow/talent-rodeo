@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -9,16 +8,15 @@ import (
 	"strings"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/cloudflare"
+	"talent-rodeo/internal/feedback"
 	"talent-rodeo/internal/funcs"
 	"talent-rodeo/internal/response"
 	"talent-rodeo/internal/search"
 	"talent-rodeo/internal/search/providers/scrapingdog"
 	"talent-rodeo/internal/subscription"
-	"talent-rodeo/internal/utils"
 	"time"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/pinecone-io/go-pinecone/v3/pinecone"
 )
 
 func (app *application) adminIndex(w http.ResponseWriter, r *http.Request) {
@@ -134,546 +132,6 @@ func (app *application) adminVoice(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (app *application) adminCompareJobs(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	data := app.newTemplateData(r)
-
-	var (
-		searchTaskID string
-		leftJobID    string
-		rightJobID   string
-	)
-
-	if r.Method == http.MethodPost {
-		if err := r.ParseForm(); err != nil {
-			app.serverError(w, r, err)
-			return
-		}
-		searchTaskID = r.PostForm.Get("search_task_id")
-		leftJobID = r.PostForm.Get("left_job_id")
-		rightJobID = r.PostForm.Get("right_job_id")
-
-		if searchTaskID != "" {
-			var err error
-			jobIDs, err := internal.GetJobIDsForSearchTask(ctx, app.fs, searchTaskID)
-			if err != nil {
-				app.logger.Error("failed to list job refs for search task", "error", err, "search_task_id", searchTaskID)
-				data["Error"] = "Failed to list job refs: " + err.Error()
-			}
-
-			app.logger.Info("fetching job details for search task", "job_count", len(jobIDs), "search_task_id", searchTaskID)
-
-			// Fetch job details for the selected search task
-			jobDetails, err := internal.GetJobDetailsByIDs(ctx, app.fs, jobIDs)
-			if err != nil {
-				app.logger.Error("failed to get job details by IDs", "error", err, "job_ids", jobIDs)
-				data["Error"] = "Failed to get job details: " + err.Error()
-				jobDetails = nil
-			}
-
-			if err != nil {
-				data["Error"] = err.Error()
-			} else {
-				data["JobDetails"] = jobDetails
-				data["SearchTaskID"] = searchTaskID
-				data["LeftJobID"] = leftJobID
-				data["RightJobID"] = rightJobID
-
-				// Find selected jobs for display
-				var leftJob, rightJob *internal.JobDetail
-				for _, job := range jobDetails {
-					if job.ID == leftJobID {
-						leftJob = &job
-					}
-					if job.ID == rightJobID {
-						rightJob = &job
-					}
-				}
-				data["LeftJob"] = leftJob
-				data["RightJob"] = rightJob
-
-				// Calculate similarity if both jobs are selected
-				if leftJobID != "" && rightJobID != "" {
-					// Get Pinecone client
-					pineconeClient, err := internal.NewPineconeClient()
-					if err != nil {
-						app.logger.Error("failed to create Pinecone client", "error", err)
-						data["Error"] = "Failed to initialize Pinecone: " + err.Error()
-					} else {
-						// Get index host from environment or config
-						indexHost := os.Getenv("PINECONE_DENSE_INDEX_HOST")
-						if indexHost == "" {
-							app.logger.Error("PINECONE_DENSE_INDEX_HOST environment variable not set")
-							data["Error"] = "PINECONE_DENSE_INDEX_HOST environment variable not set"
-						} else {
-							// Fetch vectors for both jobs
-							jobIDs := []string{leftJobID, rightJobID}
-							app.logger.Info("fetching vectors from Pinecone",
-								"index_host", indexHost,
-								"job_ids", jobIDs)
-
-							// Try with default namespace first
-							fetchResp, err := pineconeClient.FetchVectors(ctx, indexHost, internal.JobDetailNamespace, jobIDs)
-							if err != nil {
-								app.logger.Error("failed to fetch vectors", "error", err)
-								data["Error"] = "Failed to fetch job vectors: " + err.Error()
-							} else {
-								app.logger.Info("fetched vectors from Pinecone",
-									"vector_count", len(fetchResp.Vectors),
-									"namespace", fetchResp.Namespace)
-
-								if len(fetchResp.Vectors) == 2 {
-									leftVector := fetchResp.Vectors[leftJobID]
-									rightVector := fetchResp.Vectors[rightJobID]
-
-									// Calculate cosine similarity
-									similarity, err := internal.CosineSimilarity(leftVector, rightVector)
-									if err != nil {
-										app.logger.Error("failed to calculate similarity", "error", err)
-										data["Error"] = "Failed to calculate similarity: " + err.Error()
-									} else {
-										// Format similarity to 4 decimal places
-										data["Similarity"] = fmt.Sprintf("%.4f", similarity)
-									}
-								} else {
-									// Fallback to text similarity if vectors not found
-									app.logger.Info("vectors not found in Pinecone, falling back to text similarity")
-
-									// Calculate simple Jaccard similarity as fallback
-									if leftJob != nil && rightJob != nil && leftJob.Description != "" && rightJob.Description != "" {
-										// Use a simple text-based similarity
-										jaccardSim := calculateJaccardSimilarity(leftJob.Description, rightJob.Description)
-										data["Similarity"] = fmt.Sprintf("%.4f (text based)", jaccardSim)
-										data["SimilarityMethod"] = "text"
-									} else {
-										app.logger.Error("could not calculate text similarity, missing job descriptions")
-										data["Error"] = "Could not calculate similarity: vectors not found and job descriptions missing"
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	if err := response.Page(w, http.StatusOK, data, "pages/admin/compare-jobs.html"); err != nil {
-		app.serverError(w, r, err)
-	}
-}
-
-// calculateJaccardSimilarity computes a simple text similarity metric as a fallback
-// when vector embeddings are not available. It uses the Jaccard index (intersection over union)
-// on the sets of words in each description.
-func calculateJaccardSimilarity(text1, text2 string) float64 {
-	// Simple tokenization by splitting on whitespace
-	words1 := make(map[string]struct{})
-	words2 := make(map[string]struct{})
-
-	// Convert to lowercase and split
-	for _, word := range strings.Fields(strings.ToLower(text1)) {
-		// Skip very short words and basic punctuation
-		if len(word) > 2 {
-			words1[word] = struct{}{}
-		}
-	}
-
-	for _, word := range strings.Fields(strings.ToLower(text2)) {
-		if len(word) > 2 {
-			words2[word] = struct{}{}
-		}
-	}
-
-	// Count intersection
-	intersection := 0
-	for word := range words1 {
-		if _, exists := words2[word]; exists {
-			intersection++
-		}
-	}
-
-	// Calculate union
-	union := len(words1) + len(words2) - intersection
-
-	// Avoid division by zero
-	if union == 0 {
-		return 0
-	}
-
-	return float64(intersection) / float64(union)
-}
-
-func (app *application) adminSearchJobs(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	data := app.newTemplateData(r)
-
-	// Set admin flag for template to show debug information
-	data["IsAdmin"] = true
-
-	// Fetch all users for the dropdown
-	usersList, err := internal.ListUsers(r.Context(), app.fs, 100, 0)
-	if err != nil {
-		app.serverError(w, r, err)
-		return
-	}
-	data["UsersList"] = usersList
-
-	selectedUserID := ""
-	selectedCriteriaID := ""
-
-	// Default params
-	params := internal.DefaultHybridSearchParams()
-	var steeringQuery *internal.SteeringQuery
-
-	if r.Method == http.MethodPost {
-		if err := r.ParseForm(); err != nil {
-			app.serverError(w, r, err)
-			return
-		}
-
-		topKStr := r.PostForm.Get("top_k")
-		selectedUserID = r.PostForm.Get("user_id")
-		selectedCriteriaID = r.PostForm.Get("criteria_id")
-		previousUserID := r.PostForm.Get("previous_user_id") // Hidden field to track previous selection
-
-		data["SelectedUserID"] = selectedUserID
-		data["SelectedCriteriaID"] = selectedCriteriaID
-		app.logger.Debug("adminSearchJobs", "selectedUserID", selectedUserID, "selectedCriteriaID", selectedCriteriaID, "previousUserID", previousUserID)
-
-		// Determine if the user selection changed
-		userChanged := selectedUserID != previousUserID
-		app.logger.Debug("user selection check", "userChanged", userChanged, "selectedUserID", selectedUserID, "previousUserID", previousUserID)
-
-		// If a user is selected, get their steering query and subscriptions
-		if selectedUserID != "" {
-			userSteeringQuery, err := internal.GetUserSteeringQuery(ctx, app.fs, selectedUserID)
-			if err != nil {
-				app.logger.Warn("failed to get user steering query", "userID", selectedUserID, "error", err)
-				// Don't fail completely, just log warning and continue with form values
-			} else {
-				// Only use user's steering query if user changed, otherwise keep form values
-				if userChanged {
-					steeringQuery = userSteeringQuery
-					app.logger.Debug("using user steering query due to user change")
-				} else {
-					app.logger.Debug("keeping existing steering query - same user")
-				}
-			}
-
-			// Get user's subscriptions to populate criteria dropdown
-			subscriptions, err := internal.GetSubscriptionsForUser(ctx, app.fs, selectedUserID)
-			if err != nil {
-				app.logger.Warn("failed to get user subscriptions", "userID", selectedUserID, "error", err)
-			} else {
-				// Fetch the actual criteria details for each subscription
-				var userCriteria []internal.SearchCriteria
-				for _, sub := range subscriptions {
-					criteria, found, err := internal.GetSearchCriteria(ctx, app.fs, sub.CriteriaID)
-					if err != nil {
-						app.logger.Warn("failed to get criteria", "criteriaID", sub.CriteriaID, "error", err)
-						continue
-					}
-					if found {
-						userCriteria = append(userCriteria, *criteria)
-					}
-				}
-				data["UserCriteria"] = userCriteria
-			}
-		}
-
-		// Set default value if not provided
-		topK := 10
-		if topKStr != "" {
-			var err error
-			topK, err = strconv.Atoi(topKStr)
-			if err != nil {
-				data["Error"] = "Invalid top_k value: " + err.Error()
-				topK = 10
-			}
-		}
-
-		// Parse SteeringQuery fields from form
-		steeringQueryText := strings.TrimSpace(r.PostForm.Get("steering_query"))
-		rerankQueryText := strings.TrimSpace(r.PostForm.Get("rerank_query"))
-		moveTowardText := strings.TrimSpace(r.PostForm.Get("move_toward"))
-		moveAwayText := strings.TrimSpace(r.PostForm.Get("move_away"))
-
-		// Only use form values to override if user didn't change and form has steering values
-		// If user changed, we want to use the user's steering query (already set above)
-		hasFormSteeringValues := steeringQueryText != "" || rerankQueryText != "" || moveTowardText != "" || moveAwayText != ""
-
-		if !userChanged && hasFormSteeringValues {
-			// Same user with form values - use form values to override
-			app.logger.Debug("using form steering query values - same user with edits")
-			if steeringQueryText != "" {
-				if rerankQueryText == "" {
-					rerankQueryText = steeringQueryText
-				}
-
-				// Parse force values
-				forceToward := 0.8
-				if v := r.PostForm.Get("force_toward"); v != "" {
-					if f, err := strconv.ParseFloat(v, 64); err == nil {
-						forceToward = f
-					}
-				}
-
-				forceAway := 0.5
-				if v := r.PostForm.Get("force_away"); v != "" {
-					if f, err := strconv.ParseFloat(v, 64); err == nil {
-						forceAway = f
-					}
-				}
-
-				// Build steering query from form
-				steeringQuery = &internal.SteeringQuery{
-					Query:       steeringQueryText,
-					RerankQuery: rerankQueryText,
-					ForceToward: forceToward,
-					ForceAway:   forceAway,
-				}
-
-				// Set optional fields if provided
-				if moveTowardText != "" {
-					steeringQuery.MoveToward = moveTowardText
-				}
-				if moveAwayText != "" {
-					steeringQuery.MoveAway = moveAwayText
-				}
-			}
-		} else if !userChanged && selectedUserID == "" && hasFormSteeringValues {
-			// No user selected but form has values - use form values
-			app.logger.Debug("using form steering query values - no user selected")
-			if steeringQueryText != "" {
-				if rerankQueryText == "" {
-					rerankQueryText = steeringQueryText
-				}
-
-				// Parse force values
-				forceToward := 0.8
-				if v := r.PostForm.Get("force_toward"); v != "" {
-					if f, err := strconv.ParseFloat(v, 64); err == nil {
-						forceToward = f
-					}
-				}
-
-				forceAway := 0.5
-				if v := r.PostForm.Get("force_away"); v != "" {
-					if f, err := strconv.ParseFloat(v, 64); err == nil {
-						forceAway = f
-					}
-				}
-
-				// Build steering query from form
-				steeringQuery = &internal.SteeringQuery{
-					Query:       steeringQueryText,
-					RerankQuery: rerankQueryText,
-					ForceToward: forceToward,
-					ForceAway:   forceAway,
-				}
-
-				// Set optional fields if provided
-				if moveTowardText != "" {
-					steeringQuery.MoveToward = moveTowardText
-				}
-				if moveAwayText != "" {
-					steeringQuery.MoveAway = moveAwayText
-				}
-			}
-		}
-		// If user changed, steeringQuery is already set to the new user's query above
-
-		// Parse HybridSearchParams fields from form
-		if v := r.PostForm.Get("dense_weight"); v != "" {
-			if f, err := strconv.ParseFloat(v, 64); err == nil {
-				params.DenseWeight = f
-			}
-		}
-		if v := r.PostForm.Get("sparse_weight"); v != "" {
-			if f, err := strconv.ParseFloat(v, 64); err == nil {
-				params.SparseWeight = f
-			}
-		}
-		if v := r.PostForm.Get("score_fusion"); v != "" {
-			params.ScoreFusion = v
-		}
-		if v := r.PostForm.Get("recency_weight"); v != "" {
-			if f, err := strconv.ParseFloat(v, 64); err == nil {
-				params.RecencyWeight = f
-			}
-		}
-		if v := r.PostForm.Get("recency_half_life"); v != "" {
-			if f, err := strconv.ParseFloat(v, 64); err == nil {
-				params.RecencyHalfLife = f
-			}
-		}
-		if v := r.PostForm.Get("score_threshold"); v != "" {
-			if f, err := strconv.ParseFloat(v, 64); err == nil {
-				params.ScoreThreshold = f
-			}
-		}
-		// Add a boolean for enabling reranking
-		enableReranking := r.PostForm.Get("enable_reranking") == "on"
-		data["EnableReranking"] = enableReranking
-
-		data["TopK"] = topK
-		data["HybridParams"] = params
-		data["SteeringQuery"] = steeringQuery
-		data["EnableReranking"] = enableReranking // Add to data for template rendering
-
-		// Only run search if we have a valid steering query
-		if steeringQuery != nil && steeringQuery.Query != "" {
-			results, err := app.semanticSearchJobsWithParams(ctx, steeringQuery, topK, selectedCriteriaID, params, enableReranking)
-			if err != nil {
-				app.logger.Error("failed to search jobs", "error", err)
-				data["Error"] = "Failed to search jobs: " + err.Error()
-			} else {
-				data["Jobs"] = results
-			}
-		}
-	}
-	// For GET, pre-fill with defaults
-	if r.Method != http.MethodPost {
-		data["HybridParams"] = params
-	}
-
-	if err := response.Page(w, http.StatusOK, data, "pages/admin/search-jobs-enhanced.html"); err != nil {
-		app.serverError(w, r, err)
-	}
-}
-
-func (app *application) semanticSearchJobs(ctx context.Context, searchQuery string, topK int, selectedCriteriaID string) (*pinecone.RerankResponse, error) {
-
-	client, err := internal.NewPineconeClient()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Pinecone client: %w", err)
-	}
-	// Build filter map
-	filter := map[string]any{}
-	if selectedCriteriaID != "" {
-		filter["criteriaID"] = map[string]any{
-			"$eq": selectedCriteriaID,
-		}
-	}
-
-	denseIndex := os.Getenv("PINECONE_DENSE_INDEX_HOST")
-	if denseIndex == "" {
-		return nil, fmt.Errorf("PINECONE_DENSE_INDEX_HOST environment variable not set")
-	}
-	denseResults, err := client.SearchRecords(ctx, denseIndex, internal.JobDetailNamespace, searchQuery,
-		internal.WithTopK(topK*2), internal.WithFilter(filter))
-	if err != nil {
-		return nil, fmt.Errorf("failed to search dense index: %w", err)
-	}
-
-	sparseIndex := os.Getenv("PINECONE_SPARSE_INDEX_HOST")
-	if sparseIndex == "" {
-		return nil, fmt.Errorf("PINECONE_SPARSE_INDEX_HOST environment variable not set")
-	}
-	sparseResults, err := client.SearchRecords(ctx, sparseIndex, internal.JobDetailNamespace, searchQuery,
-		internal.WithTopK(topK*2), internal.WithFilter(filter))
-	if err != nil {
-		return nil, fmt.Errorf("failed to search sparse index: %w", err)
-	}
-
-	merged := make(map[string]pinecone.Document)
-	for _, hit := range denseResults.Result.Hits {
-		text, ok := hit.Fields["text"].(string)
-		if !ok || text == "" {
-			continue // skip if not a valid string
-		}
-		merged[hit.Id] = pinecone.Document{
-			"ID":       hit.Id,
-			"Score":    hit.Score,
-			"Text":     hit.Fields["text"],
-			"Title":    hit.Fields["title"],
-			"Company":  hit.Fields["company"],
-			"Location": hit.Fields["location"],
-		}
-	}
-	for _, hit := range sparseResults.Result.Hits {
-		text, ok := hit.Fields["text"].(string)
-		if !ok || text == "" {
-			continue // skip if not a valid string
-		}
-		merged[hit.Id] = pinecone.Document{
-			"ID":       hit.Id,
-			"Score":    hit.Score,
-			"Text":     hit.Fields["text"],
-			"Title":    hit.Fields["title"],
-			"Company":  hit.Fields["company"],
-			"Location": hit.Fields["location"],
-		}
-	}
-
-	// deduplicate documents by hash
-	deduplicated := make(map[string]pinecone.Document)
-	for _, doc := range merged {
-		hash, err := utils.SHA256Hash([]byte(doc["Text"].(string)))
-		if err != nil {
-			return nil, fmt.Errorf("failed to hash job detail: %w", err)
-		}
-		deduplicated[hash] = doc
-	}
-
-	documents := make([]pinecone.Document, 0, len(deduplicated))
-	for _, doc := range deduplicated {
-		documents = append(documents, doc)
-	}
-
-	params := map[string]any{
-		"truncate": "END",
-	}
-
-	return client.Inference.Rerank(ctx, &pinecone.RerankRequest{
-		Model:      "bge-reranker-v2-m3",
-		Query:      searchQuery,
-		Documents:  documents,
-		RankFields: &[]string{"Text"},
-		TopN:       &topK,
-		Parameters: &params,
-	})
-}
-
-func (app *application) semanticSearchJobsWithParams(ctx context.Context, steeringQuery *internal.SteeringQuery, topK int, selectedCriteriaID string, params *internal.HybridSearchParams, enableReranking bool) ([]internal.ScoredJobDetail, error) {
-	// Call the improved semantic search function - we don't filter by criteria anymore since we're using user steering queries
-	scoredJobs, err := internal.SemanticSearchJobs(ctx, steeringQuery, selectedCriteriaID, topK, params)
-	if err != nil {
-		return nil, fmt.Errorf("search failed: %w", err)
-	}
-
-	// Apply reranking if enabled
-	if enableReranking && len(scoredJobs) > 0 {
-		// Need to convert flat list to pointers for reranking
-		pointerJobs := make([]*internal.ScoredJobDetail, len(scoredJobs))
-		for i := range scoredJobs {
-			pointerJobs[i] = &scoredJobs[i]
-		}
-
-		client, err := internal.NewPineconeClient()
-		if err != nil {
-			return scoredJobs, fmt.Errorf("failed to create pinecone client for reranking: %w", err)
-		}
-
-		// Use the RerankQuery from the steering query if available, otherwise use the main query
-		rerankQuery := steeringQuery.RerankQuery
-		if rerankQuery == "" {
-			rerankQuery = steeringQuery.Query
-		}
-
-		// Attempt reranking, but fall back to original results if it fails
-		rerankedJobs, err := internal.RerankResults(ctx, client, pointerJobs, rerankQuery, topK, internal.PineconeRerankBGEv2M3)
-		if err != nil {
-			app.logger.Error("reranking failed, using original results", "error", err)
-		} else {
-			return rerankedJobs, nil
-		}
-	}
-
-	return scoredJobs, nil
-}
-
 func (app *application) adminFeatureFlags(w http.ResponseWriter, r *http.Request) {
 	data := app.newTemplateData(r)
 
@@ -692,13 +150,13 @@ func (app *application) adminFeatureFlags(w http.ResponseWriter, r *http.Request
 	var ss search.SchedulerSettings = search.DefaultSchedulerSettings
 	var sp subscription.ProcessorSettings = subscription.DefaultSettings
 	var sd scrapingdog.WorkerSettings
+	var fp feedback.ProcessorSettings = feedback.DefaultSettings
 
 	// Read search-scheduler flag
 	if err := kv.Get("search-scheduler", &ss); err != nil {
 		if err != cloudflare.ErrNotFound {
 			app.logger.Error("failed to get search-scheduler flag", "error", err)
 		}
-		// Use default values if error or not found
 		ss = search.DefaultSchedulerSettings
 	}
 
@@ -707,7 +165,6 @@ func (app *application) adminFeatureFlags(w http.ResponseWriter, r *http.Request
 		if err != cloudflare.ErrNotFound {
 			app.logger.Error("failed to get subscription-processor flag", "error", err)
 		}
-		// Use default values if error or not found
 		sp = subscription.DefaultSettings
 	}
 
@@ -719,31 +176,38 @@ func (app *application) adminFeatureFlags(w http.ResponseWriter, r *http.Request
 		// Keep default value if error or not found
 	}
 
-	// Pass the complete settings to the template
+	// Read feedback processor flag
+	if err := kv.Get("feedback-processor", &fp); err != nil {
+		if err != cloudflare.ErrNotFound {
+			app.logger.Error("failed to get feedback-processor flag", "error", err)
+		}
+		fp = feedback.DefaultSettings
+	}
+
 	data["SearchScheduler"] = ss
 	data["SubscriptionProcessor"] = sp
 	data["ScrapingdogWorkers"] = sd
+	data["FeedbackProcessor"] = fp
 
-	// Handle POST request for updating flags
 	if r.Method == http.MethodPost {
 		if err := r.ParseForm(); err != nil {
 			app.logger.Error("failed to parse form", "error", err)
 			data["Error"] = "Failed to parse form: " + err.Error()
 		} else {
-			// Get form values
 			newSearchPaused := r.PostForm.Get("search-scheduler-paused") == "true"
 			newSubscriptionPaused := r.PostForm.Get("subscription-processor-paused") == "true"
 			newScrapingdogPaused := r.PostForm.Get("scrapingdog-paused") == "true"
+			newFeedbackPaused := r.PostForm.Get("feedback-processor-paused") == "true"
 
-			// Parse time settings
 			searchStartHour, _ := strconv.Atoi(r.PostForm.Get("search-scheduler-start-hour"))
 			searchEndHour, _ := strconv.Atoi(r.PostForm.Get("search-scheduler-end-hour"))
 			subscriptionStartHour, _ := strconv.Atoi(r.PostForm.Get("subscription-processor-start-hour"))
 			subscriptionEndHour, _ := strconv.Atoi(r.PostForm.Get("subscription-processor-end-hour"))
+			feedbackStartHour, _ := strconv.Atoi(r.PostForm.Get("feedback-processor-start-hour"))
+			feedbackEndHour, _ := strconv.Atoi(r.PostForm.Get("feedback-processor-end-hour"))
 
 			var errors []string
 
-			// Update search-scheduler settings
 			ss.Paused = newSearchPaused
 			ss.StartHour = searchStartHour
 			ss.EndHour = searchEndHour
@@ -754,7 +218,6 @@ func (app *application) adminFeatureFlags(w http.ResponseWriter, r *http.Request
 				app.logger.Info("updated search-scheduler settings", "paused", newSearchPaused, "start_hour", searchStartHour, "end_hour", searchEndHour)
 			}
 
-			// Update subscription-processor settings
 			sp.Paused = newSubscriptionPaused
 			sp.StartHour = subscriptionStartHour
 			sp.EndHour = subscriptionEndHour
@@ -765,7 +228,6 @@ func (app *application) adminFeatureFlags(w http.ResponseWriter, r *http.Request
 				app.logger.Info("updated subscription-processor settings", "paused", newSubscriptionPaused, "start_hour", subscriptionStartHour, "end_hour", subscriptionEndHour)
 			}
 
-			// Update scrapingdog flag
 			sd.Paused = newScrapingdogPaused
 			if err := kv.Set("scrapingdog", sd, 0); err != nil {
 				app.logger.Error("failed to set scrapingdog flag", "error", err)
@@ -774,14 +236,24 @@ func (app *application) adminFeatureFlags(w http.ResponseWriter, r *http.Request
 				app.logger.Info("updated scrapingdog flag", "paused", newScrapingdogPaused)
 			}
 
+			fp.Paused = newFeedbackPaused
+			fp.StartHour = feedbackStartHour
+			fp.EndHour = feedbackEndHour
+			if err := kv.Set("feedback-processor", fp, 0); err != nil {
+				app.logger.Error("failed to set feedback-processor flag", "error", err)
+				errors = append(errors, "Failed to update feedback-processor: "+err.Error())
+			} else {
+				app.logger.Info("updated feedback-processor flag", "paused", newFeedbackPaused, "start_hour", feedbackStartHour, "end_hour", feedbackEndHour)
+			}
+
 			if len(errors) > 0 {
 				data["Error"] = strings.Join(errors, "; ")
 			} else {
 				data["Success"] = "Feature flags updated successfully"
-				// Update the displayed values with new settings
 				data["SearchScheduler"] = ss
 				data["SubscriptionProcessor"] = sp
 				data["ScrapingdogWorkers"] = sd
+				data["FeedbackProcessor"] = fp
 			}
 		}
 	}
@@ -979,35 +451,6 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	// Get the total count for the current status for pagination calculations
-	start := time.Now()
-	statusJobCount, err := internal.GetJobsCount(ctx, app.fs, selectedUser.ID, status, showAllRatings)
-	if err != nil {
-		wrappedErr := fmt.Errorf("adminUserDashboard: failed to get job count for status %s: %w", status, err)
-		app.logger.Error("adminUserDashboard: failed to get job count", "error", err, "status", status, "user_id", selectedUserID)
-
-		internal.SentryReportError(ctx, wrappedErr, sentry.LevelError, map[string]string{
-			"error_type":  "database_retrieval",
-			"entity_type": "user_jobs_count",
-			"job_status":  string(status),
-			"user_id":     selectedUserID,
-		})
-
-		// Check if this is the missing collection/index error for new users
-		if strings.Contains(err.Error(), "failed to iterate jobs") ||
-			strings.Contains(err.Error(), "failed to get job count") {
-			// For new users without any jobs collection yet, set count to 0
-			statusJobCount = 0
-			data["FirestoreError"] = true
-		} else {
-			// For other errors, return server error
-			app.serverError(w, r, wrappedErr)
-			return
-		}
-	} else {
-		app.logger.Debug("adminUserDashboard: GetJobsCount took", "duration", time.Since(start).String(), "user_id", selectedUserID)
-	}
-
 	// Hybrid Approach: Use semantic search for "New" jobs, existing queries for other statuses
 	jobs := map[string]JobWithDetails{}
 	var semanticJobsSlice []JobWithDetails // Ordered slice for semantic search results
@@ -1024,7 +467,7 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 	}
 
 	// For "New" status, use semantic search with jobs that have no UserJob record
-	start = time.Now()
+	start := time.Now()
 
 	// Get user's subscriptions to find criteriaID for semantic search
 	subscriptions, err := internal.GetSubscriptionsForUser(ctx, app.fs, selectedUser.ID)
@@ -1103,7 +546,7 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Update statusJobCount to reflect actual filtered semantic results
-	statusJobCount = int64(len(allFilteredJobs))
+	statusJobCount := int64(len(allFilteredJobs))
 
 	app.logger.Debug("adminUserDashboard: semantic search completed",
 		"duration", time.Since(start).String(),
@@ -1124,7 +567,7 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 		"new":      "New Jobs",
 		"saved":    "Saved Jobs",
 		"applied":  "Applied Jobs",
-		"rejected": "Rejected Jobs",
+		"archived": "Archived Jobs",
 	}
 	data["ShowAllRatings"] = showAllRatings
 	data["TestMode"] = true // Enable test mode features in dashboard view

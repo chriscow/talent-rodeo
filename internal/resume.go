@@ -437,7 +437,7 @@ func getResumeAnalysisTestMode(_ context.Context, _ Resume) (*annotatedResume, e
 	return &result, nil
 }
 
-func getResumeSearchAnalysisTestMode(ctx context.Context, resume Resume) (string, error) {
+func getResumeSearchAnalysisTestMode(_ context.Context, _ Resume) (string, error) {
 	// Simulate processing delay
 	time.Sleep(1 * time.Second)
 
