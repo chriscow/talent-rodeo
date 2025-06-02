@@ -1,12 +1,9 @@
 {{define "job-card"}}
-<article class="job-card">
+<article>
     <!-- Determine context: check if we have ScoredJobDetail fields directly (admin) or nested in JobWithDetails (dashboard) -->
     {{$isAdmin := false}}
-    {{$isDirect := false}}
     
-    {{/* Try to access DenseScore directly - if it exists, we're in admin context with ScoredJobDetail */}}
     {{if .DenseScore}}
-        {{$isDirect = true}}
         {{$isAdmin = true}}
     {{end}}
     
@@ -23,24 +20,16 @@
     {{end}}
     
     <div style="display: none;">
-        {{if .DenseScore}}
         <!-- Direct ScoredJobDetail access -->
-        <span class="job-id">{{.JobDetail.ProviderJobID}}</span>
-        <span class="dense-score">{{.DenseScore}}</span>
-        <span class="sparse-score">{{.SparseScore}}</span>
-        <span class="score">{{.Score}}</span>
-        {{else}}
-        <!-- Nested ScoredJobDetail access -->
-        <span class="job-id">{{.JobDetail.ProviderJobID}}</span>
-        <span class="dense-score">{{.ScoredJobDetail.DenseScore}}</span>
-        <span class="sparse-score">{{.ScoredJobDetail.SparseScore}}</span>
-        <span class="score">{{.ScoredJobDetail.Score}}</span>
-        {{end}}
+        <span>{{.JobDetail.ProviderJobID}}</span>
+        <span>{{.DenseScore}}</span>
+        <span>{{.SparseScore}}</span>
+        <span>{{.Score}}</span>
     </div>
 
     <hgroup>
         <h3>{{.JobDetail.Title}}</h3>
-        <p class="company">{{.JobDetail.Company}} - <em>Posted {{.JobDetail.PostedDate | approxAge}}</em></p>
+        <p>{{.JobDetail.Company}} - <em>Posted {{.JobDetail.PostedDate | approxAge}}</em></p>
     </hgroup>
     <div>
         <span>
@@ -54,15 +43,15 @@
     </div>
     <br />
 
-    <div class="job-content">
+    <div>
     {{with .JobDetail.ExtractedData}}
         {{with .Summary}}
-        <div class="summary">
+        <div>
             <p>{{.}}</p>
         </div>
         {{end}}
         {{with .Responsibilities}}
-        <div class="responsibilities">
+        <div>
             <h4>Responsibilities</h4>
             <ul>
                 {{range .}}
@@ -72,7 +61,7 @@
         </div>
         {{end}}
         {{with .Skills}}
-        <div class="skills">
+        <div>
             <h4>Skills</h4>
             <ul>
                 {{range .}}
@@ -82,7 +71,7 @@
         </div>
         {{end}}
         {{with .Requirements}}
-        <div class="requirements">
+        <div>
             <h4>Requirements</h4>
             <ul>
                 {{range .}}
@@ -92,7 +81,7 @@
         </div>
         {{end}}
         {{with .Qualifications}}
-        <div class="qualifications">
+        <div>
             <h4>Qualifications</h4>
             <ul>
                 {{range .}}
@@ -102,7 +91,7 @@
         </div>
         {{end}}
         {{with .BonusQualifications}}
-        <div class="bonus-qualifications">
+        <div>
             <h4>Bonus Qualifications</h4>
             <ul>
                 {{range .}}
