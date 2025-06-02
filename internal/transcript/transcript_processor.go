@@ -215,7 +215,7 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 	// Get or create search criteria
 	//
 	logger.Debug("getting or creating search criteria", "user-id", user.ID, "appointment-id", appointment.ID)
-	criteria, isNewCriteria, err := getOrCreateSearchCriteria(ctx, fs, user)
+	results, err := getOrCreateSearchCriteria(ctx, fs, user)
 	if err != nil {
 		logger.Error("failed to get or create search criteria", "error", err, "user-id", user.ID, "appointment-id", appointment.ID)
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
@@ -228,135 +228,136 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 		internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
 		return
 	}
-	logger.Debug("search criteria resolved", "user-id", user.ID, "appointment-id", appointment.ID, "criteria-id", criteria.ID, "is-new", isNewCriteria)
 
-	//
-	// Subscribe the user to the search criteria
-	//
-	logger.Debug("subscribing user to search criteria", "user-id", user.ID, "criteria-id", criteria.ID)
-	if err := internal.SubscribeToCriteria(ctx, fs, user.ID, criteria.ID); err != nil {
-		logger.Error("failed to subscribe user to search criteria", "error", err, "user-id", user.ID, "criteria-id", criteria.ID)
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"user_id":        user.ID,
-			"appointment_id": appointment.ID,
-			"user_email":     user.Email,
-			"call_id":        *appointment.CallID,
-			"criteria_id":    criteria.ID,
-			"step":           "SubscribeToCriteria",
-		})
-		internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
-		return
-	}
-	logger.Debug("user subscribed to criteria", "user-id", user.ID, "criteria-id", criteria.ID)
-
-	if isNewCriteria {
-		if queue == nil {
-			logger.Error("queue is nil", "user-id", user.ID, "appointment-id", appointment.ID)
-			internal.SentryReportError(ctx, fmt.Errorf("queue is nil"), sentry.LevelError, map[string]string{
-				"user_id":        user.ID,
-				"appointment_id": appointment.ID,
-				"user_email":     user.Email,
-				"call_id":        *appointment.CallID,
-				"step":           "validate_queue",
-			})
-			internal.ProcessAppointmentFailed(ctx, fs, user, appointment, fmt.Errorf("queue is nil"))
-			return
-		}
-
-		if dispatch == nil {
-			logger.Error("dispatch is nil", "user-id", user.ID, "appointment-id", appointment.ID)
-			internal.SentryReportError(ctx, fmt.Errorf("dispatch is nil"), sentry.LevelError, map[string]string{
-				"user_id":        user.ID,
-				"appointment_id": appointment.ID,
-				"user_email":     user.Email,
-				"call_id":        *appointment.CallID,
-				"step":           "validate_dispatch",
-			})
-			internal.ProcessAppointmentFailed(ctx, fs, user, appointment, fmt.Errorf("dispatch is nil"))
-			return
-		}
-
+	for _, result := range results {
 		//
-		// If a new criteria was created, we need to queue an immediate search.
-		// We also increase / broaden the first search for a new criteria.
+		// Subscribe the user to the search criteria
 		//
-		maxPages := internal.DefaultMaxPages * 5 // Increase the first search to get more results
-		testing := os.Getenv("TESTING_MODE") == "true"
-		if testing {
-			maxPages = 2
-		}
-		criteria.MaxPages = maxPages
-		criteria.ListingAge = internal.ListingAgeWeek // Do a week instead of a day
-
-		logger.Debug("creating search task", "user-id", user.ID, "criteria-id", criteria.ID, "max-pages", maxPages, "testing-mode", testing)
-		jobSearch, err := internal.CreateSearchTask(ctx, fs, *criteria, "scrapingdog")
-		if err != nil {
-			logger.Error("failed to create search task", "error", err, "user-id", user.ID, "criteria-id", criteria.ID)
+		logger.Debug("subscribing user to search criteria", "user-id", user.ID, "criteria-id", result.Criteria.ID)
+		if err := internal.SubscribeToCriteria(ctx, fs, user.ID, result.Criteria.ID); err != nil {
+			logger.Error("failed to subscribe user to search criteria", "error", err, "user-id", user.ID, "criteria-id", result.Criteria.ID)
 			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 				"user_id":        user.ID,
 				"appointment_id": appointment.ID,
 				"user_email":     user.Email,
 				"call_id":        *appointment.CallID,
-				"criteria_id":    criteria.ID,
-				"step":           "CreateSearchTask",
+				"criteria_id":    result.Criteria.ID,
+				"step":           "SubscribeToCriteria",
 			})
 			internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
 			return
 		}
-		logger.Debug("search task created", "user-id", user.ID, "job-search-id", jobSearch.ID)
+		logger.Debug("user subscribed to criteria", "user-id", user.ID, "criteria-id", result.Criteria.ID)
 
-		notifier := &userNotifier{userID: user.ID, dispatch: dispatch, publisher: psh}
-		dispatch.Register(user.ID, notifier)
+		if result.IsNew {
+			if queue == nil {
+				logger.Error("queue is nil", "user-id", user.ID, "appointment-id", appointment.ID)
+				internal.SentryReportError(ctx, fmt.Errorf("queue is nil"), sentry.LevelError, map[string]string{
+					"user_id":        user.ID,
+					"appointment_id": appointment.ID,
+					"user_email":     user.Email,
+					"call_id":        *appointment.CallID,
+					"step":           "validate_queue",
+				})
+				internal.ProcessAppointmentFailed(ctx, fs, user, appointment, fmt.Errorf("queue is nil"))
+				return
+			}
 
-		logger.Debug("queueing search", "user-id", user.ID, "job-search-id", jobSearch.ID)
-		if err := queue.QueueSearch(ctx, *jobSearch); err != nil {
-			logger.Error("failed to queue search", "error", err, "user-id", user.ID, "job-search-id", jobSearch.ID)
+			if dispatch == nil {
+				logger.Error("dispatch is nil", "user-id", user.ID, "appointment-id", appointment.ID)
+				internal.SentryReportError(ctx, fmt.Errorf("dispatch is nil"), sentry.LevelError, map[string]string{
+					"user_id":        user.ID,
+					"appointment_id": appointment.ID,
+					"user_email":     user.Email,
+					"call_id":        *appointment.CallID,
+					"step":           "validate_dispatch",
+				})
+				internal.ProcessAppointmentFailed(ctx, fs, user, appointment, fmt.Errorf("dispatch is nil"))
+				return
+			}
+
+			//
+			// If a new criteria was created, we need to queue an immediate search.
+			// We also increase / broaden the first search for a new criteria.
+			//
+			maxPages := internal.DefaultMaxPages * 5 // Increase the first search to get more results
+			testing := os.Getenv("TESTING_MODE") == "true"
+			if testing {
+				maxPages = 2
+			}
+			result.Criteria.MaxPages = maxPages
+			result.Criteria.ListingAge = internal.ListingAgeWeek // Do a week instead of a day
+
+			logger.Debug("creating search task", "user-id", user.ID, "criteria-id", result.Criteria.ID, "max-pages", maxPages, "testing-mode", testing)
+			jobSearch, err := internal.CreateSearchTask(ctx, fs, result.Criteria, "scrapingdog")
+			if err != nil {
+				logger.Error("failed to create search task", "error", err, "user-id", user.ID, "criteria-id", result.Criteria.ID)
+				internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+					"user_id":        user.ID,
+					"appointment_id": appointment.ID,
+					"user_email":     user.Email,
+					"call_id":        *appointment.CallID,
+					"criteria_id":    result.Criteria.ID,
+					"step":           "CreateSearchTask",
+				})
+				internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
+				return
+			}
+			logger.Debug("search task created", "user-id", user.ID, "job-search-id", jobSearch.ID)
+
+			notifier := &userNotifier{userID: user.ID, dispatch: dispatch, publisher: psh}
+			dispatch.Register(user.ID, notifier)
+
+			logger.Debug("queueing search", "user-id", user.ID, "job-search-id", jobSearch.ID)
+			if err := queue.QueueSearch(ctx, *jobSearch); err != nil {
+				logger.Error("failed to queue search", "error", err, "user-id", user.ID, "job-search-id", jobSearch.ID)
+				internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+					"user_id":        user.ID,
+					"appointment_id": appointment.ID,
+					"user_email":     user.Email,
+					"call_id":        *appointment.CallID,
+					"job_search_id":  jobSearch.ID,
+					"step":           "QueueSearch",
+				})
+				internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
+				return
+			}
+			logger.Debug("search queued successfully", "user-id", user.ID, "job-search-id", jobSearch.ID)
+		}
+
+		logger.Debug(internal.Blue("⏱️ appointment processing took"), "duration", time.Since(start).String())
+
+		//
+		// Set the apppointment status to completed
+		//
+		internal.SendPusherMessage(psh, user.ID, "Starting your first search (this takes a few minutes)", nil)
+		logger.Debug("marking appointment as completed", "user-id", user.ID, "appointment-id", appointment.ID)
+		if err := internal.ProcessAppointmentComplete(ctx, fs, user, appointment); err != nil {
+			logger.Error("failed to mark appointment as completed", "error", err, "user-id", user.ID, "appointment-id", appointment.ID)
 			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 				"user_id":        user.ID,
 				"appointment_id": appointment.ID,
 				"user_email":     user.Email,
 				"call_id":        *appointment.CallID,
-				"job_search_id":  jobSearch.ID,
-				"step":           "QueueSearch",
+				"step":           "mark_appointment_completed",
 			})
 			internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
 			return
 		}
-		logger.Debug("search queued successfully", "user-id", user.ID, "job-search-id", jobSearch.ID)
-	}
+		logger.Debug("appointment marked as completed", "user-id", user.ID, "appointment-id", appointment.ID)
 
-	logger.Debug(internal.Blue("⏱️ appointment processing took"), "duration", time.Since(start).String())
-
-	//
-	// Set the apppointment status to completed
-	//
-	internal.SendPusherMessage(psh, user.ID, "Starting your first search (this takes a few minutes)", nil)
-	logger.Debug("marking appointment as completed", "user-id", user.ID, "appointment-id", appointment.ID)
-	if err := internal.ProcessAppointmentComplete(ctx, fs, user, appointment); err != nil {
-		logger.Error("failed to mark appointment as completed", "error", err, "user-id", user.ID, "appointment-id", appointment.ID)
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"user_id":        user.ID,
-			"appointment_id": appointment.ID,
-			"user_email":     user.Email,
-			"call_id":        *appointment.CallID,
-			"step":           "mark_appointment_completed",
-		})
-		internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
-		return
-	}
-	logger.Debug("appointment marked as completed", "user-id", user.ID, "appointment-id", appointment.ID)
-
-	//
-	// Refresh user jobs - queries Pinecone for relevant jobs using an existing criteria
-	//
-	if !isNewCriteria {
-		logger.Debug("refreshing user jobs", "user-id", user.ID, "criteria-id", criteria.ID)
-		internal.SendPusherMessage(psh, user.ID, "Refreshing your results", nil)
-		// if err := internal.RefreshUserJobs(ctx, fs, user, *criteria, 0); err != nil {
-		// 	logger.Error("failed to refresh user jobs", "error", err)
-		// 	hub.CaptureException(err)
-		// 	return
-		// }
+		//
+		// Refresh user jobs - queries Pinecone for relevant jobs using an existing criteria
+		//
+		if !result.IsNew {
+			logger.Debug("refreshing user jobs", "user-id", user.ID, "criteria-id", result.Criteria.ID)
+			internal.SendPusherMessage(psh, user.ID, "Refreshing your results", nil)
+			// if err := internal.RefreshUserJobs(ctx, fs, user, *criteria, 0); err != nil {
+			// 	logger.Error("failed to refresh user jobs", "error", err)
+			// 	hub.CaptureException(err)
+			// 	return
+			// }
+		}
 	}
 
 	if smtpCfg != nil {
@@ -607,31 +608,26 @@ func RecoverProcessingAppointments(hub *sentry.Hub, fs *internal.FirestoreClient
 	return nil
 }
 
-func getOrCreateSearchCriteria(ctx context.Context, fs *internal.FirestoreClient, user *internal.User) (*internal.SearchCriteria, bool, error) {
+type searchCriteriaResult struct {
+	Criteria internal.SearchCriteria
+	IsNew    bool
+}
+
+func getOrCreateSearchCriteria(ctx context.Context, fs *internal.FirestoreClient, user *internal.User) ([]searchCriteriaResult, error) {
 	if user.SteeringQuery == nil || user.LocationPreference == nil {
-		return nil, false, fmt.Errorf("user steering query or work preferences not found")
+		return nil, fmt.Errorf("user steering query or work preferences not found")
 	}
 
 	sq := user.SteeringQuery
-	if sq.Query == "" || sq.WorkType == "" || sq.ExperienceLevel == "" {
-		return nil, false, fmt.Errorf("steering query is incomplete: %v", sq)
+	if err := sq.Validate(); err != nil {
+		return nil, fmt.Errorf("steering query is invalid: %w", err)
 	}
-	q := user.SteeringQuery.Query
+
 	locPref := *user.LocationPreference
 
 	geoID, err := internal.ExtractGeoID(ctx, fs, locPref)
 	if err != nil {
-		return nil, false, fmt.Errorf("failed to extract geo id: %w", err)
-	}
-
-	id := internal.MakeSearchCriteriaID(q, geoID, sq.WorkType, sq.ExperienceLevel)
-	criteria, found, err := internal.GetSearchCriteria(ctx, fs, id)
-	if err != nil {
-		return nil, false, fmt.Errorf("failed to get search criteria: %w", err)
-	}
-
-	if found {
-		return criteria, false, nil
+		return nil, fmt.Errorf("failed to extract geo id: %w", err)
 	}
 
 	maxPages := internal.DefaultMaxPages
@@ -640,17 +636,47 @@ func getOrCreateSearchCriteria(ctx context.Context, fs *internal.FirestoreClient
 		maxPages = 2
 	}
 
-	criteria, err = internal.CreateSearchCriteria(ctx, fs, q, geoID, sq.WorkType, sq.ExperienceLevel, maxPages, internal.DefaultListingAge)
-	if err != nil {
-		return nil, false, fmt.Errorf("failed to create search criteria: %w", err)
-	}
+	results := []searchCriteriaResult{}
 
-	return criteria, true, nil
+	for _, query := range sq.Queries {
+		id := internal.MakeSearchCriteriaID(query, geoID, sq.WorkType, sq.ExperienceLevel)
+		criteria, found, err := internal.GetSearchCriteria(ctx, fs, id)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get search criteria: %w", err)
+		}
+
+		if found {
+			results = append(results, searchCriteriaResult{
+				Criteria: *criteria,
+				IsNew:    false,
+			})
+			continue
+		}
+
+		criteria, err = internal.CreateSearchCriteria(ctx, fs, query, geoID, sq.WorkType, sq.ExperienceLevel, maxPages, internal.DefaultListingAge)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create search criteria: %w", err)
+		}
+
+		results = append(results, searchCriteriaResult{
+			Criteria: *criteria,
+			IsNew:    true,
+		})
+	}
+	return results, nil
 }
 
 // generateSteeringQuery generates a steering query based on the transcript
 func generateSteeringQuery(ctx context.Context, fs *internal.FirestoreClient, user *internal.User, transcript *internal.Transcript) error {
-	query, err := internal.GenerateSteeringQuery(ctx, transcript)
+	resume, found, err := internal.GetLatestResume(ctx, fs, user.ID)
+	if err != nil {
+		return fmt.Errorf("generateSteeringQuery: failed to get user resume: %w", err)
+	}
+	if !found {
+		return fmt.Errorf("generateSteeringQuery: no resume found for user %s", user.ID)
+	}
+
+	query, err := internal.GenerateSteeringQuery(ctx, *resume, *transcript)
 	if err != nil {
 		return fmt.Errorf("generateSteeringQuery: failed to ask LLM for steering query: %w", err)
 	}
@@ -681,7 +707,7 @@ func extractWorkPreferences(_ context.Context, data string) (*string, error) {
 	return &data, nil
 }
 func getWorkPreferences(ctx context.Context, fs *internal.FirestoreClient, transcript *internal.Transcript, locations []string, user *internal.User) error {
-	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/transcript-030-work-location.txt")
+	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/transcript.work-location.txt")
 	if err != nil {
 		return fmt.Errorf("getWorkPreferences: failed to read work location prompt: %w", err)
 	}

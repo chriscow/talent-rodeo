@@ -387,10 +387,6 @@ func updateSteeringQueryFromFeedback(currentSQ internal.SteeringQuery, analysis 
 			} else {
 				updated.MoveToward = newMoveToward
 			}
-			// Strengthen the force if user is consistently liking things
-			if updated.ForceToward < 0.9 {
-				updated.ForceToward = min(0.9, updated.ForceToward+0.1)
-			}
 			changed = true
 		}
 	}
@@ -420,7 +416,7 @@ func updateSteeringQueryFromFeedback(currentSQ internal.SteeringQuery, analysis 
 	if changed {
 		// Rebuild the rerank query to incorporate the updated MoveToward and MoveAway
 		updated.RerankQuery = fmt.Sprintf("I am looking for %s positions. %s. %s",
-			updated.Query, updated.MoveToward, updated.MoveAway)
+			updated.Queries, updated.MoveToward, updated.MoveAway)
 	}
 
 	return updated, changed

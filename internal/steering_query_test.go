@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"reflect"
 	"testing"
 
 	"github.com/chriscow/minds/tools"
@@ -36,7 +37,7 @@ func TestSteeringQueryFromTranscript(t *testing.T) {
 	}
 
 	// Create a steering query from the transcript
-	sq, err := GenerateSteeringQuery(context.Background(), transcript, tools.WithModel(tools.GPT41Nano))
+	sq, err := GenerateSteeringQuery(context.Background(), Resume{}, *transcript, tools.WithModel(tools.GPT41Nano))
 	if err != nil {
 		t.Fatalf("Failed to create steering query: %v", err)
 	}
@@ -181,10 +182,9 @@ Final JSON output:
 			name:  "Complete LLM response with analysis and JSON",
 			input: complexLLMResponse,
 			expected: &SteeringQuery{
-				Query:       "Go (Golang)",
+				Queries:     []string{"Go (Golang)"},
 				MoveToward:  "Backend development with large language models (LLMs) and generative AI, preferably in smaller companies or startups, with fully remote work options",
 				MoveAway:    "Frontend development and frontend frameworks",
-				ForceToward: 0.8, // Set by extractSteeringQuery
 				ForceAway:   0.5, // Set by extractSteeringQuery
 				RerankQuery: "Backend development using Go (Golang) with large language models (LLMs) and generative AI, preferably in smaller companies or startups with fully remote work options, while avoiding frontend development and frontend frameworks",
 			},
@@ -200,10 +200,9 @@ Final JSON output:
   "RerankQuery": "Python development focused on machine learning and data science"
 }` + "\n</answer>",
 			expected: &SteeringQuery{
-				Query:       "Python",
+				Queries:     []string{"Python"},
 				MoveToward:  "Machine learning and data science",
 				MoveAway:    "",
-				ForceToward: 0.8,
 				ForceAway:   0.5,
 				RerankQuery: "Python development focused on machine learning and data science",
 			},
@@ -219,10 +218,9 @@ Final JSON output:
   "RerankQuery": "Modern JavaScript development avoiding legacy systems"
 }` + "\n```",
 			expected: &SteeringQuery{
-				Query:       "JavaScript",
+				Queries:     []string{"JavaScript"},
 				MoveToward:  "",
 				MoveAway:    "Legacy systems",
-				ForceToward: 0.8,
 				ForceAway:   0.5,
 				RerankQuery: "Modern JavaScript development avoiding legacy systems",
 			},
@@ -237,10 +235,9 @@ Final JSON output:
   "RerankQuery": "Rust systems programming avoiding web development"
 }`,
 			expected: &SteeringQuery{
-				Query:       "Rust",
+				Queries:     []string{"Rust"},
 				MoveToward:  "Systems programming",
 				MoveAway:    "Web development",
-				ForceToward: 0.8,
 				ForceAway:   0.5,
 				RerankQuery: "Rust systems programming avoiding web development",
 			},
@@ -304,8 +301,8 @@ Final JSON output:
 			}
 
 			// Compare all fields
-			if result.Query != tt.expected.Query {
-				t.Errorf("Query mismatch: got %q, expected %q", result.Query, tt.expected.Query)
+			if !reflect.DeepEqual(result.Queries, tt.expected.Queries) {
+				t.Errorf("Query mismatch: got %q, expected %q", result.Queries, tt.expected.Queries)
 			}
 
 			if result.MoveToward != tt.expected.MoveToward {
@@ -318,10 +315,6 @@ Final JSON output:
 
 			if result.RerankQuery != tt.expected.RerankQuery {
 				t.Errorf("RerankQuery mismatch: got %q, expected %q", result.RerankQuery, tt.expected.RerankQuery)
-			}
-
-			if result.ForceToward != tt.expected.ForceToward {
-				t.Errorf("ForceToward mismatch: got %f, expected %f", result.ForceToward, tt.expected.ForceToward)
 			}
 
 			if result.ForceAway != tt.expected.ForceAway {

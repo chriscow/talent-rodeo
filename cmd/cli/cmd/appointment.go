@@ -11,7 +11,9 @@ import (
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/search/providers/scrapingdog"
 	"talent-rodeo/internal/transcript"
+	"time"
 
+	"github.com/cheggaaa/pb"
 	"github.com/getsentry/sentry-go"
 	"github.com/google/uuid"
 	"github.com/lmittmann/tint"
@@ -20,6 +22,7 @@ import (
 
 var completedAppt bool
 var sendRecap bool
+var allUsers bool
 
 func init() {
 	appointmentCmd.AddCommand(reprocessCmd)
@@ -37,9 +40,8 @@ func init() {
 
 	reprocessCmd.Flags().StringVarP(&userID, "user", "u", "", "User ID to reprocess the appointment for")
 	reprocessCmd.Flags().StringVarP(&appointmentID, "appointment", "a", "", "Appointment ID to reprocess")
-	reprocessCmd.MarkFlagRequired("appointment")
-	reprocessCmd.MarkFlagRequired("user")
 	reprocessCmd.Flags().BoolVarP(&sendRecap, "send-recap", "r", false, "Send a recap email after reprocessing the appointment")
+	reprocessCmd.Flags().BoolVarP(&allUsers, "all", "A", false, "Reprocess the latest completed appointment for all users")
 
 	sendRecapCmd.Flags().StringVarP(&userID, "user", "u", "", "User ID for the appointment")
 	sendRecapCmd.Flags().StringVarP(&appointmentID, "appointment", "a", "", "Appointment ID to send recap email for")
@@ -182,19 +184,21 @@ The argument is a JSON file for an appointment.`,
 		}
 
 		// the argument is a JSON string for an appointment
-		var appt internal.Appointment
+		appts := []internal.Appointment{}
 		data, err := os.ReadFile(args[0])
 		if err != nil {
 			return fmt.Errorf("failed to read appointment file: %w", err)
 		}
-		if err := json.Unmarshal(data, &appt); err != nil {
+		if err := json.Unmarshal(data, &appts); err != nil {
 			return fmt.Errorf("failed to unmarshal appointment: %w", err)
 		}
-		appt.UserID = userID
-		if err := internal.CreateAppointment(ctx, fs, userID, &appt); err != nil {
-			return fmt.Errorf("failed to create appointment: %w", err)
+		for _, appt := range appts {
+			appt.UserID = userID
+			if err := internal.CreateAppointment(ctx, fs, userID, &appt); err != nil {
+				return fmt.Errorf("failed to create appointment: %w", err)
+			}
+			fmt.Printf("Created appointment %s for user %s\n", appt.ID, userID)
 		}
-		fmt.Printf("Created appointment %s for user %s\n", appt.ID, userID)
 		return nil
 	},
 }
@@ -206,11 +210,81 @@ var reprocessCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
+		if allUsers {
+			// Process all users in parallel
+			fs, err := internal.NewFirestoreClient(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to create firestore client: %w", err)
+			}
+			defer fs.Close()
+
+			users, err := internal.ListUsers(ctx, fs, 1000, 0)
+			if err != nil {
+				return fmt.Errorf("failed to list users: %w", err)
+			}
+			var wg sync.WaitGroup
+			bar := pb.StartNew(len(users))
+			defer bar.Finish()
+			for _, user := range users {
+				wg.Add(1)
+				go func(user *internal.User) {
+					defer wg.Done()
+					// fmt.Printf("[ALL] Processing user %s (%s)\n", user.ID, user.Email)
+					// Get latest appointment for this user
+					appt, found, err := internal.GetLatestAppointment(ctx, fs, user.ID)
+					if err != nil {
+						// fmt.Printf("[ALL] Error getting latest appointment for user %s: %v\n", user.ID, err)
+						bar.Increment()
+						return
+					}
+					if !found {
+						// fmt.Printf("[ALL] No appointment found for user %s\n", user.ID)
+						bar.Increment()
+						return
+					}
+					// Reuse the reprocessing logic for a single appointment
+					tmpFile, err := os.CreateTemp("", "appt-reprocess-*.log")
+					if err != nil {
+						// fmt.Printf("[ALL] Error creating temp log file: %v\n", err)
+						bar.Increment()
+						return
+					}
+					defer tmpFile.Close()
+
+					logger := slog.New(tint.NewHandler(tmpFile, &tint.Options{Level: slog.LevelDebug}))
+					hub := sentry.CurrentHub()
+					dispatch := internal.NewJobEventDispatch()
+
+					srp := internal.NewSearchResultProcessor(fs, logger)
+					dispatch.Register(user.ID, srp)
+					srp.Start()
+					defer srp.Stop()
+
+					queue := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), logger, scrapingdog.WithJobEventHandler(dispatch))
+					transcript.ProcessCompletedCall(hub, fs, nil, queue, logger, dispatch, user, appt, nil)
+					time.Sleep(5 * time.Second)
+					currentAppt, err := internal.GetAppointment(ctx, fs, user.ID, appt.ID)
+					if err != nil {
+						// fmt.Printf("[ALL] Error getting appointment status for user %s: %v\n", user.ID, err)
+						bar.Increment()
+						return
+					}
+					if currentAppt.Status == internal.AppointmentStatusCompleted {
+						bar.Increment()
+					} else if currentAppt.Status == internal.AppointmentStatusFailed {
+						fmt.Printf("[ALL] Appointment processing failed for user %s\n", user.ID)
+						bar.Increment()
+					} else {
+						// still processing
+					}
+				}(user)
+			}
+			wg.Wait()
+			return nil
+		}
+
 		if userID == "" {
 			return fmt.Errorf("user ID is required")
-		}
-		if appointmentID == "" {
-			return fmt.Errorf("appointment ID is required")
 		}
 
 		var cfg *transcript.SMTPConfig
@@ -255,14 +329,35 @@ var reprocessCmd = &cobra.Command{
 		defer fs.Close()
 
 		// Initialize logger with debug level
-		logger := slog.New(tint.NewHandler(os.Stdout, &tint.Options{Level: slog.LevelDebug}))
+		tmpFile, err := os.CreateTemp("", "appt-reprocess-*.log")
+		if err != nil {
+			return fmt.Errorf("failed to create temp log file: %w", err)
+		}
+		defer tmpFile.Close()
+
+		logger := slog.New(tint.NewHandler(tmpFile, &tint.Options{Level: slog.LevelDebug}))
 
 		// Initialize Sentry hub
 		hub := sentry.CurrentHub()
 
-		appointment, err := internal.GetAppointment(ctx, fs, userID, appointmentID)
-		if err != nil {
-			return fmt.Errorf("failed to get appointment: %w", err)
+		var appointment *internal.Appointment
+		if appointmentID != "" {
+			appointment, err = internal.GetAppointment(ctx, fs, userID, appointmentID)
+			if err != nil {
+				return fmt.Errorf("failed to get appointment: %w", err)
+			}
+		} else {
+			var found bool
+			appointment, found, err = internal.GetLatestCompletedAppointment(ctx, fs, userID)
+			if err != nil {
+				return fmt.Errorf("failed to get latest completed appointment: %w", err)
+			}
+
+			if !found {
+				return fmt.Errorf("no completed appointment found for user %s", userID)
+			}
+
+			appointmentID = appointment.ID
 		}
 
 		user, found, err := internal.GetUser(ctx, fs, userID)
@@ -278,6 +373,7 @@ var reprocessCmd = &cobra.Command{
 		queue := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), logger, scrapingdog.WithJobEventHandler(dispatch))
 
 		transcript.ProcessCompletedCall(hub, fs, nil, queue, logger, dispatch, user, appointment, cfg)
+		time.Sleep(5 * time.Second) // Wait for processing to start
 
 		currentAppt, err := internal.GetAppointment(ctx, fs, userID, appointmentID)
 		if err != nil {

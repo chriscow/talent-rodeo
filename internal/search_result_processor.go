@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -15,8 +16,11 @@ import (
 )
 
 const (
-	JobDetailNamespace         = "job-details" // Pinecone namespace for job details
-	MaxConcurrentJobProcessing = 10            // Maximum number of concurrent job detail processing goroutines
+	JobDetailNamespace               = "job-details" // Pinecone namespace for job details
+	JobDetailExtractionQueueSize     = 2000
+	MaxConcurrentJobDetailProcessing = 20
+	queueLogInterval                 = 5 * time.Second
+	queueRequeueInterval             = 4 * time.Hour
 )
 
 // JobProcessor is an interface that defines the methods for processing new job details
@@ -30,19 +34,207 @@ type JobProcessor interface {
 // It is responsible for handling job listings and job details returned from a search.
 // It saves the job listings and job details to Firestore and links them to the search criteria.
 type SearchResultProcessor struct {
-	fs                    *FirestoreClient
-	logger                *slog.Logger
-	semaphore             chan struct{} // Semaphore to limit concurrent job detail processing
-	outstandingGoroutines int64         // Counter for outstanding goroutines (atomic)
+	fs     *FirestoreClient
+	logger *slog.Logger
+
+	queue     chan JobDetail
+	stopCh    chan struct{}
+	stoppedCh chan struct{}
+	workersWg sync.WaitGroup
+
+	logTicker     *time.Ticker
+	requeueTicker *time.Ticker
+
+	queueHadItems atomic.Bool // for logging when queue drains
 }
 
 func NewSearchResultProcessor(fs *FirestoreClient, logger *slog.Logger) *SearchResultProcessor {
 	logger = logger.With("pkg", "SearchResultProcessor")
 	return &SearchResultProcessor{
-		fs:                    fs,
-		logger:                logger,
-		semaphore:             make(chan struct{}, MaxConcurrentJobProcessing),
-		outstandingGoroutines: 0,
+		fs:        fs,
+		logger:    logger,
+		queue:     make(chan JobDetail, JobDetailExtractionQueueSize),
+		stopCh:    make(chan struct{}),
+		stoppedCh: make(chan struct{}),
+	}
+}
+
+// Start launches worker goroutines and periodic queue monitoring/requeueing.
+func (s *SearchResultProcessor) Start() {
+	// Start workers
+	for i := 0; i < MaxConcurrentJobDetailProcessing; i++ {
+		s.workersWg.Add(1)
+		go s.worker()
+	}
+
+	s.logTicker = time.NewTicker(queueLogInterval)
+	go s.queueLogger()
+
+	s.requeueTicker = time.NewTicker(queueRequeueInterval)
+	go s.periodicRequeue()
+
+	// Initial requeue on start
+	go s.requeueUnprocessedJobDetails()
+}
+
+// Stop signals workers to stop after finishing current job, and stops log/requeue tickers.
+func (s *SearchResultProcessor) Stop() {
+	close(s.stopCh)
+	if s.logTicker != nil {
+		s.logTicker.Stop()
+	}
+	if s.requeueTicker != nil {
+		s.requeueTicker.Stop()
+	}
+	s.workersWg.Wait()
+	close(s.stoppedCh)
+}
+
+// worker processes JobDetails from the queue, running ExtractJobDetailData.
+func (s *SearchResultProcessor) worker() {
+	defer s.workersWg.Done()
+	for {
+		select {
+		case job, ok := <-s.queue:
+			if !ok {
+				return
+			}
+			ctx := context.Background()
+			start := time.Now()
+			err := ExtractJobDetailData(ctx, &job)
+			if err != nil {
+				s.logger.Error("failed to extract job detail data (async)", "error", err, "jobID", job.ID)
+				SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+					"jobID": job.ID,
+				})
+				continue
+			}
+			s.logger.Debug(Green("extracted job detail data (async)"), "jobID", job.ID, "duration", time.Since(start).String())
+			// Save updated job detail
+			err = SaveJobDetail(ctx, s.fs, &job)
+			if err != nil {
+				s.logger.Error("failed to save job detail after extraction", "error", err, "jobID", job.ID)
+				SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+					"jobID": job.ID,
+				})
+			}
+		case <-s.stopCh:
+			return
+		}
+	}
+}
+
+// queueLogger logs the queue size every 5s if it has items, and logs when it drains.
+func (s *SearchResultProcessor) queueLogger() {
+	for {
+		select {
+		case <-s.logTicker.C:
+			qLen := len(s.queue)
+			if qLen > 0 {
+				s.queueHadItems.Store(true)
+				s.logger.Debug("job detail extraction queue size", "size", qLen)
+			} else if s.queueHadItems.Load() {
+				s.logger.Info("job detail extraction queue completely processed")
+				s.queueHadItems.Store(false)
+			}
+		case <-s.stopCh:
+			return
+		}
+	}
+}
+
+// periodicRequeue runs every 4 hours to requeue unprocessed JobDetails.
+func (s *SearchResultProcessor) periodicRequeue() {
+	for {
+		select {
+		case <-s.requeueTicker.C:
+			s.requeueUnprocessedJobDetails()
+		case <-s.stopCh:
+			return
+		}
+	}
+}
+
+// requeueUnprocessedJobDetails fetches JobDetails with nil ExtractedData and queues them.
+func (s *SearchResultProcessor) requeueUnprocessedJobDetails() {
+	ctx := context.Background()
+	jobDetails, err := GetJobDetailsWithNoExtractedData(ctx, s.fs)
+	if err != nil {
+		s.logger.Error("failed to fetch unprocessed job details", "error", err)
+		return
+	}
+	added := 0
+	for _, job := range jobDetails {
+		if !s.tryQueueJobDetail(job) {
+			s.logger.Debug("job detail queue full, dropping job", "jobID", job.ID)
+			continue
+		}
+		added++
+	}
+	if added > 0 {
+		s.logger.Info("requeued unprocessed job details", "count", added)
+	}
+}
+
+// tryQueueJobDetail attempts to queue a JobDetail, returns false if queue is full.
+func (s *SearchResultProcessor) tryQueueJobDetail(job JobDetail) bool {
+	select {
+	case s.queue <- job:
+		return true
+	default:
+		return false
+	}
+}
+
+// OnJobDetail runs the transaction block synchronously, then queues extraction async.
+func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, job JobDetail) {
+	s.logger.Debug("OnJobDetail", "jobID", job.ProviderJobID)
+
+	ctx := context.Background()
+
+	s.logger.Debug("saving job detail and linking", "jobID", job.ID, "criteriaID", jobSearch.Criteria.ID)
+	err := s.fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		if err := SaveJobDetailTx(ctx, s.fs, tx, &job); err != nil {
+			s.logger.Error("failed to save job detail", "error", err, "jobID", job.ID)
+			SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+				"jobID":      job.ID,
+				"criteriaID": jobSearch.Criteria.ID,
+			})
+			return fmt.Errorf("failed to save job detail: %w", err)
+		}
+
+		if err := LinkJobDetailToSearchTaskTx(ctx, s.fs, tx, jobSearch.ID, job.ID); err != nil {
+			s.logger.Error("failed to link job detail to search task", "error", err, "jobID", job.ID, "searchTaskID", jobSearch.ID)
+			SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+				"jobID":        job.ID,
+				"searchTaskID": jobSearch.ID,
+				"criteriaID":   jobSearch.Criteria.ID,
+			})
+			return fmt.Errorf("failed to add job detail to search task: %w", err)
+		}
+
+		if err := LinkJobDetailToCriteriaTx(ctx, s.fs, tx, jobSearch.Criteria.ID, job.ID); err != nil {
+			s.logger.Error("failed to link job detail to criteria", "error", err, "jobID", job.ID, "criteriaID", jobSearch.Criteria.ID)
+			SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+				"jobID":      job.ID,
+				"criteriaID": jobSearch.Criteria.ID,
+			})
+			return fmt.Errorf("failed to link job detail to criteria: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		s.logger.Error("failed to save job detail and link", "error", err)
+		return
+	}
+
+	// Only queue for extraction if not already extracted
+	if job.ExtractedData == nil {
+		if !s.tryQueueJobDetail(job) {
+			s.logger.Debug("job detail queue full, dropping job", "jobID", job.ID)
+		}
 	}
 }
 
@@ -62,91 +254,6 @@ func (s *SearchResultProcessor) OnJobListing(jobSearch SearchTask, job JobListin
 	if err := SaveJobListing(ctx, s.fs, jobSearch, &job); err != nil {
 		s.logger.Error("failed to create job listing", "error", err)
 	}
-}
-
-func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, job JobDetail) {
-	s.logger.Debug("OnJobDetail", "jobID", job.ProviderJobID)
-
-	go func() {
-		// Acquire semaphore slot
-		s.semaphore <- struct{}{}
-
-		// Increment counter and log
-		count := atomic.AddInt64(&s.outstandingGoroutines, 1)
-		s.logger.Debug("goroutine started", "jobID", job.ID, "outstanding", count)
-
-		defer func() {
-			// Decrement counter and log
-			count := atomic.AddInt64(&s.outstandingGoroutines, -1)
-			s.logger.Debug("goroutine finished", "jobID", job.ID, "outstanding", count)
-
-			// Release semaphore slot
-			<-s.semaphore
-		}()
-
-		ctx := context.Background()
-
-		start := time.Now()
-		s.logger.Debug("extracting job detail data", "jobID", job.ID, "criteriaID", jobSearch.Criteria.ID)
-		if err := ExtractJobDetailData(ctx, &job); err != nil {
-			s.logger.Error("failed to extract job detail data", "error", err, "jobID", job.ID)
-			SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-				"jobID":      job.ID,
-				"criteriaID": jobSearch.Criteria.ID,
-			})
-
-			return
-		}
-
-		s.logger.Debug(Green("extracted job detail data"), "jobID", job.ID, "duration", time.Since(start).String())
-
-		// Transaction for data operations only
-		err := s.fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-			if err := SaveJobDetailTx(ctx, s.fs, tx, &job); err != nil {
-				s.logger.Error("failed to save job detail", "error", err, "jobID", job.ID)
-				SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-					"jobID":      job.ID,
-					"criteriaID": jobSearch.Criteria.ID,
-				})
-				return fmt.Errorf("failed to save job detail: %w", err)
-			}
-
-			if err := LinkJobDetailToSearchTaskTx(ctx, s.fs, tx, jobSearch.ID, job.ID); err != nil {
-				s.logger.Error("failed to link job detail to search task", "error", err, "jobID", job.ID, "searchTaskID", jobSearch.ID)
-				SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-					"jobID":        job.ID,
-					"searchTaskID": jobSearch.ID,
-					"criteriaID":   jobSearch.Criteria.ID,
-				})
-				return fmt.Errorf("failed to add job detail to search task: %w", err)
-			}
-
-			if err := LinkJobDetailToCriteriaTx(ctx, s.fs, tx, jobSearch.Criteria.ID, job.ID); err != nil {
-				s.logger.Error("failed to link job detail to criteria", "error", err, "jobID", job.ID, "criteriaID", jobSearch.Criteria.ID)
-				SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-					"jobID":      job.ID,
-					"criteriaID": jobSearch.Criteria.ID,
-				})
-				return fmt.Errorf("failed to link job detail to criteria: %w", err)
-			}
-
-			return nil
-		})
-
-		if err != nil {
-			s.logger.Error("failed to save job detail and link", "error", err)
-			return
-		}
-
-		if _, err := s.UpsertJobDetailEmbeddings(ctx, jobSearch.Criteria.ID, []JobDetail{job}); err != nil {
-			s.logger.Error("failed to upsert job detail embeddings", "error", err, "jobID", job.ID)
-			SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-				"jobID":      job.ID,
-				"criteriaID": jobSearch.Criteria.ID,
-			})
-			return
-		}
-	}()
 }
 
 func (s *SearchResultProcessor) OnPageComplete(jobSearch SearchTask, page int, jobsFound int, errors []error) {
@@ -194,13 +301,19 @@ func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJob
 	}
 
 	criteria := jobSearch.Criteria
+
 	nowUTC := time.Now().UTC()
 	criteria.LastSearchedAt = &nowUTC
 	criteria.LastSearchJobID = jobSearch.ID
+
+	// If a user is new, we bump the first search to have a higher max pages and listing age
+	// so that we can get more results. Reset it back to default after the first search.
+	criteria.MaxPages = DefaultMaxPages
+	criteria.ListingAge = DefaultListingAge
 	UpdateSearchCriteria(ctx, s.fs, &criteria)
 }
 
-func (s *SearchResultProcessor) UpsertJobDetailEmbeddings(ctx context.Context, criteriaID string, jobDetails []JobDetail) (int, error) {
+func UpsertJobDetailEmbeddings(ctx context.Context, criteria SearchCriteria, jobDetails []JobDetail) (int, error) {
 	client, err := NewPineconeClient()
 	if err != nil {
 		return 0, fmt.Errorf("failed to create pinecone client: %w", err)
@@ -223,16 +336,17 @@ func (s *SearchResultProcessor) UpsertJobDetailEmbeddings(ctx context.Context, c
 	records := make([]*pinecone.IntegratedRecord, len(jobDetails))
 	for i, detail := range jobDetails {
 		records[i] = &pinecone.IntegratedRecord{
-			"_id":           detail.ID,
-			"provider":      detail.Provider,
-			"providerJobID": detail.ProviderJobID,
-			"criteriaID":    criteriaID,
-			"text":          detail.Description, //  this is what gets embedded
-			"postedDate":    detail.PostedDate,
-			"title":         detail.Title,
-			"company":       detail.Company,
-			"location":      detail.Location,
-			"url":           detail.URL,
+			"_id":             detail.ID,
+			"provider":        detail.Provider,
+			"providerJobID":   detail.ProviderJobID,
+			"criteriaID":      criteria.ID,
+			"text":            detail.Description, //  this is what gets embedded
+			"postedDate":      detail.PostedDate,
+			"title":           detail.Title,
+			"company":         detail.Company,
+			"location":        detail.Location,
+			"workType":        criteria.WorkType,
+			"experienceLevel": criteria.ExperienceLevel,
 		}
 	}
 
@@ -249,9 +363,4 @@ func (s *SearchResultProcessor) UpsertJobDetailEmbeddings(ctx context.Context, c
 	count := denseCount + sparseCount
 
 	return count, nil
-}
-
-// GetOutstandingGoroutines returns the current number of outstanding job detail processing goroutines
-func (s *SearchResultProcessor) GetOutstandingGoroutines() int64 {
-	return atomic.LoadInt64(&s.outstandingGoroutines)
 }

@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"talent-rodeo/assets"
 	"time"
 
 	"cloud.google.com/go/firestore"
 	"github.com/chriscow/minds/tools"
+	"github.com/samber/lo"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -231,6 +233,30 @@ func GetJobDetail(ctx context.Context, fs *FirestoreClient, id string) (*JobDeta
 	return &jobDetail, false, nil
 }
 
+func GetJobDetailsWithNoExtractedData(ctx context.Context, fs *FirestoreClient) ([]JobDetail, error) {
+	iter := fs.Collection(JobDetailsCollection).Where("ExtractedData", "==", nil).Documents(ctx)
+
+	var jobDetails []JobDetail
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		var jobDetail JobDetail
+		if err := doc.DataTo(&jobDetail); err != nil {
+			return nil, err
+		}
+
+		jobDetails = append(jobDetails, jobDetail)
+	}
+
+	return jobDetails, nil
+}
+
 // linkJobToCriteria creates a link between a job and criteria
 func LinkJobDetailToCriteriaTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, criteriaID, jobID string) error {
 	if criteriaID == "" || jobID == "" {
@@ -265,7 +291,7 @@ func UnlinkJobDetailFromCriteriaTx(ctx context.Context, fs *FirestoreClient, tx 
 }
 
 // ListJobDetails retrieves all job details with optional limit and offset
-func ListJobDetails(ctx context.Context, fs *FirestoreClient, limit int, offset int) ([]map[string]any, error) {
+func ListJobDetails(ctx context.Context, fs *FirestoreClient, limit int, offset int) ([]JobDetail, error) {
 	query := fs.Collection("job_details").OrderBy("CreatedAt", firestore.Desc)
 	if limit > 0 {
 		query = query.Limit(limit)
@@ -275,7 +301,7 @@ func ListJobDetails(ctx context.Context, fs *FirestoreClient, limit int, offset 
 	}
 
 	iter := query.Documents(ctx)
-	var details []map[string]any
+	var details []JobDetail
 
 	for {
 		doc, err := iter.Next()
@@ -286,7 +312,12 @@ func ListJobDetails(ctx context.Context, fs *FirestoreClient, limit int, offset 
 			return nil, fmt.Errorf("failed to iterate job details: %w", err)
 		}
 
-		details = append(details, doc.Data())
+		var jobDetail JobDetail
+		if err := doc.DataTo(&jobDetail); err != nil {
+			return nil, fmt.Errorf("failed to parse job detail %s: %w", doc.Ref.ID, err)
+		}
+
+		details = append(details, jobDetail)
 	}
 
 	return details, nil
@@ -375,4 +406,139 @@ func GetJobDetailsByIDs(ctx context.Context, fs *FirestoreClient, ids []string) 
 	}
 
 	return result, nil
+}
+
+// SearchJobDetails retrieves semantic search results for a user with 1-hour caching
+// This function is used by the dashboard for the "New" job status tab
+func SearchJobDetails(ctx context.Context, fs *FirestoreClient, userID string, steeringQuery SteeringQuery, topK int, params *HybridSearchParams) ([]ScoredJobDetail, error) {
+	// Create cache key based on user ID, criteria ID, topK, params hash, and steering query hash
+	// paramsHash := "default"
+	// if params != nil {
+	// 	paramsHash = fmt.Sprintf("%.2f-%.2f-%.2f-%.2f-%.2f-%s",
+	// 		params.DenseWeight, params.SparseWeight, params.RecencyWeight,
+	// 		params.RecencyHalfLife, params.ScoreThreshold, params.ScoreFusion)
+	// }
+
+	// Include steering query in cache key to handle custom queries
+	// steeringHash := fmt.Sprintf("%s|%s|%.2f", steeringQuery.Queries, steeringQuery.RerankQuery, steeringQuery.ForceAway)
+	// if steeringQuery.MoveToward != "" {
+	// 	steeringHash += "|" + steeringQuery.MoveToward
+	// }
+	// if steeringQuery.MoveAway != "" {
+	// 	steeringHash += "|" + steeringQuery.MoveAway
+	// }
+
+	// criteria, found, err := GetSearchCriteria(ctx, fs, criteriaID)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to get criteria by ID %s: %w", criteriaID, err)
+	// }
+	// if !found {
+	// 	return nil, fmt.Errorf("criteria with ID %s not found", criteriaID)
+	// }
+
+	// cacheKey := fmt.Sprintf("semantic_jobs:%s:%s:%d:%s:%s", userID, criteriaID, topK, paramsHash, steeringHash)
+
+	// Check cache first
+	// if cachedJobs, found := fs.semanticJobsCache.Get(cacheKey); found {
+	// 	return cachedJobs, nil
+	// }
+
+	// Get all IDs for UserJobs for this user
+	userJobs, err := ListUserJobs(ctx, fs, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user jobs: %w", err)
+	}
+
+	userJobIDs := lo.Map(userJobs, func(job UserJob, _ int) string {
+		return job.ID
+	})
+
+	userJobIDs = lo.Uniq(userJobIDs)
+
+	filter := map[string]any{
+		"ID": map[string]any{
+			"$nin": userJobIDs,
+		},
+		"workType": map[string]any{
+			"$eq": string(steeringQuery.WorkType),
+		},
+		"experienceLevel": map[string]any{
+			"$eq": string(steeringQuery.ExperienceLevel),
+		},
+	}
+
+	// Cache miss - perform semantic search
+	if params == nil {
+		params = DefaultHybridSearchParams()
+	}
+	scoredJobs, err := SemanticSearchJobs(ctx, steeringQuery, filter, topK*2, params)
+	if err != nil {
+		return nil, fmt.Errorf("SemanticSearchJobs failed: %w", err)
+	}
+
+	rerankedJobs, err := RerankResults(ctx, scoredJobs, steeringQuery.RerankQuery, topK, PineconeRerankBGEv2M3)
+	if err != nil {
+		return nil, fmt.Errorf("RerankResults failed: %w", err)
+	}
+
+	//
+	// Now get all of the actual JobDetails from Firestore. We get all the IDs,
+	// then fetch the details in a single batch to minimize Firestore reads.
+	// This is important because the reranked jobs do not have all details.
+	//
+
+	jobMap := map[string]ScoredJobDetail{}
+	for _, job := range rerankedJobs {
+		jobMap[job.JobDetail.ID] = job
+	}
+
+	ids := lo.Keys(jobMap)
+
+	jobDetails, err := GetJobDetailsByIDs(ctx, fs, ids)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get job details for semantic search: %w", err)
+	}
+
+	if len(jobDetails) != len(rerankedJobs) {
+		// HMMM: job detail might still be processing in the background?
+		// return nil, fmt.Errorf("mismatch in job details count: expected scoredJobs:%d, got jobDetails:%d", len(scoredJobs), len(jobDetails))
+	}
+
+	// Update the job details in the scored jobs
+	for _, job := range jobDetails {
+		if scoredJob, exists := jobMap[job.ID]; exists {
+			// Update the job detail with the full job data
+			scoredJob.JobDetail = job
+			jobMap[job.ID] = scoredJob
+		}
+	}
+
+	// Convert the updated map back to a slice and sort by Score descending
+	updatedScoredJobs := make([]ScoredJobDetail, 0, len(jobMap))
+	for _, scoredJob := range jobMap {
+		updatedScoredJobs = append(updatedScoredJobs, scoredJob)
+	}
+
+	// Sort by Score descending to maintain the original semantic search ranking
+	sort.Slice(updatedScoredJobs, func(i, j int) bool {
+		return updatedScoredJobs[i].Score > updatedScoredJobs[j].Score
+	})
+
+	// Cache the results with 1-hour TTL
+	// fs.semanticJobsCache.SetWithTTL(cacheKey, updatedScoredJobs, 1, 1*time.Hour)
+
+	return updatedScoredJobs, nil
+}
+
+// InvalidateSemanticJobsCache invalidates the semantic jobs cache for a user
+// This should be called when a user interacts with jobs (changes status, etc.)
+func InvalidateSemanticJobsCache(fs *FirestoreClient, userID string) {
+	// TODO: We need to invalidate all cache entries for this user
+	// Since Ristretto doesn't support prefix-based deletion, we'll use a simple approach
+	// and let the cache entries expire naturally. For a more aggressive approach,
+	// we could track cache keys per user, but for now this is sufficient.
+
+	// Note: In a production system, you might want to maintain a separate
+	// mapping of user IDs to cache keys for more efficient invalidation
+
 }

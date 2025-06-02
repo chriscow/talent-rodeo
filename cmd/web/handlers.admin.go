@@ -260,6 +260,18 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 	ctx := r.Context()
 	data := app.newTemplateData(r)
 
+	// Set common template data that's needed in all rendering paths
+	data["JobStatuses"] = internal.GetJobStatuses()
+	data["StatusDisplayNames"] = map[string]string{
+		"new":      "New Jobs",
+		"saved":    "Saved Jobs",
+		"applied":  "Applied Jobs",
+		"archived": "Archived Jobs",
+	}
+
+	// Set default ActiveStatus (will be updated later if form is posted)
+	data["ActiveStatus"] = string(internal.JobStatusNew)
+
 	// Fetch all users for the dropdown
 	users, err := internal.ListUsers(ctx, app.fs, 100, 0) // Limiting to 100 users
 	if err != nil {
@@ -289,6 +301,16 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 		app.serverError(w, r, fmt.Errorf("failed to parse form: %w", err))
 		return
 	}
+
+	// Parse status early so ActiveStatus can be set for error cases
+	status := internal.JobStatusNew
+	if statusParam := r.PostForm.Get("status"); statusParam != "" {
+		if parsedStatus, isValid := internal.ParseJobStatus(statusParam); isValid {
+			status = parsedStatus
+		}
+	}
+	// Update ActiveStatus with the parsed status
+	data["ActiveStatus"] = string(status)
 
 	selectedUserID := r.PostForm.Get("user_id")
 	previousUserID := r.PostForm.Get("previous_user_id") // Hidden field to track previous selection
@@ -347,17 +369,21 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 	if !userChanged {
 		// Same user with form values - use form values to override
 		app.logger.Debug("adminUserDashboard: using form steering query values - same user with edits")
-		steeringQuery.Query = steeringQueryText
+
+		// Ensure we have a steering query to work with
+		if steeringQuery == nil {
+			data["Error"] = "User does not have a steering query set"
+			if err := response.Page(w, http.StatusOK, data, "pages/admin/user-dashboard.html"); err != nil {
+				app.serverError(w, r, fmt.Errorf("failed to render page: %w", err))
+			}
+			return
+		}
+
+		// Split steering query text into array of strings
+		steeringQuery.Queries = strings.Split(steeringQueryText, ",")
 		steeringQuery.RerankQuery = rerankQueryText
 		steeringQuery.MoveToward = moveTowardText
 		steeringQuery.MoveAway = moveAwayText
-		// Parse force values
-		forceToward := steeringQuery.ForceToward
-		if v := r.PostForm.Get("force_toward"); v != "" {
-			if f, err := strconv.ParseFloat(v, 64); err == nil {
-				forceToward = f
-			}
-		}
 		forceAway := steeringQuery.ForceAway
 		if v := r.PostForm.Get("force_away"); v != "" {
 			if f, err := strconv.ParseFloat(v, 64); err == nil {
@@ -365,7 +391,6 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 			}
 		}
 		// Update steering query with form values
-		steeringQuery.ForceToward = forceToward
 		steeringQuery.ForceAway = forceAway
 
 		if err := steeringQuery.Validate(); err != nil {
@@ -425,13 +450,6 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 	data["EnableReranking"] = enableReranking
 
 	// Get user's dashboard data similar to showDashboard
-	status := internal.JobStatusNew
-	if statusParam := r.PostForm.Get("status"); statusParam != "" {
-		if parsedStatus, isValid := internal.ParseJobStatus(statusParam); isValid {
-			status = parsedStatus
-		}
-	}
-
 	showAllRatings := r.PostForm.Get("show_all") == "true"
 	pageSize := 10 // Show more jobs in admin view
 
@@ -486,11 +504,8 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Use the first subscription's criteria for semantic search
-	criteriaID := subscriptions[0].CriteriaID
-
 	// Use custom topK from form instead of hardcoded value
-	semanticSearchTopK := topK * 10 // Use larger search to get good results for filtering
+	semanticSearchTopK := topK
 
 	var allFilteredJobs []internal.ScoredJobDetail
 
@@ -504,7 +519,7 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	allFilteredJobs, err = internal.GetSemanticJobsForUser(ctx, app.fs, selectedUser.ID, selectedUser.SteeringQuery, criteriaID, semanticSearchTopK, params)
+	allFilteredJobs, err = internal.SearchJobDetails(ctx, app.fs, selectedUser.ID, *selectedUser.SteeringQuery, semanticSearchTopK, params)
 	if err != nil {
 		wrappedErr := fmt.Errorf("adminUserDashboard: failed to get semantic jobs: %w", err)
 		app.logger.Error("adminUserDashboard: failed to get semantic jobs", "error", err, "user_id", selectedUserID)
@@ -551,17 +566,9 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 
 	// Add dashboard data to template
 	data["HasJobs"] = len(jobs) > 0 || statusJobCount > 0
-	data["ActiveStatus"] = string(status)
 	data["NextPageToken"] = nextPageToken
 	data["HasNextPage"] = nextPageToken != ""
 	data["TotalJobsForStatus"] = statusJobCount
-	data["JobStatuses"] = internal.GetJobStatuses()
-	data["StatusDisplayNames"] = map[string]string{
-		"new":      "New Jobs",
-		"saved":    "Saved Jobs",
-		"applied":  "Applied Jobs",
-		"archived": "Archived Jobs",
-	}
 	data["ShowAllRatings"] = showAllRatings
 	data["TestMode"] = true // Enable test mode features in dashboard view
 

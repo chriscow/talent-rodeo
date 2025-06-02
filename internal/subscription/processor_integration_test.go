@@ -72,7 +72,7 @@ func TestProcessorIntegration(t *testing.T) {
 		testUser := internal.CreateTestUser(t, fs, testPrefix, userEmail, userPhone, false)
 
 		// Create a steering query for the user
-		steeringQuery := "I am looking for a software engineer position with Go and cloud experience"
+		steeringQuery := []string{"I am looking for a software engineer position with Go and cloud experience"}
 		testUser.SteeringQuery, err = internal.NewSteeringQuery(steeringQuery, internal.PineconeEmbedDense)
 		if err != nil {
 			t.Fatalf("Failed to create steering query: %v", err)
