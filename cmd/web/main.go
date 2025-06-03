@@ -519,6 +519,8 @@ func checkEnv(logger *slog.Logger, envFile string) error {
 		"VAPI_START_CALL_PATH", // URL that we will use to start a call (we will POST to this URL to start a call)
 	}
 
+	slog.Info(internal.Blue("checkEnv: checking environment variables"), "VAPI_WEBHOOK_URL", os.Getenv("VAPI_WEBHOOK_URL"))
+
 	missingKeys := []string{}
 	for _, key := range requiredKeys {
 		if os.Getenv(key) == "" {
