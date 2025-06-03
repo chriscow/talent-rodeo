@@ -267,6 +267,7 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 
 	app.fs.RunTransaction(r.Context(), func(ctx context.Context, tx *firestore.Transaction) error {
 		appointment.Status = internal.AppointmentStatusRunning
+		appointment.CallID = result.ID
 		if err := internal.UpdateAppointmentTx(ctx, app.fs, tx, appointment); err != nil {
 			return fmt.Errorf("failed to update appointment: %w", err)
 		}
