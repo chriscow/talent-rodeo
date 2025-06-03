@@ -12,6 +12,7 @@ import (
 
 	"cloud.google.com/go/firestore"
 	"github.com/chriscow/vapi-go"
+	"github.com/getsentry/sentry-go"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -51,10 +52,20 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 			user.State.Error = &errStr
 			app.fs.RunTransaction(r.Context(), func(ctx context.Context, tx *firestore.Transaction) error {
 				if err := internal.UpdateUserStatusTx(ctx, app.fs, tx, user, internal.UserStatusError); err != nil {
+					internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+						"action": "update_user_status_tx",
+						"userID": user.ID,
+						"status": string(internal.UserStatusError),
+					})
 					return fmt.Errorf("failed to update user: %w", err)
 				}
 
 				if err := internal.UpdateAppointmentTx(ctx, app.fs, tx, appointment); err != nil {
+					internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+						"action": "update_appointment_tx",
+						"userID": user.ID,
+						"status": string(internal.AppointmentStatusFailed),
+					})
 					return fmt.Errorf("failed to update appointment: %w", err)
 				}
 				return nil
@@ -65,6 +76,11 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 	// verify all env vars are set
 	if os.Getenv("VAPI_ASSISTANT_ID") == "" || os.Getenv("VAPI_OUTBOUND_PHONE_ID") == "" {
 		apptErr = fmt.Errorf("missing required environment variables")
+		internal.SentryReportError(r.Context(), apptErr, sentry.LevelError, map[string]string{
+			"action":                 "missing_required_environment_variables",
+			"VAPI_ASSISTANT_ID":      os.Getenv("VAPI_ASSISTANT_ID"),
+			"VAPI_OUTBOUND_PHONE_ID": os.Getenv("VAPI_OUTBOUND_PHONE_ID"),
+		})
 		app.logger.Error("Missing required environment variables",
 			"assistant_id", os.Getenv("VAPI_ASSISTANT_ID") == "",
 			"phone_id", os.Getenv("VAPI_OUTBOUND_PHONE_ID") == "")
@@ -82,7 +98,11 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 
 	if assistantID == "" || outboundPhoneID == "" {
 		apptErr = fmt.Errorf("missing required environment variables")
-
+		internal.SentryReportError(r.Context(), apptErr, sentry.LevelError, map[string]string{
+			"action":       "missing_required_environment_variables",
+			"assistant_id": assistantID,
+			"phone_id":     outboundPhoneID,
+		})
 		app.logger.Error("Missing required environment variables",
 			"assistant_id", assistantID == "",
 			"phone_id", outboundPhoneID == "")
@@ -96,6 +116,10 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 
 	if err := json.NewDecoder(r.Body).Decode(&appointment); err != nil {
 		apptErr = fmt.Errorf("failed to decode request body: %w", err)
+		internal.SentryReportError(r.Context(), apptErr, sentry.LevelError, map[string]string{
+			"action": "failed_to_decode_request_body",
+			"error":  err.Error(),
+		})
 		app.logger.Error("Failed to decode request body", "error", apptErr)
 		app.reportServerError(r, apptErr)
 
@@ -107,6 +131,10 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 	// validate that none of the fields are empty
 	if appointment.UserID == "" {
 		apptErr = fmt.Errorf("missing required fields: UserID")
+		internal.SentryReportError(r.Context(), apptErr, sentry.LevelError, map[string]string{
+			"action":          "missing_required_fields",
+			"user_id_missing": appointment.UserID,
+		})
 		app.logger.Error("outbound call: missing required fields", "user_id_missing", appointment.UserID == "")
 		app.reportServerError(r, apptErr)
 
@@ -119,6 +147,10 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 	user, found, apptErr = internal.GetUser(r.Context(), app.fs, appointment.UserID)
 	if apptErr != nil {
 		apptErr = fmt.Errorf("failed to get user: %w", apptErr)
+		internal.SentryReportError(r.Context(), apptErr, sentry.LevelError, map[string]string{
+			"action":  "failed_to_get_user",
+			"user_id": appointment.UserID,
+		})
 		app.logger.Error("Failed to get user", "error", apptErr)
 		app.reportServerError(r, apptErr)
 
@@ -131,6 +163,10 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 
 	if !found {
 		apptErr = fmt.Errorf("user not found: %s", appointment.UserID)
+		internal.SentryReportError(r.Context(), apptErr, sentry.LevelError, map[string]string{
+			"action":  "user_not_found",
+			"user_id": appointment.UserID,
+		})
 		app.logger.Error("User not found", "user_id", appointment.UserID)
 		app.reportServerError(r, apptErr)
 
@@ -141,6 +177,10 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 
 	if user.Phone == nil || *user.Phone == "" {
 		apptErr = fmt.Errorf("user has no phone number: %s", appointment.UserID)
+		internal.SentryReportError(r.Context(), apptErr, sentry.LevelError, map[string]string{
+			"action":  "user_has_no_phone_number",
+			"user_id": appointment.UserID,
+		})
 		app.logger.Error("User has no phone number", "user_id", appointment.UserID)
 		app.reportServerError(r, apptErr)
 
@@ -151,6 +191,15 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 
 	if user.State.Status == internal.UserStatusError {
 		apptErr = fmt.Errorf("user is in error state: %s", appointment.UserID)
+		userError := ""
+		if user.State.Error != nil {
+			userError = *user.State.Error
+		}
+		internal.SentryReportError(r.Context(), apptErr, sentry.LevelError, map[string]string{
+			"action":     "user_is_in_error_state",
+			"user_id":    appointment.UserID,
+			"user_error": userError,
+		})
 		app.logger.Error("User is in error state", "user_id", appointment.UserID)
 		app.reportServerError(r, apptErr)
 
@@ -161,6 +210,10 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 
 	if user.State.Status < internal.UserStatusCallScheduled {
 		apptErr = fmt.Errorf("user is not ready for a call: %s", appointment.UserID)
+		internal.SentryReportError(r.Context(), apptErr, sentry.LevelError, map[string]string{
+			"action":  "user_is_not_ready_for_a_call",
+			"user_id": appointment.UserID,
+		})
 		app.logger.Error("User is not ready for a call", "user_id", appointment.UserID)
 		app.reportServerError(r, apptErr)
 
@@ -173,10 +226,18 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		apptErr = fmt.Errorf("failed to get resume: %w", err)
 		if status.Code(err) == codes.NotFound {
+			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+				"action":  "user_has_no_resume",
+				"user_id": appointment.UserID,
+			})
 			app.logger.Error("handleVapiCall: user has no resume", "user_id", appointment.UserID)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action":  "failed_to_get_resume",
+			"user_id": appointment.UserID,
+		})
 		app.logger.Error("Failed to get resume", "error", err)
 		app.reportServerError(r, fmt.Errorf("failed to get resume: %w", err))
 
@@ -188,6 +249,10 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 	}
 
 	if !found {
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action":  "user_has_no_resume",
+			"user_id": appointment.UserID,
+		})
 		app.logger.Error("handleVapiCall: user has no resume", "user_id", appointment.UserID)
 		w.WriteHeader(http.StatusOK)
 		return
@@ -196,6 +261,10 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 	assistantOverrides, err := internal.BuildAssistantOverrides(r.Context(), user, resume, app.fs, app.logger)
 	if err != nil {
 		apptErr = fmt.Errorf("failed to build assistant overrides: %w", err)
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action":  "failed_to_build_assistant_overrides",
+			"user_id": appointment.UserID,
+		})
 		app.logger.Error("Failed to build assistant overrides", "error", apptErr)
 		app.reportServerError(r, apptErr)
 		w.WriteHeader(http.StatusOK)
@@ -213,6 +282,11 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 		result, err = vapi.GetCall(r.Context(), simulate.TestingCallID)
 		if err != nil {
 			apptErr = fmt.Errorf("failed to get call: %w", err)
+			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+				"action":       "failed_to_get_call",
+				"user_id":      appointment.UserID,
+				"testing_mode": os.Getenv("TESTING_MODE"),
+			})
 			app.logger.Error("Failed to get call", "error", err)
 			app.reportServerError(r, apptErr)
 			return
@@ -235,6 +309,11 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 		result, err = vapi.CreateCall(r.Context(), callConfig)
 		if err != nil {
 			apptErr = fmt.Errorf("handleVapiCall CreateCall: %w", err)
+			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+				"action":       "failed_to_create_call",
+				"user_id":      appointment.UserID,
+				"testing_mode": os.Getenv("TESTING_MODE"),
+			})
 			app.logger.Error("failed to create call", "error", err)
 
 			b, err := json.MarshalIndent(callConfig, "", "  ")
@@ -283,6 +362,10 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 	})
 
 	if err := internal.SendPusherRedirect(app.pusher, user.ID, "/dashboard"); err != nil {
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action":  "failed_to_send_pusher_redirect",
+			"user_id": user.ID,
+		})
 		app.logger.Error("Failed to send pusher redirect", "error", err)
 		// app.reportServerError(r, fmt.Errorf("failed to send pusher redirect: %w", err))
 	}
@@ -291,6 +374,11 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 	if os.Getenv("TESTING_MODE") == "true" {
 		if err := simulate.EndOfCall(r.Context(), app.processor, appointment.UserID, appointment.ID, app.logger); err != nil {
 			// Log error but continue with normal flow since this is just test simulation
+			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+				"action":       "failed_to_simulate_end_of_call",
+				"user_id":      appointment.UserID,
+				"testing_mode": os.Getenv("TESTING_MODE"),
+			})
 			app.logger.Error("Failed to simulate end-of-call", "error", err)
 		}
 	}

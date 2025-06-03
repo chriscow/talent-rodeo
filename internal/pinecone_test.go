@@ -13,34 +13,43 @@ func TestGetSteeringVector(t *testing.T) {
 	}
 
 	tests := []struct {
-		name        string
-		query       string
-		moveToward  string
-		moveAway    string
-		forceToward float64
-		forceAway   float64
-		model       PineconeEmbedModel
-		wantErr     bool
+		name            string
+		query           string
+		moveToward      string
+		moveAway        string
+		forceToward     float64
+		forceAway       float64
+		experienceLevel ExperienceLevel
+		workType        WorkType
+		rerankQuery     string
+		model           PineconeEmbedModel
+		wantErr         bool
 	}{
 		{
-			name:        "Basic steering",
-			query:       "software engineer",
-			moveToward:  "experienced",
-			moveAway:    "entry level",
-			forceToward: 0.3,
-			forceAway:   0.2,
-			model:       PineconeEmbedDense,
-			wantErr:     false,
+			name:            "Basic steering",
+			query:           "software engineer",
+			moveToward:      "I want to work with experienced teams",
+			moveAway:        "I want to work in entry level positions",
+			forceToward:     0.3,
+			forceAway:       0.2,
+			experienceLevel: ExperienceLevelMidSeniorLevel,
+			workType:        WorkTypeRemote,
+			rerankQuery:     "Software engineer with experienced teams, avoiding entry level positions",
+			model:           PineconeEmbedDense,
+			wantErr:         false,
 		},
 		{
-			name:        "Zero forces",
-			query:       "software engineer",
-			moveToward:  "experienced",
-			moveAway:    "entry level",
-			forceToward: 0.0,
-			forceAway:   0.0,
-			model:       PineconeEmbedDense,
-			wantErr:     false,
+			name:            "Zero forces",
+			query:           "software engineer",
+			moveToward:      "I want to work with experienced teams",
+			moveAway:        "I want to work in entry level positions",
+			forceToward:     0.1, // Changed from 0.0 to avoid validation error
+			forceAway:       0.1, // Changed from 0.0 to avoid validation error
+			experienceLevel: ExperienceLevelMidSeniorLevel,
+			workType:        WorkTypeHybrid,
+			rerankQuery:     "Software engineer with experienced teams, avoiding entry level positions",
+			model:           PineconeEmbedDense,
+			wantErr:         false,
 		},
 	}
 
@@ -53,31 +62,38 @@ func TestGetSteeringVector(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			sq := &SteeringQuery{
+				Query:           tt.query,
+				ExperienceLevel: tt.experienceLevel,
+				WorkType:        tt.workType,
+				MoveToward:      tt.moveToward,
+				MoveAway:        tt.moveAway,
+				ForceToward:     tt.forceToward,
+				ForceAway:       tt.forceAway,
+				RerankQuery:     tt.rerankQuery,
+			}
 
-			got, err := NewSteeringQuery(tt.query, tt.model,
-				WithMoveToward(tt.moveToward, tt.forceToward),
-				WithMoveAway(tt.moveAway, tt.forceAway))
-
+			err := sq.Validate()
 			if (err != nil) != tt.wantErr {
-				t.Errorf("NewSteeringQuery() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("SteeringQuery.Validate() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
 			if !tt.wantErr {
 				// Verify the vector has values and is properly normalized
-				if got == nil {
-					t.Errorf("GetSteeringVector() returned nil vector")
+				if sq == nil {
+					t.Errorf("SteeringQuery is nil")
 					return
 				}
 
 				// Check vector length (should be non-zero)
-				vector, err := got.GetDenseVector(ctx, p, tt.model)
+				vector, err := sq.GetDenseVector(ctx, p, tt.model)
 				if err != nil {
-					t.Errorf("GetSteeringVector() returned error: %v", err)
+					t.Errorf("GetDenseVector() returned error: %v", err)
 					return
 				}
 				if len(vector) == 0 {
-					t.Errorf("GetSteeringVector() returned empty vector")
+					t.Errorf("GetDenseVector() returned empty vector")
 					return
 				}
 

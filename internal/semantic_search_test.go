@@ -148,13 +148,13 @@ func TestHybridSearchParamsValidate(t *testing.T) {
 func TestDefaultHybridSearchParams(t *testing.T) {
 	got := DefaultHybridSearchParams()
 
-	if got.DenseWeight != 0.7 {
+	if got.DenseWeight != 0.5 {
 		t.Errorf("DenseWeight: got %v, want %v", got.DenseWeight, 0.7)
 	}
-	if got.SparseWeight != 0.3 {
+	if got.SparseWeight != 0.5 {
 		t.Errorf("SparseWeight: got %v, want %v", got.SparseWeight, 0.3)
 	}
-	if got.ScoreFusion != "linear" {
+	if got.ScoreFusion != "reciprocal_rank_fusion" {
 		t.Errorf("ScoreFusion: got %v, want %v", got.ScoreFusion, "linear")
 	}
 	if got.RecencyWeight != 0.2 {
@@ -732,6 +732,27 @@ func TestProcessSearchResults(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Create sparse hits from the test case sparse matches
+			sparseHits := make([]pinecone.Hit, 0, len(tc.sparseMatches))
+			for _, match := range tc.sparseMatches {
+				var fields map[string]any
+				switch match.Vector.Id {
+				case "job1":
+					fields = job1Fields.AsMap()
+				case "job2":
+					fields = job2Fields.AsMap()
+				case "job3":
+					fields = job3Fields.AsMap()
+				case "job4":
+					fields = job4Fields.AsMap()
+				}
+				sparseHits = append(sparseHits, pinecone.Hit{
+					Id:     match.Vector.Id,
+					Score:  match.Score,
+					Fields: fields,
+				})
+			}
+
 			// Create search result with test data
 			searchResult := &SearchResult{
 				DenseResults: &pinecone.QueryVectorsResponse{
@@ -740,10 +761,7 @@ func TestProcessSearchResults(t *testing.T) {
 				SparseResults: &pinecone.SearchRecordsResponse{
 					Result: struct {
 						Hits []pinecone.Hit `json:"hits"`
-					}{Hits: []pinecone.Hit{
-						{Id: "job1", Score: 0.92, Fields: job1Fields.AsMap()},
-						{Id: "job2", Score: 0.82, Fields: job2Fields.AsMap()},
-					}},
+					}{Hits: sparseHits},
 				},
 			}
 

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
+
+	"github.com/getsentry/sentry-go"
 )
 
 // showProfilePage handles GET requests to /profile.
@@ -35,6 +37,11 @@ func (app *application) showProfilePage(w http.ResponseWriter, r *http.Request) 
 	case internal.UserStatusProcessingResume:
 		data := app.newTemplateData(r)
 		if err := response.Page(w, http.StatusOK, data, "pages/profile-resume-processing.html"); err != nil {
+			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+				"action":   "render_template",
+				"template": "pages/profile-resume-processing.html",
+				"userID":   user.ID,
+			})
 			app.serverError(w, r, fmt.Errorf("failed to render resume processing page: %w", err))
 		}
 	case internal.UserStatusResumeUploaded:
@@ -50,6 +57,12 @@ func (app *application) showProfilePage(w http.ResponseWriter, r *http.Request) 
 
 		// Reset state to pending resume upload
 		if err := internal.UpdateUserStatus(r.Context(), app.fs, user, internal.UserStatusPendingResumeUpload); err != nil {
+			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+				"action":      "update_user_status",
+				"userID":      user.ID,
+				"from_status": user.State.Status.String(),
+				"to_status":   internal.UserStatusPendingResumeUpload.String(),
+			})
 			app.serverError(w, r, fmt.Errorf("failed to reset user state: %w", err))
 			return
 		}
@@ -57,12 +70,23 @@ func (app *application) showProfilePage(w http.ResponseWriter, r *http.Request) 
 		// Add error message to template data for toast notification
 		data["Error"] = errorMsg
 		if err := response.Page(w, http.StatusOK, data, "pages/profile-resume-upload.html"); err != nil {
+			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+				"action":   "render_template",
+				"template": "pages/profile-resume-upload.html",
+				"userID":   user.ID,
+			})
 			app.serverError(w, r, fmt.Errorf("failed to render resume upload page: %w", err))
 		}
 	default:
 		app.logger.Warn("unknown onboarding step", "step", user.State.Status)
 		// Reset to initial state for unknown states
 		if err := internal.UpdateUserStatus(r.Context(), app.fs, user, internal.UserStatusPendingResumeUpload); err != nil {
+			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+				"action":      "reset_user_status",
+				"userID":      user.ID,
+				"from_status": user.State.Status.String(),
+				"to_status":   internal.UserStatusPendingResumeUpload.String(),
+			})
 			app.serverError(w, r, fmt.Errorf("failed to reset user state: %w", err))
 			return
 		}
@@ -77,6 +101,10 @@ func (app *application) showWaitingCallPage(w http.ResponseWriter, r *http.Reque
 	// Get the user's appointments
 	appointments, err := internal.ListAppointments(r.Context(), app.fs, user.ID)
 	if err != nil {
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action": "list_appointments",
+			"userID": user.ID,
+		})
 		app.serverError(w, r, fmt.Errorf("failed to get appointments for user %s: %w", user.ID, err))
 		return
 	}
@@ -93,6 +121,10 @@ func (app *application) showWaitingCallPage(w http.ResponseWriter, r *http.Reque
 
 	if activeAppointment == nil {
 		app.logger.Error("No active appointment found", "user_id", user.ID)
+		internal.SentryReportError(r.Context(), fmt.Errorf("no active appointment found"), sentry.LevelError, map[string]string{
+			"action": "find_active_appointment",
+			"userID": user.ID,
+		})
 		app.serverError(w, r, fmt.Errorf("no active appointment found"))
 		return
 	}
@@ -100,6 +132,11 @@ func (app *application) showWaitingCallPage(w http.ResponseWriter, r *http.Reque
 	data["Appointment"] = activeAppointment
 
 	if err := response.Page(w, http.StatusOK, data, "pages/profile-waiting-call.html"); err != nil {
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action":   "render_template",
+			"template": "pages/profile-waiting-call.html",
+			"userID":   user.ID,
+		})
 		app.serverError(w, r, fmt.Errorf("failed to render waiting call page: %w", err))
 	}
 }

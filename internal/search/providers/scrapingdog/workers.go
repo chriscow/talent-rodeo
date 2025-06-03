@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"talent-rodeo/internal"
 	"time"
+
+	"github.com/getsentry/sentry-go"
 )
 
 /*
@@ -163,6 +165,9 @@ func (wm *WorkerManager) Shutdown(ctx context.Context) error {
 func (wm *WorkerManager) QueueSearch(ctx context.Context, searchJob internal.SearchTask) error {
 	// Check if we're shutting down
 	if atomic.LoadInt32(&wm.shutdownFlag) == 1 {
+		internal.SentryReportError(ctx, fmt.Errorf("worker manager is shutting down"), sentry.LevelError, map[string]string{
+			"action": "WorkerManager::QueueSearch: worker manager is shutting down",
+		})
 		return fmt.Errorf("worker manager is shutting down")
 	}
 
@@ -269,6 +274,9 @@ func (wm *WorkerManager) startWorker(ctx context.Context, workerID int) {
 			// Log the result
 			duration := time.Since(startTime)
 			if err != nil {
+				internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+					"action": "WorkerManager::startWorker: failed to process search",
+				})
 				logger.Error("failed to process search",
 					"query", searchJob.Criteria.Query,
 					"duration", duration,
@@ -291,6 +299,9 @@ func (wm *WorkerManager) processSearchPage(ctx context.Context, searchJob *inter
 
 	// Handle errors
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "WorkerManager::processSearchPage: failed to search for jobs",
+		})
 		logger.Error("failed to search for jobs",
 			"page", page,
 			"error", err)
@@ -318,6 +329,9 @@ func (wm *WorkerManager) processSearchPage(ctx context.Context, searchJob *inter
 		// Get job details
 		details, err := wm.provider.GetJobDetails(ctx, job.ProviderJobID)
 		if err != nil {
+			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+				"action": "WorkerManager::processSearchPage: failed to get job details",
+			})
 			logger.Error("failed to get job details",
 				"jobID", job.ID,
 				"error", err)

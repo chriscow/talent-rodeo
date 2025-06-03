@@ -15,6 +15,7 @@ import (
 	"talent-rodeo/internal"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -44,6 +45,9 @@ func (app *application) serveHTTP() error {
 
 	err := app.serve(srv)
 	if err != nil {
+		internal.SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
+			"action": "failed_to_serve_http",
+		})
 		return err
 	}
 
@@ -121,6 +125,9 @@ func (app *application) serveAutoHTTPS() error {
 
 	for err := range serverErrorChan {
 		if err != nil {
+			internal.SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
+				"action": "failed_to_serve_http",
+			})
 			return err
 		}
 	}
@@ -193,11 +200,17 @@ func (app *application) serve(srv *http.Server) error {
 	case err := <-serverErrorChan:
 		if !errors.Is(err, http.ErrServerClosed) {
 			app.logger.Error("server error", "error", err)
+			internal.SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
+				"action": "server_error",
+			})
 			return err
 		}
 	case err := <-shutdownErrorChan:
 		if err != nil {
 			app.logger.Error("shutdown error", "error", err)
+			internal.SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
+				"action": "shutdown_error",
+			})
 			return err
 		}
 	}

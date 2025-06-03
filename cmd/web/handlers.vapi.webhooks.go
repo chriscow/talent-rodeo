@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -210,9 +211,13 @@ func (h *application) handleTransferDestinationRequest(w http.ResponseWriter, r 
 
 // handleEndOfCallReport processes an end-of-call report webhook
 func handleEndOfCallReport(r *http.Request, app *application, msg []byte) error {
-	envelope, err := validateEndOfCallReport(msg)
+	envelope, err := validateEndOfCallReport(r, msg)
 	if err != nil {
-		return fmt.Errorf("failed to validate end-of-call report: %w", err)
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action":       "failed_to_validate_end_of_call_report",
+			"webhook_body": string(msg),
+		})
+		return err
 	}
 
 	report := envelope.EndOfCallReport
@@ -226,10 +231,14 @@ func handleEndOfCallReport(r *http.Request, app *application, msg []byte) error 
 	return nil
 }
 
-func validateEndOfCallReport(webhookMsg []byte) (*vapi.EndOfCallReportEnvelope, error) {
+func validateEndOfCallReport(r *http.Request, webhookMsg []byte) (*vapi.EndOfCallReportEnvelope, error) {
 	var env vapi.EndOfCallReportEnvelope
 	if err := json.Unmarshal(webhookMsg, &env); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal end-of-call report: %w", err)
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action":       "failed_to_unmarshal_end_of_call_report",
+			"webhook_body": string(webhookMsg),
+		})
+		return nil, err
 	}
 
 	// call.name is the appointment ID
@@ -238,25 +247,50 @@ func validateEndOfCallReport(webhookMsg []byte) (*vapi.EndOfCallReportEnvelope, 
 	// Validate required fields
 	report := env.EndOfCallReport
 	if report.Call == nil {
-		return nil, fmt.Errorf("missing call object in end of call report")
+		err := errors.New("missing call object in end of call report")
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action":       "missing_call_object_in_end_of_call_report",
+			"webhook_body": string(webhookMsg),
+		})
+		return nil, err
 	}
 
 	if report.Call.ID == nil {
-		return nil, fmt.Errorf("missing call ID in end of call report")
+		err := errors.New("missing call ID in end of call report")
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action":       "missing_call_id_in_end_of_call_report",
+			"webhook_body": string(webhookMsg),
+		})
+		return nil, err
 	}
 
 	// The appointment ID is stored in the call name
 	if report.Call.Name == nil {
-		return nil, fmt.Errorf("missing call name in end of call report. call name stores the appointment ID")
+		err := errors.New("missing call name in end of call report. call name stores the appointment ID")
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action":       "missing_call_name_in_end_of_call_report",
+			"webhook_body": string(webhookMsg),
+		})
+		return nil, err
 	}
 
 	if report.Call.Customer == nil {
-		return nil, fmt.Errorf("missing customer object in end of call report")
+		err := errors.New("missing customer object in end of call report")
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action":       "missing_customer_object_in_end_of_call_report",
+			"webhook_body": string(webhookMsg),
+		})
+		return nil, err
 	}
 
 	// The customer ID is required for getting the appointment
 	if report.Call.Customer.Name == "" {
-		return nil, fmt.Errorf("missing customer name in end of call report. The customer name stores the customer ID")
+		err := errors.New("missing customer name in end of call report. The customer name stores the customer ID")
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action":       "missing_customer_name_in_end_of_call_report",
+			"webhook_body": string(webhookMsg),
+		})
+		return nil, err
 	}
 
 	return &env, nil

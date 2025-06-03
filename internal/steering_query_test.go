@@ -140,6 +140,9 @@ func TestCleanJSONFromMarkdown(t *testing.T) {
 }
 
 func TestExtractSteeringQuery(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
 	ctx := context.Background()
 
 	// Define the complex LLM response string
