@@ -1,0 +1,322 @@
+<example-1>
+    <input>
+        <resume>
+Chris Cowherd425-829-5443       [](https://github.com/chriscow) [](mailto:madcow@gmail.com)     [](https://www.linkedin.com/in/chriscowherd/)Software Engineering Leader------------30 Years of Software Engineering LeadershipExtensive experience in a technical leadership role Engineering manager and hands-on contributor Thought leader, inventor and implementer of protocol standards and systemsStrategic, analytical and highly personable, with a collaborative, inclusive leadership styleAdept at seeing the big picture, building strong teams and driving positive outcomesTransparent  •  Trustworthy  •  Inclusive  • Accessible  •  PassionateCore CompetenciesSoftware DevelopmentRisk ManagementPrivacy Compliance IT Platform DevelopmentCloud Native ExpertiseTeam Building / LeadershipInformation SecurityAI & Data AnalyticsTechnology Diligence & Audits Financial IntegrationAcquisition & TransitionStrategic PlanningTooling & AutomationVendor ManagementProfessional SummaryBackend Software Engineer, Generative AI 
+BlestX Ventures, LLC - Redmond, WA      2023 - PresentPrivate research integrating generative AI for manufacturing processesChief Technology Officer 
+i2 Holdings dba Ambassador Software - Seattle, WA       2020 - 2022Private equity funded SaaS company executing roll-up strategy in marketing technology AI & AnalyticsPrincipal Software EngineerStahurricane LLC - Bellevue, WA 2018 – 2021Venture vehicle for ex-CEO of Donuts & eNom.  Chief Technology OfficerDonuts Inc. - Bellevue, WA  2012 - 2018World’s largest top-level domain registry operator  Senior Engineering Manager, R&DDemand Media (RightSide / Leaf Group) - Kirkland, WA   2008 – 2012Content & media generation, monetizationSoftware Engineering ManagereNom, Inc - Redmond, WA       2000 – 2008Wholesale white-label platform for domains, email, and SSLProfessional DetailsBackend Software Engineer, Generative AI 
+BlestX Ventures, LLC - Redmond, WA      2023 - PresentPrivate research integrating generative AI for manufacturing processesStack: OpenAI, Python, Go, Flask, Google Cloud, DockerIntegrate OpenAI technology Hand-crafted PDF parsing and ingestion Retrieval augmented generation (RAG) w/ Weaviate & PineconePrompt engineeringReranking results with cross-encodersExpand search surface area with synthesized dataCustomized workflow with extensive LLM function callingDistributed LLM agent coordinationFine tuning to optimize output of code generationChief Technology Officer 
+i2 Holdings dba Ambassador Software - Seattle, WA       2020 - 2022Private equity funded SaaS company executing roll-up strategy in marketing technology AI & AnalyticsStack: Python, Go, PostgreSQL, Django, Google Cloud, AWS, Docker, GDPR, CCPA & SOC2 ComplianceUltimate responsibility to protect, secure and advance all company technology assetsLeader and champion for 18 geographically distributed engineers; onshore, nearshore and offshoreCustomer driven product owner, product roadmap development, strategic planningFull lifecycle owner and leader for design, development, testing, deployment and maintenanceCoach and mentor for team career development and personal growth Reliable project execution and delivery time after time through careful planning, tracking and expectation managementPrincipal Software EngineerStahurricane LLC - Bellevue, WA        2018 – 2021Venture vehicle for ex-CEO of Donuts & eNom.  Stack: Go, Python, C#, CUDA, HLSL Compute Shaders, Unity, Google Cloud, AWS, DockerR&D software design & development of VR and mathematical researchDesigned and developed distributed system to explore and visualize difficult to solve mathematical areas using cloud GPUs (see: [](https://zeta-machine.chriscowherd.com/))Designed and developed distributed cloud-native system to perform ML inference at scale (see: [](https://github.com/chriscow/cloud-scanner-go))Designed and developed distributed brute force system to discover fundamental constants (see: [](https://github.com/chriscow/ramanujan-machine))Designed and developed application in Unity to use GPUs to visualize and explore higher dimension structures (12 dimension) and project those down to 4-dimensions then a 2-dimensional plane
+Chief Technology OfficerDonuts Inc. - Bellevue, WA      2012 - 2018World’s largest top-level domain registry operator  Stack: Python, Go, C#, PostgreSQL, Django, Google Cloud, AWS, Docker, GDPR ComplianceProvide critical functionality for proper functioning of the Internet naming infrastructureManage full lifecycle for Internet-critical software systems, quality assurance, network & opsScale growth while maintaining ICANN mandated uptime for global Internet infrastructureSuccessfully launched and operated over 200 TLDs without incidentGrew 600x from ‘13 – ’16; named #1 on Deloitte Fast 500 as fastest growing company in No. AmericaKey responsibilities:Corporate Technology  /  Product Development  /  Incident Management  /  Risk ManagementOperations, security, budgeting, technology audits, business continuity and M&A diligenceTeam building and leadership in and across organizationsManagement Portfolio: (15 direct reports, organization of 45)Platform DevelopmentQuality assuranceCorporate IT & facilities Production engineeringTooling and automationData warehousing, analytics & AIBusiness intelligenceOperations & technical supportFinancial backend integration Corporate & Physical SecuritySenior Engineering Manager, R&DDemand Media (RightSide / Leaf Group) - Kirkland, WA  2008 – 2012Content & media generation, monetizationStack: C#, SQL Server, RedisLeader, manager and mentor for 12 cross-discipline engineersDevelop many successful POCs by fostering creativity and input from all team membersFull SDLC using agile methodologies and continuous integrationDesign and initial implementation of the world's largest domain name registrySoftware Engineering ManagereNom, Inc - Redmond, WA       2000 – 2008Wholesale white-label platform for domains, email, and SSLStack: C++, C#, SQL ServerSoftware Engineering Mgr               2004 - 2008Principal Software Engineer          2000 – 2004Managed and coached team of 7 engineers while individual contributorDevised scalable server architectures for long running services such as DNS Networking and Internet protocol development for DNS, SMTP, POP, IMAP etc.Designed scalable, fault tolerant systems Guided and mentored team through uncertainty
+Microsoft, Redmond, WA          1997 - 2000Software Design Engineer World class development experience, including key contributions to early stages of Internet Explorer, Windows and OfficeAdvanced Semiconductor, Phoenix, AZ   1994 - 1996Programmer / Analyst Designed and developed tools for managing engineering changes to semiconductor processing equipmentPatentsU.S. Patent # US11552923B2Whitelist domain name registryU.S. Patent # US20160173440A1Communication using dns repurposing
+
+U.S. Patent # US20150100507A1
+Domain Protected Marks List Service
+
+U.S. Patent # US20080273077
+Virtual Video Message Answering Machine PlatformU.S. Patent # US20080281676Methods and Systems to Facilitate Keyword Bid Arbitrage with Multiple Advertisement Placement ProvidersEducationGlendale College  -  Mathematics / Computer Science    1996
+        </resume>
+        <transcript>
+AI
+Hi there. I'm Shirley from Talent Rodeo. Is now a good time for a quick chat?
+User
+Yes.
+AI
+Great. Thank you, Chris. Just to let you know, I'm still learning how to have good conversations with humans. So please forgive me if I interrupt you, take an extra long pause, or make the occasional miss mistake. I'll do my best to make this conversation both fun and valuable for you. Sound good?
+User
+Sounds good.
+AI
+Thanks for being understanding, Chris. I had a chance to review your resume and was really impressed by your deep experience in software engineering and leadership. Especially your recent work with generative AI and distributed systems. Is there a particular position or project in your career that you're especially proud of or that best represents what you're looking for going forward. Maybe something your resume doesn't fully capture.
+User
+Well, I think my position at BusTech was especially interesting considering, uh, the interest in AI lately.
+AI
+That sounds intrigued.
+User
+Uh, I oh, sorry. Yeah. I
+AI
+No worries at all, Chris. Take your time. No rush here. I'd love to hear a bit more about your experience at Buzztech. Especially what made it stand out to you. Was there a particular challenge you solved or a project you really enjoyed working on there? You mentioned BusTech in the context of AI. Which definitely feels timely. It reminds me of how some companies used AI to completely transform their workflows. Sometimes in ways nobody anticipated at the start. Did you work on something cutting edge or unique while you were there?
+User
+Yes. I created an AI that could speak to CNC robots that would rivet a few slashes for 7 80 sevens together.
+AI
+Wow. That's genuinely fascinating, Chris. Building an AI that can communicate directly with CNC robots for assembling parts of Boeing 7 87 aircraft is both complex and high stakes. Not many people get to blend manufacturing, robotics, and AI at that level. It must have required super reliable systems and some creative problem solving. Can you share what the biggest challenge was in creating that system? For example, was it the communication between the AI and robots? Or perhaps making sure everything was safe and accurate on the factory floor? And out of curiosity, did you get to see the robots in action doing the riveting? That must have been quite a sight.
+User
+Uh, no. I didn't actually get to see it. I think that would have been really cool, but I think the biggest challenge was getting the AI to reliably output the code without mistakes.
+AI
+That makes a lot of sense, Chris. Making sure the AI generates accurate and reliable code. Especially when it controls something as critical as aircraft assembly. Has to be a huge challenge Even a small error could cause big problems. It's impressive you tackled that responsibility. It's interesting too. A lot of people think the hardest part is just building the AI. When in reality, it's about making it safe and consistent in real world applications. That reminds me of a story from 1 manufacturer who tested their their AI and simulation for months before trusting it with real factory machines. Are there any other experiences or roles? Maybe outside of the AI or manufacturing space that you feel would be helpful for me to know about when thinking about your ideal next position? Sometimes those side projects or earlier roles reveal unique strengths.
+User
+Uh, I created a voice AI using a Go back end. That would help people search for jobs.
+AI
+That's awesome, Chris. Building a voice AI for jobs searching really hits close to home for me. Using Go on the back end must have been interesting given how efficient Go can be for scalable systems. Voice interfaces are tricky. Getting them to understand intent, handle different accents, and respond naturally isn't easy at all. Plus, tying it all together for a helpful experience takes real engineering care. What inspired you to create that project? Did you focus more on the conversational side? The search technology, or connecting to real job systems? And out of curiosity, do you think voice driven job search will become the norm someday? Is it more of a complementary tool?
+User
+Think there's a lot of nuances that you can capture in a conversation that a resume doesn't necessarily convey.
+AI
+Absolutely, Chris. You make a great point. Resumes just can't capture the depth, intent, or soft skills that come out in a real conversation. Sometimes, the simple act of talking through ideas uncovers opportunities or strengths people didn't even realize they had. That's actually 1 reason I love these chats. I've read about studies where voice AI systems, uncovered things about candidates' experience or interests that even their CVs didn't show. It opens up more personal and relevant job matches. Based on what you've shared, it sounds like your ideal next position makes strong use of AI back end skills, and real world impact. Are there any other experiences or types of projects? Maybe in leadership, cloud architecture, or even domain infrastructure, that you want me to keep in mind as I search for roles for you?
+User
+No. I really would like to focus on developing in Go back end services ideally, that work with LLMs.
+AI
+Thank you for clarifying that, Chris. It's clear you want to focus on go back in development, ideally in projects that work closely with large language models and AI systems. That's a powerful combination. And there's definitely growing demand in that space. Based on your resume, it looks like I should focus on searching for Go roles especially those involving AI or LLMs. Does that sound right to you? Or would you like me to
+User
+Yeah. That's right. No. That's right. That's right.
+AI
+perfect. Thank you for confirming, Chris. Just to make sure I'm covering your bases, are there any other skills or technologies you want me to include in my search? For example, Python. C site. Distributed systems or databases, Or should I focus purely on Go and LLM related work?
+User
+I think going LLM would capture it pretty well. I do know Python, but I don't wanna focus necessarily on Python. But, uh, if if it's a requirement, then I uh, you know, I can do that. But I'd really like to focus on Go.
+AI
+Got it, Chris. Your preference is to focus on Go and LLM related work. But you're open to using Python only if it's a secondary requirement, not the main focus. That's helpful. Are there any aspects of job roles or certain types of tech work that you'd like to avoid? For example, front end development, DevOps heavy roles, constant context switching, or maybe working with older programming languages or outdated systems. Let me know so I can filter out anything you'd prefer to skip.
+User
+Well, I'm not really a strong front end developer, so I probably need to avoid uh, you know, front end development or front end frameworks.
+AI
+Thanks for being clear
+User
+But, uh, uh, no. Go ahead. I think I was done.
+AI
+That Thanks, Chris. Just wanted to make sure I wasn't cutting you off. Sometimes I jump in too early. So to confirm, you'd like to avoid roles involving front end development or front end frameworks. Is there anything else you'd like to steer clear of? Like DevOps, heavy meetings, or working mostly with legacy systems or is just avoiding front end work the main thing for you?
+User
+I think that'll do it.
+AI
+Perfect. Thanks, Chris. I'll make sure to avoid front end focused roles when searching for you. Let's chat briefly about location. Where are you currently located?
+User
+Uh, I'm in Tucson, Arizona.
+AI
+Tucson, that's great. Thanks for sharing. You know, Tucson isn't just about the desert and heat. A lot of people don't realize it's home to 1 of the world's best collections of telescopes on Mount Lemmon. Plus, there's the annual gem and mineral show, which brings people from all over the globe. Are you looking mainly for remote roles? Or would you consider in office or hybrid opportunities in any particular cities? We focus on positions in the top 20 largest US metro areas. Or fully remote roles.
+User
+Uh, I think I'd just like to be fully remote.
+AI
+Got it. Fully remote is your preference. That makes sense. Especially with your deep experience and focus on back end go development. A lot of companies today are offering high caliber remote roles, so that opens up more possibilities for you. How flexible are you if something truly outstanding came up that was hybrid or occasionally in office, say, in a nearby metro area like Phoenix or even for out? Or is your remote preference pretty firm?
+User
+If it was a really, really good role that was uh, pretty ideal, I would consider even moving if I had to.
+AI
+That's really helpful to know, Chris.
+User
+But
+AI
+That's really help
+User
+yeah. Go ahead.
+AI
+Thank you, Chris. Appreciate your flexibility, and your patience as I sometimes make these abrupt transitions. Let me summarize. Just to make sure I'm understanding your priorities. You're looking for fully remote roles, but for the right opportunity, you'd be open to hybrid or possibly even relocating. Your main focus is back end go development, especially with work that involves LLMs, or generative AI. You want to avoid front end work and front end frameworks. And you're okay with some Python if it's a secondary tech. Does that sound accurate? And is there anything important about your
+User
+Yeah.
+AI
+Great. Is there
+User
+That sounds right. That's perfect.
+AI
+Wonderful, Chris. Is there anything else important about your job search or preferences that we haven't covered yet? Anything at all that would help me find the very best fit for you?
+User
+Uh, I think I would lean more towards, uh, a smaller company than, you know, something that's like a start up or something like that. Versus a large company.
+AI
+That's a great detail, Chris. You'd prefer to work with a smaller company, maybe a startup or a more agile team rather than a large corporation. That definitely helps me narrow down the search and target organizations where you can have a real impact impact and be closer to the action. I've noticed many folks with a strong technical and leadership background like yours thrive in those dynamic hands on environments. Thank you so much for your time today, Chris. We'll be searching through thousands of jobs we'll only present the best matches on your dashboard. I'll also follow-up with an email summary of our conversation. Please feel free to reply if you have any updates to your search or want to fine tune your preferences even more. It's been a pleasure chatting with you. I hope we find something really exciting for you soon.
+User
+Thanks. Bye.
+AI
+Goodbye.
+        </transcript>
+    </input>
+    <output>
+<query_construction>
+
+a. Query:
+Relevant quotes:
+- "I'd really like to focus on developing in Go back end services ideally, that work with LLMs"
+- "I think going LLM would capture it pretty well"
+- "Your preference is to focus on Go and LLM related work"
+- Resume shows: "Stack: OpenAI, Python, Go, Flask, Google Cloud, Docker"
+
+The job seeker explicitly states multiple times that they want to focus on Go backend development with LLMs. This is clearly a skills-based search since they're very specific about the technology stack. Go should be in canonical form as "Go (Golang)" to distinguish it from other meanings of "Go."
+
+b. MoveToward:
+Relevant quotes:
+- "I'd really like to focus on developing in Go back end services ideally, that work with LLMs"
+- "I think I would lean more towards, uh, a smaller company than, you know, something that's like a start up or something like that. Versus a large company"
+
+The job seeker wants Go backend development with LLMs at smaller companies/startups. Phrasing in first person: "I want to work on Go backend development with LLMs at smaller companies or startups"
+
+c. MoveAway:
+Relevant quotes:
+- "I'm not really a strong front end developer, so I probably need to avoid uh, you know, front end development or front end frameworks"
+- "I think I would lean more towards, uh, a smaller company... Versus a large company"
+
+The job seeker wants to avoid front-end work and large companies. For dense vector search negation, I need to phrase this as if they desire it: "I want to do front-end development at large corporations"
+
+d. RerankQuery:
+Combining Query (Go backend with LLMs), MoveToward (smaller companies/startups), and MoveAway (avoiding front-end and large corporations): "Go backend developer working with LLMs at smaller companies, avoiding front-end development"
+
+e. ExperienceLevel:
+Relevant quotes:
+- Resume shows "30 Years of Software Engineering Leadership"
+- Multiple CTO and leadership positions
+- Recent role: "Backend Software Engineer, Generative AI"
+- Current focus on individual contributor work with Go/LLMs
+
+Options analysis:
+- internship: No, 30 years experience
+- entry_level: No, extensive leadership background
+- associate: No, too senior
+- mid_senior_level: Yes - despite leadership background, currently working as individual contributor and seeking backend developer roles
+- director: No - while they have director-level experience, they're specifically seeking individual contributor backend developer roles
+
+The job seeker has senior experience but is currently in and seeking individual contributor roles, making "mid_senior_level" the best fit.
+
+f. WorkType:
+Relevant quotes:
+- "Uh, I think I'd just like to be fully remote"
+- "Fully remote is your preference"
+- "If it was a really, really good role that was uh, pretty ideal, I would consider even moving if I had to"
+
+The job seeker clearly states a preference for fully remote work, though they show some flexibility for exceptional opportunities. The primary preference is remote.
+
+</query_construction>
+
+<answer>
+{
+  "Query": "Go (Golang)",
+  "MoveToward": "I want to work on Go backend development with LLMs at smaller companies or startups",
+  "MoveAway": "I want to do front-end development at large corporations",
+  "RerankQuery": "Go backend developer working with LLMs at smaller companies, avoiding front-end development",
+  "ExperienceLevel": "mid_senior_level",
+  "WorkType": "remote"
+}
+</answer>
+    </output>
+</example-1>
+<example-2>
+    <input>
+        <resume>
+Vijaya Bhat                                          Canadian citizen with work authorization in USA and India Phone: (236) 878-4708                         Email: vjbht8@gmail.com                        Location: Vancouver                        Time Zone: PST   EXPERIENCE   Head Operations & People, Hoot                                                                                                                                                                                  2020 - Present Fractional expertise for sustainable solutions-focused organizations SaaS, Tech, and E-Commerce ● Currently transitioning a major contract workforce into part-time employees for the edTech across 15 states (and counting)  in the USA and all of Canada managing people & culture, regulatory requirements, benefits and 401k, E-Verify, payroll, OSHA, immigration sponsorships, and creation of employee handbooks ● Manage an employee base of 500+ employees and 5 reports across NAM (US, Canada), APAC (India, Philippines, Australia), and UK ● Lead workforce strategy, talent management and development, DEI, talent acquisition, employee relations and engagement, total rewards, employer branding, performance management, employee health & benefits, cross-border compliance, marketing, and operations ● Developed and delivered an engagement strategy for a fully async global team with 50% increased engagement and reduced attrition ● Setup legal entities and expanded across the USA in 15 states and Canada across 9 provinces ● Scale teams for hyper-growth and provide strategic business partnering for Engineering, Finance, GTM, HR, Marketing, Product, R&D, Sales, and Tech to drive operations by creating systems, developing processes, and liaising with vendors ● Manage and implement HRIS, ATS, benefits portals, PEO & EOR, and other enterprise-wide organizational projects ● Collaborated with the Executive Team to create a compelling EVP by developing and executing strategies to enhance the employer brand and thus attract top talent by communicating it across various channels ● Oversee employee relations matters, including investigations, complaints, corrective actions, and documentation in compliance with federal, state, and provincial labour laws and reporting requirements ● Mentor senior leadership in creating a high-performing culture by building partnerships and data-driven decision-making  Director Human Resources, VSOCC                                                                                                                                                                             2022 - Present Empowering children and families to reach their full potential  Education ● Direct the people & culture strategy for 16 locations, 350+ employees union and management, and 2 reports with over 15 million USD in revenue ● Lead talent acquisition, onboarding and orientation, corporate governance, employee engagement, HR technology, workplace injury and disability management, training and development, performance management, payroll, and total rewards ● Partnered with the C-suite and Board of Directors to develop organizational strategy and objectives ● Introduced DEI as a key strategic focus within the organization, creating a roadmap to integrate it into other strategic areas ● Established a robust succession pipeline, reducing external hiring turnaround times by 50% and internal recruitment time by 77% ● Overhauled the performance management and learning systems introducing tech, increased participation, and an eNPS > 60 ● Designed a total rewards strategy, created HR policy and process frameworks, and developed the company culture ● Implemented automated onboarding and orientation process with document collection, compliance, benefits management, 30-60-90 day checklists, and remote hands-oﬀ training combined with on-site training ● Transitioned to Microso Oﬀice 365 and migrated existing oﬀline setup to Sharepoint for ease of use, access, and facilitation between departments  Profile Summary: I’m driven to make people’s lives better especially when it comes to transforming how we experience work and foster connections. I pride myself on finding agile ways to meet an organization’s most important resource - talent - by translating business goals into tangible people outcomes. A human resources leader with over 12 years of experience in strategic people management - I’ve worked across NAM (USA and Canada), APAC (India, Australia, and Philippines), EMEA (UK) in diﬀerent industries - simplifying operations, solving complex problems with creativity, utilizing technology to aid people processes,building trusting relationships, and data-driven decision making. Instrumental in managing workforce expansion initiatives from a solitary hire to overseeing teams of over 21,000 employees, both union and non-union.   Special Skills: IPO, M&A, Enterprise-wide organizational and tech projects, and change management  Education & Certification: MBA in Human Resources, BS in Information Technology, CPHR  Experience Sectors: Tech, SaaS, Healthcare, Financial Services, Non-Profits, Consulting  Technologies Used: Adobe Suite, ADP WFN, Asana, Ashby, BambooHR, Dayforce, FigJam, Google Suite, Greenhouse, Gusto, Jira, Monday, Microso Oﬀice, Notion, Push Operations, Rippling, SAP, Slack, UKG, Wagepoint, Workday, Zoho, Zoom  ● Executed initiatives promoting employee well-being, resulting in an 85% reduction in workplace injuries through training, collaboration, and cultural change eﬀorts ● Led negotiations with the Union on collective bargaining agreements and provided expert advice on employee relations - legislation, policies, and procedures ● Advocated and executed an immigration sponsorship support program to help employees achieve permanent residency ● Negotiated extensive benefits including introduction of a health-spending account as part of employer branding eﬀorts  Generalist Human Resources, Neighbourly                                                                                                                                                                  2021 -  2022    Startup network of community pharmacies  Healthcare  ● Led workforce planning, recruitment, mergers, acquisitions, HR policies, processes, performance management, employee relations, and workplace safety for front store and pharmacy operations across Canada with 82 million USD revenue country-wide, 56 locations, and 1200+ employees ● Successfully managed 2 acquisitions - a 6-store brand and a singular store brand, optimizing operations and overseeing the transition of 110 employees, and supported another 20-store acquisition, scaling the company over 34% ● Managed full-cycle recruitment for 600+ hires including job postings, pre-screens, interview setup, interviewing, reference checks, job oﬀers, onboarding, promotions, extensions, terminations, and oﬀboarding ● Spearheaded strategic HR initiatives with organizational change management in collaboration with Regional Directors and VP of Ops ● Supported Eastern provinces in the absence of the HR Generalist to storefronts and pharmacies, eﬀectively managing all of Canada ● Created a company handbook consolidating various documents for improved onboarding ● Collaborated with legal counsel on Employment Standards, Worksafe BC, and Human Rights Tribunal issues to ensure regulatory compliance and mitigate risks  Specialist Marketing, WorkBC                                                                                                                                                                                               2019 - 2020  Provincial government employment program  Employment Services ● Full-cycle recruitment for notable organizations including Amazon, Microso, TAG (Telus), Shaw, Rogers, The Universal Group, Blackbird, Sunrise Soya, and more; eﬀectively partnering with over 50 employers and placing over 800 candidates ● Led recruitment, employer branding, job fairs (21 with 3000+ attendees), training and development, workshops, and labour market research reports for 30+ job coaches and job developers with over 30 million USD in revenue ● Managed remote workforce transition during COVID through the acquisition of Zoom, training for 45 staﬀ, creating user manuals, policies, GIFs,  and videos ● Directed the marketing strategy, outreach, events, campaigns, social media, SEO, website content, and marketing, and designed creatives (photos, videos, blog posts, posters, infographics, prints, GIFs, and podcasts) ● Built a talent database of over 8000 candidates across Western Canada ● Increased social media reach by 200% through campaigning, data analysis, and audience engagement ● Setup various workshops, social events, and internal meetings to improve employee engagement, teamwork, and communication ● Oﬀice administration including vendor management, health & safety, and oﬀice supplies  Manager Human Resources, HDFC Life                                                                                                                                                                            2016 - 2019 Long-term life insurance provider Financial Services  ● CoE Lead for employee relations, HR policies & processes, communication, corporate governance, and HR technology projects PAN-India managing a scaling workforce from over 18,000 to over 21,000 employees with 34 billion USD revenue, 450 locations, and 5 reports.  ● Managed talent acquisition, talent management, employee engagement, employee relations, learning and development, social media & oﬀline marketing, performance management, total rewards, onboarding, and oﬀboarding for the brand’s campus-to-corporate sales program for 3000+ trainees and employees, scaling the program by 100%. ● Led enterprise-wide organizational projects for IPO, merger, ATS, chatbot, and other special projects ● Implemented employee self-service mobile app (including designing the UI+UX) and migrated employee life-cycle activities of leaves, attendance, reimbursements, medical claims, and whistleblower and sexual harassment complaints reporting to the app. ● Saved the company over $120,000 through reconciliation of social security benefits payments ● Designed and presented HR dashboards to senior management and the Board of Directors ● Increased hiring by 20% through social media and oﬀline marketing and engagement ● Reduced organization-wide attrition by 10% through engagement initiatives  ● Led employer brand analysis project developing an EVP that resulted in a company rebranding exercise ● Designed matrixed structure for people operations leading to the formation of a dedicated country-wide and corporate talent acquisition team ● Executed the annual rewards program of 2018 end-to-end with a direct team of 2 and 56 dotted line reports for over 3000 attendees  Consultant Human Resources, Roche                                                                                                                                                                                 2015-2015 Transforming healthcare to improve lives Healthcare ● Led impact and eﬀectiveness assessment for the L&D department using the Kirkpatrick model on career progression and business outcomes with over 1 billion USD revenue, and over 500 employees. ● Oversaw the enhancement and development of learning strategy, programs, materials, and tools ● Managed employer branding, EVP development, and HRIS migration ● The project was showcased at the Roche Global HR Roundtable  Recruiter Technical, Accelya Kale                                                                                                                                                                             2015 - 2015  Leading global soware provider to the airline industry SaaS ● Led full-cycle recruitment process for 80 entry-level soware engineer and QA positions for the organization with over 1.2 billion USD in revenue and over 1500 employees ● Revamped the HRIS system, enhancing candidate application management  Facilitator & Manager, VCTS                                                                                                                 2012 - 2014 Low-cost STEM coaching institute for Olympiads  Education ● Led recruitment, training, program, and operations for a team of 12 staﬀ ● Prepared course methodologies and exam schedules, supervised exams, and maintained secure testing environments with fair assessment practices ● Delivered workshops on eﬀective teaching, instructional techniques, and classroom management to staﬀ ● Collaborated with colleagues to create unit plans with diﬀerentiated instruction to cater to student needs  Analyst & Trainer, Datamatics                                                                                                               2011 - 2011 Consulting and digital services Technology ● Trained contact centre staﬀ on devices, equipment, scripts, operations, privacy & data collection laws, and customer service with over 1 billion in revenue and over 1300 employees ● Collected customer data by coordinating with team leads, supervised calls, and prepared reports    
+        </resume>
+        <transcript>
+AI
+Hi there. I'm Shirley from Talent Rodeo. Is now a good time for a quick chat?
+User
+Sure.
+AI
+Great. Thank you. Just a heads up, I'm still learning how to have good conversations with humans. So I might interrupt you. Take an extra long pause, or make mistakes sometimes. I'll do my best to make this conversation fun and valuable for you. Sound good?
+User
+Amazing.
+AI
+Perfect. I reviewed your resume and was impressed by your experience, especially in transitioning a major contract workforce to part time employees across the USA and Canada. Is there 1 particular position or experience you're especially proud of or that best represents what you're looking for next? Which your resume might not fully capture.
+User
+Uh, I've been in strategic people leadership roles for all of my career. So the 1 highlight of my career has been being a director for multiple organizations, including startups, And the fact is that I've worked in numerous acquisitions So the next company that I'm looking for I would love to be in a head of people and culture or director of people or vice president or even a chief human resource officer. As my next job.
+AI
+That's fantastic. Your vast experience with startups and acquisitions must have provided unique insights. Are there any other roles or experiences worth mentioning that would help me better understand your ideal next position?
+User
+Yes. I have significant experience across human resources, culture building, operations, marketing, event management, and admin positions. I've also managed budgets. So I would love for my next position to be able to be at a leadership level, uh, in the c suite, and I'm able to work with a tech or a software as a service company that is positioned on a global scale. The countries that I have managed over in my career are USA. Canada, Australia, India, Philippines, the UK. So I have a lot of global experience, so I would love to be matched with an organization that requires scale.
+AI
+That global experience is incredibly valuable. We support remote positions or roles located in the top 20 largest US metropolitan areas. Are you looking for remote roles, or do you prefer us specific metro area?
+User
+I would prefer remote remote fully remote position. However, I'm open to applying to hybrid positions that are based out of Bang or even on-site positions. Based out of Vancouver, BC.
+AI
+Great to know your flexible with remote and hybrid positions. How flexible are you with this location preference if a compelling opportunity arises?
+User
+So I'm based in Vancouver. However, if there is a job that requires me to relocate to the states, for example, or a different country, I am open to it.
+AI
+Understood. What specific job titles or roles are you targeting in your next position?
+User
+Human resource manager, uh, people and culture business partner, or human resource business partner, head of people and culture, or head of people, or director of human resources, vice president of human resources, chief human resource officer. Human resource business partner.
+AI
+That's a comprehensive list of titles reflecting leadership in HR. What are the core skills or technologies you want to use or develop further in your next role?
+User
+So I do not particularly work with, uh, technologies. Other than in an area where I use say, the HRI assistant. So I have a large tech stack that's mentioned on my resume. So ADP, BambooHR, Ceridian, Dayforce, UKG, Lever, Rippling, Deal.
+AI
+You have a
+User
+SAP, and more. Workday, So I have a lot of, um, HR systems that I've worked with.
+AI
+You've worked with an impressive array of HRIS platforms. Are there any specific systems or skills from this list that you'd like to focus on or develop further? Or are you open to exploring new tools as well?
+User
+I'm open to exploring mutual.
+AI
+It's great that you're open to exploring new tools. You mentioned several roles. Like head of people and culture. How important is it for you to work in a role with a strategic focus on culture building and leadership?
+User
+Extremely important.
+AI
+Culture building is certainly a key strength of yours. Are there related responsibilities or even areas you'd prefer to avoid in your next role?
+User
+Um, I would prefer to avoid areas that would shoehorn me into a particular specialization. I want to continue to work in a leadership generalist capacity rather than specialize on in any particular area? However, if the pay is right, I'm willing to work towards that as well.
+AI
+Got it. You prefer maintaining a broad strategic overview in leadership, but you're open to specialization if the opportunity and compensation align well. What kind of company culture or team dynamics do you thrive in?
+User
+So I very much thrive in an ownership mindset attitude where you know, I'm just responsible for building things. From scratch and and, you know, the management is very much open to your idea to growing fast to building high performance teams where people take ownership and have that growth mindset.
+AI
+That ownership mindset combined with building high performance teams really resonates. Are there specific types of project or challenges you're eager to take on in your next role?
+User
+Definitely. I would say, uh, I very much have specialized in you know, high growth and high scale. So for example, I dealt with multiple acquisitions. I've dealt with funding rounds, I've dealt with IPO I've dealt with a merger. So there's a lot of growth and scale involved. I also am an expert in cross border compliance. And as well as, you know, enterprise wide organizational projects. So anything related to tech, anything related to change, anything related to transformation, So my portfolio is basically a specialization of all of those skills. So for my next role when it comes to people and culture, I would love to be a part of an organization that is, you know, emerging. For example, tech or software or AI or private equity for banking and finance, say, for example, or any sort of tech or software related industry. I'm also open to pharma and health care because that's has what been my experience in the past as well, as well as education. Um, but, yes, those are sort of the specializations that I have cultivated and I would love if my next role is also, you know, very similar uh, or matches those areas.
+AI
+That's an impressive range of skills. Especially in managing large scale projects like acquisitions and mergers. What work environments or conditions are you specifically looking to avoid?
+User
+I'm looking to avoid, um, conditions where, you know, the organization very much is, um, autocratic and, you know, doesn't, uh, really work together or doesn't really care or put to put its people first because I very much am a big believer in having people come together and work together in an organization that cares about the about its employees first. Because only when your employees are in a good place can they serve your customers really well. I think a company that puts employees um, first and then encourages them to put customers first is would be an amazing fit for me. I wanna avoid organizations that, um, are caught up in in a lot of bureaucracy. Or red tape or don't really care about giving their employees the best of benefits.
+AI
+It's clear that a people first culture is very important to you. What are your primary motivations for seeking a new opportunity right now?
+User
+I am currently working for a confidential organization in the, uh, tech area where I'm working on multiple mergers and acquisitions across the globe. However, as it's sits within the organization, um, I'm a bit worried about how my role is going to pan out, and I don't think I'm a good culture fit for this particular organization. So I'm looking to move to an organization where, um, I would be a better culture fit.
+AI
+It sounds like finding a company with a better cultural fit is a key driver in your current job search. Looking ahead, what goals or milestones are most important to you professionally?
+User
+I want to grow to the VP or the CHR role and have a voice at the table. Um, strategically. I've had that for a number of years. However, um, I even though people say job titles don't really matter, they effectively do in the long run, especially when it comes to leadership and the broader organization at large. So I would love to carve my name out and help and grow and scale an organization and be you know, known for putting in a remarkable
+        </transcript>
+    </input>
+    <output>
+<query_construction>
+
+a. Query:
+Relevant quotes from the transcript and resume:
+- "I would love to be in a head of people and culture or director of people or vice president or even a chief human resource officer"
+- "Human resource manager, uh, people and culture business partner, or human resource business partner, head of people and culture, or head of people, or director of human resources, vice president of human resources, chief human resource officer"
+- "I want to grow to the VP or the CHR role and have a voice at the table"
+- Resume shows extensive HR leadership experience across multiple organizations
+
+Primary career field: Human Resources Leadership
+This is best searched by job title rather than technical skills, as the candidate is seeking leadership roles in HR/People Operations rather than focusing on specific technical competencies. The most appropriate job title would be "Head of People" as it encompasses the strategic leadership role they're seeking while being broad enough to capture various senior HR titles.
+
+b. MoveToward:
+Relevant quotes:
+- "I would love to be matched with an organization that requires scale"
+- "I would love to be a part of an organization that is, you know, emerging. For example, tech or software or AI"
+- "I very much thrive in an ownership mindset attitude where you know, I'm just responsible for building things from scratch"
+- "I very much have specialized in you know, high growth and high scale"
+- "I want to grow to the VP or the CHR role and have a voice at the table strategically"
+
+The candidate wants strategic leadership roles in high-growth, scaling organizations, particularly in tech/software companies where they can build from scratch and have strategic influence.
+
+c. MoveAway:
+Relevant quotes:
+- "I would prefer to avoid areas that would shoehorn me into a particular specialization"
+- "I'm looking to avoid, um, conditions where, you know, the organization very much is, um, autocratic"
+- "I wanna avoid organizations that, um, are caught up in in a lot of bureaucracy. Or red tape"
+
+The candidate wants to avoid specialized roles and bureaucratic, autocratic environments. For the dense vector search negation, I'll phrase this as what they would want (specialization and bureaucracy) so it creates the proper negating vector.
+
+d. RerankQuery:
+Combining the strategic HR leadership focus, desire for high-growth tech companies with ownership culture, while avoiding specialization and bureaucracy.
+
+e. ExperienceLevel:
+Relevant quotes:
+- "I've been in strategic people leadership roles for all of my career"
+- "I want to grow to the VP or the CHR role and have a voice at the table"
+- Resume shows: "Head Operations & People" (current), "Director Human Resources" positions
+- 12+ years of HR experience managing up to 21,000 employees
+
+This is clearly director-level experience. The candidate is currently in head/director roles and seeking VP/CHRO positions, which indicates they're at the director experience level seeking advancement to executive roles.
+
+f. WorkType:
+Relevant quotes:
+- "I would prefer remote remote fully remote position"
+- "However, I'm open to applying to hybrid positions"
+- "So I'm based in Vancouver. However, if there is a job that requires me to relocate to the states, for example, or a different country, I am open to it"
+
+Clear preference for remote work, though open to hybrid and relocation if needed.
+
+</query_construction>
+
+<answer>
+{
+  "Query": "Head of People",
+  "MoveToward": "I want to work in strategic leadership roles at high-growth tech companies where I can build from scratch and have ownership mindset",
+  "MoveAway": "I want to work in specialized roles at bureaucratic organizations with autocratic management",
+  "RerankQuery": "Head of People at high-growth tech companies with strategic leadership and ownership culture, avoiding specialized bureaucratic roles",
+  "ExperienceLevel": "director",
+  "WorkType": "remote"
+}
+</answer>
+    </output>
+</example-2>
