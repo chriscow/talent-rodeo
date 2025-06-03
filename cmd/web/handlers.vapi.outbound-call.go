@@ -253,7 +253,7 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	if result.ID != nil && result.Status != nil {
+	if result != nil && result.ID != nil && result.Status != nil {
 		app.logger.Info(internal.Green("call created successfully"),
 			"users_id", user.ID,
 			"resume_id", resume.ID,
@@ -263,6 +263,8 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 	} else {
 		app.logger.Warn(internal.BGYellow("unexpected nil pointer result from CreateCall"), "result", result)
 		app.reportServerError(r, fmt.Errorf("unexpected nil pointer result from CreateCall"))
+
+		return
 	}
 
 	app.fs.RunTransaction(r.Context(), func(ctx context.Context, tx *firestore.Transaction) error {
