@@ -132,7 +132,8 @@ func BuildAssistantOverrides(ctx context.Context, user *User, resume *Resume, fs
 		FirstMessage: &firstMessage,
 		Model:        &model,
 		Server: &vapi.ServerConfig{
-			URL: os.Getenv("VAPI_WEBHOOK_URL"),
+			URL:            os.Getenv("VAPI_WEBHOOK_URL"),
+			TimeoutSeconds: 30,
 		},
 	}, nil
 }
