@@ -121,13 +121,18 @@ func BuildAssistantOverrides(ctx context.Context, user *User, resume *Resume, fs
 		firstMessage = "Hi there! I'm Shirley from Talent Rodeo. Is now a good time for a quick chat?"
 	}
 
-	logger.Info("Built assistant overrides",
+	logger.Info("built assistant overrides",
 		"userID", user.ID,
 		"assistantId", assistantID,
-		"firstMessage", firstMessage)
+		"firstMessage", firstMessage,
+		"webhookURL", os.Getenv("VAPI_WEBHOOK_URL"),
+	)
 
 	return &vapi.Assistant{
 		FirstMessage: &firstMessage,
 		Model:        &model,
+		Server: &vapi.ServerConfig{
+			URL: os.Getenv("VAPI_WEBHOOK_URL"),
+		},
 	}, nil
 }
