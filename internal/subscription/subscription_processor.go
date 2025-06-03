@@ -4,6 +4,7 @@ package subscription
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -62,6 +63,9 @@ func NewProcessor(fs *internal.FirestoreClient, logger *slog.Logger) *Processor 
 		logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 	}
 	if fs == nil {
+		internal.SentryReportError(context.Background(), errors.New("firestore client cannot be nil"), sentry.LevelError, map[string]string{
+			"action": "NewProcessor: firestore client cannot be nil",
+		})
 		panic("firestore client cannot be nil")
 	}
 
@@ -157,6 +161,9 @@ func (p *Processor) Start(ctx context.Context) error {
 func (p *Processor) initCloudflareKV() error {
 	kv, err := cloudflare.NewKV()
 	if err != nil {
+		internal.SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
+			"action": "Processor::initCloudflareKV: failed to create Cloudflare KV client",
+		})
 		return fmt.Errorf("failed to create Cloudflare KV client: %w", err)
 	}
 
@@ -169,12 +176,18 @@ func (p *Processor) RefreshSettings() error {
 	if err := p.kv.Get(SubscriptionProcessorKey, &settings); err != nil {
 		if err != cloudflare.ErrNotFound {
 			p.logger.Error("failed to get subscription processor settings from Cloudflare KV", "key", SubscriptionProcessorKey, "error", err)
+			internal.SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
+				"action": "Processor::RefreshSettings: failed to get feature flag",
+			})
 			return fmt.Errorf("failed to get feature flag: %w", err)
 		}
 		// If not found, use default settings
 		settings = DefaultSettings
 		if err := p.kv.Set(SubscriptionProcessorKey, DefaultSettings, 0); err != nil {
 			p.logger.Error("failed to set default subscription processor settings in Cloudflare KV", "key", SubscriptionProcessorKey, "error", err)
+			internal.SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
+				"action": "Processor::RefreshSettings: failed to set default feature flag",
+			})
 			return fmt.Errorf("failed to set default feature flag: %w", err)
 		}
 	}
@@ -249,6 +262,9 @@ func (p *Processor) process(ctx context.Context) error {
 	// Get all criteria
 	allCriteria, err := internal.ListSearchCriteria(ctx, p.fs)
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "Processor::process: failed to list search criteria",
+		})
 		return fmt.Errorf("failed to list search criteria: %w", err)
 	}
 
@@ -307,6 +323,9 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 	// Get all subscribers for this criteria
 	subscribers, err := internal.GetCriteriaSubscribers(ctx, p.fs, criteria.ID)
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "Processor::processCriteria: failed to get subscribers for criteria",
+		})
 		return fmt.Errorf("failed to get subscribers for criteria %s: %w", criteria.ID, err)
 	}
 
@@ -319,6 +338,9 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 	twentyFourHoursAgo := time.Now().Add(-24 * time.Hour)
 	jobIDs, err := internal.GetJobIDsForCriteriaCreatedAfter(ctx, p.fs, criteria.ID, twentyFourHoursAgo)
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "Processor::processCriteria: failed to get recent jobs for criteria",
+		})
 		return fmt.Errorf("failed to get recent jobs for criteria %s: %w", criteria.ID, err)
 	}
 
@@ -338,6 +360,9 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 	// Get all users in one call
 	_, err = internal.GetUsersByIDs(ctx, p.fs, userIDs)
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "Processor::processCriteria: failed to get users",
+		})
 		return fmt.Errorf("failed to get users: %w", err)
 	}
 

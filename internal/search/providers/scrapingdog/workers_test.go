@@ -38,9 +38,7 @@ func (m *MockSearchProvider) GetJobDetails(ctx context.Context, jobID string) (*
 		return m.getJobDetailsFunc(ctx, jobID)
 	}
 	return m.mockJobDetail, m.getJobDetailsError
-}
-
-// MockEventHandler implements the JobEventHandler interface for testing
+} // MockEventHandler implements the JobEventHandler interface for testing
 type MockEventHandler struct {
 	onJobListingCalled      bool
 	onNewJobCalled          bool
@@ -234,7 +232,14 @@ func TestProcessQueuedSearch(t *testing.T) {
 	assert.True(t, mockHandler.onSearchCompletedCalled, "OnSearchCompleted should have been called")
 
 	// Verify jobs were received
-	assert.Equal(t, 2, len(mockHandler.jobsReceived), "Should have received 2 jobs")
+	// Count only actual job IDs (filter out "page_complete" and other non-job entries)
+	actualJobs := 0
+	for _, received := range mockHandler.jobsReceived {
+		if received != "page_complete" && received != "error" {
+			actualJobs++
+		}
+	}
+	assert.Equal(t, 2, actualJobs, "Should have received 2 jobs")
 }
 
 func TestProcessQueuedSearchWithErrors(t *testing.T) {

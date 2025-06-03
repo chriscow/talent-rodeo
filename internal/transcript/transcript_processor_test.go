@@ -127,6 +127,9 @@ func TestRecoverProcessingAppointments(t *testing.T) {
 
 func TestExtractWorkPreferences(t *testing.T) {
 	ctx := context.Background()
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
 
 	t.Run("valid final determinations", func(t *testing.T) {
 		data := "Some text before <final_determinations>Remote work preferred, San Francisco Bay Area</final_determinations> some text after"
@@ -229,7 +232,9 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 		user := &internal.User{
 			ID: "test-criteria-user-2",
 			SteeringQuery: &internal.SteeringQuery{
-				Query: "software engineer python",
+				Query:           "software engineer python",
+				WorkType:        internal.WorkTypeRemote,
+				ExperienceLevel: internal.ExperienceLevelEntryLevel,
 			},
 			// WorkPreferences is nil
 		}
@@ -255,7 +260,9 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 		user := &internal.User{
 			ID: "test-criteria-user-3",
 			SteeringQuery: &internal.SteeringQuery{
-				Query: "software engineer python",
+				Query:           "software engineer python",
+				WorkType:        internal.WorkTypeRemote,
+				ExperienceLevel: internal.ExperienceLevelEntryLevel,
 			},
 			LocationPreference: internal.StringPtr("Remote work in San Francisco"),
 		}
@@ -273,10 +280,16 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 	})
 
 	t.Run("reuse existing search criteria", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("skipping integration test in short mode")
+		}
+
 		user := &internal.User{
 			ID: "test-criteria-user-4",
 			SteeringQuery: &internal.SteeringQuery{
-				Query: "software engineer python",
+				Query:           "software engineer python",
+				WorkType:        internal.WorkTypeRemote,
+				ExperienceLevel: internal.ExperienceLevelEntryLevel,
 			},
 			LocationPreference: internal.StringPtr("Remote work in San Francisco"),
 		}

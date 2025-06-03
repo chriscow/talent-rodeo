@@ -128,14 +128,34 @@ func TestSearchCriteria(t *testing.T) {
 	})
 
 	t.Run("GetSearchCriteriaNeedsSearch", func(t *testing.T) {
-		// Create criteria that needs search (never searched) with subscribers
+		// Create test users for subscriptions
 		timestamp := time.Now().UnixNano()
+		user1 := CreateTestUser(t, client, "Test User 1", fmt.Sprintf("user1-%d@test.com", timestamp), "1234567890", false)
+		user2 := CreateTestUser(t, client, "Test User 2", fmt.Sprintf("user2-%d@test.com", timestamp), "1234567891", false)
+
+		// Clean up test users
+		t.Cleanup(func() {
+			DeleteTestUserCriteria(ctx, t, client, user1.ID)
+			DeleteTestUserCriteria(ctx, t, client, user2.ID)
+		})
+
+		// Create criteria that needs search (never searched) with subscribers
 		query1 := fmt.Sprintf("%s-never-searched-%d", testPrefix, timestamp)
 		workType1 := WorkTypeRemote
 		expLevel1 := ExperienceLevelEntryLevel
 		created1, err := CreateSearchCriteria(ctx, client, query1, "us-ny-newyork", workType1, expLevel1, 2, ListingAgeMonth)
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() never searched error = %v", err)
+		}
+
+		// Add subscribers to created1
+		err = SubscribeToCriteria(ctx, client, user1.ID, created1.ID)
+		if err != nil {
+			t.Fatalf("SubscribeToCriteria() for user1 and created1 error = %v", err)
+		}
+		err = SubscribeToCriteria(ctx, client, user2.ID, created1.ID)
+		if err != nil {
+			t.Fatalf("SubscribeToCriteria() for user2 and created1 error = %v", err)
 		}
 
 		// Create criteria searched more than 24 hours ago with subscribers
@@ -146,7 +166,18 @@ func TestSearchCriteria(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() old search error = %v", err)
 		}
-		// Set LastSearchedAt to 25 hours ago and subscriber count to 2
+
+		// Add subscribers to created2
+		err = SubscribeToCriteria(ctx, client, user1.ID, created2.ID)
+		if err != nil {
+			t.Fatalf("SubscribeToCriteria() for user1 and created2 error = %v", err)
+		}
+		err = SubscribeToCriteria(ctx, client, user2.ID, created2.ID)
+		if err != nil {
+			t.Fatalf("SubscribeToCriteria() for user2 and created2 error = %v", err)
+		}
+
+		// Set LastSearchedAt to 25 hours ago
 		oldTime := time.Now().Add(-25 * time.Hour)
 		created2.LastSearchedAt = &oldTime
 		err = UpdateSearchCriteria(ctx, client, created2)
@@ -162,7 +193,18 @@ func TestSearchCriteria(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateSearchCriteria() recent search error = %v", err)
 		}
-		// Set LastSearchedAt to 1 hour ago and subscriber count to 3
+
+		// Add subscribers to created3
+		err = SubscribeToCriteria(ctx, client, user1.ID, created3.ID)
+		if err != nil {
+			t.Fatalf("SubscribeToCriteria() for user1 and created3 error = %v", err)
+		}
+		err = SubscribeToCriteria(ctx, client, user2.ID, created3.ID)
+		if err != nil {
+			t.Fatalf("SubscribeToCriteria() for user2 and created3 error = %v", err)
+		}
+
+		// Set LastSearchedAt to 1 hour ago
 		recentTime := time.Now().Add(-1 * time.Hour)
 		created3.LastSearchedAt = &recentTime
 		err = UpdateSearchCriteria(ctx, client, created3)
