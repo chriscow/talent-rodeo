@@ -7,6 +7,7 @@ import (
 	"talent-rodeo/internal"
 
 	"cloud.google.com/go/firestore"
+	"github.com/getsentry/sentry-go"
 )
 
 // resetOnboardingState handles POST requests to reset a user's onboarding progress.
@@ -40,6 +41,10 @@ func (app *application) resetOnboardingState(w http.ResponseWriter, r *http.Requ
 		"Search": firestore.Delete,
 	}); err != nil {
 		app.serverError(w, r, fmt.Errorf("resetOnboardingState: failed to update onboarding: %w", err))
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action": "resetOnboardingState",
+			"userID": user.ID,
+		})
 		return
 	}
 

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/alexedwards/flow"
+	"github.com/getsentry/sentry-go"
 )
 
 // showSchedulePage displays the scheduling interface where users can set their
@@ -64,6 +65,11 @@ func (app *application) showSchedulePage(w http.ResponseWriter, r *http.Request)
 	data["MinDateTime"] = now.Format("2006-01-02T15:04")
 
 	if err := response.Page(w, http.StatusOK, data, "pages/profile-schedule-phone-call.html"); err != nil {
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action":   "render_template",
+			"template": "pages/profile-schedule-phone-call.html",
+			"userID":   user.ID,
+		})
 		app.serverError(w, r, fmt.Errorf("failed to render schedule page: %w", err))
 	}
 }
@@ -96,6 +102,11 @@ func (app *application) createAppointment(w http.ResponseWriter, r *http.Request
 	}
 
 	if os.Getenv("VAPI_START_CALL_PATH") == "" {
+		internal.SentryReportError(r.Context(), fmt.Errorf("VAPI_START_CALL_PATH is not set"), sentry.LevelError, map[string]string{
+			"action":   "check_environment_variable",
+			"userID":   user.ID,
+			"variable": "VAPI_START_CALL_PATH",
+		})
 		app.serverError(w, r, fmt.Errorf("VAPI_START_CALL_PATH is not set"))
 		return
 	}
@@ -157,6 +168,12 @@ func (app *application) createAppointment(w http.ResponseWriter, r *http.Request
 	err = internal.CreateAppointment(r.Context(), app.fs, user.ID, appointment)
 	if err != nil {
 		app.logger.Error("Failed to create appointment", "error", err)
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action":         "create_appointment",
+			"userID":         user.ID,
+			"scheduled_time": scheduledTime.UTC().String(),
+			"timezone":       timezone,
+		})
 		http.Error(w, fmt.Sprintf("Failed to create appointment: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -171,6 +188,11 @@ func (app *application) createAppointment(w http.ResponseWriter, r *http.Request
 	body, err := json.Marshal(callRequest)
 	if err != nil {
 		app.logger.Error("Failed to marshal call request", "error", err)
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action":      "marshal_call_request",
+			"userID":      user.ID,
+			"customer_id": user.ID,
+		})
 		http.Error(w, fmt.Sprintf("Failed to marshal call request: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -192,6 +214,12 @@ func (app *application) createAppointment(w http.ResponseWriter, r *http.Request
 	_, err = app.processor.CreateAndEnqueueTask(r.Context(), handlers.TaskTypeWebhookCall, "initial-call", payloadBytes, scheduledTime.UTC())
 	if err != nil {
 		app.logger.Error("Failed to create and enqueue task", "error", err)
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action":         "create_enqueue_task",
+			"userID":         user.ID,
+			"task_type":      handlers.TaskTypeWebhookCall,
+			"scheduled_time": scheduledTime.UTC().String(),
+		})
 		http.Error(w, fmt.Sprintf("Failed to create and enqueue task: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -200,6 +228,12 @@ func (app *application) createAppointment(w http.ResponseWriter, r *http.Request
 	err = internal.UpdateUserStatus(r.Context(), app.fs, user, internal.UserStatusCallScheduled)
 	if err != nil {
 		app.logger.Error("Failed to update onboarding state", "error", err)
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action":      "update_user_status",
+			"userID":      user.ID,
+			"from_status": user.State.Status.String(),
+			"to_status":   internal.UserStatusCallScheduled.String(),
+		})
 		http.Error(w, fmt.Sprintf("Failed to update onboarding state: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -255,12 +289,23 @@ func (app *application) rescheduleAppointment(w http.ResponseWriter, r *http.Req
 	err := internal.UpdateUserStatus(r.Context(), app.fs, user, internal.UserStatusResumeUploaded)
 	if err != nil {
 		app.logger.Error("Failed to update onboarding state", "error", err)
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action":      "update_user_status_reschedule",
+			"userID":      user.ID,
+			"from_status": user.State.Status.String(),
+			"to_status":   internal.UserStatusResumeUploaded.String(),
+		})
 		http.Error(w, fmt.Sprintf("Failed to update onboarding state: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	data := app.newTemplateData(r)
 	if err := response.Page(w, http.StatusOK, data, "pages/profile-schedule-phone-call.html"); err != nil {
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action":   "render_template_reschedule",
+			"template": "pages/profile-schedule-phone-call.html",
+			"userID":   user.ID,
+		})
 		app.serverError(w, r, fmt.Errorf("failed to render schedule page: %w", err))
 	}
 }
@@ -290,6 +335,11 @@ func (app *application) cancelAppointment(w http.ResponseWriter, r *http.Request
 	// Update to pass both userID and appointmentID
 	err := internal.CancelAppointment(r.Context(), app.fs, user.ID, id)
 	if err != nil {
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action":         "cancel_appointment",
+			"userID":         user.ID,
+			"appointment_id": id,
+		})
 		app.serverError(w, r, fmt.Errorf("failed to cancel appointment: %w", err))
 		return
 	}
@@ -351,6 +401,11 @@ func (app *application) callNow(w http.ResponseWriter, r *http.Request) {
 	err := internal.CreateAppointment(r.Context(), app.fs, user.ID, appointment)
 	if err != nil {
 		app.logger.Error("Failed to create appointment", "error", err)
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action":         "create_appointment_call_now",
+			"userID":         user.ID,
+			"scheduled_time": scheduledTime.String(),
+		})
 		app.serverError(w, r, fmt.Errorf("failed to create appointment: %w", err))
 		return
 	}
@@ -360,6 +415,11 @@ func (app *application) callNow(w http.ResponseWriter, r *http.Request) {
 	body, err := json.Marshal(appointment)
 	if err != nil {
 		app.logger.Error("Failed to marshal call request", "error", err)
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action":         "marshal_appointment_call_now",
+			"userID":         user.ID,
+			"appointment_id": appointment.ID,
+		})
 		app.serverError(w, r, fmt.Errorf("failed to marshal call request: %w", err))
 		return
 	}
@@ -381,6 +441,12 @@ func (app *application) callNow(w http.ResponseWriter, r *http.Request) {
 	_, err = app.processor.CreateAndEnqueueTask(r.Context(), handlers.TaskTypeWebhookCall, "initial-call", payloadBytes, scheduledTime)
 	if err != nil {
 		app.logger.Error("Failed to create and enqueue task", "error", err)
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action":         "create_enqueue_task_call_now",
+			"userID":         user.ID,
+			"task_type":      handlers.TaskTypeWebhookCall,
+			"scheduled_time": scheduledTime.String(),
+		})
 		app.serverError(w, r, fmt.Errorf("failed to create and enqueue task: %w", err))
 		return
 	}

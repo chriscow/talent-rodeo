@@ -9,6 +9,8 @@ import (
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/cloudflare"
 	"time"
+
+	"github.com/getsentry/sentry-go"
 )
 
 const (
@@ -62,10 +64,16 @@ func NewScheduler(fs *internal.FirestoreClient, logger *slog.Logger, queue inter
 	// Initialize Cloudflare KV client for feature flag
 	kv, err := cloudflare.NewKV()
 	if err != nil {
+		internal.SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
+			"action": "NewScheduler: failed to initialize Cloudflare KV client",
+		})
 		logger.Error("failed to initialize Cloudflare KV client", "error", err)
 	}
 
 	if queue == nil {
+		internal.SentryReportError(context.Background(), errors.New("queue is nil"), sentry.LevelError, map[string]string{
+			"action": "NewScheduler: queue is nil",
+		})
 		panic("NewScheduler: queue is nil")
 	}
 
@@ -89,6 +97,9 @@ func (s *Scheduler) Start(ctx context.Context) error {
 	s.logger.Info("starting search scheduler")
 
 	if s.queue == nil {
+		internal.SentryReportError(context.Background(), errors.New("queue is nil"), sentry.LevelError, map[string]string{
+			"action": "NewScheduler::Start: queue is nil",
+		})
 		panic("NewScheduler::Start: queue is nil")
 	}
 
@@ -96,6 +107,9 @@ func (s *Scheduler) Start(ctx context.Context) error {
 
 	// Then requeue any users that were previously queued but not completed
 	if err := s.RecoverIncompleteSearches(); err != nil {
+		internal.SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
+			"action": "NewScheduler::Start: failed to requeue incomplete searches",
+		})
 		return fmt.Errorf("failed to requeue incomplete searches: %w", err)
 	}
 
@@ -120,7 +134,10 @@ func (s *Scheduler) RefreshSettings() error {
 			settings = DefaultSchedulerSettings
 			s.logger.Info("No search scheduler settings found, using defaults")
 			if err := s.kv.Set(SchedulerSettingsKey, settings, 0); err != nil {
-				return fmt.Errorf("failed to set default search scheduler settings: %w", err)
+				internal.SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
+					"action": "NewScheduler::RefreshSettings: failed to set default search scheduler settings",
+				})
+				return err
 			}
 			s.logger.Info("Default search scheduler settings saved to Cloudflare KV", "settings", settings)
 		}
@@ -231,6 +248,10 @@ func (s *Scheduler) StartCriteriaSearch(ctx context.Context) {
 	for _, criteria := range items {
 		if err := s.enqueueSearch(ctx, criteria); err != nil {
 			criteria.Error = err.Error()
+			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+				"action":   "NewScheduler::StartCriteriaSearch: failed to enqueue search",
+				"criteria": criteria.Query,
+			})
 		}
 		processedCount++
 	}
@@ -239,6 +260,9 @@ func (s *Scheduler) StartCriteriaSearch(ctx context.Context) {
 		depth, err := s.queue.GetQueueDepth(ctx)
 		if err != nil {
 			s.logger.Error("error getting queue depth", "error", err)
+			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+				"action": "NewScheduler::StartCriteriaSearch: failed to get queue depth",
+			})
 		}
 		s.logger.Info("newly enqueued", "new", processedCount, "queue_depth", depth)
 	}
@@ -256,13 +280,21 @@ func (s *Scheduler) enqueueSearch(ctx context.Context, criteria internal.SearchC
 			s.logger.Debug("search task already exists", "criteria", criteria)
 			return nil
 		}
-		return fmt.Errorf("failed to save job search: %w", err)
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action":   "NewScheduler::enqueueSearch: failed to save job search",
+			"criteria": criteria.Query,
+		})
+		return err
 	}
 
 	// Queue the search with the provider
 	s.logger.Info("enqueueSearch", "criteria", criteria)
 	if err := s.queue.QueueSearch(ctx, *jobSearch); err != nil {
-		return fmt.Errorf("failed to queue search: %w", err)
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action":   "NewScheduler::enqueueSearch: failed to queue search",
+			"criteria": criteria.Query,
+		})
+		return err
 	}
 
 	return nil
@@ -304,15 +336,24 @@ func (s *Scheduler) RecoverIncompleteSearches() error {
 
 	searchTasks, err := internal.GetIncompleteSearchTasks(context.Background(), s.fs)
 	if err != nil {
-		return fmt.Errorf("failed to get incomplete search tasks: %w", err)
+		internal.SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
+			"action": "NewScheduler::RecoverIncompleteSearches: failed to get incomplete search tasks",
+		})
+		return err
 	}
 
 	for _, searchTask := range searchTasks {
 		if err := internal.SetSearchTaskStatus(context.Background(), s.fs, searchTask.ID, internal.SearchTaskStatusQueued); err != nil {
-			return fmt.Errorf("failed to set search task status: %w", err)
+			internal.SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
+				"action": "NewScheduler::RecoverIncompleteSearches: failed to set search task status",
+			})
+			return err
 		}
 		if err := s.queue.QueueSearch(context.Background(), *searchTask); err != nil {
-			return fmt.Errorf("failed to requeue search task: %w", err)
+			internal.SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
+				"action": "NewScheduler::RecoverIncompleteSearches: failed to requeue search task",
+			})
+			return err
 		}
 	}
 

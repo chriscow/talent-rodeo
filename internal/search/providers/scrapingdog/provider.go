@@ -10,6 +10,8 @@ import (
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/cloudflare"
 	"talent-rodeo/internal/search"
+
+	"github.com/getsentry/sentry-go"
 )
 
 /*
@@ -124,6 +126,9 @@ func NewProvider(apiKey string, logger *slog.Logger, opts ...ProviderOption) *Pr
 
 	kv, err := cloudflare.NewKV()
 	if err != nil {
+		internal.SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
+			"action": "NewProvider: failed to create KV client",
+		})
 		logger.Error("failed to create KV client", "error", err)
 		panic(fmt.Sprintf("failed to create KV client: %v", err))
 	}
@@ -180,6 +185,9 @@ func (p *Provider) Validate(ctx context.Context) error {
 func (p *Provider) Start(ctx context.Context) error {
 	settings, err := p.getWorkerSettings(ctx)
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "NewProvider::Start: failed to get worker settings",
+		})
 		return fmt.Errorf("failed to get worker settings: %w", err)
 	}
 
@@ -221,12 +229,18 @@ func (p *Provider) SearchJobListings(ctx context.Context, criteria internal.Sear
 	// Call the API
 	jobListings, err := p.apiClient.SearchJobListings(ctx, criteria.Query, criteria.GeoID, criteria.WorkType, criteria.ExperienceLevel, page, SortBy(criteria.ListingAge))
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "NewProvider::SearchJobListings: API search failed",
+		})
 		return nil, fmt.Errorf("API search failed: %w", err)
 	}
 
 	// Convert to common format
 	jobs, err := convertJobListings(JobProviderName, jobListings, &criteria)
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "NewProvider::SearchJobListings: failed to convert job listings",
+		})
 		return nil, fmt.Errorf("failed to convert job listings: %w", err)
 	}
 
@@ -249,12 +263,18 @@ func (p *Provider) GetJobDetails(ctx context.Context, jobID string) (*internal.J
 
 	jobDetail, err := p.apiClient.GetJobDetails(ctx, jobID)
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "NewProvider::GetJobDetails: API job details fetch failed",
+		})
 		return nil, fmt.Errorf("API job details fetch failed: %w", err)
 	}
 
 	// Convert to common format
 	details, err := convertJobDetail(jobDetail)
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "NewProvider::GetJobDetails: failed to convert job details",
+		})
 		return nil, fmt.Errorf("failed to convert job details: %w", err)
 	}
 

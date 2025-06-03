@@ -102,7 +102,7 @@ func ExtractGeoID(ctx context.Context, fs *FirestoreClient, data string) (string
 
 	prompt := `Evaaluate the following statement and determine the ID of the location
 	closest and most relevant to the statement. If you cannot determine the location,
-	select ID "103644278" which is "Remote" or "United States"
+	or it explicitly asks for report, select ID "103644278" which is "Remote"
 
 	Geoids:
 	%s
@@ -110,7 +110,7 @@ func ExtractGeoID(ctx context.Context, fs *FirestoreClient, data string) (string
 	Statement: %s
 	`
 
-	res, err := tools.StructuredAsk[result](ctx, "location-id", fmt.Sprintf(prompt, string(geoidJSON), data), tools.WithModel(tools.GPT41Nano))
+	res, err := tools.StructuredAsk[result](ctx, "location-id", fmt.Sprintf(prompt, string(geoidJSON), data), tools.WithModel(tools.GPT41Mini))
 	if err != nil {
 		return "", err
 	}
