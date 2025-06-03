@@ -10,19 +10,19 @@ import (
 type UserStatus int
 
 const (
-	UserStatusUnknown UserStatus = iota
-	UserStatusError
-	UserStatusPendingResumeUpload
-	UserStatusProcessingResume
-	UserStatusResumeUploaded
-	UserStatusCallScheduled       // 5
-	UserStatusCallStarted         // 6
-	UserStatusCallAnalysisStarted // 7
-	UserStatusCallProcessing      // 8
-	UserStatusCallCompleted       // 9
-	UserStatusJobSearchScheduled  // 10
-	UserStatusJobSearchStarted    // 11
-	UserStatusJobSearchComplete   // 12
+	UserStatusUnknown             UserStatus = iota // 0
+	UserStatusError                                 // 1
+	UserStatusPendingResumeUpload                   // 2
+	UserStatusProcessingResume                      // 3
+	UserStatusResumeUploaded                        // 4
+	UserStatusCallScheduled                         // 5
+	UserStatusCallStarted                           // 6
+	UserStatusCallAnalysisStarted                   // 7
+	UserStatusCallProcessing                        // 8
+	UserStatusCallCompleted                         // 9
+	UserStatusJobSearchScheduled                    // 10
+	UserStatusJobSearchStarted                      // 11
+	UserStatusJobSearchComplete                     // 12
 )
 
 type UserState struct {
