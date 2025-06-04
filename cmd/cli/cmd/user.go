@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"talent-rodeo/internal"
 
+	"github.com/cheggaaa/pb"
 	"github.com/spf13/cobra"
 )
 
@@ -18,6 +20,7 @@ func init() {
 	usersCmd.AddCommand(deleteUserCmd)
 	usersCmd.AddCommand(listGeoIDsCmd)
 	usersCmd.AddCommand(createUserCmd)
+	usersCmd.AddCommand(importUsersCmd)
 
 	// Add flags
 	listUsersCmd.Flags().IntP("limit", "l", 100, "Maximum number of users to return per page")
@@ -116,7 +119,7 @@ var listUsersCmd = &cobra.Command{
 		}
 
 		if jsonOutput {
-			output, err := json.MarshalIndent(userInfos, "", "  ")
+			output, err := json.MarshalIndent(users, "", "  ")
 			if err != nil {
 				return fmt.Errorf("failed to marshal user info: %w", err)
 			}
@@ -224,6 +227,59 @@ var listGeoIDsCmd = &cobra.Command{
 
 		fmt.Printf("Retrieved %d GeoIDs\n", len(geoIDs))
 		fmt.Println(string(output))
+
+		return nil
+	},
+}
+
+var importUsersCmd = &cobra.Command{
+	Use:   "import [json-file]",
+	Short: "Import users from a JSON file",
+	Long:  `Import users from a JSON file containing an array of User structs`,
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := context.Background()
+
+		fs, err := internal.NewFirestoreClient(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to create Firestore client: %w", err)
+		}
+		defer fs.Close()
+
+		// Read the JSON file
+		filePath := args[0]
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return fmt.Errorf("failed to read file %s: %w", filePath, err)
+		}
+
+		// Parse the JSON into an array of User structs
+		var users []internal.User
+		if err := json.Unmarshal(data, &users); err != nil {
+			return fmt.Errorf("failed to parse JSON from file %s: %w", filePath, err)
+		}
+
+		bar := pb.StartNew(len(users))
+		defer bar.Finish()
+
+		// Import each user
+		successCount := 0
+		errorCount := 0
+		for i, user := range users {
+			if err := internal.CreateUser(ctx, fs, &user); err != nil {
+				fmt.Printf("Failed to import user %d (ID: %s, Name: %s): %v\n", i+1, user.ID, user.Name, err)
+				errorCount++
+			} else {
+				successCount++
+			}
+			bar.Increment()
+		}
+
+		fmt.Printf("\nImport completed: %d successful, %d failed\n", successCount, errorCount)
+
+		if errorCount > 0 {
+			return fmt.Errorf("import completed with %d errors", errorCount)
+		}
 
 		return nil
 	},

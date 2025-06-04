@@ -134,7 +134,15 @@ var genSearchQueriesCmd = &cobra.Command{
 			log.Fatalf("Error getting appointment transcript: %v", err)
 		}
 
-		q, err := internal.GenerateSteeringQuery(ctx, transcript)
+		resume, found, err := internal.GetLatestResume(ctx, fs, userID)
+		if err != nil {
+			log.Fatalf("Error getting resume: %v", err)
+		}
+		if !found {
+			log.Fatalf("Resume not found for user: %s", userID)
+		}
+
+		q, err := internal.GenerateSteeringQuery(ctx, *resume, *transcript)
 		if err != nil {
 			log.Fatalf("Error generating search queries: %v", err)
 		}
