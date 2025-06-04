@@ -65,10 +65,10 @@ type HybridSearchParams struct {
 // DefaultHybridSearchParams returns a set of default parameters for hybrid search
 func DefaultHybridSearchParams() *HybridSearchParams {
 	return &HybridSearchParams{
-		DenseWeight:     0.5,
-		SparseWeight:    0.5,
-		ScoreFusion:     "reciprocal_rank_fusion",
-		RecencyWeight:   0.2,
+		DenseWeight:     0.9,
+		SparseWeight:    0.3,
+		ScoreFusion:     "linear", // Default to linear fusion
+		RecencyWeight:   0.1,
 		RecencyHalfLife: 30.0,
 		ScoreThreshold:  0,
 	}
@@ -223,7 +223,7 @@ func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, crite
 	if err != nil {
 		return nil, fmt.Errorf("failed to search dense index: %w", err)
 	}
-	logger.Debug("dense search results", "count", len(denseResults.Matches))
+	logger.Debug("dense search results", "count", len(denseResults.Matches), "top-score", denseResults.Matches[0].Score)
 
 	sparseIndex := os.Getenv("PINECONE_SPARSE_INDEX_HOST")
 	if sparseIndex == "" {
@@ -236,7 +236,7 @@ func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, crite
 	if err != nil {
 		return nil, fmt.Errorf("failed to search sparse index: %w", err)
 	}
-	logger.Debug("sparse search results", "count", len(sparseResults.Result.Hits))
+	logger.Debug("sparse search results", "count", len(sparseResults.Result.Hits), "top-score", sparseResults.Result.Hits[0].Score)
 
 	searchResult := &SearchResult{
 		DenseResults:  denseResults,
