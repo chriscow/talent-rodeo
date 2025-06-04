@@ -12,8 +12,20 @@ import (
 )
 
 const (
-	DefaultForceToward = 0.9 // Default strength to steer toward the target concept
-	DefaultForceAway   = 0.8 // Default strength to steer away from the avoid concept
+	// The ForceAway value is intentionally kept relatively low (e.g. 0.3–0.5).
+	//
+	// In semantic vector space, subtracting too much in the direction of an undesired concept
+	// can overly distort the query embedding, removing useful shared context or introducing noise.
+	//
+	// This is especially true when the MoveAway concept is only tangentially related
+	// — subtracting a strong vector could inadvertently suppress desirable meaning.
+	//
+	// Empirically (e.g. in relevance feedback literature), negative signals are best applied
+	// with lower weights than positive ones. A lighter touch avoids degrading the retrieval quality.
+	//
+	// So: steer clearly but gently away from unwanted concepts, and let MoveToward carry most of the intent.
+
+	DefaultForceAway = 0.3 // Default strength to steer away from the avoid concept. Should be low.
 )
 
 // SteeringQuery encapsulates all parameters needed for semantic steering of
@@ -42,12 +54,21 @@ type SteeringQuery struct {
 	// MoveAway is a concept as a complete sentence to move results away from
 	MoveAway string `description:"The concept to steer the search results away from, expressed as a first person complete sentence and is required."`
 
-	// ForceToward determines how strongly to move toward the target concept (0.0-1.0)
-	// Only used if MoveToward is set
-	ForceToward float64 `description:"A value between 0.0 and 1.0 indicating how strongly to steer the search results toward the MoveToward concept."`
-
 	// ForceAway determines how strongly to move away from the avoid concept (0.0-1.0)
-	// Only used if MoveAway is set
+	//
+	// The ForceAway value is intentionally kept relatively low (e.g. 0.3–0.5).
+	//
+	// In semantic vector space, subtracting too much in the direction of an undesired concept
+	// can overly distort the query embedding, removing useful shared context or introducing noise.
+	//
+	// This is especially true when the MoveAway concept is only tangentially related
+	// — subtracting a strong vector could inadvertently suppress desirable meaning.
+	//
+	// Empirically (e.g. in relevance feedback literature), negative signals are best applied
+	// with lower weights than positive ones. A lighter touch avoids degrading the retrieval quality.
+	//
+	// So: steer clearly but gently away from unwanted concepts, and let MoveToward carry most of the intent.
+
 	ForceAway float64 `description:"A value between 0.0 and 1.0 indicating how strongly to steer the search results away from the MoveAway concept."`
 
 	// RerankQuery is an all encompassing query expressed as one or more complete sentences
@@ -81,11 +102,6 @@ func (sq SteeringQuery) Validate() error {
 		return fmt.Errorf("rerank query cannot be empty")
 	}
 
-	// Validate ForceToward only if MoveToward is set
-	if sq.ForceToward == 0 || sq.ForceToward > 1 {
-		return fmt.Errorf("ForceToward must be between 0.0 and 1.0, got %f", sq.ForceToward)
-	}
-
 	// Validate ForceAway only if MoveAway is set
 	if sq.ForceAway == 0 || sq.ForceAway > 1 {
 		return fmt.Errorf("ForceAway must be between 0.0 and 1.0, got %f", sq.ForceAway)
@@ -116,22 +132,6 @@ func NewSteeringQuery(query string, model PineconeEmbedModel, opts ...SteeringOp
 	}
 
 	return sq, nil
-}
-
-// WithMoveToward sets the concept to move toward
-func WithMoveToward(concept string, force float64) SteeringOption {
-	return func(sq *SteeringQuery) {
-		sq.MoveToward = concept
-		sq.ForceToward = force
-	}
-}
-
-// WithMoveAway sets the concept to move away from
-func WithMoveAway(concept string, force float64) SteeringOption {
-	return func(sq *SteeringQuery) {
-		sq.MoveAway = concept
-		sq.ForceAway = force
-	}
 }
 
 // GetDenseVector generates a semantically steered dense vector from the SteeringQuery.
@@ -190,11 +190,6 @@ func (q *SteeringQuery) GetDenseVector(ctx context.Context, p *Pinecone, model P
 	// Subtract the component in the direction of MoveAway
 	for i := range steeredVec {
 		steeredVec[i] -= float32(q.ForceAway) * float32(dot) * awayUnit[i]
-	}
-
-	// Optionally reapply interpolation toward the MoveToward vector (usually redundant, but tunable)
-	for i := range steeredVec {
-		steeredVec[i] += float32(q.ForceToward) * (towardVec[i] - steeredVec[i])
 	}
 
 	// Normalize the final vector to unit length for cosine similarity
@@ -266,7 +261,6 @@ func GenerateSteeringQuery(ctx context.Context, resume Resume, transcript Transc
 		return nil, fmt.Errorf("steering query validation failed: %w", err)
 	}
 
-	sq.ForceToward = DefaultForceToward
 	sq.ForceAway = DefaultForceAway
 
 	return sq, nil
@@ -339,8 +333,8 @@ Extract the data below into a JSON structure:
 		}
 	}
 
-	query.ForceToward = 0.8
-	query.ForceAway = 0.5
+	// set this to the default value so Validate does not complain
+	query.ForceAway = DefaultForceAway
 
 	if err := query.Validate(); err != nil {
 		return nil, err
