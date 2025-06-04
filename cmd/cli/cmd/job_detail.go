@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"talent-rodeo/internal"
 	"time"
 
@@ -55,17 +56,6 @@ var jobsCmd = &cobra.Command{
 	Use:   "jobs",
 	Short: "Manage jobs",
 	Long:  `Jobs command allows you to manage jobs in the system`,
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		// Only check for user ID if the command requires it and is not the list command
-		// or if it's the list command but a user ID was provided
-		if cmd.Name() != "list" && (cmd.Name() == "update" || cmd.Name() == "delete") {
-			userID, _ := cmd.Flags().GetString("user")
-			if userID == "" {
-				return fmt.Errorf("user ID is required (use --user or -u)")
-			}
-		}
-		return nil
-	},
 }
 
 var listJobsCmd = &cobra.Command{
@@ -463,7 +453,11 @@ var upsertJobDetailsCmd = &cobra.Command{
 			return fmt.Errorf("failed to list search criteria: %w", err)
 		}
 
+		denseIndex := os.Getenv("PINECONE_DENSE_INDEX_HOST")
+		println("Dense index host:", denseIndex)
+
 		bar := pb.StartNew(len(criterium))
+		defer bar.Finish()
 
 		for _, crit := range criterium {
 			ids, err := internal.GetJobIDsForCriteriaCreatedAfter(ctx, fs, crit.ID, time.Time{})

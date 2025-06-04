@@ -182,19 +182,21 @@ The argument is a JSON file for an appointment.`,
 		}
 
 		// the argument is a JSON string for an appointment
-		var appt internal.Appointment
+		appts := []internal.Appointment{}
 		data, err := os.ReadFile(args[0])
 		if err != nil {
 			return fmt.Errorf("failed to read appointment file: %w", err)
 		}
-		if err := json.Unmarshal(data, &appt); err != nil {
+		if err := json.Unmarshal(data, &appts); err != nil {
 			return fmt.Errorf("failed to unmarshal appointment: %w", err)
 		}
-		appt.UserID = userID
-		if err := internal.CreateAppointment(ctx, fs, userID, &appt); err != nil {
-			return fmt.Errorf("failed to create appointment: %w", err)
+		for _, appt := range appts {
+			appt.UserID = userID
+			if err := internal.CreateAppointment(ctx, fs, userID, &appt); err != nil {
+				return fmt.Errorf("failed to create appointment: %w", err)
+			}
+			fmt.Printf("Created appointment %s for user %s\n", appt.ID, userID)
 		}
-		fmt.Printf("Created appointment %s for user %s\n", appt.ID, userID)
 		return nil
 	},
 }
