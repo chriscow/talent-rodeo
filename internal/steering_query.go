@@ -9,7 +9,6 @@ import (
 
 	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/tools"
-	"github.com/sashabaranov/go-openai"
 )
 
 const (
@@ -17,7 +16,14 @@ const (
 	DefaultForceAway   = 0.8 // Default strength to steer away from the avoid concept
 )
 
-// SteeringQuery encapsulates all parameters needed for semantic steering of queries
+// SteeringQuery encapsulates all parameters needed for semantic steering of
+// queries. Why not just include “not X” in the text? Because embedding models
+// don’t reliably capture negation. As you found, simply phrasing “other than
+// cats” or “except electrical” in the query still yields an embedding that is
+// close to those concepts (the model sees the word “cats” and increases
+// similarity to cat-related content). Therefore, we need to explicitly
+// manipulate the vector to remove that semantic component, rather than relying
+// on the embedding model to understand a negation in text.
 type SteeringQuery struct {
 	// Query is the main concept or search term (required)
 	Query string `description:"The canonical form of the one main query term, job title or concept to base the search on."`
@@ -128,66 +134,71 @@ func WithMoveAway(concept string, force float64) SteeringOption {
 	}
 }
 
-// Updated GetSteeringVector method to use SteeringQuery with optional fields
+// GetDenseVector generates a semantically steered dense vector from the SteeringQuery.
+// It starts from the MoveToward embedding and adjusts it to steer away from MoveAway
+// using vector projection, suitable for cosine similarity search.
+//
+// Subtract the projection of MoveToward onto MoveAway:
+//
+// This removes any semantic alignment between the MoveToward vector and the MoveAway concept.
+// Mathematically, this implements the projection formula:
+//
+//	v' = v - (v · û) * û
+//
+// where:
+//   - v  is the MoveToward vector,
+//   - û  is the unit vector in the direction of MoveAway,
+//   - v' is the adjusted vector with the unwanted dimension removed.
+//
+// This ensures we only steer away from the component of MoveToward that aligns with MoveAway,
+// rather than blindly subtracting the entire MoveAway vector, which could introduce unrelated noise.
 func (q *SteeringQuery) GetDenseVector(ctx context.Context, p *Pinecone, model PineconeEmbedModel) ([]float32, error) {
-	// Validate the query
+	// Ensure query parameters are valid
 	if err := q.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid steering query: %w", err)
 	}
 
-	// Build the list of texts to embed
-	texts := []string{q.Query, q.MoveToward, q.MoveAway}
+	// Prepare input texts for embedding
+	texts := []string{q.MoveToward, q.MoveAway}
 
-	// Create embeddings for all concepts in one call
+	// Request embeddings for MoveToward and MoveAway
 	embedResp, err := p.CreateEmbeddings(ctx, texts, model, PineconeInputTypeQuery)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create embeddings: %w", err)
 	}
-
-	if len(embedResp.Data) == 0 {
-		return nil, fmt.Errorf("no embeddings returned")
-	}
-
-	// Check if the number of embeddings matches the number of texts
 	if len(embedResp.Data) != len(texts) {
-		return nil, fmt.Errorf("number of embeddings (%d) does not match number of texts (%d)", len(embedResp.Data), len(texts))
+		return nil, fmt.Errorf("expected %d embeddings, got %d", len(texts), len(embedResp.Data))
 	}
 
-	embeddings := embedResp.Data
+	// Extract vectors from response
+	towardVec := *embedResp.Data[0].Values
+	awayVec := *embedResp.Data[1].Values
 
-	if embeddings[0].Values == nil {
-		return nil, fmt.Errorf("embedding for query is nil")
+	// Initialize the steering vector from MoveToward
+	steeredVec := make([]float32, len(towardVec))
+	copy(steeredVec, towardVec)
+
+	// Normalize the away vector to get a unit vector
+	awayUnit := normalizeVector(awayVec)
+
+	// Compute dot product between toward vector and away unit vector
+	var dot float64
+	for i := range towardVec {
+		dot += float64(towardVec[i]) * float64(awayUnit[i])
 	}
 
-	// Extract the query vector
-	queryVector := *embeddings[0].Values
-	modifiedVector := make([]float32, len(queryVector))
-	copy(modifiedVector, queryVector)
-
-	// Apply steering toward concept if specified
-	if embeddings[1].Values == nil {
-		return nil, fmt.Errorf("embedding for MoveToward is nil")
+	// Subtract the component in the direction of MoveAway
+	for i := range steeredVec {
+		steeredVec[i] -= float32(q.ForceAway) * float32(dot) * awayUnit[i]
 	}
 
-	towardVector := *embeddings[1].Values
-	for i := range modifiedVector {
-		// Add a portion of the difference between toward vector and query vector
-		modifiedVector[i] += float32(q.ForceToward) * (towardVector[i] - queryVector[i])
+	// Optionally reapply interpolation toward the MoveToward vector (usually redundant, but tunable)
+	for i := range steeredVec {
+		steeredVec[i] += float32(q.ForceToward) * (towardVec[i] - steeredVec[i])
 	}
 
-	// Apply steering away from concept if specified
-	if embeddings[2].Values == nil {
-		return nil, fmt.Errorf("embedding for MoveAway is nil")
-	}
-	awayVector := *embeddings[2].Values
-	for i := range modifiedVector {
-		// Subtract a portion of the difference between away vector and query vector
-		modifiedVector[i] -= float32(q.ForceAway) * (awayVector[i] - queryVector[i])
-	}
-
-	modifiedVector = normalizeVector(modifiedVector)
-
-	return modifiedVector, nil
+	// Normalize the final vector to unit length for cosine similarity
+	return normalizeVector(steeredVec), nil
 }
 
 // NOTE: I guess you cannot currently generate sparse vectors with Pinecone. You can only query them.
@@ -203,24 +214,32 @@ func (q *SteeringQuery) GetSparseVector(ctx context.Context, p *Pinecone, model 
 	return nil, fmt.Errorf("sparse vector generation is not supported")
 }
 
-func GenerateSteeringQuery(ctx context.Context, transcript *Transcript, opts ...tools.Option) (*SteeringQuery, error) {
-	const promptFile = "prompts/transcript-010-steering-query.txt"
-	const exampleFile = "prompts/transcript-010-steering-query-examples.txt"
-	prompt, err := assets.EmbeddedFiles.ReadFile(promptFile)
+func GenerateSteeringQuery(ctx context.Context, resume Resume, transcript Transcript, opts ...tools.Option) (*SteeringQuery, error) {
+	const promptFile = "prompts/transcript-steering-query.v002.txt"
+	const exampleFile = "prompts/transcript-steering-query.examples.v002.txt"
+	sysPrompt, err := assets.EmbeddedFiles.ReadFile(promptFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read steering query prompt: %w", err)
 	}
-	examples, err := assets.EmbeddedFiles.ReadFile(exampleFile)
+	exampleData, err := assets.EmbeddedFiles.ReadFile(exampleFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read steering query examples: %w", err)
 	}
 
+	examples := minds.Messages{}
+	if err := json.Unmarshal([]byte(exampleData), &examples); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal examples into messages: %w", err)
+	}
+
 	messages := minds.Messages{
 		{
-			Role:    openai.ChatMessageRoleSystem,
-			Content: string(prompt) + "\n\n" + string(examples),
+			Role:    minds.RoleSystem,
+			Content: string(sysPrompt),
 		},
 	}
+
+	messages = append(messages, examples...)
+
 	options := []tools.Option{
 		tools.WithModel(tools.DeepSeekChat),
 		tools.WithMaxTokens(8192),
@@ -231,7 +250,9 @@ func GenerateSteeringQuery(ctx context.Context, transcript *Transcript, opts ...
 		options = append(options, opts...)
 	}
 
-	origResp, err := tools.Ask(ctx, `<transcript>\n\n`+transcript.String()+`</transcript>`, options...)
+	prompt := fmt.Sprintf(`<transcript>%s</transcript><resume>%s</resume>`, transcript.String(), resume.RawText)
+
+	origResp, err := tools.Ask(ctx, prompt, options...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to ask LLM for steering query: %w", err)
 	}
