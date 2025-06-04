@@ -36,7 +36,7 @@ func TestSteeringQueryFromTranscript(t *testing.T) {
 	}
 
 	// Create a steering query from the transcript
-	sq, err := GenerateSteeringQuery(context.Background(), transcript, tools.WithModel(tools.GPT41Nano))
+	sq, err := GenerateSteeringQuery(context.Background(), Resume{}, *transcript, tools.WithModel(tools.GPT41Nano))
 	if err != nil {
 		t.Fatalf("Failed to create steering query: %v", err)
 	}

@@ -650,7 +650,15 @@ func getOrCreateSearchCriteria(ctx context.Context, fs *internal.FirestoreClient
 
 // generateSteeringQuery generates a steering query based on the transcript
 func generateSteeringQuery(ctx context.Context, fs *internal.FirestoreClient, user *internal.User, transcript *internal.Transcript) error {
-	query, err := internal.GenerateSteeringQuery(ctx, transcript)
+	resume, found, err := internal.GetLatestResume(ctx, fs, user.ID)
+	if err != nil {
+		return fmt.Errorf("generateSteeringQuery: failed to get user resume: %w", err)
+	}
+	if !found {
+		return fmt.Errorf("generateSteeringQuery: no resume found for user %s", user.ID)
+	}
+
+	query, err := internal.GenerateSteeringQuery(ctx, *resume, *transcript)
 	if err != nil {
 		return fmt.Errorf("generateSteeringQuery: failed to ask LLM for steering query: %w", err)
 	}
