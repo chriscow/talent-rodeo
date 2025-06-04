@@ -4,17 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"strings"
 	"talent-rodeo/internal"
 	"time"
 
-	"github.com/pinecone-io/go-pinecone/v3/pinecone"
+	"github.com/cheggaaa/pb"
 	"github.com/spf13/cobra"
-)
-
-var (
-	jobsUpsertFlag bool
 )
 
 func init() {
@@ -30,10 +24,10 @@ func init() {
 	jobsCmd.AddCommand(deleteJobListingsCmd)
 	jobsCmd.AddCommand(deleteJobDetailsCmd)
 	jobsCmd.AddCommand(deleteAllUserJobsCmd)
+	jobsCmd.AddCommand(upsertJobDetailsCmd)
 
 	// Add flags
 	jobsCmd.PersistentFlags().StringP("user", "u", "", "User ID (optional for list operation)")
-	listJobsCmd.Flags().BoolVar(&jobsUpsertFlag, "upsert", false, "Upsert job details to Pinecone")
 
 	updateJobCmd.Flags().StringP("id", "i", "", "Job ID to update")
 	updateJobCmd.Flags().StringP("status", "s", "", "Update job status (viewed, saved, applied, archived)")
@@ -88,15 +82,6 @@ var listJobsCmd = &cobra.Command{
 		}
 		defer fs.Close()
 
-		// Create Pinecone client if upsert host is specified
-		var pineconeClient *internal.Pinecone
-		if jobsUpsertFlag {
-			pineconeClient, err = internal.NewPineconeClient()
-			if err != nil {
-				return fmt.Errorf("failed to create Pinecone client: %w", err)
-			}
-		}
-
 		if userID == "" {
 			// No user ID provided, list all job details
 			details, err := internal.ListJobDetails(ctx, fs, 100, 0)
@@ -123,68 +108,6 @@ var listJobsCmd = &cobra.Command{
 
 			fmt.Printf("Retrieved %d job details\n", len(details))
 			fmt.Println(string(output))
-
-			// Handle upsert if host is specified
-			if jobsUpsertFlag && pineconeClient != nil {
-				denseIndex := os.Getenv("PINECONE_DENSE_INDEX_HOST")
-				if denseIndex == "" {
-					return fmt.Errorf("PINECONE_DENSE_INDEX_HOST environment variable is required when upsert is true")
-				}
-				sparseIndex := os.Getenv("PINECONE_SPARSE_INDEX_HOST")
-				if sparseIndex == "" {
-					return fmt.Errorf("PINECONE_SPARSE_INDEX_HOST environment variable is required when upsert is true")
-				}
-
-				// Convert details to IntegratedRecords for Pinecone
-				records := make([]*pinecone.IntegratedRecord, len(details))
-				for i, detail := range details {
-					id, ok := detail["ID"].(string)
-					if !ok {
-						continue // Skip if ID is not a string
-					}
-
-					var description string
-					if desc, ok := detail["Description"].(string); ok {
-						description = desc
-					}
-
-					var postedDate time.Time
-					if pd, ok := detail["PostedDate"].(time.Time); ok {
-						postedDate = pd
-					}
-
-					records[i] = &pinecone.IntegratedRecord{
-						"_id":        id,
-						"text":       description, // This is what gets embedded
-						"postedDate": postedDate,
-					}
-				}
-
-				// Filter out nil entries (where ID was not a string)
-				filteredRecords := make([]*pinecone.IntegratedRecord, 0, len(records))
-				for _, r := range records {
-					if r != nil {
-						filteredRecords = append(filteredRecords, r)
-					}
-				}
-
-				if len(filteredRecords) > 0 {
-					namespace := "job-details"
-					denseIndex = strings.TrimPrefix(denseIndex, "https://")
-					count, err := pineconeClient.UpsertRecords(ctx, denseIndex, namespace, filteredRecords, false)
-					if err != nil {
-						return fmt.Errorf("failed to upsert records to Pinecone: %w", err)
-					}
-					fmt.Printf("Successfully upserted %d records to Pinecone dense index %s\n", count, denseIndex)
-
-					sparseIndex = strings.TrimPrefix(sparseIndex, "https://")
-					count, err = pineconeClient.UpsertRecords(ctx, sparseIndex, namespace, filteredRecords, true)
-					if err != nil {
-						return fmt.Errorf("failed to upsert records to Pinecone: %w", err)
-					}
-					fmt.Printf("Successfully upserted %d records to Pinecone sparse index %s\n", count, sparseIndex)
-				}
-			}
 
 			return nil
 		}
@@ -518,6 +441,51 @@ var deleteAllUserJobsCmd = &cobra.Command{
 		}
 
 		fmt.Printf("Successfully deleted %d jobs with prefix: %s across all users\n", totalDeleted, prefix)
+		return nil
+	},
+}
+
+var upsertJobDetailsCmd = &cobra.Command{
+	Use:   "upsert",
+	Short: "Upsert job details",
+	Long:  `Upsert job details to Pinecone`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := context.Background()
+
+		fs, err := internal.NewFirestoreClient(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to create Firestore client: %w", err)
+		}
+		defer fs.Close()
+
+		criterium, err := internal.ListSearchCriteria(ctx, fs)
+		if err != nil {
+			return fmt.Errorf("failed to list search criteria: %w", err)
+		}
+
+		bar := pb.StartNew(len(criterium))
+
+		for _, crit := range criterium {
+			ids, err := internal.GetJobIDsForCriteriaCreatedAfter(ctx, fs, crit.ID, time.Time{})
+			if err != nil {
+				return fmt.Errorf("failed to get job IDs for criteria %s: %w", crit.ID, err)
+			}
+			if len(ids) == 0 {
+				continue
+			}
+
+			jobs, err := internal.GetJobDetailsByIDs(ctx, fs, ids)
+			if err != nil {
+				return fmt.Errorf("failed to get job details for criteria %s: %w", crit.ID, err)
+			}
+			if len(jobs) == 0 {
+				continue
+			}
+
+			internal.UpsertJobDetailEmbeddings(ctx, crit, jobs)
+			bar.Add(1)
+		}
+
 		return nil
 	},
 }

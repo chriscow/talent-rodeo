@@ -265,7 +265,7 @@ func UnlinkJobDetailFromCriteriaTx(ctx context.Context, fs *FirestoreClient, tx 
 }
 
 // ListJobDetails retrieves all job details with optional limit and offset
-func ListJobDetails(ctx context.Context, fs *FirestoreClient, limit int, offset int) ([]map[string]any, error) {
+func ListJobDetails(ctx context.Context, fs *FirestoreClient, limit int, offset int) ([]JobDetail, error) {
 	query := fs.Collection("job_details").OrderBy("CreatedAt", firestore.Desc)
 	if limit > 0 {
 		query = query.Limit(limit)
@@ -275,7 +275,7 @@ func ListJobDetails(ctx context.Context, fs *FirestoreClient, limit int, offset 
 	}
 
 	iter := query.Documents(ctx)
-	var details []map[string]any
+	var details []JobDetail
 
 	for {
 		doc, err := iter.Next()
@@ -286,7 +286,12 @@ func ListJobDetails(ctx context.Context, fs *FirestoreClient, limit int, offset 
 			return nil, fmt.Errorf("failed to iterate job details: %w", err)
 		}
 
-		details = append(details, doc.Data())
+		var jobDetail JobDetail
+		if err := doc.DataTo(&jobDetail); err != nil {
+			return nil, fmt.Errorf("failed to parse job detail %s: %w", doc.Ref.ID, err)
+		}
+
+		details = append(details, jobDetail)
 	}
 
 	return details, nil
