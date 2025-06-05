@@ -347,17 +347,11 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 	if !userChanged {
 		// Same user with form values - use form values to override
 		app.logger.Debug("adminUserDashboard: using form steering query values - same user with edits")
-		steeringQuery.Query = steeringQueryText
+		// Split steering query text into array of strings
+		steeringQuery.Queries = strings.Split(steeringQueryText, ",")
 		steeringQuery.RerankQuery = rerankQueryText
 		steeringQuery.MoveToward = moveTowardText
 		steeringQuery.MoveAway = moveAwayText
-		// Parse force values
-		forceToward := steeringQuery.ForceToward
-		if v := r.PostForm.Get("force_toward"); v != "" {
-			if f, err := strconv.ParseFloat(v, 64); err == nil {
-				forceToward = f
-			}
-		}
 		forceAway := steeringQuery.ForceAway
 		if v := r.PostForm.Get("force_away"); v != "" {
 			if f, err := strconv.ParseFloat(v, 64); err == nil {
@@ -365,7 +359,6 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 			}
 		}
 		// Update steering query with form values
-		steeringQuery.ForceToward = forceToward
 		steeringQuery.ForceAway = forceAway
 
 		if err := steeringQuery.Validate(); err != nil {

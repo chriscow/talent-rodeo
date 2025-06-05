@@ -477,7 +477,7 @@ func GetSemanticJobsForUser(ctx context.Context, fs *FirestoreClient, userID str
 	}
 
 	// Include steering query in cache key to handle custom queries
-	steeringHash := fmt.Sprintf("%s|%s|%.2f|%.2f", steeringQuery.Query, steeringQuery.RerankQuery, steeringQuery.ForceToward, steeringQuery.ForceAway)
+	steeringHash := fmt.Sprintf("%s|%s|%.2f", steeringQuery.Queries, steeringQuery.RerankQuery, steeringQuery.ForceAway)
 	if steeringQuery.MoveToward != "" {
 		steeringHash += "|" + steeringQuery.MoveToward
 	}

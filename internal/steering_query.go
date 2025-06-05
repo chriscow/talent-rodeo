@@ -37,8 +37,8 @@ const (
 // manipulate the vector to remove that semantic component, rather than relying
 // on the embedding model to understand a negation in text.
 type SteeringQuery struct {
-	// Query is the main concept or search term (required)
-	Query string `description:"The canonical form of the one main query term, job title or concept to base the search on."`
+	// Queries is the main concept or search term (required)
+	Queries []string `description:"The canonical form of the one or more main query term(s), job title(s) to base the searches on."`
 
 	// This parameter will help you filter out the jobs based on the experience required to apply for the job.
 	// Possible Values - internship, entry_level, associate, mid_senior_level & director.
@@ -78,7 +78,7 @@ type SteeringQuery struct {
 
 // Validate checks if the steering query parameters are valid
 func (sq SteeringQuery) Validate() error {
-	if sq.Query == "" {
+	if len(sq.Queries) == 0 {
 		return fmt.Errorf("query cannot be empty")
 	}
 
@@ -114,17 +114,24 @@ func (sq SteeringQuery) Validate() error {
 type SteeringOption func(*SteeringQuery)
 
 // NewSteeringQuery creates a new steering query with the given query and options
-func NewSteeringQuery(query string, model PineconeEmbedModel, opts ...SteeringOption) (*SteeringQuery, error) {
+func NewSteeringQuery(queries []string, model PineconeEmbedModel, opts ...SteeringOption) (*SteeringQuery, error) {
 	if model == "" {
 		return nil, fmt.Errorf("model cannot be empty")
 	}
 
-	if query == "" {
+	if len(queries) == 0 {
 		return nil, fmt.Errorf("query cannot be empty")
 	}
 
+	// Ensure all queries are non-empty
+	for _, query := range queries {
+		if strings.TrimSpace(query) == "" {
+			return nil, fmt.Errorf("all queries must be non-empty")
+		}
+	}
+
 	sq := &SteeringQuery{
-		Query: query,
+		Queries: queries,
 	}
 
 	for _, opt := range opts {

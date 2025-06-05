@@ -63,12 +63,11 @@ func TestGetSteeringVector(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			sq := &SteeringQuery{
-				Query:           tt.query,
+				Queries:         []string{tt.query},
 				ExperienceLevel: tt.experienceLevel,
 				WorkType:        tt.workType,
 				MoveToward:      tt.moveToward,
 				MoveAway:        tt.moveAway,
-				ForceToward:     tt.forceToward,
 				ForceAway:       tt.forceAway,
 				RerankQuery:     tt.rerankQuery,
 			}

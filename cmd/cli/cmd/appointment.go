@@ -11,6 +11,7 @@ import (
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/search/providers/scrapingdog"
 	"talent-rodeo/internal/transcript"
+	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/google/uuid"
@@ -37,7 +38,6 @@ func init() {
 
 	reprocessCmd.Flags().StringVarP(&userID, "user", "u", "", "User ID to reprocess the appointment for")
 	reprocessCmd.Flags().StringVarP(&appointmentID, "appointment", "a", "", "Appointment ID to reprocess")
-	reprocessCmd.MarkFlagRequired("appointment")
 	reprocessCmd.MarkFlagRequired("user")
 	reprocessCmd.Flags().BoolVarP(&sendRecap, "send-recap", "r", false, "Send a recap email after reprocessing the appointment")
 
@@ -211,9 +211,6 @@ var reprocessCmd = &cobra.Command{
 		if userID == "" {
 			return fmt.Errorf("user ID is required")
 		}
-		if appointmentID == "" {
-			return fmt.Errorf("appointment ID is required")
-		}
 
 		var cfg *transcript.SMTPConfig
 		if sendRecap {
@@ -262,9 +259,24 @@ var reprocessCmd = &cobra.Command{
 		// Initialize Sentry hub
 		hub := sentry.CurrentHub()
 
-		appointment, err := internal.GetAppointment(ctx, fs, userID, appointmentID)
-		if err != nil {
-			return fmt.Errorf("failed to get appointment: %w", err)
+		var appointment *internal.Appointment
+		if appointmentID != "" {
+			appointment, err = internal.GetAppointment(ctx, fs, userID, appointmentID)
+			if err != nil {
+				return fmt.Errorf("failed to get appointment: %w", err)
+			}
+		} else {
+			var found bool
+			appointment, found, err = internal.GetLatestCompletedAppointment(ctx, fs, userID)
+			if err != nil {
+				return fmt.Errorf("failed to get latest completed appointment: %w", err)
+			}
+
+			if !found {
+				return fmt.Errorf("no completed appointment found for user %s", userID)
+			}
+
+			appointmentID = appointment.ID
 		}
 
 		user, found, err := internal.GetUser(ctx, fs, userID)
@@ -280,6 +292,7 @@ var reprocessCmd = &cobra.Command{
 		queue := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), logger, scrapingdog.WithJobEventHandler(dispatch))
 
 		transcript.ProcessCompletedCall(hub, fs, nil, queue, logger, dispatch, user, appointment, cfg)
+		time.Sleep(5 * time.Second) // Wait for processing to start
 
 		currentAppt, err := internal.GetAppointment(ctx, fs, userID, appointmentID)
 		if err != nil {
