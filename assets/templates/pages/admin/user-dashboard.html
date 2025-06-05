@@ -56,7 +56,7 @@
                 <div>
                     <label for="steering_query">Main Query</label>
                     <input type="text" name="steering_query" id="steering_query" 
-                           value="{{with .SteeringQuery}}{{.Query}}{{end}}" 
+                           value="{{with .SteeringQuery}}{{join .Queries ", "}}{{end}}" 
                            placeholder="e.g., Go Developer">
                 </div>
                 <div>

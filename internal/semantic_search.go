@@ -84,18 +84,15 @@ type ScoredJobDetail struct {
 func (s *ScoredJobDetail) ToPineconeDocument() pinecone.Document {
 	// pinecone.Document is a map[string]any
 	return pinecone.Document{
-		"_id":           s.JobDetail.ID,
-		"description":   s.JobDetail.Description,
-		"provider":      s.JobDetail.Provider,
-		"providerID":    s.JobDetail.ProviderJobID,
-		"title":         s.JobDetail.Title,
-		"company":       s.JobDetail.Company,
-		"location":      s.JobDetail.Location,
-		"url":           s.JobDetail.URL,
-		"postedDate":    s.JobDetail.PostedDate,
-		"denseScore":    s.DenseScore,
-		"sparseScore":   s.SparseScore,
-		"combinedScore": s.Score,
+		"_id":         s.JobDetail.ID,
+		"description": s.JobDetail.Description,
+		"provider":    s.JobDetail.Provider,
+		"providerID":  s.JobDetail.ProviderJobID,
+		"title":       s.JobDetail.Title,
+		"company":     s.JobDetail.Company,
+		"location":    s.JobDetail.Location,
+		"url":         s.JobDetail.URL,
+		"postedDate":  s.JobDetail.PostedDate,
 	}
 }
 
@@ -180,7 +177,7 @@ func (p *HybridSearchParams) Validate() *HybridSearchParams {
 //  5. Deduplicates and sorts results
 //
 // If params is nil, default parameters will be used.
-func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, criteria SearchCriteria, topK int, params *HybridSearchParams) ([]ScoredJobDetail, error) {
+func SemanticSearchJobs(ctx context.Context, steeringQuery SteeringQuery, filter map[string]any, topK int, params *HybridSearchParams) ([]*ScoredJobDetail, error) {
 	if params == nil {
 		params = DefaultHybridSearchParams()
 	} else {
@@ -190,19 +187,6 @@ func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, crite
 	client, err := NewPineconeClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Pinecone client: %w", err)
-	}
-
-	// Build filter map
-	filter := map[string]any{
-		"criteriaID": map[string]any{
-			"$eq": criteria.ID,
-		},
-		"workType": map[string]any{
-			"$eq": criteria.WorkType,
-		},
-		"experience": map[string]any{
-			"$eq": criteria.ExperienceLevel,
-		},
 	}
 
 	metaFilter, err := structpb.NewStruct(filter)
@@ -253,13 +237,19 @@ func SemanticSearchJobs(ctx context.Context, steeringQuery *SteeringQuery, crite
 
 // RerankResults applies reranking to a list of scored job details using the Pinecone reranker.
 // This is extracted to make testing easier.
-func RerankResults(ctx context.Context, client *Pinecone, scoredMatches []*ScoredJobDetail, rerankQuery string, topK int, model PineconeRerankModel) ([]ScoredJobDetail, error) {
+func RerankResults(ctx context.Context, scoredMatches []*ScoredJobDetail, rerankQuery string, topK int, model PineconeRerankModel) ([]ScoredJobDetail, error) {
 	rerankParams := map[string]any{
 		"truncate": "END",
 	}
 
+	client, err := NewPineconeClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Pinecone client: %w", err)
+	}
+
 	// Convert to Documents for reranking
 	documents := make([]pinecone.Document, 0, len(scoredMatches))
+	jobMap := make(map[string]JobDetail)
 	for _, match := range scoredMatches {
 		if match.JobDetail.Description == "" {
 			continue
@@ -269,13 +259,16 @@ func RerankResults(ctx context.Context, client *Pinecone, scoredMatches []*Score
 		doc := match.ToPineconeDocument()
 
 		documents = append(documents, doc)
+
+		// Store job details in a map for easy access
+		jobMap[match.JobDetail.ID] = match.JobDetail
 	}
 
 	rerankResponse, err := client.Inference.Rerank(ctx, &pinecone.RerankRequest{
 		Model:      string(model),
 		Query:      rerankQuery,
 		Documents:  documents,
-		RankFields: &[]string{"text"},
+		RankFields: &[]string{"description"},
 		TopN:       &topK,
 		Parameters: &rerankParams,
 	})
@@ -288,21 +281,11 @@ func RerankResults(ctx context.Context, client *Pinecone, scoredMatches []*Score
 	for _, result := range rerankResponse.Data {
 		doc := *result.Document // Document is a map[string]any
 
-		// Parse posted date if available
-		var postedDate time.Time
-		if dateStr, ok := doc["postedDate"].(string); ok {
-			postedDate, _ = time.Parse(time.RFC3339, dateStr)
-		}
-
-		// Create job detail from document
-		jobDetail := JobDetail{
-			ID:          doc["ID"].(string),
-			Title:       safeGetString(doc, "title"),
-			Company:     safeGetString(doc, "company"),
-			Location:    safeGetString(doc, "location"),
-			Description: safeGetString(doc, "text"),
-			URL:         safeGetString(doc, "url"),
-			PostedDate:  postedDate,
+		id := doc["_id"].(string)
+		jobDetail, exists := jobMap[id]
+		if !exists {
+			// If we don't have the job detail, skip this result
+			continue
 		}
 
 		results = append(results, ScoredJobDetail{
@@ -317,7 +300,7 @@ func RerankResults(ctx context.Context, client *Pinecone, scoredMatches []*Score
 // processSearchResults processes raw search results from Pinecone and applies fusion scoring,
 // normalization, recency boosting, deduplication, and sorting.
 // The client parameter is optional and only needed when reranking is specified.
-func processSearchResults(_ context.Context, logger *slog.Logger, searchResult *SearchResult, topK int, params *HybridSearchParams) ([]ScoredJobDetail, error) {
+func processSearchResults(_ context.Context, logger *slog.Logger, searchResult *SearchResult, topK int, params *HybridSearchParams) ([]*ScoredJobDetail, error) {
 	// Create maps to track scores from each source
 	denseScores := make(map[string]float32)
 	sparseScores := make(map[string]float32)
@@ -498,13 +481,13 @@ func processSearchResults(_ context.Context, logger *slog.Logger, searchResult *
 	logger.Debug("final matches", "count", len(scoredMatches), "topK", topK)
 
 	// Create final results from sorted matches
-	results := make([]ScoredJobDetail, 0, len(scoredMatches))
+	results := make([]*ScoredJobDetail, 0, len(scoredMatches))
 	for _, match := range scoredMatches {
 		if match.JobDetail.Description == "" {
 			continue
 		}
 
-		results = append(results, *match)
+		results = append(results, match)
 	}
 
 	return results, nil
