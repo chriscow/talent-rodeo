@@ -291,10 +291,12 @@ func (wm *WorkerManager) startWorker(ctx context.Context, workerID int) {
 }
 
 // processSearchPage processes a single page of job search results
+// Note: API concurrency is controlled at the APIClient level with semaphores,
+// allowing this method to make multiple API calls without exceeding provider limits
 func (wm *WorkerManager) processSearchPage(ctx context.Context, searchJob *internal.SearchTask, page int, logger *slog.Logger) ([]internal.JobListing, []error) {
 	var pageErrors []error
 
-	// Execute the search for this page
+	// Execute the search for this page (API call #1)
 	listings, err := wm.provider.SearchJobListings(ctx, searchJob.Criteria, page)
 
 	// Handle errors
@@ -326,7 +328,7 @@ func (wm *WorkerManager) processSearchPage(ctx context.Context, searchJob *inter
 			// Continue processing
 		}
 
-		// Get job details
+		// Get job details (API call #2 - rate limited by APIClient semaphore)
 		details, err := wm.provider.GetJobDetails(ctx, job.ProviderJobID)
 		if err != nil {
 			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{

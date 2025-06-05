@@ -99,10 +99,15 @@ func WithJobEventHandler(handler internal.JobEventHandler) ProviderOption {
 	}
 }
 
-// WithWorkerCount sets the number of worker goroutines
-func WithWorkerCount(count int) ProviderOption {
+// WithProviderAPIConcurrency sets the maximum number of concurrent API calls
+func WithProviderAPIConcurrency(maxConcurrent int) ProviderOption {
 	return func(p *Provider) {
-		// This will be used when starting workers
+		// Re-create the API client with the new concurrency setting
+		if p.apiClient != nil {
+			p.apiClient = NewAPIClient(p.apiKey,
+				WithAPILogger(p.logger),
+				WithAPIConcurrency(maxConcurrent))
+		}
 	}
 }
 
@@ -138,9 +143,10 @@ func NewProvider(apiKey string, logger *slog.Logger, opts ...ProviderOption) *Pr
 
 	// Create worker manager if not already set
 	if provider.workerManager == nil {
+		// Use a larger semaphore for search tasks since API concurrency is controlled at the client level
 		provider.workerManager = NewWorkerManager(
 			provider,
-			DefaultConcurrency,
+			DefaultConcurrency*4, // Allow more search tasks since API calls are rate-limited
 			DefaultQueueSize,
 			withWorkerLogger(logger),
 			withEventHandler(provider.eventHandler),
@@ -199,7 +205,7 @@ func (p *Provider) Start(ctx context.Context) error {
 	// Start the settings updater
 	go p.startSettingsUpdater(ctx)
 
-	return p.workerManager.Start(ctx, DefaultConcurrency)
+	return p.workerManager.Start(ctx, DefaultConcurrency*4) // More workers since API calls are rate-limited
 }
 
 // Close gracefully stops the background workers
