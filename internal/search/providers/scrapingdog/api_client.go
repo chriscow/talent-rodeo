@@ -32,10 +32,11 @@ type APIClientInterface interface {
 
 // APIClient implements the APIClientInterface
 type APIClient struct {
-	apiKey  string
-	baseURL string
-	client  *http.Client
-	logger  *slog.Logger
+	apiKey       string
+	baseURL      string
+	client       *http.Client
+	logger       *slog.Logger
+	apiSemaphore chan struct{} // Controls concurrent API calls
 }
 
 // APIOption is a function type for configuring the APIClient
@@ -62,13 +63,21 @@ func WithAPIHTTPClient(client *http.Client) APIOption {
 	}
 }
 
+// WithAPIConcurrency sets the maximum number of concurrent API calls
+func WithAPIConcurrency(maxConcurrent int) APIOption {
+	return func(c *APIClient) {
+		c.apiSemaphore = make(chan struct{}, maxConcurrent)
+	}
+}
+
 // NewAPIClient creates a new ScrapingDog API client
 func NewAPIClient(apiKey string, opts ...APIOption) *APIClient {
 	client := &APIClient{
-		apiKey:  apiKey,
-		baseURL: DefaultBaseURL,
-		client:  &http.Client{Timeout: 60 * time.Second},
-		logger:  slog.Default(),
+		apiKey:       apiKey,
+		baseURL:      DefaultBaseURL,
+		client:       &http.Client{Timeout: 60 * time.Second},
+		logger:       slog.Default(),
+		apiSemaphore: make(chan struct{}, DefaultConcurrency), // Default to 5
 	}
 
 	for _, opt := range opts {
@@ -85,6 +94,14 @@ func NewAPIClient(apiKey string, opts ...APIOption) *APIClient {
 
 // SearchJobListings searches for jobs with the given criteria
 func (c *APIClient) SearchJobListings(ctx context.Context, query, location string, jobType internal.WorkType, expLevel internal.ExperienceLevel, page int, sortBy SortBy) ([]LinkedInJobListing, error) {
+	// Acquire semaphore to limit concurrent API calls
+	select {
+	case c.apiSemaphore <- struct{}{}:
+		defer func() { <-c.apiSemaphore }()
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
 	c.logger.Info("searching for job listings",
 		"query", query,
 		"location", location,
@@ -140,6 +157,14 @@ func (c *APIClient) SearchJobListings(ctx context.Context, query, location strin
 
 // GetJobDetails retrieves detailed information for a specific job
 func (c *APIClient) GetJobDetails(ctx context.Context, jobID string) (LinkedInJobDetail, error) {
+	// Acquire semaphore to limit concurrent API calls
+	select {
+	case c.apiSemaphore <- struct{}{}:
+		defer func() { <-c.apiSemaphore }()
+	case <-ctx.Done():
+		return LinkedInJobDetail{}, ctx.Err()
+	}
+
 	c.logger.Debug("getting job details from scrapingdog", "jobID", jobID)
 
 	// Construct URL with jobid parameter

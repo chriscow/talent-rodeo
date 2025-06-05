@@ -8,7 +8,7 @@ const (
 	SearchProviderName = "scrapingdog"
 	JobProviderName    = "linkedin"
 	DefaultBaseURL     = "https://api.scrapingdog.com/linkedinjobs"
-	MaxRetries         = 3
+	MaxRetries         = 10
 	RetryDelay         = 5 * time.Second
 	DefaultConcurrency = 5
 	DefaultQueueSize   = 100
