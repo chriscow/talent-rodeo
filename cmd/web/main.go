@@ -140,6 +140,7 @@ type application struct {
 	pusher                *pusher.Client
 	jobDispatch           *internal.JobEventDispatch
 	feedbackProcessor     *feedback.Processor
+	searchResultProcessor *internal.SearchResultProcessor
 	sessionManager        *scs.SessionManager
 	searchProvider        *scrapingdog.Provider
 	searchScheduler       *search.Scheduler
@@ -587,7 +588,9 @@ func (app *application) startServices(ctx context.Context) error {
 	app.subscriptionProcessor = subscription.NewProcessor(app.fs, app.logger)
 
 	app.jobDispatch = internal.NewJobEventDispatch()
-	app.jobDispatch.Register("search-result-processor", internal.NewSearchResultProcessor(app.fs, app.logger))
+	app.searchResultProcessor = internal.NewSearchResultProcessor(app.fs, app.logger)
+	app.jobDispatch.Register("search-result-processor", app.searchResultProcessor)
+	app.searchResultProcessor.Start()
 
 	app.searchProvider = scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), app.logger, scrapingdog.WithJobEventHandler(app.jobDispatch))
 	app.searchScheduler = search.NewScheduler(app.fs, app.logger, app.searchProvider, app.mailer, app.config.notifications.email)

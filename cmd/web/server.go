@@ -171,6 +171,10 @@ func (app *application) serve(srv *http.Server) error {
 		}
 		app.logger.Info("app: search service stopped")
 
+		app.logger.Info("app: stopping search result processor")
+		app.searchResultProcessor.Stop()
+		app.logger.Info("app: search result processor stopped")
+
 		// Stop the task processor first
 		app.logger.Info("app: stopping task processor")
 		app.processor.Stop()

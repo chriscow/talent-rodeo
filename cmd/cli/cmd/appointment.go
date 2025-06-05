@@ -254,7 +254,12 @@ var reprocessCmd = &cobra.Command{
 					logger := slog.New(tint.NewHandler(tmpFile, &tint.Options{Level: slog.LevelDebug}))
 					hub := sentry.CurrentHub()
 					dispatch := internal.NewJobEventDispatch()
-					dispatch.Register(user.ID, internal.NewSearchResultProcessor(fs, logger))
+
+					srp := internal.NewSearchResultProcessor(fs, logger)
+					dispatch.Register(user.ID, srp)
+					srp.Start()
+					defer srp.Stop()
+
 					queue := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), logger, scrapingdog.WithJobEventHandler(dispatch))
 					transcript.ProcessCompletedCall(hub, fs, nil, queue, logger, dispatch, user, appt, nil)
 					time.Sleep(5 * time.Second)
