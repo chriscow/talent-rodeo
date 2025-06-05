@@ -42,7 +42,7 @@ func parseSalaryRange(ctx context.Context, basePay string) (*internal.SalaryRang
 		return nil, fmt.Errorf("invalid salary format: %s", basePay)
 	}
 
-	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/match-000.salary.txt")
+	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/salary.parse-range.v001.txt")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read salary prompt: %w", err)
 	}
@@ -54,7 +54,8 @@ func parseSalaryRange(ctx context.Context, basePay string) (*internal.SalaryRang
 		return nil, fmt.Errorf("failed to generate prompt: %w", err)
 	}
 
-	salary, err := tools.StructuredAsk[internal.SalaryRange](ctx, "salary_data", prompt)
+	salary, err := tools.StructuredAsk[internal.SalaryRange](ctx, "salary_data", prompt,
+		tools.WithModel(tools.GPT41Nano))
 	if err != nil {
 		return nil, fmt.Errorf("failed to ask: %w", err)
 	}
