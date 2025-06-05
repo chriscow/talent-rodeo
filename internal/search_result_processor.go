@@ -118,6 +118,7 @@ func (s *SearchResultProcessor) worker() {
 					"jobID": job.ID,
 				})
 			}
+
 		case <-s.stopCh:
 			return
 		}
@@ -228,6 +229,14 @@ func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, job JobDetail)
 	if err != nil {
 		s.logger.Error("failed to save job detail and link", "error", err)
 		return
+	}
+
+	_, err = UpsertJobDetailEmbeddings(ctx, jobSearch.Criteria, []JobDetail{job})
+	if err != nil {
+		s.logger.Error("failed to upsert job detail embeddings", "error", err, "jobID", job.ID)
+		SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"jobID": job.ID,
+		})
 	}
 
 	// Only queue for extraction if not already extracted
