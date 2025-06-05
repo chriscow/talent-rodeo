@@ -263,3 +263,132 @@ func (app *application) handleJobFeedback(w http.ResponseWriter, r *http.Request
 	// Using 204 No Content to prevent HTMX from updating the DOM
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// Add new handler for dismissing a job
+func (app *application) handleJobDismiss(w http.ResponseWriter, r *http.Request) {
+	user := contextGetAuthenticatedUser(r)
+	if user == nil {
+		app.clientError(w, r, http.StatusUnauthorized)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		app.clientError(w, r, http.StatusBadRequest)
+		return
+	}
+	jobID := r.FormValue("job_id")
+	if jobID == "" {
+		app.clientError(w, r, http.StatusBadRequest)
+		return
+	}
+	// Create or update UserJob with Dismissed status
+	_, exists, err := internal.GetUserJob(r.Context(), app.fs, user.ID, jobID)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+	if !exists {
+		userJob := &internal.UserJob{
+			ID:        jobID,
+			Status:    internal.JobStatusDismissed,
+			JobRef:    app.fs.Collection("job_details").Doc(jobID),
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
+		_, err := app.fs.Collection("users").Doc(user.ID).Collection("user_jobs").Doc(jobID).Set(r.Context(), userJob)
+		if err != nil {
+			app.serverError(w, r, err)
+			return
+		}
+	} else {
+		err := internal.UpdateUserJobStatus(r.Context(), app.fs, user.ID, jobID, internal.JobStatusDismissed)
+		if err != nil {
+			app.serverError(w, r, err)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// Add new handler for job-title save/archive (no feedback record)
+func (app *application) handleJobTitleAction(w http.ResponseWriter, r *http.Request) {
+	user := contextGetAuthenticatedUser(r)
+	if user == nil {
+		app.clientError(w, r, http.StatusUnauthorized)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		app.clientError(w, r, http.StatusBadRequest)
+		return
+	}
+	jobID := r.FormValue("job_id")
+	action := r.FormValue("action") // 'like', 'dislike', or 'unset'
+	typeVal := r.FormValue("type")  // for unset
+	if jobID == "" || action == "" {
+		app.clientError(w, r, http.StatusBadRequest)
+		return
+	}
+	var targetStatus internal.JobStatus
+	if action == "like" {
+		targetStatus = internal.JobStatusSaved
+	} else if action == "dislike" {
+		targetStatus = internal.JobStatusArchived
+	} else if action == "unset" {
+		// Remove UserJob if it matches the status being unset
+		existingUserJob, exists, err := internal.GetUserJob(r.Context(), app.fs, user.ID, jobID)
+		if err != nil {
+			app.serverError(w, r, err)
+			return
+		}
+		var expectedStatus internal.JobStatus
+		if typeVal == "like" {
+			expectedStatus = internal.JobStatusSaved
+		} else if typeVal == "dislike" {
+			expectedStatus = internal.JobStatusArchived
+		}
+		if exists && existingUserJob.Status == expectedStatus {
+			err := internal.DeleteUserJob(r.Context(), app.fs, user.ID, jobID)
+			if err != nil {
+				app.serverError(w, r, err)
+				return
+			}
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	} else {
+		app.clientError(w, r, http.StatusBadRequest)
+		return
+	}
+	// Create or update UserJob
+	_, exists, err := internal.GetUserJob(r.Context(), app.fs, user.ID, jobID)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+	now := time.Now()
+	if !exists {
+		userJob := &internal.UserJob{
+			ID:        jobID,
+			Status:    targetStatus,
+			JobRef:    app.fs.Collection("job_details").Doc(jobID),
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+		if targetStatus == internal.JobStatusSaved {
+			userJob.SavedAt = &now
+		} else if targetStatus == internal.JobStatusArchived {
+			userJob.ArchivedAt = &now
+		}
+		_, err := app.fs.Collection("users").Doc(user.ID).Collection("user_jobs").Doc(jobID).Set(r.Context(), userJob)
+		if err != nil {
+			app.serverError(w, r, err)
+			return
+		}
+	} else {
+		err := internal.UpdateUserJobStatus(r.Context(), app.fs, user.ID, jobID, targetStatus)
+		if err != nil {
+			app.serverError(w, r, err)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
