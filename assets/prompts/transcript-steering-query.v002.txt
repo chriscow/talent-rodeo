@@ -8,7 +8,7 @@ The user will provide a resume and a transcript.
 
 Your goal is to extract and construct the following components:
 
-1. Query: A specific programming language, technology stack, or job title that best represents the job seeker's primary focus. This should be highly specific and directly related to job search keywords. 
+1. Queries: A list of specific programming languages, technology stacks, or job titles that best represents the job seeker's primary focus. This should be highly specific and directly related to job search keywords. 
 2. MoveToward: Multiple first-person sentences describing what the job seeker wants in a position, including work type preferences.
 3. MoveAway: Multiple first-person sentences describing what the job seeker wants to avoid, phrased as if desired.
 4. RerankQuery: A comprehensive, first-person query combining all preferences and keywords.
@@ -21,7 +21,7 @@ Please follow these steps:
 2. Analyze and construct each component inside <structured_analysis> tags in your thinking block, showing your reasoning:
 
    <structured_analysis>
-   a. Query:
+   a. Queries:
       - List relevant quotes from both resume and transcript
       - Identify primary career field
       - Determine if it's best searched by skills or job title
@@ -32,7 +32,7 @@ Please follow these steps:
       - List potential alternatives and explain why they weren't chosen
       - Summarize key findings
       - Explain your final choice
-      - Ensure that the Query is a specific programming language, technology stack, or job title, not a broad concept
+      - Ensure that the Queries are specific programming languages, technology stacks, or job titles, not a broad concepts
 
    b. MoveToward:
       - List relevant quotes from both resume and transcript
@@ -87,12 +87,12 @@ Important notes:
 - Base all components on explicit statements or strong implications from the job seeker's resume and responses.
 - Ensure ExperienceLevel and WorkType contain only the specified enum values.
 - MoveToward, MoveAway, and RerankQuery should be in first-person, as if the job seeker is speaking.
-- The Query must be a specific programming language, technology stack, or job title that would be used in job search keywords. Avoid broad concepts like "Generative AI" for the Query field.
+- The Queries must be a specific programming language, technology stack, or job title that would be used in job search keywords. Avoid broad concepts like "Generative AI" for the Queries field.
 
 Your final output should follow this JSON structure:
 
 {
-  "Query": "Specific programming language, technology stack, or job title",
+  "Queries": ["Specific programming language, technology stack, or job title"],
   "MoveToward": "Multiple first-person sentences about desired aspects, including work type",
   "MoveAway": "Multiple first-person sentences about aspects to avoid, but phrased as if desired",
   "RerankQuery": "Comprehensive first-person sentences combining all preferences and keywords",
