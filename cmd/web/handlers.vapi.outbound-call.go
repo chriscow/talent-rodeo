@@ -13,9 +13,6 @@ import (
 	"cloud.google.com/go/firestore"
 	"github.com/chriscow/vapi-go"
 	"github.com/getsentry/sentry-go"
-
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // makeOutboundCall handles a scheduled webhook task to make an outbound call with VAPI.
@@ -223,43 +220,7 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	resume, found, err := internal.GetLatestResume(r.Context(), app.fs, user.ID)
-	if err != nil {
-		apptErr = fmt.Errorf("failed to get resume: %w", err)
-		if status.Code(err) == codes.NotFound {
-			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-				"action":  "user_has_no_resume",
-				"user_id": appointment.UserID,
-			})
-			app.logger.Error("handleVapiCall: user has no resume", "user_id", appointment.UserID)
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-			"action":  "failed_to_get_resume",
-			"user_id": appointment.UserID,
-		})
-		app.logger.Error("Failed to get resume", "error", err)
-		app.reportServerError(r, fmt.Errorf("failed to get resume: %w", err))
-
-		// This might be a transient error, so we want to retry
-		response.JSON(w, http.StatusInternalServerError, map[string]string{
-			"error": "failed to get resume",
-		})
-		return
-	}
-
-	if !found {
-		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-			"action":  "user_has_no_resume",
-			"user_id": appointment.UserID,
-		})
-		app.logger.Error("handleVapiCall: user has no resume", "user_id", appointment.UserID)
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	assistantOverrides, err := internal.BuildAssistantOverrides(r.Context(), user, resume, app.fs, app.logger)
+	assistantOverrides, err := internal.BuildAssistantOverrides(r.Context(), user, app.fs, app.logger)
 	if err != nil {
 		apptErr = fmt.Errorf("failed to build assistant overrides: %w", err)
 		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
@@ -270,12 +231,6 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 		app.reportServerError(r, apptErr)
 		w.WriteHeader(http.StatusOK)
 		return
-	}
-
-	phone := vapi.PhoneNumber{
-		TwilioAccountSid:  os.Getenv("TWILIO_ACCOUNT_SID"),
-		TwilioAuthToken:   os.Getenv("TWILIO_AUTH_TOKEN"),
-		TwilioPhoneNumber: os.Getenv("TWILIO_FROM_NUMBER"),
 	}
 
 	var result *vapi.Call
@@ -295,6 +250,12 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 
 		appointment.CallID = result.ID
 	} else {
+		phone := vapi.PhoneNumber{
+			TwilioAccountSid:  os.Getenv("TWILIO_ACCOUNT_SID"),
+			TwilioAuthToken:   os.Getenv("TWILIO_AUTH_TOKEN"),
+			TwilioPhoneNumber: os.Getenv("TWILIO_FROM_NUMBER"),
+		}
+
 		// Create call config
 		callConfig := vapi.Call{
 			Name:               &appointment.ID,
@@ -336,7 +297,6 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 	if result != nil && result.ID != nil && result.Status != nil {
 		app.logger.Info(internal.Green("call created successfully"),
 			"users_id", user.ID,
-			"resume_id", resume.ID,
 			"call_id", *result.ID,
 			"status", *result.Status,
 		)
