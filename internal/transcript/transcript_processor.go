@@ -707,7 +707,7 @@ func extractWorkPreferences(_ context.Context, data string) (*string, error) {
 	return &data, nil
 }
 func getWorkPreferences(ctx context.Context, fs *internal.FirestoreClient, transcript *internal.Transcript, locations []string, user *internal.User) error {
-	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/transcript-030-work-location.txt")
+	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/transcript.work-location.txt")
 	if err != nil {
 		return fmt.Errorf("getWorkPreferences: failed to read work location prompt: %w", err)
 	}
