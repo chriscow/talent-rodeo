@@ -67,7 +67,7 @@ func (app *application) adminVoice(w http.ResponseWriter, r *http.Request) {
 		if selectedUserID == "_none" {
 			app.logger.Info("handling _none user case")
 			// Build assistant overrides with nil user and nil resume
-			overrides, err := internal.BuildAssistantOverrides(ctx, nil, nil, app.fs, app.logger)
+			overrides, err := internal.BuildAssistantOverrides(ctx, nil, app.fs, app.logger)
 			if err != nil {
 				app.logger.Error("failed to build assistant overrides", "error", err)
 				app.serverError(w, r, fmt.Errorf("failed to build assistant overrides: %w", err))
@@ -89,15 +89,8 @@ func (app *application) adminVoice(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			// Fetch the user's latest resume
-			resume, _, err := internal.GetLatestResume(ctx, app.fs, selectedUserID)
-			if err != nil {
-				app.logger.Warn("failed to get resume", "error", err, "user_id", selectedUserID)
-				// Continue without resume - it's optional
-			}
-
 			// Build assistant overrides for the selected user
-			overrides, err := internal.BuildAssistantOverrides(ctx, selectedUser, resume, app.fs, app.logger)
+			overrides, err := internal.BuildAssistantOverrides(ctx, selectedUser, app.fs, app.logger)
 			if err != nil {
 				app.logger.Error("failed to build assistant overrides", "error", err, "user_id", selectedUserID)
 				app.serverError(w, r, fmt.Errorf("failed to build assistant overrides: %w", err))

@@ -14,7 +14,7 @@ import (
 
 const (
 	defaultAssistantModel          = "gpt-4.1"
-	defaultAssistantPromptTemplate = "prompts/shirely.general.002.txt"
+	defaultAssistantPromptTemplate = "prompts/shirely.general.003.txt"
 )
 
 func GetAssistantID(userID string) string {
@@ -36,7 +36,7 @@ func GetAssistantTemplate(userID string) (*utils.Prompt, error) {
 
 // BuildAssistantOverrides creates assistant overrides for a given user ID.
 // It returns the assistant request response which includes the overrides and any error encountered.
-func BuildAssistantOverrides(ctx context.Context, user *User, resume *Resume, fs *FirestoreClient, logger *slog.Logger) (*vapi.Assistant, error) {
+func BuildAssistantOverrides(ctx context.Context, user *User, fs *FirestoreClient, logger *slog.Logger) (*vapi.Assistant, error) {
 	assistantID := GetAssistantID(user.ID)
 
 	// Create template and data structure
@@ -45,12 +45,16 @@ func BuildAssistantOverrides(ctx context.Context, user *User, resume *Resume, fs
 		return nil, fmt.Errorf("failed to get assistant template: %w", err)
 	}
 
+	resume, found, err := GetLatestResume(ctx, fs, user.ID)
+	if err != nil || !found {
+		return nil, fmt.Errorf("failed to get latest resume (found:%v) : %w", found, err)
+	}
+
 	resumeText := ""
 	if resume != nil {
 		resumeText = resume.RawText
 	}
 
-	firstMessage := ""
 	fullName := ""
 	if user != nil {
 		fullName = user.Name
@@ -115,10 +119,11 @@ func BuildAssistantOverrides(ctx context.Context, user *User, resume *Resume, fs
 		},
 	}
 
+	firstMessage := ""
 	if len(data.PreviousDiscussion) > 0 {
-		firstMessage = fmt.Sprintf("Hi there! I'm Shirley from Talent Rodeo. Thanks for calling back, %s! How is your job search going?", user.FirstName)
+		firstMessage = fmt.Sprintf("Hey! Hi there! I'm Shirley from Talent Rodeo. Thanks for calling back, %s! How is your job search going?", user.FirstName)
 	} else {
-		firstMessage = "Hi there! I'm Shirley from Talent Rodeo. Is now a good time for a quick chat?"
+		firstMessage = "Hey! Hi there! I'm Shirley from Talent Rodeo. Am I speaking with " + user.FirstName + "?"
 	}
 
 	logger.Info("built assistant overrides",
