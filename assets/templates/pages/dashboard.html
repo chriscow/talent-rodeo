@@ -135,16 +135,41 @@
                 const activeTab = document.querySelector('.job-status-tabs li.active a');
                 const currentStatus = activeTab ? activeTab.textContent.trim().replace(' Jobs', '').toLowerCase() : 'new';
                 
-                // If clicking the same type that's already active, remove it (deselect)
+                // For job-title, only create/update UserJob, do not send feedback
+                if (itemId === 'job-title') {
+                    // If clicking the same type that's already active, remove it (deselect)
+                    if (this.feedback[itemId] === type) {
+                        delete this.feedback[itemId];
+                        if (jobId) {
+                            htmx.ajax('POST', '/feedback/job/title', {
+                                values: {
+                                    job_id: jobId,
+                                    action: 'unset',
+                                    type: type
+                                }
+                            });
+                        }
+                        if (currentStatus === 'saved' || currentStatus === 'archived') {
+                            this.showJobTransition(jobCard, 'New', 'moved back to');
+                        }
+                    } else {
+                        this.feedback[itemId] = type;
+                        if (jobId) {
+                            htmx.ajax('POST', '/feedback/job/title', {
+                                values: {
+                                    job_id: jobId,
+                                    action: type
+                                }
+                            });
+                        }
+                        const targetStatus = type === 'like' ? 'Saved' : 'Archived';
+                        this.showJobTransition(jobCard, targetStatus, 'moved to');
+                    }
+                    return;
+                }
+                // For all other feedback, keep existing logic
                 if (this.feedback[itemId] === type) {
                     delete this.feedback[itemId];
-                    
-                    // For job-title feedback on Saved/Archived tabs, show transition message
-                    if (itemId === 'job-title' && (currentStatus === 'saved' || currentStatus === 'archived')) {
-                        this.showJobTransition(jobCard, 'New', 'moved back to');
-                    }
-                    
-                    // Send deselection to backend via HTMX
                     if (jobId) {
                         htmx.ajax('POST', '/feedback/job', {
                             values: { 
@@ -156,16 +181,7 @@
                         });
                     }
                 } else {
-                    // Otherwise, set the new feedback type
                     this.feedback[itemId] = type;
-                    
-                    // For job-title feedback, show transition message
-                    if (itemId === 'job-title') {
-                        const targetStatus = type === 'like' ? 'Saved' : 'Archived';
-                        this.showJobTransition(jobCard, targetStatus, 'moved to');
-                    }
-                    
-                    // Send feedback to backend via HTMX
                     if (jobId) {
                         htmx.ajax('POST', '/feedback/job', {
                             values: { 
@@ -177,6 +193,24 @@
                         });
                     }
                 }
+            },
+            
+            dismissJob(el) {
+                const jobCard = this.$el.closest('[data-job-id]') || this.$el;
+                const jobId = jobCard.getAttribute('data-job-id');
+                if (!jobId) return;
+                htmx.ajax('POST', '/feedback/job/dismiss', {
+                    values: { job_id: jobId }
+                });
+                // Animate and remove card
+                jobCard.classList.add('job-transitioning');
+                setTimeout(() => {
+                    jobCard.style.opacity = '0';
+                    jobCard.style.transform = 'scale(0.95)';
+                    setTimeout(() => {
+                        jobCard.style.display = 'none';
+                    }, 500);
+                }, 300);
             },
             
             showJobTransition(jobCard, targetStatus, action) {
