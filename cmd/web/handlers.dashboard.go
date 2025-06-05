@@ -192,31 +192,33 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 
 	// Get the total count for the current status for pagination calculations
 	start := time.Now()
-	statusJobCount, err := internal.GetJobsCount(r.Context(), app.fs, user.ID, status)
-	if err != nil {
-		wrappedErr := fmt.Errorf("showDashboard: failed to get job count for status %s: %w", status, err)
-		app.logger.Error("showDashboard: failed to get job count", "error", err, "status", status)
+	statusJobCount := int64(0) // Default to 0 if no jobs found
 
-		internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
-			"error_type":  "database_retrieval",
-			"entity_type": "user_jobs_count",
-			"job_status":  string(status),
-		})
+	// statusJobCount, err := internal.GetJobsCount(r.Context(), app.fs, user.ID, status)
+	// if err != nil {
+	// 	wrappedErr := fmt.Errorf("showDashboard: failed to get job count for status %s: %w", status, err)
+	// 	app.logger.Error("showDashboard: failed to get job count", "error", err, "status", status)
 
-		// Check if this is the missing collection/index error for new users
-		if strings.Contains(err.Error(), "failed to iterate jobs") ||
-			strings.Contains(err.Error(), "failed to get job count") {
-			// For new users without any jobs collection yet, set count to 0
-			statusJobCount = 0
-			data["FirestoreError"] = true
-		} else {
-			// For other errors, return server error
-			app.serverError(w, r, wrappedErr)
-			return
-		}
-	} else {
-		app.logger.Debug("showDashboard: GetJobsCount took", "duration", time.Since(start).String())
-	}
+	// 	internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
+	// 		"error_type":  "database_retrieval",
+	// 		"entity_type": "user_jobs_count",
+	// 		"job_status":  string(status),
+	// 	})
+
+	// 	// Check if this is the missing collection/index error for new users
+	// 	if strings.Contains(err.Error(), "failed to iterate jobs") ||
+	// 		strings.Contains(err.Error(), "failed to get job count") {
+	// 		// For new users without any jobs collection yet, set count to 0
+	// 		statusJobCount = 0
+	// 		data["FirestoreError"] = true
+	// 	} else {
+	// 		// For other errors, return server error
+	// 		app.serverError(w, r, wrappedErr)
+	// 		return
+	// 	}
+	// } else {
+	// 	app.logger.Debug("showDashboard: GetJobsCount took", "duration", time.Since(start).String())
+	// }
 
 	// Hybrid Approach: Use semantic search for "New" jobs, existing queries for other statuses
 	jobs := map[string]JobWithDetails{}

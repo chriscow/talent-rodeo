@@ -1,5 +1,11 @@
 {{define "job-card"}}
 <article class="job-card" x-data="jobFeedback()" data-job-id="{{.JobDetail.ID}}">
+    <button class="job-close-btn" @click="dismissJob($el)" title="Dismiss this job" aria-label="Dismiss job" type="button">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <line x1="5" y1="5" x2="15" y2="15" stroke="currentColor" stroke-width="2"/>
+            <line x1="15" y1="5" x2="5" y2="15" stroke="currentColor" stroke-width="2"/>
+        </svg>
+    </button>
     <!-- Determine context: check if we have ScoredJobDetail fields directly (admin) or nested in JobWithDetails (dashboard) -->
     {{$isAdmin := false}}
     
@@ -38,17 +44,17 @@
             @mouseleave="currentHover = null">
             <span class="item-text">{{.JobDetail.Title}}</span>
             <div class="feedback-buttons job-title-buttons" role="group">
-                <button class="secondary outline"
+                <button class="secondary outline" data-tooltip="Save Job"
                         :class="{ 'active-like': feedback['job-title'] === 'like' }"
                         @click="toggleFeedback('job-title', 'like')">
-                    <img class="light-theme-icon" src="/static/img/thumbs-up.24px.light-theme.svg" alt="Like" width="24" height="24">
-                    <img class="dark-theme-icon" src="/static/img/thumbs-up.24px.dark-theme.svg" alt="Like" width="24" height="24">
+                    <img class="light-theme-icon" src="/static/img/save.24px.light-theme.svg" alt="Save" width="24" height="24" >
+                    <img class="dark-theme-icon" src="/static/img/save.24px.dark-theme.svg" alt="Save" width="24" height="24">
                 </button>
-                <button class="secondary outline"
+                <button class="secondary outline" data-tooltip="Reject Job"
                         :class="{ 'active-dislike': feedback['job-title'] === 'dislike' }"
                         @click="toggleFeedback('job-title', 'dislike')">
-                    <img class="light-theme-icon" src="/static/img/thumbs-down.24px.light-theme.svg" alt="Dislike" width="24" height="24">
-                    <img class="dark-theme-icon" src="/static/img/thumbs-down.24px.dark-theme.svg" alt="Dislike" width="24" height="24">
+                    <img class="light-theme-icon" src="/static/img/trash-2.24px.light-theme.svg" alt="Archive" width="24" height="24">
+                    <img class="dark-theme-icon" src="/static/img/trash-2.24px.dark-theme.svg" alt="Archive" width="24" height="24">
                 </button>
             </div>
         </h3>
