@@ -21,9 +21,9 @@ import (
 
 const (
 	resumeCollection             = "resumes"
-	resumeAnalysisPrompt         = "prompts/resume-analysis.txt"
-	resumeAnalysisExamples       = "prompts/resume-analysis.examples.txt"
-	resumeSearchAnalysisTemplate = "prompts/resume-search-analysis.001.txt"
+	resumeAnalysisPrompt         = "prompts/resume.legit-analysis.v001.txt"
+	resumeAnalysisExamples       = "prompts/resume.legit-analysis.examples.v001.txt"
+	resumeSearchAnalysisTemplate = "prompts/resume.search-analysis.v001.txt"
 )
 
 type annotatedResume struct {
