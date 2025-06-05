@@ -4,6 +4,7 @@
     .job-card {
         transition: opacity 0.3s ease, transform 0.3s ease;
         transform-origin: center;
+        position: relative;
     }
     
     /* Admin debug info */
@@ -295,6 +296,29 @@
         background: var(--pico-background-color, #11191f);
         color: var(--pico-color, #c2c8d0);
         border-color: var(--pico-muted-border-color, #374151);
+    }
+
+    .job-close-btn {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        width: 2rem;
+        height: 2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: none;
+        color: var(--pico-muted-color, #888);
+        cursor: pointer;
+        padding: 0;
+        z-index: 2;
+        border-radius: 50%;
+        transition: background 0.2s;
+    }
+    .job-close-btn:hover {
+        background: var(--pico-muted-border-color, #eee);
+        color: var(--pico-color, #333);
     }
 </style>
 {{end}}

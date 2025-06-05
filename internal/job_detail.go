@@ -443,28 +443,30 @@ func SearchJobDetails(ctx context.Context, fs *FirestoreClient, userID string, s
 	// 	return cachedJobs, nil
 	// }
 
-	// Get all IDs for UserJobs for this user
-	userJobs, err := ListUserJobs(ctx, fs, userID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user jobs: %w", err)
-	}
-
-	userJobIDs := lo.Map(userJobs, func(job UserJob, _ int) string {
-		return job.ID
-	})
-
-	userJobIDs = lo.Uniq(userJobIDs)
-
 	filter := map[string]any{
-		"ID": map[string]any{
-			"$nin": userJobIDs,
-		},
 		"workType": map[string]any{
 			"$eq": string(steeringQuery.WorkType),
 		},
 		"experienceLevel": map[string]any{
 			"$eq": string(steeringQuery.ExperienceLevel),
 		},
+	}
+
+	// Get all IDs for UserJobs for this user
+	userJobs, err := ListUserJobs(ctx, fs, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user jobs: %w", err)
+	}
+
+	if len(userJobs) > 0 {
+		jobIDs := []any{} // for protobuf, we need to create []interface{} to use $nin
+		for _, job := range userJobs {
+			jobIDs = append(jobIDs, job.ID)
+		}
+
+		filter["ID"] = map[string]any{
+			"$nin": jobIDs, // Exclude jobs already in user's job list
+		}
 	}
 
 	// Cache miss - perform semantic search

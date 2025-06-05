@@ -90,6 +90,8 @@ func (app *application) routes() http.Handler {
 
 			// Feedback routes
 			mux.HandleFunc("/feedback/job", app.handleJobFeedback, "POST")
+			mux.HandleFunc("/feedback/job/dismiss", app.handleJobDismiss, "POST")
+			mux.HandleFunc("/feedback/job/title", app.handleJobTitleAction, "POST")
 
 			mux.HandleFunc("/testing/reset-user-state", app.handleTestingResetUserState, "POST")
 

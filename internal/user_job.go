@@ -27,6 +27,7 @@ const (
 	JobStatusSaved       JobStatus = "saved"
 	JobStatusApplied     JobStatus = "applied"
 	JobStatusArchived    JobStatus = "archived"
+	JobStatusDismissed   JobStatus = "dismissed" // User dismissed the job from view
 
 	// DefaultUserJobsTopK is the number of top jobs to return from semantic search
 	DefaultUserJobsTopK = 100
@@ -45,6 +46,8 @@ func ParseJobStatus(statusStr string) (JobStatus, bool) {
 		return JobStatusApplied, true
 	case string(JobStatusArchived):
 		return JobStatusArchived, true
+	case string(JobStatusDismissed):
+		return JobStatusDismissed, false // Recognize but not valid for dashboard
 	default:
 		return JobStatusNew, false
 	}
