@@ -219,7 +219,7 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 			// SteeringQuery is nil
 		}
 
-		_, _, err := getOrCreateSearchCriteria(ctx, client, user)
+		_, err := getOrCreateSearchCriteria(ctx, client, user)
 		if err == nil {
 			t.Error("getOrCreateSearchCriteria() error = nil, want error for missing steering query")
 		}
@@ -232,14 +232,14 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 		user := &internal.User{
 			ID: "test-criteria-user-2",
 			SteeringQuery: &internal.SteeringQuery{
-				Query:           "software engineer python",
+				Queries:         []string{"software engineer python"},
 				WorkType:        internal.WorkTypeRemote,
 				ExperienceLevel: internal.ExperienceLevelEntryLevel,
 			},
 			// WorkPreferences is nil
 		}
 
-		_, _, err := getOrCreateSearchCriteria(ctx, client, user)
+		_, err := getOrCreateSearchCriteria(ctx, client, user)
 		if err == nil {
 			t.Error("getOrCreateSearchCriteria() error = nil, want error for missing work preferences")
 		}
@@ -260,20 +260,21 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 		user := &internal.User{
 			ID: "test-criteria-user-3",
 			SteeringQuery: &internal.SteeringQuery{
-				Query:           "software engineer python",
+				Queries:         []string{"software engineer python"},
 				WorkType:        internal.WorkTypeRemote,
 				ExperienceLevel: internal.ExperienceLevelEntryLevel,
 			},
 			LocationPreference: internal.StringPtr("Remote work in San Francisco"),
 		}
 
-		criteria, _, err := getOrCreateSearchCriteria(ctx, client, user)
+		results, err := getOrCreateSearchCriteria(ctx, client, user)
 		if err != nil {
 			t.Errorf("getOrCreateSearchCriteria() error = %v, want nil", err)
 		}
-		if criteria == nil {
-			t.Error("getOrCreateSearchCriteria() returned nil criteria")
+		if len(results) != 1 {
+			t.Fatalf("getOrCreateSearchCriteria() should return 1 result, got %d", len(results))
 		}
+		criteria := results[0].Criteria
 		if criteria.Query != "software engineer python" {
 			t.Errorf("getOrCreateSearchCriteria() query = %v, want %v", criteria.Query, "software engineer python")
 		}
@@ -287,7 +288,7 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 		user := &internal.User{
 			ID: "test-criteria-user-4",
 			SteeringQuery: &internal.SteeringQuery{
-				Query:           "software engineer python",
+				Queries:         []string{"software engineer python"},
 				WorkType:        internal.WorkTypeRemote,
 				ExperienceLevel: internal.ExperienceLevelEntryLevel,
 			},
@@ -295,19 +296,126 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 		}
 
 		// Create criteria first time
-		criteria1, _, err := getOrCreateSearchCriteria(ctx, client, user)
+		results, err := getOrCreateSearchCriteria(ctx, client, user)
 		if err != nil {
 			t.Fatalf("getOrCreateSearchCriteria() first call error = %v", err)
 		}
+		if len(results) != 1 {
+			t.Fatalf("getOrCreateSearchCriteria() should return 1 result, got %d", len(results))
+		}
+		criteria1 := results[0].Criteria
 
 		// Call again with same data
-		criteria2, _, err := getOrCreateSearchCriteria(ctx, client, user)
+		results, err = getOrCreateSearchCriteria(ctx, client, user)
 		if err != nil {
 			t.Errorf("getOrCreateSearchCriteria() second call error = %v, want nil", err)
 		}
+		if len(results) != 1 {
+			t.Fatalf("getOrCreateSearchCriteria() should return 1 result, got %d", len(results))
+		}
+		criteria2 := results[0].Criteria
 
 		if criteria1.ID != criteria2.ID {
 			t.Errorf("getOrCreateSearchCriteria() should reuse existing criteria, got different IDs: %v vs %v", criteria1.ID, criteria2.ID)
+		}
+	})
+
+	t.Run("multiple queries, all new", func(t *testing.T) {
+		testGeoID := internal.GeoID{
+			ID:    "test-criteria-geoid-multi",
+			Value: "Austin",
+		}
+		if err := internal.CreateGeoID(ctx, client, testGeoID); err != nil {
+			t.Fatalf("Failed to create test geo ID: %v", err)
+		}
+
+		user := &internal.User{
+			ID: "test-criteria-user-multi-1",
+			SteeringQuery: &internal.SteeringQuery{
+				Queries:         []string{"software engineer python", "backend developer go"},
+				WorkType:        internal.WorkTypeRemote,
+				ExperienceLevel: internal.ExperienceLevelEntryLevel,
+			},
+			LocationPreference: internal.StringPtr("Remote work in Austin"),
+		}
+
+		results, err := getOrCreateSearchCriteria(ctx, client, user)
+		if err != nil {
+			t.Errorf("getOrCreateSearchCriteria() error = %v, want nil", err)
+		}
+		if len(results) != 2 {
+			t.Fatalf("getOrCreateSearchCriteria() should return 2 results, got %d", len(results))
+		}
+		wantQueries := map[string]bool{"software engineer python": false, "backend developer go": false}
+		for _, r := range results {
+			if _, ok := wantQueries[r.Criteria.Query]; !ok {
+				t.Errorf("unexpected query in results: %v", r.Criteria.Query)
+			}
+			if !r.IsNew {
+				t.Errorf("expected IsNew=true for query %v, got false", r.Criteria.Query)
+			}
+			wantQueries[r.Criteria.Query] = true
+		}
+		for q, seen := range wantQueries {
+			if !seen {
+				t.Errorf("expected query %v in results, not found", q)
+			}
+		}
+	})
+
+	t.Run("multiple queries, some existing, some new", func(t *testing.T) {
+		testGeoID := internal.GeoID{
+			ID:    "test-criteria-geoid-mixed",
+			Value: "Chicago",
+		}
+		if err := internal.CreateGeoID(ctx, client, testGeoID); err != nil {
+			t.Fatalf("Failed to create test geo ID: %v", err)
+		}
+		// Pre-create one criteria
+		preUser := &internal.User{
+			ID: "test-criteria-user-multi-2",
+			SteeringQuery: &internal.SteeringQuery{
+				Queries:         []string{"frontend developer react"},
+				WorkType:        internal.WorkTypeRemote,
+				ExperienceLevel: internal.ExperienceLevelEntryLevel,
+			},
+			LocationPreference: internal.StringPtr("Remote work in Chicago"),
+		}
+		_, err := getOrCreateSearchCriteria(ctx, client, preUser)
+		if err != nil {
+			t.Fatalf("pre-create getOrCreateSearchCriteria() error = %v", err)
+		}
+		// Now test with two queries, one existing, one new
+		user := &internal.User{
+			ID: "test-criteria-user-multi-2",
+			SteeringQuery: &internal.SteeringQuery{
+				Queries:         []string{"frontend developer react", "fullstack engineer js"},
+				WorkType:        internal.WorkTypeRemote,
+				ExperienceLevel: internal.ExperienceLevelEntryLevel,
+			},
+			LocationPreference: internal.StringPtr("Remote work in Chicago"),
+		}
+		results, err := getOrCreateSearchCriteria(ctx, client, user)
+		if err != nil {
+			t.Errorf("getOrCreateSearchCriteria() error = %v, want nil", err)
+		}
+		if len(results) != 2 {
+			t.Fatalf("getOrCreateSearchCriteria() should return 2 results, got %d", len(results))
+		}
+		foundExisting, foundNew := false, false
+		for _, r := range results {
+			if r.Criteria.Query == "frontend developer react" && !r.IsNew {
+				foundExisting = true
+			}
+			if r.Criteria.Query == "fullstack engineer js" && r.IsNew {
+				foundNew = true
+			}
+		}
+		if !foundExisting {
+			t.Errorf("expected existing criteria for 'frontend developer react' with IsNew=false")
+		}
+		if !foundNew {
+			t.Errorf("expected new criteria for 'fullstack engineer js' with IsNew=true")
 		}
 	})
 }
