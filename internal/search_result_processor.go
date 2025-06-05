@@ -301,9 +301,15 @@ func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJob
 	}
 
 	criteria := jobSearch.Criteria
+
 	nowUTC := time.Now().UTC()
 	criteria.LastSearchedAt = &nowUTC
 	criteria.LastSearchJobID = jobSearch.ID
+
+	// If a user is new, we bump the first search to have a higher max pages and listing age
+	// so that we can get more results. Reset it back to default after the first search.
+	criteria.MaxPages = DefaultMaxPages
+	criteria.ListingAge = DefaultListingAge
 	UpdateSearchCriteria(ctx, s.fs, &criteria)
 }
 
