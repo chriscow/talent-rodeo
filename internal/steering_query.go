@@ -217,8 +217,8 @@ func (q *SteeringQuery) GetSparseVector(ctx context.Context, p *Pinecone, model 
 }
 
 func GenerateSteeringQuery(ctx context.Context, resume Resume, transcript Transcript, opts ...tools.Option) (*SteeringQuery, error) {
-	const promptFile = "prompts/transcript-steering-query.v002.txt"
-	const exampleFile = "prompts/transcript-steering-query.examples.v002.txt"
+	const promptFile = "prompts/transcript.steering-query.v002.txt"
+	const exampleFile = "prompts/transcript.steering-query.examples.v002.txt"
 	sysPrompt, err := assets.EmbeddedFiles.ReadFile(promptFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read steering query prompt: %w", err)

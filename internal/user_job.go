@@ -3,13 +3,11 @@ package internal
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
 	firestorepb "cloud.google.com/go/firestore/apiv1/firestorepb"
-	"github.com/samber/lo"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -458,109 +456,4 @@ func DeleteAllUserJobsByPrefix(ctx context.Context, fs *FirestoreClient, prefix 
 	}
 
 	return deleted, nil
-}
-
-// GetSemanticJobsForUser retrieves semantic search results for a user with 1-hour caching
-// This function is used by the dashboard for the "New" job status tab
-func GetSemanticJobsForUser(ctx context.Context, fs *FirestoreClient, userID string, steeringQuery *SteeringQuery, criteriaID string, topK int, params *HybridSearchParams) ([]ScoredJobDetail, error) {
-	// Skip requests without a steering query
-	if steeringQuery == nil {
-		return nil, fmt.Errorf("user %s has no steering query", userID)
-	}
-
-	// Create cache key based on user ID, criteria ID, topK, params hash, and steering query hash
-	paramsHash := "default"
-	if params != nil {
-		paramsHash = fmt.Sprintf("%.2f-%.2f-%.2f-%.2f-%.2f-%s",
-			params.DenseWeight, params.SparseWeight, params.RecencyWeight,
-			params.RecencyHalfLife, params.ScoreThreshold, params.ScoreFusion)
-	}
-
-	// Include steering query in cache key to handle custom queries
-	steeringHash := fmt.Sprintf("%s|%s|%.2f", steeringQuery.Queries, steeringQuery.RerankQuery, steeringQuery.ForceAway)
-	if steeringQuery.MoveToward != "" {
-		steeringHash += "|" + steeringQuery.MoveToward
-	}
-	if steeringQuery.MoveAway != "" {
-		steeringHash += "|" + steeringQuery.MoveAway
-	}
-
-	criteria, found, err := GetSearchCriteria(ctx, fs, criteriaID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get criteria by ID %s: %w", criteriaID, err)
-	}
-	if !found {
-		return nil, fmt.Errorf("criteria with ID %s not found", criteriaID)
-	}
-
-	cacheKey := fmt.Sprintf("semantic_jobs:%s:%s:%d:%s:%s", userID, criteriaID, topK, paramsHash, steeringHash)
-
-	// Check cache first
-	if cachedJobs, found := fs.semanticJobsCache.Get(cacheKey); found {
-		return cachedJobs, nil
-	}
-
-	// Cache miss - perform semantic search
-	if params == nil {
-		params = DefaultHybridSearchParams()
-	}
-	scoredJobs, err := SemanticSearchJobs(ctx, steeringQuery, *criteria, topK, params)
-	if err != nil {
-		return nil, fmt.Errorf("failed to search jobs for user %s: %w", userID, err)
-	}
-
-	jobMap := map[string]ScoredJobDetail{}
-	for _, job := range scoredJobs {
-		jobMap[job.JobDetail.ID] = job
-	}
-
-	ids := lo.Keys(jobMap)
-
-	jobDetails, err := GetJobDetailsByIDs(ctx, fs, ids)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get job details for semantic search: %w", err)
-	}
-
-	if len(jobDetails) != len(scoredJobs) {
-		// HMMM: job detail might still be processing in the background?
-		// return nil, fmt.Errorf("mismatch in job details count: expected scoredJobs:%d, got jobDetails:%d", len(scoredJobs), len(jobDetails))
-	}
-
-	// Update the job details in the scored jobs
-	for _, job := range jobDetails {
-		if scoredJob, exists := jobMap[job.ID]; exists {
-			// Update the job detail with the full job data
-			scoredJob.JobDetail = job
-			jobMap[job.ID] = scoredJob
-		}
-	}
-
-	// Convert the updated map back to a slice and sort by Score descending
-	updatedScoredJobs := make([]ScoredJobDetail, 0, len(jobMap))
-	for _, scoredJob := range jobMap {
-		updatedScoredJobs = append(updatedScoredJobs, scoredJob)
-	}
-
-	// Sort by Score descending to maintain the original semantic search ranking
-	sort.Slice(updatedScoredJobs, func(i, j int) bool {
-		return updatedScoredJobs[i].Score > updatedScoredJobs[j].Score
-	})
-
-	// Cache the results with 1-hour TTL
-	fs.semanticJobsCache.SetWithTTL(cacheKey, updatedScoredJobs, 1, 1*time.Hour)
-
-	return updatedScoredJobs, nil
-}
-
-// InvalidateSemanticJobsCache invalidates the semantic jobs cache for a user
-// This should be called when a user interacts with jobs (changes status, etc.)
-func InvalidateSemanticJobsCache(fs *FirestoreClient, userID string) {
-	// TODO: We need to invalidate all cache entries for this user
-	// Since Ristretto doesn't support prefix-based deletion, we'll use a simple approach
-	// and let the cache entries expire naturally. For a more aggressive approach,
-	// we could track cache keys per user, but for now this is sufficient.
-
-	// Note: In a production system, you might want to maintain a separate
-	// mapping of user IDs to cache keys for more efficient invalidation
-
 }

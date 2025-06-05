@@ -241,22 +241,18 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if len(subscriptions) > 0 {
-			// Use the first subscription's criteria for semantic search
-			criteriaID := subscriptions[0].CriteriaID
-
 			// Use a large topK for comprehensive semantic search results (cached for 1 hour)
-			const semanticSearchTopK = 500
+			const semanticSearchTopK = 50 // we use 50 because SearchJobDetails will double it and rerank, which has a limit of 100
 
 			var params *internal.HybridSearchParams = nil // use the default params
 
-			allSemanticJobs, err := internal.GetSemanticJobsForUser(r.Context(), app.fs, user.ID, user.SteeringQuery, criteriaID, semanticSearchTopK, params)
+			allSemanticJobs, err := internal.SearchJobDetails(r.Context(), app.fs, user.ID, *user.SteeringQuery, semanticSearchTopK, params)
 			if err != nil {
 				wrappedErr := fmt.Errorf("showDashboard: failed to get semantic jobs: %w", err)
 				app.logger.Error("showDashboard: failed to get semantic jobs", "error", err)
 				internal.SentryReportError(r.Context(), wrappedErr, sentry.LevelError, map[string]string{
 					"error_type":  "semantic_search",
 					"entity_type": "semantic_jobs",
-					"criteria_id": criteriaID,
 				})
 				app.serverError(w, r, wrappedErr)
 				return
