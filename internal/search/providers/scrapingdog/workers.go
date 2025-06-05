@@ -377,7 +377,7 @@ func (wm *WorkerManager) processQueuedSearch(ctx context.Context, workerID int, 
 	defer cancel()
 
 	// Set a timeout for the entire search process
-	ctx, cancel = context.WithTimeout(ctx, 5*time.Minute)
+	ctx, cancel = context.WithTimeout(ctx, 20*time.Minute)
 	defer cancel()
 
 	searchJob.Status = internal.SearchTaskStatusProcessing

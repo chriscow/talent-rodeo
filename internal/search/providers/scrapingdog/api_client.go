@@ -75,7 +75,7 @@ func NewAPIClient(apiKey string, opts ...APIOption) *APIClient {
 	client := &APIClient{
 		apiKey:       apiKey,
 		baseURL:      DefaultBaseURL,
-		client:       &http.Client{Timeout: 60 * time.Second},
+		client:       &http.Client{Timeout: 120 * time.Second},
 		logger:       slog.Default(),
 		apiSemaphore: make(chan struct{}, DefaultConcurrency), // Default to 5
 	}
@@ -97,6 +97,7 @@ func (c *APIClient) SearchJobListings(ctx context.Context, query, location strin
 	// Acquire semaphore to limit concurrent API calls
 	select {
 	case c.apiSemaphore <- struct{}{}:
+		c.logger.Debug("acquired API semaphore", "inUse", len(c.apiSemaphore), "capacity", cap(c.apiSemaphore))
 		defer func() { <-c.apiSemaphore }()
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -160,6 +161,7 @@ func (c *APIClient) GetJobDetails(ctx context.Context, jobID string) (LinkedInJo
 	// Acquire semaphore to limit concurrent API calls
 	select {
 	case c.apiSemaphore <- struct{}{}:
+		c.logger.Debug("acquired API semaphore", "inUse", len(c.apiSemaphore), "capacity", cap(c.apiSemaphore))
 		defer func() { <-c.apiSemaphore }()
 	case <-ctx.Done():
 		return LinkedInJobDetail{}, ctx.Err()
