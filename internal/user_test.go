@@ -64,21 +64,78 @@ func TestUser(t *testing.T) {
 	// Test UpdateUser
 	t.Run("UpdateUser", func(t *testing.T) {
 		updates := map[string]any{
-			"FirstName": "Updated",
+			"Name": "Updated User",
 		}
-		if err := UpdateUser(ctx, client, user.ID, updates); err != nil {
+		err := UpdateUser(ctx, client, user.ID, updates)
+		if err != nil {
 			t.Fatalf("UpdateUser() error = %v", err)
 		}
 
+		// Verify update
 		got, found, err := GetUser(ctx, client, user.ID)
 		if err != nil {
-			t.Fatalf("GetUser() after update error = %v", err)
+			t.Fatalf("GetUser() error = %v", err)
 		}
 		if !found {
-			t.Fatal("GetUser() after update got found = false, want true")
+			t.Fatal("GetUser() got found = false, want true")
 		}
-		if got.FirstName != "Updated" {
-			t.Errorf("UpdateUser() got first_name = %v, want %v", got.FirstName, "Updated")
+		if got.Name != "Updated User" {
+			t.Errorf("GetUser() got name = %v, want %v", got.Name, "Updated User")
+		}
+	})
+
+	// Test LinkedInProfileURL field
+	t.Run("LinkedInProfileURL", func(t *testing.T) {
+		// Create a user with LinkedIn profile URL
+		linkedInUser := &User{
+			ID:                 "test-user-linkedin-" + fmt.Sprintf("%d", time.Now().UnixNano()),
+			Name:               "LinkedIn User",
+			Email:              fmt.Sprintf("linkedin-%d@example.com", time.Now().UnixNano()),
+			Provider:           "linkedin",
+			LinkedInProfileURL: "https://www.linkedin.com/in/testuser",
+			State: UserState{
+				Status:  UserStatusPendingResumeUpload,
+				Started: time.Now(),
+			},
+		}
+
+		err := CreateUser(ctx, client, linkedInUser)
+		if err != nil {
+			t.Fatalf("CreateUser() error = %v", err)
+		}
+		defer DeleteUser(ctx, client, linkedInUser.ID)
+
+		// Retrieve and verify
+		got, found, err := GetUser(ctx, client, linkedInUser.ID)
+		if err != nil {
+			t.Fatalf("GetUser() error = %v", err)
+		}
+		if !found {
+			t.Fatal("GetUser() got found = false, want true")
+		}
+		if got.LinkedInProfileURL != linkedInUser.LinkedInProfileURL {
+			t.Errorf("GetUser() got LinkedInProfileURL = %v, want %v", got.LinkedInProfileURL, linkedInUser.LinkedInProfileURL)
+		}
+
+		// Test updating LinkedIn profile URL
+		updates := map[string]any{
+			"LinkedInProfileURL": "https://www.linkedin.com/in/updateduser",
+		}
+		err = UpdateUser(ctx, client, linkedInUser.ID, updates)
+		if err != nil {
+			t.Fatalf("UpdateUser() error = %v", err)
+		}
+
+		// Verify update
+		got, found, err = GetUser(ctx, client, linkedInUser.ID)
+		if err != nil {
+			t.Fatalf("GetUser() error = %v", err)
+		}
+		if !found {
+			t.Fatal("GetUser() got found = false, want true")
+		}
+		if got.LinkedInProfileURL != "https://www.linkedin.com/in/updateduser" {
+			t.Errorf("GetUser() got LinkedInProfileURL = %v, want %v", got.LinkedInProfileURL, "https://www.linkedin.com/in/updateduser")
 		}
 	})
 
