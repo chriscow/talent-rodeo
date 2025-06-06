@@ -9,6 +9,7 @@ import (
 
 	"talent-rodeo/internal"
 
+	"github.com/cheggaaa/pb"
 	"github.com/spf13/cobra"
 )
 
@@ -20,6 +21,7 @@ var (
 	criteriaExperienceFlag string
 	criteriaListingAgeFlag string
 	criteriaAllFlag        bool
+	criteriaDeleteAllFlag  bool
 )
 
 func init() {
@@ -66,11 +68,12 @@ func init() {
 	// 'delete' subcommand
 	deleteCmd := &cobra.Command{
 		Use:   "delete [id]",
-		Short: "Delete a search criteria",
-		Long:  `Delete a search criteria by its ID.`,
-		Args:  cobra.ExactArgs(1),
+		Short: "Delete a search criteria or all criteria",
+		Long:  "Delete a search criteria by its ID, or delete all criteria with --all flag.",
+		Args:  cobra.MaximumNArgs(1),
 		RunE:  runDeleteCriteria,
 	}
+	deleteCmd.Flags().BoolVar(&criteriaDeleteAllFlag, "all", false, "Delete all search criteria")
 
 	// Add subcommands to criteria command
 	criteriaCmd.AddCommand(listCmd, needsSearchCmd, createCmd, deleteCmd)
@@ -178,7 +181,32 @@ func runDeleteCriteria(cmd *cobra.Command, args []string) error {
 	}
 	defer fs.Close()
 
+	if criteriaDeleteAllFlag {
+		// Delete all search criteria
+		criteria, err := internal.ListSearchCriteria(ctx, fs)
+		if err != nil {
+			return fmt.Errorf("failed to list search criteria: %w", err)
+		}
+		if len(criteria) == 0 {
+			fmt.Println("No search criteria to delete.")
+			return nil
+		}
+		bar := pb.StartNew(len(criteria))
+		defer bar.Finish()
+		for _, c := range criteria {
+			if err := internal.DeleteSearchCriteria(ctx, fs, c.ID); err != nil {
+				return fmt.Errorf("failed to delete search criteria with ID %s: %w", c.ID, err)
+			}
+			bar.Increment()
+		}
+		fmt.Printf("All (%d) search criteria deleted successfully\n", len(criteria))
+		return nil
+	}
+
 	// Get criteria ID from arguments
+	if len(args) < 1 {
+		return fmt.Errorf("criteria ID is required unless --all is set")
+	}
 	criteriaID := args[0]
 
 	// Delete search criteria and all related data

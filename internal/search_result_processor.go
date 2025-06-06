@@ -109,7 +109,7 @@ func (s *SearchResultProcessor) worker() {
 				})
 				continue
 			}
-			s.logger.Debug(Green("extracted job detail data (async)"), "jobID", job.ID, "duration", time.Since(start).String())
+			s.logger.Debug("extracted job detail data (async)", "jobID", job.ID, "duration", time.Since(start).String())
 			// Save updated job detail
 			err = SaveJobDetail(ctx, s.fs, &job)
 			if err != nil {
@@ -135,7 +135,7 @@ func (s *SearchResultProcessor) queueLogger() {
 				s.queueHadItems.Store(true)
 				s.logger.Debug("job detail extraction queue size", "size", qLen)
 			} else if s.queueHadItems.Load() {
-				s.logger.Info("job detail extraction queue completely processed")
+				s.logger.Info(Green("job detail extraction queue completely processed"))
 				s.queueHadItems.Store(false)
 			}
 		case <-s.stopCh:

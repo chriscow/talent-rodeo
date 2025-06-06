@@ -37,8 +37,8 @@ type SearchTask struct {
 }
 
 type JobDetailRef struct {
-	JobID     string    `firestore:"job_id"`
-	CreatedAt time.Time `firestore:"created_at"`
+	JobID     string
+	CreatedAt time.Time
 }
 
 var ErrSearchTaskExists = errors.New("search task already exists")

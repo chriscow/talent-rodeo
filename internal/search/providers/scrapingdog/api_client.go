@@ -17,6 +17,8 @@ import (
 type SortBy string
 
 const (
+	ScrapingDogConcurrency = 5
+
 	SortByDay   SortBy = "day"   // Last 24 hours
 	SortByWeek  SortBy = "week"  // Last 7 days
 	SortByMonth SortBy = "month" // Last 30 days
@@ -77,7 +79,7 @@ func NewAPIClient(apiKey string, opts ...APIOption) *APIClient {
 		baseURL:      DefaultBaseURL,
 		client:       &http.Client{Timeout: 120 * time.Second},
 		logger:       slog.Default(),
-		apiSemaphore: make(chan struct{}, DefaultConcurrency), // Default to 5
+		apiSemaphore: make(chan struct{}, ScrapingDogConcurrency), // Default to 5
 	}
 
 	for _, opt := range opts {

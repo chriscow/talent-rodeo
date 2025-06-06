@@ -53,14 +53,39 @@ type SearchProvider interface {
 	GetJobDetails(ctx context.Context, jobID string) (*internal.JobDetail, error)
 }
 
+// WorkerSettings holds the settings for the worker manager
 type WorkerSettings struct {
 	Paused bool // Whether the workers should process the search queue
 }
 
+// TaskType represents the type of work to be done by the worker
+// ("search" for SearchTask, "job_detail" for JobDetail fetch, etc.)
+type TaskType string
+
+const (
+	TaskTypeSearch    TaskType = "search"
+	TaskTypeJobDetail TaskType = "job_detail"
+)
+
+type JobDetailTask struct {
+	SearchTask internal.SearchTask
+	JobListing internal.JobListing
+}
+
+// WorkerTask is a union type for all possible queue items
+// Only one of SearchTask or JobListing should be set, depending on Type
+// (Extendable for future types)
+type WorkerTask struct {
+	Type          TaskType
+	SearchTask    *internal.SearchTask // for search tasks
+	JobDetailTask *JobDetailTask       // for job detail fetches
+}
+
 // WorkerManager handles background processing of search jobs
+// (Refactored: now uses a single shared queue for all task types)
 type WorkerManager struct {
 	provider     SearchProvider
-	searchQueue  chan internal.SearchTask
+	taskQueue    chan WorkerTask // Shared queue for all task types
 	semaphore    chan struct{}
 	workerWg     sync.WaitGroup
 	logger       *slog.Logger
@@ -68,8 +93,7 @@ type WorkerManager struct {
 	shutdownFunc context.CancelFunc
 	shutdownFlag int32
 	eventHandler internal.JobEventHandler
-	// Pause control using atomic operations
-	pausedFlag int32 // 0 = not paused, 1 = paused
+	pausedFlag   int32 // 0 = not paused, 1 = paused
 }
 
 // WorkerOption configures the WorkerManager
@@ -89,13 +113,13 @@ func withEventHandler(handler internal.JobEventHandler) WorkerOption {
 	}
 }
 
-// NewWorkerManager creates a new worker manager
+// NewWorkerManager creates a new worker manager (single shared queue)
 func NewWorkerManager(provider SearchProvider, maxConcurrent int, queueSize int, opts ...WorkerOption) *WorkerManager {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	wm := &WorkerManager{
 		provider:     provider,
-		searchQueue:  make(chan internal.SearchTask, queueSize),
+		taskQueue:    make(chan WorkerTask, queueSize*10), // Shared queue for all tasks
 		semaphore:    make(chan struct{}, maxConcurrent),
 		logger:       slog.Default(),
 		shutdownCtx:  ctx,
@@ -112,14 +136,13 @@ func NewWorkerManager(provider SearchProvider, maxConcurrent int, queueSize int,
 	return wm
 }
 
-// Start launches worker goroutines to process the search queue
+// Start launches worker goroutines to process the shared task queue
 func (wm *WorkerManager) Start(ctx context.Context, numWorkers int) error {
 	wm.logger.Info("starting worker manager",
 		"numWorkers", numWorkers,
-		"queueSize", cap(wm.searchQueue),
+		"queueSize", cap(wm.taskQueue),
 		"maxConcurrent", cap(wm.semaphore))
 
-	// Launch the workers
 	for i := 0; i < numWorkers; i++ {
 		wm.workerWg.Add(1)
 		id := i + 1
@@ -134,24 +157,16 @@ func (wm *WorkerManager) Start(ctx context.Context, numWorkers int) error {
 
 // Shutdown gracefully stops the worker manager
 func (wm *WorkerManager) Shutdown(ctx context.Context) error {
-	// Set the atomic shutdown flag
 	if !atomic.CompareAndSwapInt32(&wm.shutdownFlag, 0, 1) {
-		// Already shutting down
 		return nil
 	}
-
 	wm.logger.InfoContext(ctx, "Shutting down worker manager")
-
-	// Signal cancellation to workers
 	wm.shutdownFunc()
-
-	// Wait for workers to finish with timeout
 	done := make(chan struct{})
 	go func() {
 		wm.workerWg.Wait()
 		close(done)
 	}()
-
 	select {
 	case <-done:
 		wm.logger.InfoContext(ctx, "Worker manager shutdown complete")
@@ -161,34 +176,31 @@ func (wm *WorkerManager) Shutdown(ctx context.Context) error {
 	}
 }
 
-// QueueSearch adds a search request to the queue
-func (wm *WorkerManager) QueueSearch(ctx context.Context, searchJob internal.SearchTask) error {
+// QueueTask adds a WorkerTask to the shared queue
+func (wm *WorkerManager) QueueTask(ctx context.Context, task WorkerTask) error {
 	// Check if we're shutting down
 	if atomic.LoadInt32(&wm.shutdownFlag) == 1 {
 		internal.SentryReportError(ctx, fmt.Errorf("worker manager is shutting down"), sentry.LevelError, map[string]string{
-			"action": "WorkerManager::QueueSearch: worker manager is shutting down",
+			"action": "WorkerManager::QueueTask: worker manager is shutting down",
 		})
 		return fmt.Errorf("worker manager is shutting down")
 	}
 
 	// Try to add to the queue
 	select {
-	case wm.searchQueue <- searchJob:
-		wm.logger.InfoContext(ctx, "search queued successfully",
-			"query", searchJob.Criteria.Query,
-			"geoID", searchJob.Criteria.GeoID,
-			"maxPages", searchJob.Criteria.MaxPages)
+	case wm.taskQueue <- task:
+		wm.logger.InfoContext(ctx, "task queued successfully", "type", task.Type)
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		return fmt.Errorf("search queue is full")
+		return fmt.Errorf("task queue is full")
 	}
 }
 
 // GetQueueDepth returns the current number of items in the queue
 func (wm *WorkerManager) GetQueueDepth() int {
-	return len(wm.searchQueue)
+	return len(wm.taskQueue)
 }
 
 // Pause sets the pause state of the workers
@@ -215,7 +227,7 @@ func (wm *WorkerManager) IsPaused() bool {
 	return atomic.LoadInt32(&wm.pausedFlag) == 1
 }
 
-// startWorker runs a worker goroutine to process search requests
+// startWorker runs a worker goroutine to process tasks from the shared queue
 func (wm *WorkerManager) startWorker(ctx context.Context, workerID int) {
 	logger := wm.logger.With("pkg", "scrapingdog", "workerID", workerID)
 
@@ -233,15 +245,15 @@ func (wm *WorkerManager) startWorker(ctx context.Context, workerID int) {
 				continue
 			}
 
-			// Attempt to get a search request from the queue
-			var searchJob internal.SearchTask
+			// Attempt to get a task from the queue
+			var task WorkerTask
 			var ok bool
 
 			select {
-			case searchJob, ok = <-wm.searchQueue:
+			case task, ok = <-wm.taskQueue:
 				if !ok {
 					// Channel closed
-					logger.Info("search queue closed, worker exiting")
+					logger.Info("task queue closed, worker exiting")
 					return
 				}
 			case <-wm.shutdownCtx.Done():
@@ -261,186 +273,128 @@ func (wm *WorkerManager) startWorker(ctx context.Context, workerID int) {
 				return
 			}
 
-			// Process the search request
+			// Process the task
 			startTime := time.Now()
-			logger.Info("processing search",
-				"query", searchJob.Criteria.Query)
-
-			err := wm.processQueuedSearch(ctx, workerID, searchJob)
+			wm.processWorkerTask(ctx, task, logger)
 
 			// Release the semaphore
 			<-wm.semaphore
 
 			// Log the result
 			duration := time.Since(startTime)
-			if err != nil {
-				internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-					"action": "WorkerManager::startWorker: failed to process search",
-				})
-				logger.Error("failed to process search",
-					"query", searchJob.Criteria.Query,
-					"duration", duration,
-					"error", err)
-			} else {
-				logger.Info("completed search",
-					"query", searchJob.Criteria.Query,
-					"duration", duration)
-			}
+			logger.Debug("completed task", "type", task.Type, "duration", duration)
 		}
 	}
 }
 
-// processSearchPage processes a single page of job search results
-// Note: API concurrency is controlled at the APIClient level with semaphores,
-// allowing this method to make multiple API calls without exceeding provider limits
-func (wm *WorkerManager) processSearchPage(ctx context.Context, searchJob *internal.SearchTask, page int, logger *slog.Logger) ([]internal.JobListing, []error) {
-	var pageErrors []error
-
-	// Execute the search for this page (API call #1)
-	listings, err := wm.provider.SearchJobListings(ctx, searchJob.Criteria, page)
-
-	// Handle errors
-	if err != nil {
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"action": "WorkerManager::processSearchPage: failed to search for jobs",
-		})
-		logger.Error("failed to search for jobs",
-			"page", page,
-			"error", err)
-		pageErrors = append(pageErrors, fmt.Errorf("page %d: %w", page, err))
-		return nil, pageErrors
-	}
-
-	// If we got no results, this is not an error but indicates end of pagination
-	if len(listings) == 0 {
-		logger.Debug("no more results found", "page", page)
-		return nil, pageErrors
-	}
-
-	// Process each job listing to get details
-	var validJobs []internal.JobListing
-	for _, job := range listings {
-		select {
-		case <-ctx.Done():
-			pageErrors = append(pageErrors, ctx.Err())
-			return validJobs, pageErrors
-		default:
-			// Continue processing
+// processWorkerTask dispatches a WorkerTask by type
+func (wm *WorkerManager) processWorkerTask(ctx context.Context, task WorkerTask, logger *slog.Logger) {
+	switch task.Type {
+	case TaskTypeSearch:
+		if task.SearchTask != nil {
+			wm.handleSearchTask(ctx, *task.SearchTask)
 		}
-
-		// Get job details (API call #2 - rate limited by APIClient semaphore)
-		details, err := wm.provider.GetJobDetails(ctx, job.ProviderJobID)
-		if err != nil {
-			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-				"action": "WorkerManager::processSearchPage: failed to get job details",
-			})
-			logger.Error("failed to get job details",
-				"jobID", job.ID,
-				"error", err)
-			pageErrors = append(pageErrors, fmt.Errorf("get details for %s: %w", job.ID, err))
-			continue
+	case TaskTypeJobDetail:
+		if task.JobDetailTask != nil {
+			wm.handleJobDetailTask(ctx, *task.JobDetailTask)
 		}
-
-		details.URL = job.URL                       // this is the original URL from the job listing
-		details.CompanyLogo = job.CompanyLogo       // use the logo from the listing
-		details.CompanyProfile = job.CompanyProfile // use the profile from the listing
-
-		// Notify about the new job
-		if wm.eventHandler != nil {
-			wm.eventHandler.OnJobDetail(*searchJob, *details)
-		}
-
-		validJobs = append(validJobs, job)
+	default:
+		logger.Warn("unknown task type", "type", task.Type)
 	}
-
-	logger.Debug("found jobs",
-		"page", page,
-		"count", len(listings),
-		"validJobs", len(validJobs))
-
-	searchJob.PagesCompleted = page
-	now := time.Now().UTC()
-	searchJob.UpdatedAt = &now
-
-	// Notify about page completion
-	if wm.eventHandler != nil {
-		wm.eventHandler.OnPageComplete(*searchJob, page, len(validJobs), pageErrors)
-	}
-
-	return validJobs, pageErrors
 }
 
-// processQueuedSearch handles the search processing workflow
-func (wm *WorkerManager) processQueuedSearch(ctx context.Context, workerID int, searchJob internal.SearchTask) error {
-	// Create a child context that can be canceled if the parent is done
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	// Set a timeout for the entire search process
-	ctx, cancel = context.WithTimeout(ctx, 20*time.Minute)
-	defer cancel()
-
-	searchJob.Status = internal.SearchTaskStatusProcessing
-	if wm.eventHandler != nil {
-		wm.eventHandler.OnSearchStarted(searchJob)
-	}
-
-	// Create new logger with request context
-	logger := wm.logger.With(
-		"pkg", "scrapingdog",
-		"workerID", workerID,
-		"query", searchJob.Criteria.Query,
-		"location", searchJob.Criteria.GeoID)
-
-	logger.Info("processing queued search")
-
-	// Track errors for reporting
+// handleSearchTask processes a SearchTask (pagination, enqueues job detail tasks)
+func (wm *WorkerManager) handleSearchTask(ctx context.Context, searchJob internal.SearchTask) {
+	logger := wm.logger.With("search", searchJob.Criteria.Query)
+	logger.Info(internal.Cyan("processing search task"))
 	var searchErrors []error
-
-	// Handle pagination manually
 	var allJobs []internal.JobListing
-
 	if searchJob.Criteria.MaxPages == 0 {
 		searchJob.Criteria.MaxPages = internal.DefaultMaxPages
 	}
-
 	for page := searchJob.PagesCompleted + 1; page <= searchJob.Criteria.MaxPages; page++ {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			logger.Warn("context cancelled during search task")
+			return
 		default:
-			// Continue processing
 		}
-
-		// Process this page of search results
-		pageJobs, pageErrors := wm.processSearchPage(ctx, &searchJob, page, logger)
-
-		// Add any errors from this page to our overall error collection
-		searchErrors = append(searchErrors, pageErrors...)
-
-		// If we got no results, stop pagination
-		if len(pageJobs) == 0 {
+		listings, err := wm.provider.SearchJobListings(ctx, searchJob.Criteria, page)
+		if err != nil {
+			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+				"action": "WorkerManager::handleSearchTask: failed to search for jobs",
+			})
+			logger.Error("failed to search for jobs", "page", page, "error", err)
+			searchErrors = append(searchErrors, fmt.Errorf("page %d: %w", page, err))
 			break
 		}
-
-		// Add jobs to the list
-		allJobs = append(allJobs, pageJobs...)
+		if len(listings) == 0 {
+			logger.Debug("no more results found", "page", page)
+			break
+		}
+		var validJobs []internal.JobListing
+		for _, job := range listings {
+			select {
+			case <-ctx.Done():
+				logger.Warn("context cancelled during job listing processing")
+				return
+			default:
+			}
+			// Enqueue job detail fetch as a WorkerTask
+			jobDetailTask := JobDetailTask{
+				SearchTask: searchJob,
+				JobListing: job,
+			}
+			workerTask := WorkerTask{Type: TaskTypeJobDetail, JobDetailTask: &jobDetailTask}
+			select {
+			case wm.taskQueue <- workerTask:
+				logger.Debug("enqueued job detail fetch", "jobID", job.ID)
+				validJobs = append(validJobs, job)
+			default:
+				logger.Warn("task queue full, dropping job detail fetch", "jobID", job.ID)
+			}
+		}
+		logger.Debug("found job listings", "page", page, "count", len(listings), "validJobs", len(validJobs))
+		searchJob.PagesCompleted = page
+		now := time.Now().UTC()
+		searchJob.UpdatedAt = &now
+		if wm.eventHandler != nil {
+			wm.eventHandler.OnPageComplete(searchJob, page, len(validJobs), searchErrors)
+		}
+		allJobs = append(allJobs, validJobs...)
 	}
-
-	// Log completion
-	logger.Info("search completed",
-		"totalJobs", len(allJobs),
-		"errors", len(searchErrors))
-
 	now := time.Now().UTC()
 	searchJob.Status = internal.SearchTaskStatusCompleted
-	searchJob.PagesCompleted = searchJob.Criteria.MaxPages // All pages processed
+	searchJob.PagesCompleted = searchJob.Criteria.MaxPages
 	searchJob.UpdatedAt = &now
-
-	// Update user's search status
 	if wm.eventHandler != nil {
 		wm.eventHandler.OnSearchCompleted(searchJob, len(allJobs), searchErrors)
 	}
+}
 
-	return nil
+// handleJobDetailTask processes a JobDetail fetch (deduplication, fetch, store, event)
+func (wm *WorkerManager) handleJobDetailTask(ctx context.Context, task JobDetailTask) {
+	logger := wm.logger.With("jobID", task.JobListing.ID)
+	logger.Debug(internal.Green("processing job detail task"))
+	jobDetailID := task.JobListing.ID
+	if jobDetailID == "" {
+		logger.Error("job listing missing ID, skipping", "job", task.JobListing)
+		return
+	}
+
+	jobDetail, err := wm.provider.GetJobDetails(ctx, task.JobListing.ProviderJobID)
+	if err != nil {
+		logger.Error("failed to fetch job details", "jobID", task.JobListing.ProviderJobID, "error", err)
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "WorkerManager::handleJobDetailTask: failed to get job details",
+			"jobID":  task.JobListing.ProviderJobID,
+		})
+		return
+	}
+	jobDetail.URL = task.JobListing.URL
+	jobDetail.CompanyLogo = task.JobListing.CompanyLogo
+	jobDetail.CompanyProfile = task.JobListing.CompanyProfile
+	if wm.eventHandler != nil {
+		wm.eventHandler.OnJobDetail(task.SearchTask, *jobDetail)
+	}
 }
