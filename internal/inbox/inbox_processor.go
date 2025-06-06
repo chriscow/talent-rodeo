@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"sync"
+	"talent-rodeo/internal"
 	"talent-rodeo/internal/cloudflare"
 	"time"
 )
@@ -34,7 +35,7 @@ var DefaultSettings = ProcessorSettings{
 // Processor handles periodic inbox checking and email processing
 type Processor struct {
 	reader     InboxReader
-	handler    EmailHandler
+	handler    internal.EmailHandler
 	logger     *slog.Logger
 	ticker     *time.Ticker
 	done       chan bool
@@ -46,7 +47,7 @@ type Processor struct {
 }
 
 // NewProcessor creates a new inbox processor
-func NewProcessor(reader InboxReader, handler EmailHandler, logger *slog.Logger) *Processor {
+func NewProcessor(reader InboxReader, handler internal.EmailHandler, logger *slog.Logger) *Processor {
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 	}

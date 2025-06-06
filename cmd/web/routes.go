@@ -29,6 +29,11 @@ func (app *application) routes() http.Handler {
 	mux.Use(app.logAccess)
 	mux.Use(app.sessionManager.LoadAndSave)
 
+	// Health check endpoints (no auth required)
+	mux.HandleFunc("/health", app.health, "GET")
+	mux.HandleFunc("/health/detailed", app.healthDetailed, "GET")
+	mux.HandleFunc("/health/gmail", app.gmailHealth, "GET")
+
 	// VAPI webhook endpoint
 	mux.HandleFunc("/vapi/outbound-call", app.makeOutboundCall, "POST")
 	mux.HandleFunc("/webhooks/vapi", app.handleVapiWebhook, "POST")
