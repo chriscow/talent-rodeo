@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/hashicorp/go-retryablehttp"
@@ -15,6 +16,11 @@ import (
 )
 
 const linkedinProfilesCollection = "linkedin_profiles"
+
+// Proxycurl API docs:
+//
+// https://nubela.co/proxycurl/docs#people-api-person-profile-endpoint
+//
 
 // LinkedInProfile defines the structure for storing a user's LinkedIn profile data.
 type LinkedInProfile struct {
@@ -30,29 +36,67 @@ type LinkedInProfile struct {
 // It uses the user's ID as the document ID.
 func SetLinkedInProfile(ctx context.Context, fs *FirestoreClient, userID string, profile *LinkedInProfile) error {
 	_, err := fs.Collection(linkedinProfilesCollection).Doc(userID).Set(ctx, profile)
-	return err
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // GetLinkedInProfile retrieves a LinkedIn profile by user ID.
-func GetLinkedInProfile(ctx context.Context, fs *FirestoreClient, userID string) (*LinkedInProfile, error) {
+func GetLinkedInProfile(ctx context.Context, fs *FirestoreClient, userID string) (*LinkedInProfile, bool, error) {
 	doc, err := fs.Collection(linkedinProfilesCollection).Doc(userID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
-			return nil, nil // Return nil if profile doesn't exist
+			user, found, err := GetUser(ctx, fs, userID)
+			if err != nil {
+				return nil, false, err
+			}
+			if !found {
+				return nil, false, nil
+			}
+			if user.LinkedInURL == "" {
+				return nil, false, nil
+			}
+			data, err := fetchLinkedInProfile(ctx, user.LinkedInURL)
+			if err != nil {
+				return nil, false, err
+			}
+
+			profile := &LinkedInProfile{
+				UserID:    userID,
+				Profile:   data,
+				FetchedAt: time.Now(),
+				Available: true,
+			}
+
+			if err := SetLinkedInProfile(ctx, fs, userID, profile); err != nil {
+				return nil, false, err
+			}
+
+			if err := SetLinkedInProfileURL(ctx, fs, userID, profile.ProfileID); err != nil {
+				return nil, false, err
+			}
+
+			return profile, true, nil
 		}
-		return nil, err
+		return nil, false, err
 	}
 
 	var profile LinkedInProfile
 	if err := doc.DataTo(&profile); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return &profile, nil
+	return &profile, true, nil
 }
 
 // fetchLinkedInProfile fetches a LinkedIn profile using the Proxycurl API given a profile URL and API key.
 // Note: Most parameters with '=include' incur extra cost per the Proxycurl pricing table.
-func fetchLinkedInProfile(ctx context.Context, linkedinProfileURL, apiKey string) (map[string]any, error) {
+func fetchLinkedInProfile(ctx context.Context, linkedinProfileURL string) (map[string]any, error) {
+	apiKey := os.Getenv("PROXYCURL_API_KEY")
+	if apiKey == "" {
+		return nil, fmt.Errorf("PROXYCURL_API_KEY is not set")
+	}
 	endpoint := "https://nubela.co/proxycurl/api/v2/linkedin"
 
 	u, err := url.Parse(endpoint)

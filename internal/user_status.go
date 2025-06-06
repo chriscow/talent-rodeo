@@ -14,15 +14,16 @@ const (
 	UserStatusError                                 // 1
 	UserStatusPendingResumeUpload                   // 2
 	UserStatusProcessingResume                      // 3
-	UserStatusResumeUploaded                        // 4
-	UserStatusCallScheduled                         // 5
-	UserStatusCallStarted                           // 6
-	UserStatusCallAnalysisStarted                   // 7
-	UserStatusCallProcessing                        // 8
-	UserStatusCallCompleted                         // 9
-	UserStatusJobSearchScheduled                    // 10
-	UserStatusJobSearchStarted                      // 11
-	UserStatusJobSearchComplete                     // 12
+	UserStatusProcessingProfile                     // 4
+	UserStatusResumeUploaded                        // 5
+	UserStatusCallScheduled                         // 6
+	UserStatusCallStarted                           // 7
+	UserStatusCallAnalysisStarted                   // 8
+	UserStatusCallProcessing                        // 9
+	UserStatusCallCompleted                         // 10
+	UserStatusJobSearchScheduled                    // 11
+	UserStatusJobSearchStarted                      // 12
+	UserStatusJobSearchComplete                     // 13
 )
 
 type UserState struct {
@@ -73,6 +74,8 @@ func (s UserStatus) String() string {
 		return "Pending Resume Upload"
 	case UserStatusProcessingResume:
 		return "Processing Resume"
+	case UserStatusProcessingProfile:
+		return "Processing Profile"
 	case UserStatusResumeUploaded:
 		return "Resume Uploaded"
 	case UserStatusCallScheduled:
@@ -106,6 +109,8 @@ func (s UserStatus) Description() string {
 		return "We are waiting for your resume to be uploaded."
 	case UserStatusProcessingResume:
 		return "The resume is being processed."
+	case UserStatusProcessingProfile:
+		return "Your profile is being processed."
 	case UserStatusResumeUploaded:
 		return "The resume has been successfully uploaded but a call has not been scheduled yet."
 	case UserStatusCallScheduled:
@@ -133,6 +138,7 @@ func (s UserStatus) Description() string {
 // This includes processing resume, call analysis, and call completion states
 func (s UserStatus) IsOnboarding() bool {
 	return s == UserStatusProcessingResume ||
+		s == UserStatusProcessingProfile ||
 		s == UserStatusCallScheduled ||
 		s == UserStatusCallStarted ||
 		s == UserStatusCallAnalysisStarted ||

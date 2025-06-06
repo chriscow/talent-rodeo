@@ -21,10 +21,11 @@ import (
 )
 
 type resumeUploadForm struct {
-	Phone     string
-	Filename  string
-	Terms     bool // Add terms field
-	Validator validator.Validator
+	Phone       string
+	Filename    string
+	Terms       bool   // Add terms field
+	LinkedInURL string // New field for LinkedIn profile URL
+	Validator   validator.Validator
 }
 
 // isValidFileType checks if the given filename has an allowed extension (.pdf or .docx or .txt).
@@ -80,6 +81,7 @@ func (app *application) showUploadPage(w http.ResponseWriter, r *http.Request) {
 	app.logger.Info("showUploadPage", "method", r.Method, "url", r.URL.String())
 
 	data := app.newTemplateData(r)
+
 	if err := response.Page(w, http.StatusOK, data, "pages/profile-resume-upload.html"); err != nil {
 		app.logger.Error("Failed to render resume upload page", "error", err)
 		app.serverError(w, r, fmt.Errorf("failed to render resume upload page: %w", err))
@@ -136,24 +138,20 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 	form.Validator.CheckField(form.Terms, "terms", "You must agree to the Terms of Service to continue")
 
 	file, header, err := r.FormFile("resume")
-	if err != nil {
-		form.Validator.AddFieldError("resume", "Please select a file")
+	if err != nil && err != http.ErrMissingFile {
+		form.Validator.AddFieldError("resume", "Error processing file. Please try again.")
 		internal.SentryReportError(r.Context(), err, sentry.LevelWarning, map[string]string{
 			"action":    "getFormFile",
 			"fieldName": "resume",
 		})
-		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
-			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
-			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-				"template": "pages/profile-resume-upload.html",
-				"action":   "response.Page",
-			})
-		}
-		return
 	}
-	defer file.Close()
+	hasFile := err == nil
+	if file != nil {
+		defer file.Close()
+	}
 
 	form.Phone = r.FormValue("phone")
+	form.LinkedInURL = r.FormValue("linkedin_url")
 
 	// Ensure phone number is prefixed with +1 (E.164 format)
 	if !strings.HasPrefix(form.Phone, "+1") && !strings.HasPrefix(form.Phone, "1") {
@@ -164,106 +162,83 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 	phoneRegex := regexp.MustCompile(`^\+1\d{10}$`)
 	form.Validator.CheckField(validator.Matches(form.Phone, phoneRegex), "phone", "Invalid phone number. Please use the format +1XXXXXXXXXX.")
 
-	form.Validator.CheckField(isValidFileType(header.Filename), "resume", "Invalid file type. Please upload a DOCX, PDF, or TXT file.")
+	// Only validate file type if a file was uploaded
+	if hasFile {
+		form.Validator.CheckField(isValidFileType(header.Filename), "resume", "Invalid file type. Please upload a DOCX, PDF, or TXT file.")
+	}
+
+	// Require at least one of resume or LinkedIn URL
+	if !hasFile && strings.TrimSpace(form.LinkedInURL) == "" {
+		form.Validator.AddFieldError("resume", "You must provide a resume or LinkedIn profile (both is best)")
+	}
+
+	form.Validator.CheckField(validator.Matches(form.LinkedInURL, regexp.MustCompile(`^https://www\.linkedin\.com/in/`)), "linkedin_url", "Invalid LinkedIn profile URL. Please use the format https://www.linkedin.com/in/your-profile")
 
 	if form.Validator.HasErrors() {
 		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
-			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-				"template": "pages/profile-resume-upload.html",
-				"action":   "response.Page",
-			})
-		}
-		return
-	}
-
-	form.Filename = header.Filename
-
-	tempFile, err := os.CreateTemp("", "resume-*."+filepath.Ext(header.Filename))
-	if err != nil {
-		form.Validator.AddFieldError("resume", "Failed to process file. Please try again.")
-		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-			"action":   "os.CreateTemp",
-			"filename": header.Filename,
-		})
-		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
-			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
-			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-				"template": "pages/profile-resume-upload.html",
-				"action":   "response.Page",
-			})
-		}
-		return
-	}
-	defer os.Remove(tempFile.Name())
-
-	_, err = io.Copy(tempFile, file)
-	if err != nil {
-		form.Validator.AddFieldError("resume", "Failed to process file. Please try again.")
-		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-			"action":   "copyFileToTemp",
-			"filename": header.Filename,
-		})
-		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
-			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
-			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-				"template": "pages/profile-resume-upload.html",
-				"action":   "renderTemplate",
-			})
-		}
-		return
-	}
-
-	resumeText, err := app.extractResumeText(tempFile, header.Filename)
-	if err != nil {
-		form.Validator.AddFieldError("resume", fmt.Sprintf("Failed to extract text from resume: %v", err))
-		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-			"action":   "extractResumeText",
-			"filename": header.Filename,
-			"fileType": strings.ToLower(filepath.Ext(header.Filename)),
-		})
-		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
-			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
-			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-				"template": "pages/profile-resume-upload.html",
-				"action":   "renderTemplate",
-			})
 		}
 		return
 	}
 
 	user := contextGetAuthenticatedUser(r)
-	resume := internal.Resume{
-		RawText: resumeText,
-	}
-	if err := internal.CreateResume(r.Context(), app.fs, *user, &resume); err != nil {
-		form.Validator.AddFieldError("resume", "Failed to save resume. Please try again.")
-		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-			"action":   "internal.CreateResume",
-			"userID":   user.ID,
-			"filename": header.Filename,
-		})
-		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
-			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
+	var resume *internal.Resume
+
+	if hasFile {
+		form.Filename = header.Filename
+
+		tempFile, err := os.CreateTemp("", "resume-*."+filepath.Ext(header.Filename))
+		if err != nil {
+			form.Validator.AddFieldError("resume", "Failed to process file. Please try again.")
 			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-				"template": "pages/profile-resume-upload.html",
-				"action":   "renderTemplate",
+				"action":   "os.CreateTemp",
+				"filename": header.Filename,
 			})
 		}
-		return
+		defer os.Remove(tempFile.Name())
+
+		_, err = io.Copy(tempFile, file)
+		if err != nil {
+			form.Validator.AddFieldError("resume", "Failed to process file. Please try again.")
+			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+				"action":   "copyFileToTemp",
+				"filename": header.Filename,
+			})
+		}
+
+		resumeText, err := app.extractResumeText(tempFile, header.Filename)
+		if err != nil {
+			form.Validator.AddFieldError("resume", fmt.Sprintf("Failed to extract text from resume: %v", err))
+			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+				"action":   "extractResumeText",
+				"filename": header.Filename,
+				"fileType": strings.ToLower(filepath.Ext(header.Filename)),
+			})
+		}
+
+		resume = &internal.Resume{
+			RawText: resumeText,
+		}
+		if err := internal.CreateResume(r.Context(), app.fs, *user, resume); err != nil {
+			form.Validator.AddFieldError("resume", "Failed to save resume. Please try again.")
+			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+				"action":   "internal.CreateResume",
+				"userID":   user.ID,
+				"filename": header.Filename,
+			})
+		}
 	}
 
 	userState := internal.UserState{
-		Status:  internal.UserStatusProcessingResume,
+		Status:  internal.UserStatusProcessingProfile,
 		Started: time.Now(),
 	}
 
-	user.Phone = &form.Phone
-
-	// Save the phone number and update state
+	// Save the phone number, LinkedIn URL, and update state
 	if err := internal.UpdateUser(context.Background(), app.fs, user.ID, map[string]any{
-		"Phone": form.Phone,
-		"State": userState,
+		"Phone":       form.Phone,
+		"LinkedInURL": form.LinkedInURL,
+		"State":       userState,
 	}); err != nil {
 		app.serverError(w, r, fmt.Errorf("failed to update user: %w", err))
 		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
@@ -274,15 +249,18 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Start resume processing in background
+	// Start profile processing in background
 	go func() {
-		if err := internal.AnnotateResume(context.Background(), app.fs, app.logger, user, &resume); err != nil {
-			app.logger.Error("Failed to annotate resume", "error", err)
-			internal.SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
-				"action":   "internal.AnnotateResume",
-				"userID":   user.ID,
-				"resumeID": resume.ID,
-			})
+		if hasFile || strings.TrimSpace(form.LinkedInURL) != "" {
+			if err := internal.ProcessCandidateProfile(context.Background(), app.fs, app.logger, user, resume, form.LinkedInURL); err != nil {
+				app.logger.Error("Failed to process candidate profile", "error", err)
+				internal.SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
+					"action":      "internal.ProcessCandidateProfile",
+					"userID":      user.ID,
+					"hasResume":   fmt.Sprintf("%t", resume != nil),
+					"hasLinkedIn": fmt.Sprintf("%t", strings.TrimSpace(form.LinkedInURL) != ""),
+				})
+			}
 		}
 		internal.SendPusherRedirect(app.pusher, user.ID, "/dashboard")
 	}()

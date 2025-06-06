@@ -9,6 +9,11 @@
 
     <form method="post" action="/profile/resume/upload" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+        <div class="form-group">
+            <div class="alert alert-info" style="margin-bottom:1rem;">
+                <strong>Tip:</strong> You <strong>must</strong> provide <strong>either</strong> a resume <strong>or</strong> a LinkedIn profile. <strong>Both is best!</strong>
+            </div>
+        </div>
         <div class="grid">
             <label for="phone">
                 Phone Number
@@ -22,14 +27,22 @@
 
             <label for="resume">
                 Resume (PDF, DOCX, or TXT)
-                <input type="file" id="resume" name="resume" required accept=".pdf,.docx,.txt"
+                <input type="file" id="resume" name="resume" accept=".pdf,.docx,.txt"
                     aria-describedby="resume-help{{if .Form.Validator.FieldErrors.resume}} resume-error{{end}}" {{with
                     .Form.Validator.FieldErrors.resume}} aria-invalid="true" {{end}}>
                 {{with .Form.Validator.FieldErrors.resume}}
                 <small id="resume-error" role="alert">{{.}}</small>
                 {{end}}
-                <small id="resume-help">PDF, DOCX, or TXT up to 10MB</small>
+                <small id="resume-help">PDF, DOCX, or TXT up to 10MB. <strong>Required if you do not provide a LinkedIn profile.</strong></small>
             </label>
+        </div>
+        <div class="form-group">
+            <label for="linkedin-url">LinkedIn Profile URL</label>
+            <input type="url" id="linkedin-url" name="linkedin_url" class="form-control" placeholder="https://www.linkedin.com/in/your-profile" value="{{.Form.LinkedInURL}}" autocomplete="url" {{with .Form.Validator.FieldErrors.linkedin_url}} aria-invalid="true" aria-describedby="linkedin-url-error" {{end}}>
+            {{with .Form.Validator.FieldErrors.linkedin_url}}
+            <small id="linkedin-url-error" role="alert">{{.}}</small>
+            {{end}}
+            <small class="form-text text-muted">Paste your LinkedIn profile URL. <strong>Required if you do not upload a resume.</strong></small>
         </div>
         <section>
             <label for="terms">
@@ -46,4 +59,24 @@
         </footer>
     </form>
 </div>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const resumeInput = document.getElementById('resume');
+        const useLinkedInCheckbox = document.getElementById('use-linkedin');
+
+        function toggleResumeRequired() {
+            if (useLinkedInCheckbox.checked) {
+                resumeInput.required = false;
+            } else {
+                resumeInput.required = true;
+            }
+        }
+
+        if (useLinkedInCheckbox) {
+            useLinkedInCheckbox.addEventListener('change', toggleResumeRequired);
+            // Initial check
+            toggleResumeRequired();
+        }
+    });
+</script>
 {{end}}

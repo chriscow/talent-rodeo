@@ -80,9 +80,9 @@ func TestValidResume(t *testing.T) {
 	}
 
 	// Run resume validation
-	err = AnnotateResume(context.Background(), fs, logger, user, resume)
+	err = ProcessCandidateProfile(context.Background(), fs, logger, user, resume, "")
 	if err != nil {
-		t.Fatalf("AnnotateResume() error = %v", err)
+		t.Fatalf("ProcessCandidateProfile() error = %v", err)
 	}
 
 	// Get updated resume
@@ -155,9 +155,9 @@ func TestNotAResumeEasy(t *testing.T) {
 	}
 
 	// Run resume validation
-	err = AnnotateResume(context.Background(), fs, logger, user, resume)
+	err = ProcessCandidateProfile(context.Background(), fs, logger, user, resume, "")
 	if err != nil {
-		t.Fatalf("AnnotateResume() error = %v", err)
+		t.Fatalf("ProcessCandidateProfile() error = %v", err)
 	}
 
 	// Get updated resume
@@ -243,9 +243,9 @@ func TestNotAResumeMedium(t *testing.T) {
 	}
 
 	// Run resume validation
-	err = AnnotateResume(context.Background(), fs, logger, user, resume)
+	err = ProcessCandidateProfile(context.Background(), fs, logger, user, resume, "")
 	if err != nil {
-		t.Fatalf("AnnotateResume() error = %v", err)
+		t.Fatalf("ProcessCandidateProfile() error = %v", err)
 	}
 
 	// Get updated resume
@@ -323,9 +323,9 @@ func TestJailbreakAttempt(t *testing.T) {
 	}
 
 	// Run resume validation
-	err = AnnotateResume(context.Background(), fs, logger, user, resume)
+	err = ProcessCandidateProfile(context.Background(), fs, logger, user, resume, "")
 	if err != nil {
-		t.Fatalf("AnnotateResume() error = %v", err)
+		t.Fatalf("ProcessCandidateProfile() error = %v", err)
 	}
 
 	// Get updated resume

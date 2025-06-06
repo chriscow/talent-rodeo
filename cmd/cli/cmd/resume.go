@@ -70,7 +70,7 @@ var createResumeCmd = &cobra.Command{
 			return fmt.Errorf("failed to add resume: %w", err)
 		}
 
-		err = internal.AnnotateResume(ctx, fs, slog.Default(), user, resume)
+		err = internal.ProcessCandidateProfile(ctx, fs, slog.Default(), user, resume, false)
 		if err != nil {
 			return fmt.Errorf("failed to annotate resume: %w", err)
 		}
@@ -115,7 +115,7 @@ var annotateResumeCmd = &cobra.Command{
 			return fmt.Errorf("resume not found: %s", resumeID)
 		}
 
-		err = internal.AnnotateResume(ctx, fs, slog.Default(), user, resume)
+		err = internal.ProcessCandidateProfile(ctx, fs, slog.Default(), user, resume, false)
 		if err != nil {
 			return fmt.Errorf("failed to annotate resume: %w", err)
 		}

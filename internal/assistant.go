@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -46,13 +47,32 @@ func BuildAssistantOverrides(ctx context.Context, user *User, fs *FirestoreClien
 	}
 
 	resume, found, err := GetLatestResume(ctx, fs, user.ID)
-	if err != nil || !found {
-		return nil, fmt.Errorf("failed to get latest resume (found:%v) : %w", found, err)
+	if err != nil {
+		logger.Warn("failed to get latest resume, continuing without it", "error", err, "userID", user.ID)
+	}
+	if !found {
+		logger.Info("no resume found for user", "userID", user.ID)
+	}
+
+	linkedinProfile, found, err := GetLinkedInProfile(ctx, fs, user.ID)
+	if err != nil {
+		logger.Warn("failed to get linkedin profile, continuing without it", "error", err, "userID", user.ID)
+	}
+	if !found {
+		linkedinProfile = nil // Ensure it's nil if not available
 	}
 
 	resumeText := ""
 	if resume != nil {
 		resumeText = resume.RawText
+	}
+
+	var linkedinProfileText string
+	if linkedinProfile != nil {
+		profileData, err := json.MarshalIndent(linkedinProfile.Profile, "", "  ")
+		if err == nil {
+			linkedinProfileText = string(profileData)
+		}
 	}
 
 	fullName := ""
@@ -93,14 +113,19 @@ func BuildAssistantOverrides(ctx context.Context, user *User, fs *FirestoreClien
 		FirstName          string
 		FullName           string
 		Resume             string
+		LinkedInProfile    string
 		SearchStrategy     string
 		PreviousDiscussion []previousDiscussion
 	}{
 		FirstName:          firstName,
 		FullName:           fullName,
 		Resume:             resumeText,
-		SearchStrategy:     *resume.SearchAnalysis,
+		LinkedInProfile:    linkedinProfileText,
 		PreviousDiscussion: previousDiscussions,
+	}
+
+	if resume != nil && resume.SearchAnalysis != nil {
+		data.SearchStrategy = *resume.SearchAnalysis
 	}
 
 	// Execute template with data
