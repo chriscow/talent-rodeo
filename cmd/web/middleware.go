@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
@@ -162,6 +163,18 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 				"path", r.URL.Path)
 			next.ServeHTTP(w, r)
 			return
+		}
+
+		// Update LastAccessedAt if needed
+		if user.LastAccessedAt.IsZero() || time.Since(user.LastAccessedAt) > internal.UserAccessUpdateThreshold {
+			user.LastAccessedAt = time.Now()
+			err := internal.UpdateUser(r.Context(), app.fs, user.ID, map[string]any{"LastAccessedAt": user.LastAccessedAt})
+			if err != nil {
+				app.logger.Warn("failed to update LastAccessedAt", "user_id", user.ID, "error", err)
+			} else {
+				// Update cache with new value
+				app.fs.SetUserCache(user.ID, user)
+			}
 		}
 
 		app.logger.Debug("user authenticated",
