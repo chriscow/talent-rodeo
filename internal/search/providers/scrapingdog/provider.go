@@ -250,13 +250,13 @@ func (p *Provider) SearchJobListings(ctx context.Context, criteria internal.Sear
 		return nil, fmt.Errorf("failed to convert job listings: %w", err)
 	}
 
-	p.logger.Info("search completed", "count", len(jobs))
+	p.logger.Info("search job listings completed", "count", len(jobs))
 	return jobs, nil
 }
 
 // GetJobDetails retrieves detailed information for a job
 func (p *Provider) GetJobDetails(ctx context.Context, jobID string) (*internal.JobDetail, error) {
-	p.logger.Debug("getting job details", "jobID", jobID)
+	p.logger.Debug("fetching job details", "jobID", jobID)
 
 	// Check if we have cached results
 	if p.cache != nil {
@@ -294,7 +294,7 @@ func (p *Provider) QueueSearch(ctx context.Context, searchJob internal.SearchTas
 		"geoID", searchJob.Criteria.GeoID,
 		"maxPages", searchJob.Criteria.MaxPages)
 
-	return p.workerManager.QueueSearch(ctx, searchJob)
+	return p.workerManager.QueueTask(ctx, WorkerTask{Type: TaskTypeSearch, SearchTask: &searchJob})
 }
 
 // GetQueueDepth returns the current number of items in the queue
