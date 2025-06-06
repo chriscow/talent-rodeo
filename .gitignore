@@ -33,6 +33,7 @@ __pycache__
 *.env
 bin/
 tmp/
+web
 
 testdata/
 build-errors.log
