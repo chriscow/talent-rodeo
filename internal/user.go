@@ -32,15 +32,16 @@ type User struct {
 	HashedSecret string
 	IsSuperUser  bool
 
-	Provider    string
-	Name        string
-	FirstName   string
-	LastName    string
-	NickName    string
-	Description string
-	UserID      string
-	AvatarURL   string
-	Location    string
+	Provider           string
+	Name               string
+	FirstName          string
+	LastName           string
+	NickName           string
+	Description        string
+	UserID             string
+	AvatarURL          string
+	Location           string
+	LinkedInProfileURL string
 
 	Phone *string
 

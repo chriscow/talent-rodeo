@@ -136,6 +136,8 @@ func userFromReader(reader io.Reader, user *goth.User) error {
 		} `json:"locale"`
 		Email         string `json:"email"`
 		EmailVerified bool   `json:"email_verified"`
+		Profile       string `json:"profile"`
+		Link          string `json:"link"`
 	}{}
 
 	err := json.NewDecoder(reader).Decode(&u)
@@ -151,6 +153,17 @@ func userFromReader(reader io.Reader, user *goth.User) error {
 	user.NickName = u.GivenName
 	user.AvatarURL = u.Picture
 	user.Email = u.Email
+
+	// Try to get LinkedIn profile URL from response, or construct it
+	profileURL := u.Profile
+	if profileURL == "" {
+		profileURL = u.Link
+	}
+	// Store the profile URL in RawData for access in the handler
+	if user.RawData == nil {
+		user.RawData = make(map[string]interface{})
+	}
+	user.RawData["linkedin_profile_url"] = profileURL
 
 	// Optionally, use locale data if needed
 	// user.Locale = fmt.Sprintf("%s-%s", u.Locale.Language, u.Locale.Country)

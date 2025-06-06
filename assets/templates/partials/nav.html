@@ -50,13 +50,24 @@
         </li>
         {{end}}
         <li>
-            <form method="POST" action="/logout" style="margin: 0;">
-                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-                <button type="submit" class="outline" style="margin: 0;">Logout</button>
-            </form>
+            <details class="dropdown" role="list">
+                <summary role="button" class="secondary" style="padding: 0.25rem;">
+                    <img src="{{.User.AvatarURL}}" alt="avatar" style="border-radius: 50%; height:40px; vertical-align: middle;" />
+                </summary>
+                <ul>
+                    <li><a href="/profile">Profile</a></li>
+                    {{if .User.LinkedInProfileURL}}
+                    <li><a href="{{.User.LinkedInProfileURL}}" target="_blank" rel="noopener noreferrer">View LinkedIn Profile</a></li>
+                    {{end}}
+                    <li>
+                        <form method="POST" action="/logout" style="margin: 0;">
+                            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                            <button type="submit" style="width: 100%; text-align: left; padding: 0.5rem 1rem; border: none; background: none; cursor: pointer;">Logout</button>
+                        </form>
+                    </li>
+                </ul>
+            </details>
         </li>
-        <li><a href="/profile"><img src="{{.User.AvatarURL}}" alt="avatar"
-                    style="border-radius: 50%; height:50px;" /></a></li>
     {{end}}
     </ul>
 </nav>

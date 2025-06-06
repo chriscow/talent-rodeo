@@ -90,18 +90,27 @@ func (app *application) completeSocialAuth(w http.ResponseWriter, r *http.Reques
 	if !found {
 		app.logger.Info("User not found, creating new user", "email", gothUser.Email)
 
+		// Extract LinkedIn profile URL from RawData if available
+		linkedInProfileURL := ""
+		if gothUser.Provider == "linkedin" && gothUser.RawData != nil {
+			if profileURL, ok := gothUser.RawData["linkedin_profile_url"].(string); ok {
+				linkedInProfileURL = profileURL
+			}
+		}
+
 		u = &internal.User{
-			ID:          uuid.New().String(),
-			Email:       gothUser.Email,
-			Provider:    gothUser.Provider,
-			Name:        gothUser.Name,
-			FirstName:   gothUser.FirstName,
-			LastName:    gothUser.LastName,
-			NickName:    gothUser.NickName,
-			Description: gothUser.Description,
-			UserID:      gothUser.UserID,
-			AvatarURL:   gothUser.AvatarURL,
-			Location:    gothUser.Location,
+			ID:                 uuid.New().String(),
+			Email:              gothUser.Email,
+			Provider:           gothUser.Provider,
+			Name:               gothUser.Name,
+			FirstName:          gothUser.FirstName,
+			LastName:           gothUser.LastName,
+			NickName:           gothUser.NickName,
+			Description:        gothUser.Description,
+			UserID:             gothUser.UserID,
+			AvatarURL:          gothUser.AvatarURL,
+			Location:           gothUser.Location,
+			LinkedInProfileURL: linkedInProfileURL,
 			State: internal.UserState{
 				Status:  internal.UserStatusPendingResumeUpload,
 				Started: time.Now(),
@@ -111,6 +120,18 @@ func (app *application) completeSocialAuth(w http.ResponseWriter, r *http.Reques
 		if err := internal.CreateUser(r.Context(), app.fs, u); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to create firestore user: %w", err))
 			return
+		}
+	} else {
+		// Update existing user with LinkedIn profile URL if it's not already set
+		if gothUser.Provider == "linkedin" && u.LinkedInProfileURL == "" && gothUser.RawData != nil {
+			if profileURL, ok := gothUser.RawData["linkedin_profile_url"].(string); ok && profileURL != "" {
+				updates := map[string]any{
+					"LinkedInProfileURL": profileURL,
+				}
+				if err := internal.UpdateUser(r.Context(), app.fs, u.ID, updates); err != nil {
+					app.logger.Error("Failed to update LinkedIn profile URL", "error", err, "userID", u.ID)
+				}
+			}
 		}
 	}
 
