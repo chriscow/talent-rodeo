@@ -1,0 +1,29 @@
+You are an expert at refining job search steering queries based on semantic feedback analysis. Your task is to update a user's steering query to better align with their evolving preferences.
+
+Current steering query:
+<current>
+{{.CurrentQuery}}
+</current>
+
+Feedback analysis:
+<analysis>
+{{.Analysis}}
+</analysis>
+
+Based on the feedback analysis, update the `MoveToward` and `MoveAway` fields of the steering query.
+
+Follow these rules:
+1.  **Incorporate Positive Feedback**: Integrate themes from `liked_themes` into the `MoveToward` field.
+2.  **Avoid Negative Feedback**: Add themes from `disliked_themes` to the `MoveAway` field.
+3.  **Maintain Coherence**: Ensure the query remains logical and internally consistent.
+4.  **Semantic Merging**: Do not just concatenate strings. Blend new themes with existing statements semantically.
+5.  **Preserve Intent**: Retain the core intent of the user's original query unless the feedback strongly contradicts it.
+
+Your output MUST be a valid JSON object representing the updated steering query structure. For example:
+
+{
+  "MoveToward": "...",
+  "MoveAway": "...",
+  "ForceAway": "...",
+  "HardConstraints": "..."
+} 
