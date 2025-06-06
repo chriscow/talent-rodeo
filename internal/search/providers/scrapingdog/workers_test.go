@@ -2,6 +2,7 @@ package scrapingdog
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"testing"
@@ -95,7 +96,7 @@ func TestNewWorkerManager(t *testing.T) {
 	assert.NotNil(t, wm)
 	assert.Equal(t, mockSearchProvider, wm.provider)
 	assert.Equal(t, maxConcurrent, cap(wm.semaphore))
-	assert.Equal(t, queueSize, cap(wm.searchQueue))
+	assert.Equal(t, queueSize*10, cap(wm.taskQueue))
 }
 
 func TestWorkerManagerWithOptions(t *testing.T) {
@@ -114,21 +115,29 @@ func TestWorkerManagerWithOptions(t *testing.T) {
 	assert.Equal(t, mockHandler, wm.eventHandler)
 }
 
-func TestQueueSearchAndGetQueueDepth(t *testing.T) {
+func TestQueueTaskAndGetQueueDepth(t *testing.T) {
 	mockSearchProvider := &MockSearchProvider{}
 	wm := NewWorkerManager(mockSearchProvider, 3, 5)
 
 	// Initial queue should be empty
 	assert.Equal(t, 0, wm.GetQueueDepth())
 
-	// Add a search to the queue
+	// Add a search task to the queue
 	ctx := context.Background()
-	err := wm.QueueSearch(ctx, internal.SearchTask{Criteria: internal.SearchCriteria{Query: "golang"}})
+	searchTask := WorkerTask{
+		Type:       TaskTypeSearch,
+		SearchTask: &internal.SearchTask{Criteria: internal.SearchCriteria{Query: "golang"}},
+	}
+	err := wm.QueueTask(ctx, searchTask)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, wm.GetQueueDepth())
 
-	// Add another search
-	err = wm.QueueSearch(ctx, internal.SearchTask{Criteria: internal.SearchCriteria{Query: "python"}})
+	// Add another search task
+	searchTask2 := WorkerTask{
+		Type:       TaskTypeSearch,
+		SearchTask: &internal.SearchTask{Criteria: internal.SearchCriteria{Query: "python"}},
+	}
+	err = wm.QueueTask(ctx, searchTask2)
 	assert.NoError(t, err)
 	assert.Equal(t, 2, wm.GetQueueDepth())
 }
@@ -155,8 +164,12 @@ func TestWorkerManagerStartAndShutdown(t *testing.T) {
 	ctx := context.Background()
 	wm.Start(ctx, 2)
 
-	// Queue a search
-	err := wm.QueueSearch(ctx, internal.SearchTask{Criteria: internal.SearchCriteria{Query: "golang"}})
+	// Queue a search task
+	searchTask := WorkerTask{
+		Type:       TaskTypeSearch,
+		SearchTask: &internal.SearchTask{Criteria: internal.SearchCriteria{Query: "golang"}},
+	}
+	err := wm.QueueTask(ctx, searchTask)
 	assert.NoError(t, err)
 
 	// Give workers time to process
@@ -170,7 +183,7 @@ func TestWorkerManagerStartAndShutdown(t *testing.T) {
 	assert.Equal(t, 0, wm.GetQueueDepth())
 }
 
-func TestProcessQueuedSearch(t *testing.T) {
+func TestHandleSearchTask(t *testing.T) {
 	// Create mock jobs
 	mockJobs := []internal.JobListing{
 		{ID: "job1", Title: "Job 1", ProviderJobID: "prov-job1"},
@@ -216,33 +229,21 @@ func TestProcessQueuedSearch(t *testing.T) {
 		GeoID: "remote",
 	}
 
-	// Process a search
+	// Process a search directly using the internal method
 	ctx := context.Background()
-	err := wm.processQueuedSearch(ctx, 1, internal.SearchTask{Criteria: criteria})
-
-	// Check that the process completed without error
-	assert.NoError(t, err)
+	wm.handleSearchTask(ctx, internal.SearchTask{Criteria: criteria})
 
 	// Verify the provider methods were called
 	assert.True(t, mockSearchProvider.searchJobsCalled, "SearchJobs should have been called")
-	assert.True(t, mockSearchProvider.getJobDetailsCalled, "GetJobDetails should have been called")
 
 	// Verify the event handler methods were called
-	assert.True(t, mockHandler.onNewJobCalled, "OnNewJob should have been called")
 	assert.True(t, mockHandler.onSearchCompletedCalled, "OnSearchCompleted should have been called")
 
-	// Verify jobs were received
-	// Count only actual job IDs (filter out "page_complete" and other non-job entries)
-	actualJobs := 0
-	for _, received := range mockHandler.jobsReceived {
-		if received != "page_complete" && received != "error" {
-			actualJobs++
-		}
-	}
-	assert.Equal(t, 2, actualJobs, "Should have received 2 jobs")
+	// Verify that job detail tasks were enqueued (check queue depth)
+	assert.Greater(t, wm.GetQueueDepth(), 0, "Job detail tasks should be enqueued")
 }
 
-func TestProcessQueuedSearchWithErrors(t *testing.T) {
+func TestHandleSearchTaskWithErrors(t *testing.T) {
 	// Test with search error
 	mockSearchProvider := &MockSearchProvider{
 		searchJobsError: assert.AnError,
@@ -256,46 +257,60 @@ func TestProcessQueuedSearchWithErrors(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	err := wm.processQueuedSearch(ctx, 1, internal.SearchTask{Criteria: internal.SearchCriteria{Query: "golang"}})
+	wm.handleSearchTask(ctx, internal.SearchTask{Criteria: internal.SearchCriteria{Query: "golang"}})
 
-	assert.NoError(t, err, "Process should complete even with search errors")
 	assert.True(t, mockSearchProvider.searchJobsCalled, "SearchJobs should have been called")
 	assert.True(t, mockHandler.onSearchCompletedCalled, "OnSearchCompleted should have been called")
 }
 
-func TestQueueSearchWhenShuttingDown(t *testing.T) {
+func TestQueueTaskWhenShuttingDown(t *testing.T) {
 	mockSearchProvider := &MockSearchProvider{}
 	wm := NewWorkerManager(mockSearchProvider, 3, 5)
 
 	// Set shutdown flag
 	wm.shutdownFlag = 1
 
-	// Try to queue a search
+	// Try to queue a search task
 	ctx := context.Background()
-	err := wm.QueueSearch(ctx, internal.SearchTask{Criteria: internal.SearchCriteria{Query: "golang"}})
+	searchTask := WorkerTask{
+		Type:       TaskTypeSearch,
+		SearchTask: &internal.SearchTask{Criteria: internal.SearchCriteria{Query: "golang"}},
+	}
+	err := wm.QueueTask(ctx, searchTask)
 
 	// Should return an error
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "shutting down")
 }
 
-func TestQueueSearchWhenQueueIsFull(t *testing.T) {
+func TestQueueTaskWhenQueueIsFull(t *testing.T) {
 	mockSearchProvider := &MockSearchProvider{}
 
-	// Create a worker manager with a small queue
+	// Create a worker manager with a small queue (actual capacity will be 1*10 = 10)
 	wm := NewWorkerManager(mockSearchProvider, 3, 1)
 
-	// Fill the queue
 	ctx := context.Background()
-	err := wm.QueueSearch(ctx, internal.SearchTask{Criteria: internal.SearchCriteria{Query: "golang"}})
-	assert.NoError(t, err)
 
-	// Try to add another search to the full queue with a timeout context
+	// Fill the queue completely (capacity is queueSize*10 = 10)
+	for i := 0; i < 10; i++ {
+		searchTask := WorkerTask{
+			Type:       TaskTypeSearch,
+			SearchTask: &internal.SearchTask{Criteria: internal.SearchCriteria{Query: fmt.Sprintf("job%d", i)}},
+		}
+		err := wm.QueueTask(ctx, searchTask)
+		assert.NoError(t, err)
+	}
+
+	// Now the queue should be full, try to add another task with a timeout context
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 	defer cancel()
 
-	err = wm.QueueSearch(ctxWithTimeout, internal.SearchTask{Criteria: internal.SearchCriteria{Query: "python"}})
+	searchTask := WorkerTask{
+		Type:       TaskTypeSearch,
+		SearchTask: &internal.SearchTask{Criteria: internal.SearchCriteria{Query: "overflow"}},
+	}
+	err := wm.QueueTask(ctxWithTimeout, searchTask)
 
-	// Should return an error
+	// Should return an error due to timeout or queue full
 	assert.Error(t, err)
 }
