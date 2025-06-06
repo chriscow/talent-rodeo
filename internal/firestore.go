@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"sync"
+	"time"
 
 	"cloud.google.com/go/firestore"
 	firebase "firebase.google.com/go/v4"
@@ -22,6 +23,8 @@ type FirestoreClient struct {
 	jobListingCache   *ristretto.Cache[string, *JobListing]
 	jobDetailCache    *ristretto.Cache[string, *JobDetail]
 	semanticJobsCache *ristretto.Cache[string, []ScoredJobDetail]
+
+	userCache *ristretto.Cache[string, *User] // User cache by ID
 }
 
 // Track if this is the first call to NewFirestoreClient
@@ -110,11 +113,22 @@ func NewFirestoreClient(ctx context.Context) (*FirestoreClient, error) {
 		return nil, fmt.Errorf("failed to create semantic jobs cache: %w", err)
 	}
 
+	userCache, err := ristretto.NewCache(&ristretto.Config[string, *User]{
+		NumCounters: 1e5,     // number of keys to track frequency of
+		MaxCost:     1 << 26, // maximum cost of cache (64MB)
+		BufferItems: 64,      // number of keys per Get buffer
+		Metrics:     false,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create user cache: %w", err)
+	}
+
 	return &FirestoreClient{
 		Client:            fs,
 		jobListingCache:   jobListingCache,
 		jobDetailCache:    jobDetailCache,
 		semanticJobsCache: semanticJobsCache,
+		userCache:         userCache,
 	}, nil
 }
 
@@ -129,6 +143,10 @@ func (fs *FirestoreClient) Close() error {
 
 	if fs.semanticJobsCache != nil {
 		fs.semanticJobsCache.Close()
+	}
+
+	if fs.userCache != nil {
+		fs.userCache.Close()
 	}
 
 	if fs.Client != nil {
@@ -198,4 +216,26 @@ func DeleteCollection(ctx context.Context, fs *FirestoreClient, collectionPath s
 	}
 
 	return nil
+}
+
+func (fs *FirestoreClient) GetUserFromCache(id string) (*User, bool) {
+	if fs.userCache == nil {
+		return nil, false
+	}
+	user, found := fs.userCache.Get(id)
+	return user, found
+}
+
+func (fs *FirestoreClient) SetUserCache(id string, user *User) {
+	if fs.userCache == nil {
+		return
+	}
+	fs.userCache.SetWithTTL(id, user, 1, 15*time.Minute)
+}
+
+func (fs *FirestoreClient) EvictUserCache(id string) {
+	if fs.userCache == nil {
+		return
+	}
+	fs.userCache.Del(id)
 }

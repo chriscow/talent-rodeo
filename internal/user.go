@@ -21,6 +21,8 @@ const (
 	UserTierEnterprise UserTier = "enterprise"
 
 	usersCollection = "users"
+
+	UserAccessUpdateThreshold = time.Hour // 1 hour
 )
 
 // User represents a user document in Firestore
@@ -52,6 +54,8 @@ type User struct {
 	Tier            UserTier
 	CompletedAt     *time.Time
 	SubscriptionEnd *time.Time
+
+	LastAccessedAt time.Time // Last time the user accessed the system
 }
 
 type ErrUserExists struct {
@@ -95,12 +99,15 @@ func CreateUser(ctx context.Context, fs *FirestoreClient, u *User) error {
 		}
 		return fmt.Errorf("failed to create user: %w", err)
 	}
-
+	fs.SetUserCache(u.ID, u)
 	return nil
 }
 
 // GetUser retrieves a user by ID
 func GetUser(ctx context.Context, fs *FirestoreClient, id string) (*User, bool, error) {
+	if user, found := fs.GetUserFromCache(id); found {
+		return user, true, nil
+	}
 	doc, err := fs.Collection(usersCollection).Doc(id).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -114,6 +121,7 @@ func GetUser(ctx context.Context, fs *FirestoreClient, id string) (*User, bool, 
 		return nil, false, fmt.Errorf("failed to unmarshal user data: %w", err)
 	}
 
+	fs.SetUserCache(id, &user)
 	return &user, true, nil
 }
 
@@ -271,7 +279,8 @@ func UpdateUser(ctx context.Context, fs *FirestoreClient, id string, updates map
 		}
 		return fmt.Errorf("failed to update user: %w", err)
 	}
-
+	// Invalidate cache so next read is fresh
+	fs.EvictUserCache(id)
 	return nil
 }
 
@@ -320,7 +329,7 @@ func DeleteUser(ctx context.Context, fs *FirestoreClient, id string) error {
 	if err != nil {
 		return fmt.Errorf("failed to delete user: %w", err)
 	}
-
+	fs.EvictUserCache(id)
 	return nil
 }
 
@@ -367,6 +376,6 @@ func SaveUser(ctx context.Context, fs *FirestoreClient, user *User) error {
 	if err != nil {
 		return fmt.Errorf("failed to save user: %w", err)
 	}
-
+	fs.SetUserCache(user.ID, user)
 	return nil
 }
