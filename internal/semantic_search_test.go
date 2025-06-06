@@ -148,16 +148,16 @@ func TestHybridSearchParamsValidate(t *testing.T) {
 func TestDefaultHybridSearchParams(t *testing.T) {
 	got := DefaultHybridSearchParams()
 
-	if got.DenseWeight != 0.5 {
-		t.Errorf("DenseWeight: got %v, want %v", got.DenseWeight, 0.7)
+	if got.DenseWeight != 0.9 {
+		t.Errorf("DenseWeight: got %v, want %v", got.DenseWeight, 0.9)
 	}
-	if got.SparseWeight != 0.5 {
+	if got.SparseWeight != 0.3 {
 		t.Errorf("SparseWeight: got %v, want %v", got.SparseWeight, 0.3)
 	}
-	if got.ScoreFusion != "reciprocal_rank_fusion" {
+	if got.ScoreFusion != "linear" {
 		t.Errorf("ScoreFusion: got %v, want %v", got.ScoreFusion, "linear")
 	}
-	if got.RecencyWeight != 0.2 {
+	if got.RecencyWeight != 0.1 {
 		t.Errorf("RecencyWeight: got %v, want %v", got.RecencyWeight, 0.2)
 	}
 	if got.RecencyHalfLife != 30.0 {
