@@ -153,33 +153,82 @@ func ListResumes(ctx context.Context, fs *FirestoreClient, userID string) ([]*Re
 	return resumes, nil
 }
 
-// AnnotateResume uses an LLM to annotate the resume text and output it as YAML.
-func AnnotateResume(ctx context.Context, fs *FirestoreClient, logger *slog.Logger, user *User, resume *Resume) error {
+// ProcessCandidateProfile uses an LLM to annotate the resume text and/or LinkedIn profile and output it as YAML.
+func ProcessCandidateProfile(ctx context.Context, fs *FirestoreClient, logger *slog.Logger, user *User, resume *Resume, linkedInURL string) error {
+	var linkedinProfile *LinkedInProfile
+	var err error
+
+	if linkedInURL != "" {
+		// make sure the url is valid
+		if !strings.HasPrefix(linkedInURL, "https://www.linkedin.com/in/") {
+			return fmt.Errorf("invalid LinkedIn URL: %s", linkedInURL)
+		}
+		user.LinkedInURL = linkedInURL
+		_, found, err := GetLinkedInProfile(ctx, fs, user.ID)
+		if err != nil {
+			return fmt.Errorf("failed to get linkedin profile: %w", err)
+		}
+		if !found {
+			logger.Warn("linkedin profile not available though requested", "userID", user.ID)
+			linkedinProfile = nil // ensure it is nil if not available
+		}
+	}
+
+	var profileText string
+	if resume != nil && resume.RawText != "" {
+		profileText += "Resume:\n" + resume.RawText
+	}
+	if linkedinProfile != nil {
+		profileData, err := json.MarshalIndent(linkedinProfile.Profile, "", "  ")
+		if err == nil {
+			profileText += "\n\nLinkedIn Profile:\n" + string(profileData)
+		}
+	}
+
+	if strings.TrimSpace(profileText) == "" {
+		// Nothing to process, so we can probably just mark the user as ready for the next step.
+		// Or flag an error. For now, let's update status and return.
+		if err := UpdateUserStatus(ctx, fs, user, UserStatusResumeUploaded); err != nil {
+			logger.Error("failed to update user state to ResumeUploaded", "error", err)
+		}
+		return nil
+	}
+
+	analysisInput := Resume{RawText: profileText}
 	var analysis *annotatedResume
 	var searchAnalysis string
-	var err error
+
 	if os.Getenv("TESTING_MODE") == "true" {
-		logger.Debug("annotateResume: using test mode")
-		analysis, err = getResumeAnalysisTestMode(ctx, *resume)
+		logger.Debug("ProcessCandidateProfile: using test mode")
+		analysis, err = getResumeAnalysisTestMode(ctx, analysisInput)
 		if err != nil {
-			logger.Error("annotateResume: test mode failed", "error", err)
+			logger.Error("ProcessCandidateProfile: test mode failed", "error", err)
 			return fmt.Errorf("test mode annotation failed: %w", err)
 		}
 
-		searchAnalysis, err = getResumeSearchAnalysisTestMode(ctx, *resume)
+		searchAnalysis, err = getResumeSearchAnalysisTestMode(ctx, analysisInput)
 		if err != nil {
-			logger.Error("annotateResume: test mode search analysis failed", "error", err)
+			logger.Error("ProcessCandidateProfile: test mode search analysis failed", "error", err)
 			return fmt.Errorf("test mode search analysis failed: %w", err)
 		}
 	} else {
-		analysis, err = getAnnotatedResume(ctx, *resume)
+		analysis, err = getAnnotatedResume(ctx, analysisInput)
 		if err != nil {
-			return fmt.Errorf("failed to get resume analysis: %w", err)
+			return fmt.Errorf("failed to get profile analysis: %w", err)
 		}
 
-		searchAnalysis, err = getResumeSearchAnalysis(ctx, *resume)
+		searchAnalysis, err = getResumeSearchAnalysis(ctx, analysisInput)
 		if err != nil {
-			return fmt.Errorf("failed to get resume search analysis: %w", err)
+			return fmt.Errorf("failed to get profile search analysis: %w", err)
+		}
+	}
+
+	if resume == nil {
+		resume = &Resume{
+			UserID: user.ID,
+		}
+		if err := CreateResume(ctx, fs, *user, resume); err != nil {
+			return fmt.Errorf("failed to create resume for analysis: %w", err)
 		}
 	}
 
@@ -194,7 +243,7 @@ func AnnotateResume(ctx context.Context, fs *FirestoreClient, logger *slog.Logge
 	}
 
 	if !resume.IsValid {
-		errorMsg := "Uploaded document is not a valid resume"
+		errorMsg := "Uploaded document is not a valid resume, or the profile is invalid."
 		if resume.Analysis != nil && (strings.Contains(*resume.Analysis, "news article") || strings.Contains(*resume.Analysis, "jailbreak")) {
 			errorMsg = "The document you uploaded doesn't appear to be a valid resume. Please upload a proper resume document."
 		}

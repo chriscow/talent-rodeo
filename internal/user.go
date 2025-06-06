@@ -44,7 +44,8 @@ type User struct {
 	AvatarURL   string
 	Location    string
 
-	Phone *string
+	Phone       *string
+	LinkedInURL string
 
 	State UserState
 
@@ -248,6 +249,13 @@ func SetUserWorkPreferences(ctx context.Context, fs *FirestoreClient, id string,
 		return fmt.Errorf("failed to update work preferences: %w", err)
 	}
 	return nil
+}
+
+func SetLinkedInProfileURL(ctx context.Context, fs *FirestoreClient, id string, url string) error {
+	_, err := fs.Collection(usersCollection).Doc(id).Set(ctx, map[string]any{
+		"LinkedInURL": url,
+	})
+	return err
 }
 
 // UpdateUser updates an existing user document
