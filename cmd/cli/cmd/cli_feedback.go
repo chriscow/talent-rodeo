@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"os"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/feedback"
 	"time"
@@ -49,6 +51,7 @@ func init() {
 
 func processFeedback(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
 	// Initialize Firestore client
 	fs, err := internal.NewFirestoreClient(ctx)
@@ -60,7 +63,7 @@ func processFeedback(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Starting feedback processing at %s\n", time.Now().Format(time.RFC3339))
 
 	// Process all users' feedback
-	err = feedback.ProcessAllUsersFeedback(ctx, fs)
+	err = feedback.ProcessAllUsersFeedback(ctx, fs, logger)
 	if err != nil {
 		return fmt.Errorf("failed to process user feedback: %w", err)
 	}
@@ -72,7 +75,7 @@ func processFeedback(cmd *cobra.Command, args []string) error {
 func processFeedbackForUser(cmd *cobra.Command, args []string) error {
 	userID := args[0]
 	ctx := context.Background()
-
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	// Initialize Firestore client
 	fs, err := internal.NewFirestoreClient(ctx)
 	if err != nil {
@@ -83,7 +86,7 @@ func processFeedbackForUser(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Processing feedback for user %s at %s\n", userID, time.Now().Format(time.RFC3339))
 
 	// Process specific user's feedback
-	err = feedback.ProcessUserFeedbackForSteeringQuery(ctx, fs, userID)
+	err = feedback.ProcessUserFeedback(ctx, fs, logger, userID)
 	if err != nil {
 		return fmt.Errorf("failed to process feedback for user %s: %w", userID, err)
 	}

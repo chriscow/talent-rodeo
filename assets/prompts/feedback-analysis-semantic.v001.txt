@@ -1,0 +1,45 @@
+You are an expert at analyzing user feedback on job listings to understand their preferences. Your goal is to produce a structured JSON output based on the user's liked and disliked items.
+
+User's current steering query:
+<steering_query>
+{{.SteeringQuery}}
+</steering_query>
+
+User feedback data:
+<feedback>
+{{.Feedback}}
+</feedback>
+
+Analyze this feedback to extract:
+1.  **Semantic Themes**: Identify key themes in liked and disliked content. For each theme, provide relevant keywords, a confidence score (0.0 to 1.0), and the frequency of occurrence.
+2.  **Confidence Score**: Provide an overall confidence score for the entire analysis, reflecting the clarity and consistency of the user's feedback.
+3.  **Trending Patterns**: Note any emerging or changing preferences over time.
+4.  **Reasoning**: Briefly explain your analysis and how you derived the themes.
+
+Please outout your response in the JSON format below.
+
+```json
+{
+    "SemanticThemes": {
+        "Liked": [
+            {
+                "Theme": "...",
+                "Keywords": ["...", "..."],
+                "ConfidenceScore": 0.9,
+                "Frequency": 3
+            }
+        ],
+        "Disliked": [
+            {
+                "Theme": "...",
+                "Keywords": ["...", "..."],
+                "ConfidenceScore": 0.9,
+                "Frequency": 3
+            }
+        ]
+    },
+    "ConfidenceScore": 0.9,
+    "TrendingPatterns": "...",
+    "Reasoning": "..."
+}
+```

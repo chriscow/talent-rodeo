@@ -17,6 +17,7 @@ import (
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/auth"
 	"talent-rodeo/internal/feedback"
+	"talent-rodeo/internal/inbox"
 	"talent-rodeo/internal/nudge"
 	"talent-rodeo/internal/search"
 	"talent-rodeo/internal/search/providers/scrapingdog"
@@ -147,9 +148,10 @@ type config struct {
 		secretKey     string
 		webhookSecret string
 	}
-	testing   bool   // Flag to indicate if the application is running in test mode
-	envFile   string // override which env file to load, e.g. ".env.prod" or ".env.dev"
-	nudgeOnly bool   // Flag to indicate if only the nudge processor should be started
+	testing    bool   // Flag to indicate if the application is running in test mode
+	gmailSetup bool   // Flag to run Gmail setup and exit
+	envFile    string // override which env file to load, e.g. ".env.prod" or ".env.dev"
+	nudgeOnly  bool   // Flag to indicate if only the nudge processor should be started
 }
 
 type application struct {
@@ -171,6 +173,7 @@ type application struct {
 	searchScheduler       *search.Scheduler
 	subscriptionProcessor *subscription.Processor
 	nudgeProcessor        *nudge.Processor
+	inboxProcessor        *inbox.Processor
 	stripeClient          *client.API
 }
 
@@ -209,6 +212,7 @@ func run(logger *slog.Logger) error {
 	flag.StringVar(&cfg.linkedin.clientID, "linkedin-client-id", "", "LinkedIn client ID")
 	flag.StringVar(&cfg.linkedin.clientSecret, "linkedin-client-secret", "", "LinkedIn client secret")
 	flag.BoolVar(&cfg.testing, "testing", false, "enable testing mode")
+	flag.BoolVar(&cfg.gmailSetup, "gmail-setup", false, "run Gmail OAuth setup and exit")
 	flag.BoolVar(&cfg.nudgeOnly, "nudge-only", false, "only start the nudge processor, skip other services")
 	showVersion := flag.Bool("version", false, "display version and exit")
 
@@ -304,6 +308,11 @@ func run(logger *slog.Logger) error {
 	if *showVersion {
 		fmt.Printf("version: %s\n", version.Get())
 		return nil
+	}
+
+	// Handle Gmail setup mode
+	if cfg.gmailSetup {
+		return runGmailSetup(logger)
 	}
 
 	// Set testing mode environment variable for components that can't access the flag
@@ -558,6 +567,8 @@ func checkEnv(logger *slog.Logger, envFile string) error {
 
 		"FIREBASE_PROJECT_ID", "FIREBASE_CREDENTIALS",
 
+		"GMAIL_READER_CREDENTIALS", "GMAIL_TOKEN_BASE64",
+
 		"GOOGLE_AUTH_CLIENT_ID", "GOOGLE_AUTH_CLIENT_SECRET",
 
 		"JOB_ID_ENCRYPTION_KEY",
@@ -653,6 +664,72 @@ func setupSessionManager(cfg config, FirestoreClient *internal.FirestoreClient, 
 	return sessionManager, nil
 }
 
+// getGmailTokenPath returns the Gmail token path from env or default
+func getGmailTokenPath() string {
+	if path := os.Getenv("GMAIL_TOKEN_PATH"); path != "" {
+		return path
+	}
+	return "gmail_token.json"
+}
+
+// setupGmailTokenFromSecret creates token file from environment variable if it doesn't exist
+func setupGmailTokenFromSecret(tokenPath string, logger *slog.Logger) error {
+	// If token file already exists, don't overwrite
+	if _, err := os.Stat(tokenPath); err == nil {
+		return nil
+	}
+
+	// Check for base64 encoded token in environment
+	tokenBase64 := os.Getenv("GMAIL_TOKEN_BASE64")
+	if tokenBase64 == "" {
+		return nil // No secret available, that's ok
+	}
+
+	// Decode and write token file
+	tokenData, err := base64.StdEncoding.DecodeString(tokenBase64)
+	if err != nil {
+		return fmt.Errorf("failed to decode GMAIL_TOKEN_BASE64: %w", err)
+	}
+
+	err = os.WriteFile(tokenPath, tokenData, 0600)
+	if err != nil {
+		return fmt.Errorf("failed to write token file: %w", err)
+	}
+
+	logger.Info("created token file from environment secret", "path", tokenPath)
+	return nil
+}
+
+// runGmailSetup handles the Gmail OAuth setup process
+func runGmailSetup(logger *slog.Logger) error {
+	fmt.Println("=== Gmail OAuth Setup ===")
+
+	if os.Getenv("GMAIL_READER_CREDENTIALS") == "" {
+		return fmt.Errorf("GMAIL_READER_CREDENTIALS environment variable is required")
+	}
+
+	tokenPath := getGmailTokenPath()
+	fmt.Printf("Token will be saved to: %s\n", tokenPath)
+	fmt.Println()
+
+	config := inbox.InboxConfig{
+		TokenPath: tokenPath,
+	}
+
+	reader, err := inbox.NewGmailReader(config, logger)
+	if err != nil {
+		return fmt.Errorf("failed to create Gmail reader: %w", err)
+	}
+	defer reader.Close()
+
+	fmt.Println("✅ Gmail OAuth setup complete!")
+	fmt.Printf("Token saved to: %s\n", tokenPath)
+	fmt.Println()
+	fmt.Println("You can now deploy your application with Gmail access.")
+
+	return nil
+}
+
 func (app *application) startServices(ctx context.Context, smtpCfg *smtp.Config) error {
 
 	if !app.config.nudgeOnly {
@@ -700,6 +777,46 @@ func (app *application) startServices(ctx context.Context, smtpCfg *smtp.Config)
 			"action": "startServices: failed to start nudge processor",
 		})
 		return fmt.Errorf("failed to start nudge processor: %w", err)
+	}
+
+	// Only initialize Gmail if credentials are available and token exists
+	if os.Getenv("GMAIL_READER_CREDENTIALS") != "" {
+		app.logger.Info("Gmail credentials found, attempting to initialize Gmail integration")
+
+		tokenPath := getGmailTokenPath()
+
+		// Try to setup token from environment secret if file doesn't exist
+		if err := setupGmailTokenFromSecret(tokenPath, app.logger); err != nil {
+			app.logger.Warn("failed to setup token from secret", "error", err)
+		}
+
+		// Check if token file exists
+		if _, err := os.Stat(tokenPath); err == nil {
+			app.logger.Info("Gmail token found, initializing Gmail reader", "token_path", tokenPath)
+			gmail, err := inbox.NewGmailReader(inbox.InboxConfig{
+				TokenPath: tokenPath,
+			}, app.logger)
+			if err != nil {
+				app.logger.Warn("failed to create Gmail reader - Gmail features will be unavailable", "error", err)
+			} else {
+				dispatch := internal.NewInboxDispatch()
+				// dispatch.Register("feedback", app.feedbackProcessor)
+
+				app.inboxProcessor = inbox.NewProcessor(gmail, dispatch, app.logger)
+				if err := app.inboxProcessor.Start(ctx); err != nil {
+					app.logger.Warn("failed to start inbox processor - Gmail features will be unavailable", "error", err)
+				} else {
+					app.logger.Info("✅ Gmail integration successfully initialized")
+				}
+			}
+		} else {
+			app.logger.Info("Gmail token not found - Gmail features will be unavailable",
+				"token_path", tokenPath,
+				"help", "Run 'go run cmd/cli/cli_main.go gmail setup' to configure Gmail access")
+		}
+	} else {
+		app.logger.Info("Gmail credentials not configured - Gmail features will be unavailable",
+			"help", "Set GMAIL_READER_CREDENTIALS environment variable to enable Gmail integration")
 	}
 
 	return nil

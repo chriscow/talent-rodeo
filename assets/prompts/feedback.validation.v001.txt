@@ -1,0 +1,12 @@
+Validate the updated steering query for coherence and effectiveness.
+
+Updated steering query:
+<query>{{.UpdatedQuery}}</query>
+
+Check for:
+1. Internal contradictions
+2. Vector space compatibility
+3. Job search effectiveness
+4. User preference alignment
+
+Return validation results and any recommended refinements. 
