@@ -388,12 +388,12 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 		if err := internal.CreateGeoID(ctx, client, testGeoID); err != nil {
 			t.Fatalf("Failed to create test geo ID: %v", err)
 		}
-		
+
 		// Use unique test queries that include timestamp to ensure test isolation
 		timestamp := time.Now().UnixNano()
 		existingQuery := fmt.Sprintf("test-criteria-frontend-developer-react-%d", timestamp)
 		newQuery := fmt.Sprintf("test-criteria-fullstack-engineer-js-%d", timestamp)
-		
+
 		// Pre-create one criteria
 		preUser := &internal.User{
 			ID: "test-criteria-user-multi-2",
