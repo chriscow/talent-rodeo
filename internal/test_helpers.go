@@ -160,7 +160,7 @@ func DeleteTestData(t *testing.T, client *FirestoreClient, prefix string) {
 	}
 
 	// Clean up any other top-level collections
-	otherCollections := []string{"job_searches", "job_listings", "job_details"} // Add other top-level collections as needed
+	otherCollections := []string{"job_searches", "job_listings", "job_details", "search_criteria"} // Add other top-level collections as needed
 	for _, collection := range otherCollections {
 		iter := client.Collection(collection).Where("ID", ">=", prefix).Where("ID", "<", prefix+"~").Documents(ctx)
 		for {

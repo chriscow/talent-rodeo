@@ -263,6 +263,10 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 				Queries:         []string{"software engineer python"},
 				WorkType:        internal.WorkTypeRemote,
 				ExperienceLevel: internal.ExperienceLevelEntryLevel,
+				MoveToward:      "I want remote software engineering positions using Python",
+				MoveAway:        "I want to avoid on-site positions and non-Python roles",
+				RerankQuery:     "I am looking for remote software engineer positions using Python, avoiding on-site work and non-Python technologies",
+				ForceAway:       0.3,
 			},
 			LocationPreference: internal.StringPtr("Remote work in San Francisco"),
 		}
@@ -291,6 +295,10 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 				Queries:         []string{"software engineer python"},
 				WorkType:        internal.WorkTypeRemote,
 				ExperienceLevel: internal.ExperienceLevelEntryLevel,
+				MoveToward:      "I want remote software engineering positions using Python",
+				MoveAway:        "I want to avoid on-site positions and non-Python roles",
+				RerankQuery:     "I am looking for remote software engineer positions using Python, avoiding on-site work and non-Python technologies",
+				ForceAway:       0.3,
 			},
 			LocationPreference: internal.StringPtr("Remote work in San Francisco"),
 		}
@@ -329,12 +337,21 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 			t.Fatalf("Failed to create test geo ID: %v", err)
 		}
 
+		// Use unique test queries that include timestamp to ensure test isolation
+		timestamp := time.Now().UnixNano()
+		query1 := fmt.Sprintf("test-criteria-software-engineer-python-%d", timestamp)
+		query2 := fmt.Sprintf("test-criteria-backend-developer-go-%d", timestamp)
+
 		user := &internal.User{
 			ID: "test-criteria-user-multi-1",
 			SteeringQuery: &internal.SteeringQuery{
-				Queries:         []string{"software engineer python", "backend developer go"},
+				Queries:         []string{query1, query2},
 				WorkType:        internal.WorkTypeRemote,
 				ExperienceLevel: internal.ExperienceLevelEntryLevel,
+				MoveToward:      "I want remote software engineering and backend development positions",
+				MoveAway:        "I want to avoid on-site positions and frontend roles",
+				RerankQuery:     "I am looking for remote software engineer and backend developer positions, avoiding on-site work and frontend technologies",
+				ForceAway:       0.3,
 			},
 			LocationPreference: internal.StringPtr("Remote work in Austin"),
 		}
@@ -346,7 +363,7 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 		if len(results) != 2 {
 			t.Fatalf("getOrCreateSearchCriteria() should return 2 results, got %d", len(results))
 		}
-		wantQueries := map[string]bool{"software engineer python": false, "backend developer go": false}
+		wantQueries := map[string]bool{query1: false, query2: false}
 		for _, r := range results {
 			if _, ok := wantQueries[r.Criteria.Query]; !ok {
 				t.Errorf("unexpected query in results: %v", r.Criteria.Query)
@@ -371,13 +388,23 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 		if err := internal.CreateGeoID(ctx, client, testGeoID); err != nil {
 			t.Fatalf("Failed to create test geo ID: %v", err)
 		}
+		
+		// Use unique test queries that include timestamp to ensure test isolation
+		timestamp := time.Now().UnixNano()
+		existingQuery := fmt.Sprintf("test-criteria-frontend-developer-react-%d", timestamp)
+		newQuery := fmt.Sprintf("test-criteria-fullstack-engineer-js-%d", timestamp)
+		
 		// Pre-create one criteria
 		preUser := &internal.User{
 			ID: "test-criteria-user-multi-2",
 			SteeringQuery: &internal.SteeringQuery{
-				Queries:         []string{"frontend developer react"},
+				Queries:         []string{existingQuery},
 				WorkType:        internal.WorkTypeRemote,
 				ExperienceLevel: internal.ExperienceLevelEntryLevel,
+				MoveToward:      "I want remote frontend development positions using React",
+				MoveAway:        "I want to avoid backend roles and non-React frameworks",
+				RerankQuery:     "I am looking for remote frontend developer positions using React, avoiding backend work and non-React technologies",
+				ForceAway:       0.3,
 			},
 			LocationPreference: internal.StringPtr("Remote work in Chicago"),
 		}
@@ -389,9 +416,13 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 		user := &internal.User{
 			ID: "test-criteria-user-multi-2",
 			SteeringQuery: &internal.SteeringQuery{
-				Queries:         []string{"frontend developer react", "fullstack engineer js"},
+				Queries:         []string{existingQuery, newQuery},
 				WorkType:        internal.WorkTypeRemote,
 				ExperienceLevel: internal.ExperienceLevelEntryLevel,
+				MoveToward:      "I want remote frontend and fullstack development positions",
+				MoveAway:        "I want to avoid backend-only roles and non-JS frameworks",
+				RerankQuery:     "I am looking for remote frontend and fullstack developer positions, avoiding backend-only work and non-JS technologies",
+				ForceAway:       0.3,
 			},
 			LocationPreference: internal.StringPtr("Remote work in Chicago"),
 		}
@@ -404,18 +435,18 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 		}
 		foundExisting, foundNew := false, false
 		for _, r := range results {
-			if r.Criteria.Query == "frontend developer react" && !r.IsNew {
+			if r.Criteria.Query == existingQuery && !r.IsNew {
 				foundExisting = true
 			}
-			if r.Criteria.Query == "fullstack engineer js" && r.IsNew {
+			if r.Criteria.Query == newQuery && r.IsNew {
 				foundNew = true
 			}
 		}
 		if !foundExisting {
-			t.Errorf("expected existing criteria for 'frontend developer react' with IsNew=false")
+			t.Errorf("expected existing criteria for '%s' with IsNew=false", existingQuery)
 		}
 		if !foundNew {
-			t.Errorf("expected new criteria for 'fullstack engineer js' with IsNew=true")
+			t.Errorf("expected new criteria for '%s' with IsNew=true", newQuery)
 		}
 	})
 }
