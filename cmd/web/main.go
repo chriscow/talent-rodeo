@@ -588,7 +588,7 @@ func (app *application) startServices(ctx context.Context) error {
 	app.subscriptionProcessor = subscription.NewProcessor(app.fs, app.logger)
 
 	app.jobDispatch = internal.NewJobEventDispatch()
-	app.searchResultProcessor = internal.NewSearchResultProcessor(app.fs, app.logger)
+	app.searchResultProcessor = internal.NewSearchResultProcessor(app.fs, app.logger, app.pusher, app.jobDispatch)
 	app.jobDispatch.Register("search-result-processor", app.searchResultProcessor)
 	app.searchResultProcessor.Start()
 

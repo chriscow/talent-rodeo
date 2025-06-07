@@ -32,3 +32,21 @@ func SendPusherRedirect(psh *pusher.Client, userID string, url string) error {
 
 	return nil
 }
+
+func SendPusherProgress(psh *pusher.Client, userID string, message string, progress int, total int) error {
+	if psh == nil {
+		return nil // ignore silently if pusher is not configured
+	}
+
+	data := map[string]any{
+		"message":  message,
+		"progress": progress,
+		"total":    total,
+	}
+
+	if err := psh.Trigger(userID, "server-progress", data); err != nil {
+		return err
+	}
+
+	return nil
+}

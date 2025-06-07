@@ -27,35 +27,6 @@ type SMTPConfig struct {
 	From     string
 }
 
-type userNotifier struct {
-	userID    string
-	publisher *pusher.Client
-	dispatch  *internal.JobEventDispatch
-}
-
-func (u *userNotifier) OnSearchStarted(task internal.SearchTask, userID *string) {
-	fmt.Println("userNotifier:OnSearchStarted", task)
-}
-
-func (u *userNotifier) OnJobListing(task internal.SearchTask, listing internal.JobListing, userID *string) {
-	// fmt.Println("userNotifier:OnJobListing", task, listing)
-}
-
-func (u *userNotifier) OnJobDetail(task internal.SearchTask, listing internal.JobListing, details internal.JobDetail, userID *string) {
-	fmt.Println("userNotifier:OnJobDetail", task.Criteria.ID, details.Title)
-	internal.SendPusherMessage(u.publisher, u.userID, "Searching: "+details.Title, nil)
-}
-
-func (u *userNotifier) OnPageComplete(task internal.SearchTask, page int, jobsFound int, errors []error, userID *string) {
-	fmt.Println("userNotifier:OnPageComplete", task, page, jobsFound, errors)
-}
-
-func (u *userNotifier) OnSearchCompleted(task internal.SearchTask, totalJobs int, errors []error, userID *string) {
-	fmt.Println("userNotifier:OnSearchCompleted", task, totalJobs, errors)
-	u.dispatch.Deregister(u.userID)
-	internal.SendPusherRedirect(u.publisher, u.userID, "/dashboard")
-}
-
 // ProcessCompletedCall updates the appointment after a successful call with the transcript summary.
 // It is called as a background task after the transcript is fully processed.
 //
@@ -304,9 +275,6 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 				return
 			}
 			logger.Debug("search task created", "user-id", user.ID, "job-search-id", jobSearch.ID)
-
-			notifier := &userNotifier{userID: user.ID, dispatch: dispatch, publisher: psh}
-			dispatch.Register(user.ID, notifier)
 
 			logger.Debug("queueing search", "user-id", user.ID, "job-search-id", jobSearch.ID)
 			if err := queue.QueueSearch(ctx, *jobSearch); err != nil {

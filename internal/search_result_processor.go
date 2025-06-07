@@ -13,6 +13,7 @@ import (
 	"cloud.google.com/go/firestore"
 	"github.com/getsentry/sentry-go"
 	"github.com/pinecone-io/go-pinecone/v3/pinecone"
+	"github.com/pusher/pusher-http-go/v5"
 )
 
 const (
@@ -22,6 +23,22 @@ const (
 	queueLogInterval                 = 5 * time.Second
 	queueRequeueInterval             = 4 * time.Hour
 )
+
+type ExtractionTask struct {
+	SearchTaskID string
+	UserID       *string
+	JobDetail    JobDetail
+}
+
+type SearchProgress struct {
+	UserID               string
+	SearchTaskID         string
+	TotalJobs            atomic.Int32
+	ProcessedJobs        atomic.Int32
+	AllJobsQueued        atomic.Bool
+	mu                   sync.Mutex
+	lastProgressNotified int
+}
 
 // JobProcessor is an interface that defines the methods for processing new job details
 // returned from a search. It is used to enqueue jobs for post processing, such as
@@ -34,10 +51,12 @@ type JobProcessor interface {
 // It is responsible for handling job listings and job details returned from a search.
 // It saves the job listings and job details to Firestore and links them to the search criteria.
 type SearchResultProcessor struct {
-	fs     *FirestoreClient
-	logger *slog.Logger
+	fs            *FirestoreClient
+	logger        *slog.Logger
+	pusherClient  *pusher.Client
+	eventDispatch *JobEventDispatch
 
-	queue     chan JobDetail
+	queue     chan ExtractionTask
 	stopCh    chan struct{}
 	stoppedCh chan struct{}
 	workersWg sync.WaitGroup
@@ -45,17 +64,20 @@ type SearchResultProcessor struct {
 	logTicker     *time.Ticker
 	requeueTicker *time.Ticker
 
-	queueHadItems atomic.Bool // for logging when queue drains
+	queueHadItems    atomic.Bool // for logging when queue drains
+	progressTrackers sync.Map
 }
 
-func NewSearchResultProcessor(fs *FirestoreClient, logger *slog.Logger) *SearchResultProcessor {
+func NewSearchResultProcessor(fs *FirestoreClient, logger *slog.Logger, psh *pusher.Client, dispatch *JobEventDispatch) *SearchResultProcessor {
 	logger = logger.With("pkg", "SearchResultProcessor")
 	return &SearchResultProcessor{
-		fs:        fs,
-		logger:    logger,
-		queue:     make(chan JobDetail, JobDetailExtractionQueueSize),
-		stopCh:    make(chan struct{}),
-		stoppedCh: make(chan struct{}),
+		fs:            fs,
+		logger:        logger,
+		pusherClient:  psh,
+		eventDispatch: dispatch,
+		queue:         make(chan ExtractionTask, JobDetailExtractionQueueSize),
+		stopCh:        make(chan struct{}),
+		stoppedCh:     make(chan struct{}),
 	}
 }
 
@@ -66,6 +88,8 @@ type JobEventHandler interface {
 	OnJobDetail(task SearchTask, listing JobListing, details JobDetail, userID *string)
 	OnPageComplete(task SearchTask, page int, jobsFound int, errors []error, userID *string)
 	OnSearchCompleted(task SearchTask, totalJobs int, errors []error, userID *string)
+	OnJobDetailExtractionComplete(task SearchTask, jobDetail JobDetail, userID *string)
+	OnAllExtractionsComplete(task SearchTask, totalJobs int, userID *string)
 }
 */
 
@@ -105,32 +129,59 @@ func (s *SearchResultProcessor) worker() {
 	defer s.workersWg.Done()
 	for {
 		select {
-		case job, ok := <-s.queue:
+		case task, ok := <-s.queue:
 			if !ok {
 				return
 			}
 			ctx := context.Background()
 			start := time.Now()
-			err := ExtractJobDetailData(ctx, &job)
+			err := ExtractJobDetailData(ctx, &task.JobDetail)
 			if err != nil {
-				s.logger.Error("failed to extract job detail data (async)", "error", err, "jobID", job.ID)
+				s.logger.Error("failed to extract job detail data (async)", "error", err, "jobID", task.JobDetail.ID)
 				SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-					"jobID": job.ID,
+					"jobID": task.JobDetail.ID,
 				})
 				continue
 			}
-			s.logger.Debug("extracted job detail data (async)", "jobID", job.ID, "duration", time.Since(start).String())
+			s.logger.Debug("extracted job detail data (async)", "jobID", task.JobDetail.ID, "duration", time.Since(start).String())
 			// Save updated job detail
-			err = SaveJobDetail(ctx, s.fs, &job)
+			err = SaveJobDetail(ctx, s.fs, &task.JobDetail)
 			if err != nil {
-				s.logger.Error("failed to save job detail after extraction", "error", err, "jobID", job.ID)
+				s.logger.Error("failed to save job detail after extraction", "error", err, "jobID", task.JobDetail.ID)
 				SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-					"jobID": job.ID,
+					"jobID": task.JobDetail.ID,
 				})
 			}
+			s.handleExtractionCompletion(task)
 
 		case <-s.stopCh:
 			return
+		}
+	}
+}
+
+func (s *SearchResultProcessor) handleExtractionCompletion(task ExtractionTask) {
+	if val, ok := s.progressTrackers.Load(task.SearchTaskID); ok {
+		progress := val.(SearchProgress)
+		processed := progress.ProcessedJobs.Add(1)
+		total := progress.TotalJobs.Load()
+
+		if progress.UserID != "" {
+			// Notify every 5%
+			currentProgress := int(float32(processed) / float32(total) * 100)
+			if total > 0 && (currentProgress-progress.lastProgressNotified >= 5 || processed == total) {
+				s.logger.Debug("sending progress update", "user", progress.UserID, "progress", currentProgress, "searchTaskID", task.SearchTaskID)
+				SendPusherProgress(s.pusherClient, progress.UserID, "Extracting job details...", currentProgress, 100)
+				progress.mu.Lock()
+				progress.lastProgressNotified = currentProgress
+				progress.mu.Unlock()
+			}
+		}
+
+		if progress.AllJobsQueued.Load() && processed == total {
+			s.logger.Info("all extractions complete for search", "searchTaskID", task.SearchTaskID)
+			s.eventDispatch.OnAllExtractionsComplete(SearchTask{ID: task.SearchTaskID}, int(total), task.UserID)
+			s.progressTrackers.Delete(task.SearchTaskID)
 		}
 	}
 }
@@ -176,21 +227,25 @@ func (s *SearchResultProcessor) requeueUnprocessedJobDetails() {
 	}
 	added := 0
 	for _, job := range jobDetails {
-		if !s.tryQueueJobDetail(job) {
-			s.logger.Debug("job detail queue full, dropping job", "jobID", job.ID)
-			continue
-		}
-		added++
+		// We don't have search task info here, so we can't create a proper ExtractionTask.
+		// For now, we'll just log it. This is a background recovery task.
+		// A proper implementation would require storing more context with the job detail.
+		s.logger.Warn("skipping requeue of unprocessed job detail, context missing", "jobID", job.ID)
+		// if !s.tryQueueExtractionTask(ExtractionTask{JobDetail: job}) {
+		// 	s.logger.Debug("job detail queue full, dropping job", "jobID", job.ID)
+		// 	continue
+		// }
+		// added++
 	}
 	if added > 0 {
 		s.logger.Info("requeued unprocessed job details", "count", added)
 	}
 }
 
-// tryQueueJobDetail attempts to queue a JobDetail, returns false if queue is full.
-func (s *SearchResultProcessor) tryQueueJobDetail(job JobDetail) bool {
+// tryQueueExtractionTask attempts to queue a JobDetail, returns false if queue is full.
+func (s *SearchResultProcessor) tryQueueExtractionTask(task ExtractionTask) bool {
 	select {
-	case s.queue <- job:
+	case s.queue <- task:
 		return true
 	default:
 		return false
@@ -251,7 +306,17 @@ func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, listing JobLis
 
 	// Only queue for extraction if not already extracted
 	if jobDetail.ExtractedData == nil {
-		if !s.tryQueueJobDetail(jobDetail) {
+		if val, ok := s.progressTrackers.Load(jobSearch.ID); ok {
+			progress := val.(SearchProgress)
+			progress.TotalJobs.Add(1)
+		}
+
+		task := ExtractionTask{
+			SearchTaskID: jobSearch.ID,
+			UserID:       userID,
+			JobDetail:    jobDetail,
+		}
+		if !s.tryQueueExtractionTask(task) {
 			s.logger.Debug("job detail queue full, dropping job", "jobID", jobDetail.ID)
 		}
 	}
@@ -259,6 +324,15 @@ func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, listing JobLis
 
 func (s *SearchResultProcessor) OnSearchStarted(jobSearch SearchTask, userID *string) {
 	s.logger.Debug("OnSearchStarted", "criteria", jobSearch.Criteria.GetSearchHash())
+
+	if userID != nil && *userID != "" {
+		s.logger.Info("tracking search progress for user", "userID", *userID, "searchTaskID", jobSearch.ID)
+		s.progressTrackers.Store(jobSearch.ID, SearchProgress{
+			UserID:       *userID,
+			SearchTaskID: jobSearch.ID,
+		})
+	}
+
 	ctx := context.Background()
 	if err := UpdateSearchTask(ctx, s.fs, &jobSearch); err != nil {
 		s.logger.Error("failed to update search task", "error", err)
@@ -298,6 +372,20 @@ func (s *SearchResultProcessor) OnPageComplete(jobSearch SearchTask, page int, j
 func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJobs int, errors []error, userID *string) {
 	s.logger.Info("OnSearchCompleted", "criteria", jobSearch.Criteria.ID, "total_jobs", totalJobs, "errors", errors)
 
+	if val, ok := s.progressTrackers.Load(jobSearch.ID); ok {
+		progress := val.(SearchProgress)
+		progress.AllJobsQueued.Store(true)
+		// It's possible OnJobDetail hasn't run for all jobs yet when OnSearchCompleted is called.
+		// The TotalJobs is set in OnJobDetail. We check for completion in handleExtractionCompletion.
+		s.logger.Debug("all jobs queued for search", "searchTaskID", jobSearch.ID, "totalJobsSoFar", progress.TotalJobs.Load())
+
+		if progress.AllJobsQueued.Load() && progress.ProcessedJobs.Load() == progress.TotalJobs.Load() {
+			s.logger.Info("all extractions complete for search at OnSearchCompleted", "searchTaskID", jobSearch.ID)
+			s.eventDispatch.OnAllExtractionsComplete(jobSearch, int(progress.TotalJobs.Load()), userID)
+			s.progressTrackers.Delete(jobSearch.ID)
+		}
+	}
+
 	// TODO: Do this in a transaction
 	jobSearch.Status = SearchTaskStatusCompleted
 	// join all the errors into a single string
@@ -330,6 +418,18 @@ func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJob
 	criteria.MaxPages = DefaultMaxPages
 	criteria.ListingAge = DefaultListingAge
 	UpdateSearchCriteria(ctx, s.fs, &criteria)
+}
+
+func (s *SearchResultProcessor) OnJobDetailExtractionComplete(task SearchTask, jobDetail JobDetail, userID *string) {
+	// Business logic is handled in the worker.
+	// This is here to satisfy the interface.
+}
+
+func (s *SearchResultProcessor) OnAllExtractionsComplete(task SearchTask, totalJobs int, userID *string) {
+	s.logger.Info("all extractions complete, sending redirect", "searchTaskID", task.ID, "user", *userID)
+	if userID != nil && *userID != "" {
+		SendPusherRedirect(s.pusherClient, *userID, "/dashboard")
+	}
 }
 
 func UpsertJobDetailEmbeddings(ctx context.Context, criteria SearchCriteria, jobDetails []JobDetail) (int, error) {
