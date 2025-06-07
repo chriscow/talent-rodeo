@@ -1,0 +1,64 @@
+{{define "title"}}Pusher Test{{end}}
+
+{{define "page:main"}}
+<main class="container">
+    <article>
+        <h1>Pusher Progress Test</h1>
+        <p>Use this page to test the Pusher progress updates.</p>
+
+        <div id="progress-container">
+            <hgroup>
+                <h1 id="page-title">Test Progress</h1>
+                <p id="progress-message">Waiting for progress updates...</p>
+            </hgroup>
+            <progress id="progress-bar" value="0" max="100"></progress>
+        </div>
+
+        <form hx-post="/testing/pusher/trigger" hx-swap="none">
+            <input type="hidden" name="userID" value="{{.TestUserID}}">
+            <label for="message">Message</label>
+            <input type="text" name="message" value="Test progress update">
+            <label for="progress">Progress</label>
+            <input type="number" name="progress" value="50">
+            <label for="total">Total</label>
+            <input type="number" name="total" value="100">
+            <button type="submit">Trigger Progress</button>
+        </form>
+    </article>
+</main>
+
+<div data-session-id="{{.TestUserID}}" 
+     data-pusher-key="{{.PusherKey}}" 
+     data-pusher-cluster="{{.PusherCluster}}"
+     hidden></div>
+{{end}}
+
+{{define "page:scripts"}}
+<script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
+<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const userElement = document.querySelector('[data-session-id]');
+        if (!userElement) return;
+        
+        const pusher = new Pusher(userElement.dataset.pusherKey, {
+            cluster: userElement.dataset.pusherCluster
+        });
+        
+        const channel = pusher.subscribe(`${userElement.dataset.sessionId}`);
+        
+        channel.bind('server-progress', function(data) {
+            console.log('Received server progress:', data); // Add logging to help debug
+            const progressBar = document.querySelector('#progress-bar');
+            const progressMessage = document.querySelector('#progress-message');
+            if (progressBar) {
+                progressBar.value = data.progress;
+                progressBar.max = data.total;
+            }
+            if (progressMessage) {
+                progressMessage.textContent = data.message;
+            }
+        });
+    });
+</script>
+{{end}} 

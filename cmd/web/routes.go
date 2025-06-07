@@ -122,6 +122,8 @@ func (app *application) routes() http.Handler {
 		app.logger.Info(internal.Red("TESTING_MODE is true - setting up testing routes"))
 		mux.HandleFunc("/testing/authenticate", app.handleTestingAuthenticate, "POST")
 		mux.HandleFunc("/testing/reset", app.handleTestingResetUserState, "POST")
+		mux.HandleFunc("/testing/pusher", app.showPusherTest, "GET")
+		mux.HandleFunc("/testing/pusher/trigger", app.triggerPusherProgress, "POST")
 	}
 
 	return mux

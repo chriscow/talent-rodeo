@@ -255,7 +255,7 @@ var reprocessCmd = &cobra.Command{
 					hub := sentry.CurrentHub()
 					dispatch := internal.NewJobEventDispatch()
 
-					srp := internal.NewSearchResultProcessor(fs, logger)
+					srp := internal.NewSearchResultProcessor(fs, logger, nil, dispatch)
 					dispatch.Register(user.ID, srp)
 					srp.Start()
 					defer srp.Stop()
@@ -369,7 +369,7 @@ var reprocessCmd = &cobra.Command{
 		}
 
 		dispatch := internal.NewJobEventDispatch()
-		dispatch.Register(userID, internal.NewSearchResultProcessor(fs, logger))
+		dispatch.Register(userID, internal.NewSearchResultProcessor(fs, logger, nil, dispatch))
 		queue := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), logger, scrapingdog.WithJobEventHandler(dispatch))
 
 		transcript.ProcessCompletedCall(hub, fs, nil, queue, logger, dispatch, user, appointment, cfg)

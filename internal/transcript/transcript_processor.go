@@ -128,7 +128,7 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 	//
 	// Get work preferences
 	//
-	internal.SendPusherMessage(psh, user.ID, "Determining your work preferences", nil)
+	internal.SendPusherMessage(psh, user.ID, "Determining your work preferences (~10s)", nil)
 	logger.Debug("extracting GeoID from transcript", "user-id", user.ID, "appointment-id", appointment.ID, "locations-count", len(locations))
 	if err := getWorkPreferences(ctx, fs, transcript, locations, user); err != nil {
 		logger.Error("failed to get work preferences", "error", err, "user-id", user.ID, "appointment-id", appointment.ID)
@@ -147,7 +147,7 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 	//
 	// Generate steering query
 	//
-	internal.SendPusherMessage(psh, user.ID, "Generating your search criteria", nil)
+	internal.SendPusherMessage(psh, user.ID, "Generating your search criteria (~30s)", nil)
 	logger.Debug("generating steering query", "user-id", user.ID, "appointment-id", appointment.ID)
 	if err := generateSteeringQuery(ctx, fs, user, transcript); err != nil {
 		logger.Error("failed to generate steering query", "error", err, "user-id", user.ID, "appointment-id", appointment.ID)
@@ -186,7 +186,7 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 	// Get or create search criteria
 	//
 	logger.Debug("getting or creating search criteria", "user-id", user.ID, "appointment-id", appointment.ID)
-	results, err := getOrCreateSearchCriteria(ctx, fs, user)
+	searchCriteriaList, err := getOrCreateSearchCriteria(ctx, fs, user)
 	if err != nil {
 		logger.Error("failed to get or create search criteria", "error", err, "user-id", user.ID, "appointment-id", appointment.ID)
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
@@ -200,27 +200,27 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 		return
 	}
 
-	for _, result := range results {
+	for _, searchCriteria := range searchCriteriaList {
 		//
 		// Subscribe the user to the search criteria
 		//
-		logger.Debug("subscribing user to search criteria", "user-id", user.ID, "criteria-id", result.Criteria.ID)
-		if err := internal.SubscribeToCriteria(ctx, fs, user.ID, result.Criteria.ID); err != nil {
-			logger.Error("failed to subscribe user to search criteria", "error", err, "user-id", user.ID, "criteria-id", result.Criteria.ID)
+		logger.Debug("subscribing user to search criteria", "user-id", user.ID, "criteria-id", searchCriteria.Criteria.ID)
+		if err := internal.SubscribeToCriteria(ctx, fs, user.ID, searchCriteria.Criteria.ID); err != nil {
+			logger.Error("failed to subscribe user to search criteria", "error", err, "user-id", user.ID, "criteria-id", searchCriteria.Criteria.ID)
 			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 				"user_id":        user.ID,
 				"appointment_id": appointment.ID,
 				"user_email":     user.Email,
 				"call_id":        *appointment.CallID,
-				"criteria_id":    result.Criteria.ID,
+				"criteria_id":    searchCriteria.Criteria.ID,
 				"step":           "SubscribeToCriteria",
 			})
 			internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
 			return
 		}
-		logger.Debug("user subscribed to criteria", "user-id", user.ID, "criteria-id", result.Criteria.ID)
+		logger.Debug("user subscribed to criteria", "user-id", user.ID, "criteria-id", searchCriteria.Criteria.ID)
 
-		if result.IsNew {
+		if searchCriteria.IsNew {
 			if queue == nil {
 				logger.Error("queue is nil", "user-id", user.ID, "appointment-id", appointment.ID)
 				internal.SentryReportError(ctx, fmt.Errorf("queue is nil"), sentry.LevelError, map[string]string{
@@ -233,7 +233,7 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 				internal.ProcessAppointmentFailed(ctx, fs, user, appointment, fmt.Errorf("queue is nil"))
 				return
 			}
-
+			internal.SendPusherProgress(psh, user.ID, "Starting your first search (this takes a few minutes)", 0, 100)
 			if dispatch == nil {
 				logger.Error("dispatch is nil", "user-id", user.ID, "appointment-id", appointment.ID)
 				internal.SentryReportError(ctx, fmt.Errorf("dispatch is nil"), sentry.LevelError, map[string]string{
@@ -256,19 +256,19 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 			if testing {
 				maxPages = 2
 			}
-			result.Criteria.MaxPages = maxPages
-			result.Criteria.ListingAge = internal.ListingAgeWeek // Do a week instead of a day
+			searchCriteria.Criteria.MaxPages = maxPages
+			searchCriteria.Criteria.ListingAge = internal.ListingAgeWeek // Do a week instead of a day
 
-			logger.Debug("creating search task", "user-id", user.ID, "criteria-id", result.Criteria.ID, "max-pages", maxPages, "testing-mode", testing)
-			jobSearch, err := internal.CreateSearchTask(ctx, fs, result.Criteria, "scrapingdog")
+			logger.Debug("creating search task", "user-id", user.ID, "criteria-id", searchCriteria.Criteria.ID, "max-pages", maxPages, "testing-mode", testing)
+			jobSearch, err := internal.CreateSearchTask(ctx, fs, searchCriteria.Criteria, "scrapingdog", &user.ID)
 			if err != nil {
-				logger.Error("failed to create search task", "error", err, "user-id", user.ID, "criteria-id", result.Criteria.ID)
+				logger.Error("failed to create search task", "error", err, "user-id", user.ID, "criteria-id", searchCriteria.Criteria.ID)
 				internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 					"user_id":        user.ID,
 					"appointment_id": appointment.ID,
 					"user_email":     user.Email,
 					"call_id":        *appointment.CallID,
-					"criteria_id":    result.Criteria.ID,
+					"criteria_id":    searchCriteria.Criteria.ID,
 					"step":           "CreateSearchTask",
 				})
 				internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
@@ -291,6 +291,16 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 				return
 			}
 			logger.Debug("search queued successfully", "user-id", user.ID, "job-search-id", jobSearch.ID)
+			internal.SendPusherMessage(psh, user.ID, "", nil)
+		} else {
+			logger.Debug("refreshing user jobs", "user-id", user.ID, "criteria-id", searchCriteria.Criteria.ID)
+			internal.SendPusherMessage(psh, user.ID, "Refreshing your results", nil)
+			// if err := internal.RefreshUserJobs(ctx, fs, user, *criteria, 0); err != nil {
+			// 	logger.Error("failed to refresh user jobs", "error", err)
+			// 	hub.CaptureException(err)
+			// 	return
+			// }
+			internal.SendPusherRedirect(psh, user.ID, "/dashboard")
 		}
 
 		logger.Debug(internal.Blue("⏱️ appointment processing took"), "duration", time.Since(start).String())
@@ -298,7 +308,6 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 		//
 		// Set the apppointment status to completed
 		//
-		internal.SendPusherMessage(psh, user.ID, "Starting your first search (this takes a few minutes)", nil)
 		logger.Debug("marking appointment as completed", "user-id", user.ID, "appointment-id", appointment.ID)
 		if err := internal.ProcessAppointmentComplete(ctx, fs, user, appointment); err != nil {
 			logger.Error("failed to mark appointment as completed", "error", err, "user-id", user.ID, "appointment-id", appointment.ID)
@@ -313,56 +322,49 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 			return
 		}
 		logger.Debug("appointment marked as completed", "user-id", user.ID, "appointment-id", appointment.ID)
-
-		//
-		// Refresh user jobs - queries Pinecone for relevant jobs using an existing criteria
-		//
-		if !result.IsNew {
-			logger.Debug("refreshing user jobs", "user-id", user.ID, "criteria-id", result.Criteria.ID)
-			internal.SendPusherMessage(psh, user.ID, "Refreshing your results", nil)
-			// if err := internal.RefreshUserJobs(ctx, fs, user, *criteria, 0); err != nil {
-			// 	logger.Error("failed to refresh user jobs", "error", err)
-			// 	hub.CaptureException(err)
-			// 	return
-			// }
-		}
 	}
 
-	if smtpCfg != nil {
-		logger.Debug("generating recap email", "user-id", user.ID, "appointment-id", appointment.ID)
-		if err := GenerateRecapEmail(ctx, fs, user, transcript, *smtpCfg, logger); err != nil {
-			logger.Error("failed to generate recap email", "error", err, "user-id", user.ID, "appointment-id", appointment.ID)
-			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-				"user_id":        user.ID,
-				"appointment_id": appointment.ID,
-				"user_email":     user.Email,
-				"call_id":        *appointment.CallID,
-				"step":           "GenerateRecapEmail",
-			})
-			internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
-			return
-		}
+	SendRecapEmail(ctx, fs, user, appointment, transcript, smtpCfg, logger)
 
-		appointment.RecapSent = true
-		if err := internal.UpdateAppointment(ctx, fs, appointment); err != nil {
-			logger.Error("failed to update appointment with recap sent status", "error", err, "user-id", user.ID, "appointment-id", appointment.ID)
-			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-				"user_id":        user.ID,
-				"appointment_id": appointment.ID,
-				"user_email":     user.Email,
-				"call_id":        *appointment.CallID,
-				"step":           "UpdateAppointment-RecapSent",
-			})
-			internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
-			return
-		}
-		logger.Debug("recap email sent", "user-id", user.ID, "appointment-id", appointment.ID)
-	} else {
-		logger.Debug("skipping recap email - no SMTP config", "user-id", user.ID, "appointment-id", appointment.ID)
-	}
-
-	internal.SendPusherRedirect(psh, user.ID, "/dashboard")
 	logger.Debug(internal.Green("✅ appointment processing completed"), "user-id", user.ID, "appointment-id", appointment.ID)
+}
+
+func SendRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user *internal.User, appointment *internal.Appointment, transcript *internal.Transcript, cfg *SMTPConfig, logger *slog.Logger) error {
+	if cfg == nil {
+		logger.Debug("skipping recap email - no SMTP config", "user-id", user.ID, "appointment-id", appointment.ID)
+		return nil
+	}
+
+	logger.Debug("generating recap email", "user-id", user.ID, "appointment-id", appointment.ID)
+	if err := GenerateRecapEmail(ctx, fs, user, transcript, *cfg, logger); err != nil {
+		logger.Error("failed to generate recap email", "error", err, "user-id", user.ID, "appointment-id", appointment.ID)
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"user_id":        user.ID,
+			"appointment_id": appointment.ID,
+			"user_email":     user.Email,
+			"call_id":        *appointment.CallID,
+			"step":           "GenerateRecapEmail",
+		})
+		internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
+		return err
+	}
+
+	appointment.RecapSent = true
+	if err := internal.UpdateAppointment(ctx, fs, appointment); err != nil {
+		logger.Error("failed to update appointment with recap sent status", "error", err, "user-id", user.ID, "appointment-id", appointment.ID)
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"user_id":        user.ID,
+			"appointment_id": appointment.ID,
+			"user_email":     user.Email,
+			"call_id":        *appointment.CallID,
+			"step":           "UpdateAppointment-RecapSent",
+		})
+		internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
+		return err
+	}
+	logger.Debug("recap email sent", "user-id", user.ID, "appointment-id", appointment.ID)
+
+	return nil
 }
 
 func GenerateRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user *internal.User, transcript *internal.Transcript, cfg SMTPConfig, logger *slog.Logger) error {

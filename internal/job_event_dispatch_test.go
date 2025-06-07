@@ -41,6 +41,18 @@ func (m *mockJobEventHandler) OnSearchCompleted(task SearchTask, totalJobs int, 
 	m.events = append(m.events, "OnSearchCompleted")
 }
 
+func (m *mockJobEventHandler) OnJobDetailExtractionComplete(task SearchTask, jobDetail JobDetail, userID *string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.events = append(m.events, "OnJobDetailExtractionComplete")
+}
+
+func (m *mockJobEventHandler) OnAllExtractionsComplete(task SearchTask, totalJobs int, userID *string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.events = append(m.events, "OnAllExtractionsComplete")
+}
+
 func (m *mockJobEventHandler) getEvents() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -187,6 +199,14 @@ func (p *panicHandler) OnPageComplete(task SearchTask, page int, jobsFound int, 
 }
 
 func (p *panicHandler) OnSearchCompleted(task SearchTask, totalJobs int, errors []error, userID *string) {
+	panic("test panic")
+}
+
+func (p *panicHandler) OnJobDetailExtractionComplete(task SearchTask, jobDetail JobDetail, userID *string) {
+	panic("test panic")
+}
+
+func (p *panicHandler) OnAllExtractionsComplete(task SearchTask, totalJobs int, userID *string) {
 	panic("test panic")
 }
 
