@@ -84,6 +84,15 @@
     });
 
     feather.replace()  // feather icons
+
+    // Keep server alive by sending a HEAD request every minute
+    setInterval(function() {
+        fetch('/', { method: 'HEAD' })
+            .catch(function(error) {
+                // Silently ignore errors to avoid console spam
+                console.debug('Keep-alive ping failed:', error);
+            });
+    }, 60000); // 60,000 milliseconds = 1 minute
 </script>
 <script src="/static/js/minimal-theme-switcher.js"></script>
 
