@@ -58,15 +58,6 @@ type WorkerSettings struct {
 	Paused bool // Whether the workers should process the search queue
 }
 
-// TaskType represents the type of work to be done by the worker
-// ("search" for SearchTask, "job_detail" for JobDetail fetch, etc.)
-type TaskType string
-
-const (
-	TaskTypeSearch    TaskType = "search"
-	TaskTypeJobDetail TaskType = "job_detail"
-)
-
 type JobDetailTask struct {
 	SearchTask internal.SearchTask
 	JobListing internal.JobListing
@@ -76,7 +67,7 @@ type JobDetailTask struct {
 // Only one of SearchTask or JobListing should be set, depending on Type
 // (Extendable for future types)
 type WorkerTask struct {
-	Type          TaskType
+	UserID        *string              // optional user ID for live updates
 	SearchTask    *internal.SearchTask // for search tasks
 	JobDetailTask *JobDetailTask       // for job detail fetches
 }
@@ -186,10 +177,17 @@ func (wm *WorkerManager) QueueTask(ctx context.Context, task WorkerTask) error {
 		return fmt.Errorf("worker manager is shutting down")
 	}
 
+	taskType := "unknown"
+	if task.SearchTask != nil {
+		taskType = "search"
+	} else if task.JobDetailTask != nil {
+		taskType = "job_detail"
+	}
+
 	// Try to add to the queue
 	select {
 	case wm.taskQueue <- task:
-		wm.logger.InfoContext(ctx, "task queued successfully", "type", task.Type)
+		wm.logger.Info("task queued successfully", "type", taskType)
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -273,6 +271,13 @@ func (wm *WorkerManager) startWorker(ctx context.Context, workerID int) {
 				return
 			}
 
+			taskType := "unknown"
+			if task.SearchTask != nil {
+				taskType = "search"
+			} else if task.JobDetailTask != nil {
+				taskType = "job_detail"
+			}
+
 			// Process the task
 			startTime := time.Now()
 			wm.processWorkerTask(ctx, task, logger)
@@ -282,29 +287,28 @@ func (wm *WorkerManager) startWorker(ctx context.Context, workerID int) {
 
 			// Log the result
 			duration := time.Since(startTime)
-			logger.Debug("completed task", "type", task.Type, "duration", duration)
+			logger.Debug("completed task", "type", taskType, "duration", duration)
 		}
 	}
 }
 
 // processWorkerTask dispatches a WorkerTask by type
 func (wm *WorkerManager) processWorkerTask(ctx context.Context, task WorkerTask, logger *slog.Logger) {
-	switch task.Type {
-	case TaskTypeSearch:
-		if task.SearchTask != nil {
-			wm.handleSearchTask(ctx, *task.SearchTask)
-		}
-	case TaskTypeJobDetail:
-		if task.JobDetailTask != nil {
-			wm.handleJobDetailTask(ctx, *task.JobDetailTask)
-		}
-	default:
-		logger.Warn("unknown task type", "type", task.Type)
+	if task.SearchTask != nil {
+		wm.handleSearchTask(ctx, task)
+	}
+	if task.JobDetailTask != nil {
+		wm.handleJobDetailTask(ctx, task)
 	}
 }
 
 // handleSearchTask processes a SearchTask (pagination, enqueues job detail tasks)
-func (wm *WorkerManager) handleSearchTask(ctx context.Context, searchJob internal.SearchTask) {
+func (wm *WorkerManager) handleSearchTask(ctx context.Context, wt WorkerTask) {
+	if wt.SearchTask == nil {
+		wm.logger.Error("search task is nil, skipping", "task", wt)
+		return
+	}
+	searchJob := *wt.SearchTask
 	logger := wm.logger.With("search", searchJob.Criteria.Query)
 	logger.Info(internal.Cyan("processing search task"))
 	var searchErrors []error
@@ -345,7 +349,7 @@ func (wm *WorkerManager) handleSearchTask(ctx context.Context, searchJob interna
 				SearchTask: searchJob,
 				JobListing: job,
 			}
-			workerTask := WorkerTask{Type: TaskTypeJobDetail, JobDetailTask: &jobDetailTask}
+			workerTask := WorkerTask{UserID: wt.UserID, JobDetailTask: &jobDetailTask}
 			select {
 			case wm.taskQueue <- workerTask:
 				logger.Debug("enqueued job detail fetch", "jobID", job.ID)
@@ -359,7 +363,7 @@ func (wm *WorkerManager) handleSearchTask(ctx context.Context, searchJob interna
 		now := time.Now().UTC()
 		searchJob.UpdatedAt = &now
 		if wm.eventHandler != nil {
-			wm.eventHandler.OnPageComplete(searchJob, page, len(validJobs), searchErrors)
+			wm.eventHandler.OnPageComplete(searchJob, page, len(validJobs), searchErrors, wt.UserID)
 		}
 		allJobs = append(allJobs, validJobs...)
 	}
@@ -368,12 +372,17 @@ func (wm *WorkerManager) handleSearchTask(ctx context.Context, searchJob interna
 	searchJob.PagesCompleted = searchJob.Criteria.MaxPages
 	searchJob.UpdatedAt = &now
 	if wm.eventHandler != nil {
-		wm.eventHandler.OnSearchCompleted(searchJob, len(allJobs), searchErrors)
+		wm.eventHandler.OnSearchCompleted(searchJob, len(allJobs), searchErrors, wt.UserID)
 	}
 }
 
 // handleJobDetailTask processes a JobDetail fetch (deduplication, fetch, store, event)
-func (wm *WorkerManager) handleJobDetailTask(ctx context.Context, task JobDetailTask) {
+func (wm *WorkerManager) handleJobDetailTask(ctx context.Context, wt WorkerTask) {
+	if wt.JobDetailTask == nil {
+		wm.logger.Error("job detail task is nil, skipping", "task", wt)
+		return
+	}
+	task := *wt.JobDetailTask
 	logger := wm.logger.With("jobID", task.JobListing.ID)
 	logger.Debug(internal.Green("processing job detail task"))
 	jobDetailID := task.JobListing.ID
@@ -395,6 +404,6 @@ func (wm *WorkerManager) handleJobDetailTask(ctx context.Context, task JobDetail
 	jobDetail.CompanyLogo = task.JobListing.CompanyLogo
 	jobDetail.CompanyProfile = task.JobListing.CompanyProfile
 	if wm.eventHandler != nil {
-		wm.eventHandler.OnJobDetail(task.SearchTask, *jobDetail)
+		wm.eventHandler.OnJobDetail(task.SearchTask, task.JobListing, *jobDetail, wt.UserID)
 	}
 }

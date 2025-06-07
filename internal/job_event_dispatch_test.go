@@ -11,31 +11,31 @@ type mockJobEventHandler struct {
 	mu     sync.Mutex
 }
 
-func (m *mockJobEventHandler) OnSearchStarted(task SearchTask) {
+func (m *mockJobEventHandler) OnSearchStarted(task SearchTask, userID *string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.events = append(m.events, "OnSearchStarted")
 }
 
-func (m *mockJobEventHandler) OnJobListing(task SearchTask, listing JobListing) {
+func (m *mockJobEventHandler) OnJobListing(task SearchTask, listing JobListing, userID *string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.events = append(m.events, "OnJobListing")
 }
 
-func (m *mockJobEventHandler) OnJobDetail(task SearchTask, details JobDetail) {
+func (m *mockJobEventHandler) OnJobDetail(task SearchTask, listing JobListing, details JobDetail, userID *string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.events = append(m.events, "OnJobDetail")
 }
 
-func (m *mockJobEventHandler) OnPageComplete(task SearchTask, page int, jobsFound int, errors []error) {
+func (m *mockJobEventHandler) OnPageComplete(task SearchTask, page int, jobsFound int, errors []error, userID *string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.events = append(m.events, "OnPageComplete")
 }
 
-func (m *mockJobEventHandler) OnSearchCompleted(task SearchTask, totalJobs int, errors []error) {
+func (m *mockJobEventHandler) OnSearchCompleted(task SearchTask, totalJobs int, errors []error, userID *string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.events = append(m.events, "OnSearchCompleted")
@@ -114,7 +114,7 @@ func TestEventDispatching(t *testing.T) {
 	detail := JobDetail{ID: "test-detail"}
 
 	// Test OnSearchStarted
-	dispatch.OnSearchStarted(task)
+	dispatch.OnSearchStarted(task, nil)
 	events1 := handler1.getEvents()
 	events2 := handler2.getEvents()
 
@@ -126,7 +126,7 @@ func TestEventDispatching(t *testing.T) {
 	}
 
 	// Test OnJobListing
-	dispatch.OnJobListing(task, listing)
+	dispatch.OnJobListing(task, listing, nil)
 	events1 = handler1.getEvents()
 	events2 = handler2.getEvents()
 
@@ -138,7 +138,7 @@ func TestEventDispatching(t *testing.T) {
 	}
 
 	// Test OnJobDetail
-	dispatch.OnJobDetail(task, detail)
+	dispatch.OnJobDetail(task, listing, detail, nil)
 	events1 = handler1.getEvents()
 
 	if len(events1) != 3 || events1[2] != "OnJobDetail" {
@@ -146,7 +146,7 @@ func TestEventDispatching(t *testing.T) {
 	}
 
 	// Test OnSearchCompleted
-	dispatch.OnSearchCompleted(task, 10, nil)
+	dispatch.OnSearchCompleted(task, 10, nil, nil)
 	events1 = handler1.getEvents()
 
 	if len(events1) != 4 || events1[3] != "OnSearchCompleted" {
@@ -161,32 +161,32 @@ func TestEventDispatchingWithNoHandlers(t *testing.T) {
 	detail := JobDetail{ID: "test-detail"}
 
 	// These should not panic even with no handlers
-	dispatch.OnSearchStarted(task)
-	dispatch.OnJobListing(task, listing)
-	dispatch.OnJobDetail(task, detail)
-	dispatch.OnSearchCompleted(task, 0, nil)
+	dispatch.OnSearchStarted(task, nil)
+	dispatch.OnJobListing(task, listing, nil)
+	dispatch.OnJobDetail(task, listing, detail, nil)
+	dispatch.OnSearchCompleted(task, 0, nil, nil)
 }
 
 // Test handler that panics
 type panicHandler struct{}
 
-func (p *panicHandler) OnSearchStarted(task SearchTask) {
+func (p *panicHandler) OnSearchStarted(task SearchTask, userID *string) {
 	panic("test panic")
 }
 
-func (p *panicHandler) OnJobListing(task SearchTask, listing JobListing) {
+func (p *panicHandler) OnJobListing(task SearchTask, listing JobListing, userID *string) {
 	panic("test panic")
 }
 
-func (p *panicHandler) OnJobDetail(task SearchTask, details JobDetail) {
+func (p *panicHandler) OnJobDetail(task SearchTask, listing JobListing, details JobDetail, userID *string) {
 	panic("test panic")
 }
 
-func (p *panicHandler) OnPageComplete(task SearchTask, page int, jobsFound int, errors []error) {
+func (p *panicHandler) OnPageComplete(task SearchTask, page int, jobsFound int, errors []error, userID *string) {
 	panic("test panic")
 }
 
-func (p *panicHandler) OnSearchCompleted(task SearchTask, totalJobs int, errors []error) {
+func (p *panicHandler) OnSearchCompleted(task SearchTask, totalJobs int, errors []error, userID *string) {
 	panic("test panic")
 }
 
@@ -201,7 +201,7 @@ func TestEventDispatchingWithPanickingHandler(t *testing.T) {
 	task := SearchTask{ID: "test-task"}
 
 	// These should not panic even if one handler panics
-	dispatch.OnSearchStarted(task)
+	dispatch.OnSearchStarted(task, nil)
 
 	// Verify the normal handler still got called
 	events := normalHandler.getEvents()

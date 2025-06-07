@@ -33,24 +33,24 @@ type userNotifier struct {
 	dispatch  *internal.JobEventDispatch
 }
 
-func (u *userNotifier) OnSearchStarted(task internal.SearchTask) {
+func (u *userNotifier) OnSearchStarted(task internal.SearchTask, userID *string) {
 	fmt.Println("userNotifier:OnSearchStarted", task)
 }
 
-func (u *userNotifier) OnJobListing(task internal.SearchTask, listing internal.JobListing) {
+func (u *userNotifier) OnJobListing(task internal.SearchTask, listing internal.JobListing, userID *string) {
 	// fmt.Println("userNotifier:OnJobListing", task, listing)
 }
 
-func (u *userNotifier) OnJobDetail(task internal.SearchTask, details internal.JobDetail) {
+func (u *userNotifier) OnJobDetail(task internal.SearchTask, listing internal.JobListing, details internal.JobDetail, userID *string) {
 	fmt.Println("userNotifier:OnJobDetail", task.Criteria.ID, details.Title)
 	internal.SendPusherMessage(u.publisher, u.userID, "Searching: "+details.Title, nil)
 }
 
-func (u *userNotifier) OnPageComplete(task internal.SearchTask, page int, jobsFound int, errors []error) {
+func (u *userNotifier) OnPageComplete(task internal.SearchTask, page int, jobsFound int, errors []error, userID *string) {
 	fmt.Println("userNotifier:OnPageComplete", task, page, jobsFound, errors)
 }
 
-func (u *userNotifier) OnSearchCompleted(task internal.SearchTask, totalJobs int, errors []error) {
+func (u *userNotifier) OnSearchCompleted(task internal.SearchTask, totalJobs int, errors []error, userID *string) {
 	fmt.Println("userNotifier:OnSearchCompleted", task, totalJobs, errors)
 	u.dispatch.Deregister(u.userID)
 	internal.SendPusherRedirect(u.publisher, u.userID, "/dashboard")

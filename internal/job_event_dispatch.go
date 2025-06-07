@@ -6,11 +6,11 @@ import (
 
 // JobEventHandler defines the interface for handling job-related events
 type JobEventHandler interface {
-	OnSearchStarted(task SearchTask)
-	OnJobListing(task SearchTask, listing JobListing)
-	OnJobDetail(task SearchTask, details JobDetail)
-	OnPageComplete(task SearchTask, page int, jobsFound int, errors []error)
-	OnSearchCompleted(task SearchTask, totalJobs int, errors []error)
+	OnSearchStarted(task SearchTask, userID *string)
+	OnJobListing(task SearchTask, listing JobListing, userID *string)
+	OnJobDetail(task SearchTask, listing JobListing, details JobDetail, userID *string)
+	OnPageComplete(task SearchTask, page int, jobsFound int, errors []error, userID *string)
+	OnSearchCompleted(task SearchTask, totalJobs int, errors []error, userID *string)
 }
 
 // JobEventDispatch implements JobEventHandler and dispatches events to multiple registered handlers
@@ -55,7 +55,7 @@ func (jed *JobEventDispatch) GetHandlerCount() int {
 }
 
 // OnSearchStarted implements JobEventHandler
-func (jed *JobEventDispatch) OnSearchStarted(task SearchTask) {
+func (jed *JobEventDispatch) OnSearchStarted(task SearchTask, userID *string) {
 	jed.mu.RLock()
 	handlers := make([]JobEventHandler, 0, len(jed.handlers))
 	for _, handler := range jed.handlers {
@@ -70,13 +70,13 @@ func (jed *JobEventDispatch) OnSearchStarted(task SearchTask) {
 				// Ignore panics from handlers
 				recover()
 			}()
-			handler.OnSearchStarted(task)
+			handler.OnSearchStarted(task, userID)
 		}()
 	}
 }
 
 // OnJobListing implements JobEventHandler
-func (jed *JobEventDispatch) OnJobListing(task SearchTask, listing JobListing) {
+func (jed *JobEventDispatch) OnJobListing(task SearchTask, listing JobListing, userID *string) {
 	jed.mu.RLock()
 	handlers := make([]JobEventHandler, 0, len(jed.handlers))
 	for _, handler := range jed.handlers {
@@ -91,13 +91,13 @@ func (jed *JobEventDispatch) OnJobListing(task SearchTask, listing JobListing) {
 				// Ignore panics from handlers
 				recover()
 			}()
-			handler.OnJobListing(task, listing)
+			handler.OnJobListing(task, listing, userID)
 		}()
 	}
 }
 
 // OnJobDetail implements JobEventHandler
-func (jed *JobEventDispatch) OnJobDetail(task SearchTask, details JobDetail) {
+func (jed *JobEventDispatch) OnJobDetail(task SearchTask, listing JobListing, details JobDetail, userID *string) {
 	jed.mu.RLock()
 	handlers := make([]JobEventHandler, 0, len(jed.handlers))
 	for _, handler := range jed.handlers {
@@ -112,13 +112,13 @@ func (jed *JobEventDispatch) OnJobDetail(task SearchTask, details JobDetail) {
 				// Ignore panics from handlers
 				recover()
 			}()
-			handler.OnJobDetail(task, details)
+			handler.OnJobDetail(task, listing, details, userID)
 		}()
 	}
 }
 
 // OnPageComplete implements JobEventHandler
-func (jed *JobEventDispatch) OnPageComplete(task SearchTask, page int, jobsFound int, errors []error) {
+func (jed *JobEventDispatch) OnPageComplete(task SearchTask, page int, jobsFound int, errors []error, userID *string) {
 	jed.mu.RLock()
 	handlers := make([]JobEventHandler, 0, len(jed.handlers))
 	for _, handler := range jed.handlers {
@@ -133,13 +133,13 @@ func (jed *JobEventDispatch) OnPageComplete(task SearchTask, page int, jobsFound
 				// Ignore panics from handlers
 				recover()
 			}()
-			handler.OnPageComplete(task, page, jobsFound, errors)
+			handler.OnPageComplete(task, page, jobsFound, errors, userID)
 		}()
 	}
 }
 
 // OnSearchCompleted implements JobEventHandler
-func (jed *JobEventDispatch) OnSearchCompleted(task SearchTask, totalJobs int, errors []error) {
+func (jed *JobEventDispatch) OnSearchCompleted(task SearchTask, totalJobs int, errors []error, userID *string) {
 	jed.mu.RLock()
 	handlers := make([]JobEventHandler, 0, len(jed.handlers))
 	for _, handler := range jed.handlers {
@@ -154,7 +154,7 @@ func (jed *JobEventDispatch) OnSearchCompleted(task SearchTask, totalJobs int, e
 				// Ignore panics from handlers
 				recover()
 			}()
-			handler.OnSearchCompleted(task, totalJobs, errors)
+			handler.OnSearchCompleted(task, totalJobs, errors, userID)
 		}()
 	}
 }
