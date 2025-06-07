@@ -294,7 +294,7 @@ func (p *Provider) QueueSearch(ctx context.Context, searchJob internal.SearchTas
 		"geoID", searchJob.Criteria.GeoID,
 		"maxPages", searchJob.Criteria.MaxPages)
 
-	return p.workerManager.QueueTask(ctx, WorkerTask{Type: TaskTypeSearch, SearchTask: &searchJob})
+	return p.workerManager.QueueTask(ctx, WorkerTask{SearchTask: &searchJob})
 }
 
 // GetQueueDepth returns the current number of items in the queue

@@ -23,33 +23,33 @@ type jobSinkForwarder struct {
 	done    chan struct{}
 }
 
-func (f *jobSinkForwarder) OnSearchStarted(task internal.SearchTask) {
+func (f *jobSinkForwarder) OnSearchStarted(task internal.SearchTask, userID *string) {
 	f.logger.Info(internal.BGGreen("Search started"),
 		"searchID", task.ID,
 		"criteria", task.Criteria)
 	// Forward to JobSink with context
-	f.jobSink.OnSearchStarted(task)
+	f.jobSink.OnSearchStarted(task, userID)
 }
 
-func (f *jobSinkForwarder) OnJobListing(task internal.SearchTask, listing internal.JobListing) {
+func (f *jobSinkForwarder) OnJobListing(task internal.SearchTask, listing internal.JobListing, userID *string) {
 	f.logger.Info(internal.Blue("New job listing found"),
 		"jobID", listing.ID,
 		"title", listing.Title,
 		"company", listing.Company,
 		"location", listing.Location)
-	f.jobSink.OnJobListing(task, listing)
+	f.jobSink.OnJobListing(task, listing, userID)
 }
 
-func (f *jobSinkForwarder) OnJobDetail(task internal.SearchTask, details internal.JobDetail) {
+func (f *jobSinkForwarder) OnJobDetail(task internal.SearchTask, listing internal.JobListing, details internal.JobDetail, userID *string) {
 	f.logger.Info(internal.BGBlue("New job detail found"),
 		"jobID", details.ID,
 		"title", details.Title,
 		"company", details.Company,
 		"location", details.Location)
-	f.jobSink.OnJobDetail(task, details)
+	f.jobSink.OnJobDetail(task, listing, details, userID)
 }
 
-func (f *jobSinkForwarder) OnPageComplete(task internal.SearchTask, page int, jobsFound int, errors []error) {
+func (f *jobSinkForwarder) OnPageComplete(task internal.SearchTask, page int, jobsFound int, errors []error, userID *string) {
 	if len(errors) > 0 {
 		f.logger.Error(internal.BGRed("Page completed with errors"),
 			"page", page,
@@ -60,10 +60,10 @@ func (f *jobSinkForwarder) OnPageComplete(task internal.SearchTask, page int, jo
 			"page", page,
 			"jobsFound", jobsFound)
 	}
-	f.jobSink.OnPageComplete(task, page, jobsFound, errors)
+	f.jobSink.OnPageComplete(task, page, jobsFound, errors, userID)
 }
 
-func (f *jobSinkForwarder) OnSearchCompleted(task internal.SearchTask, totalJobs int, errors []error) {
+func (f *jobSinkForwarder) OnSearchCompleted(task internal.SearchTask, totalJobs int, errors []error, userID *string) {
 	if len(errors) > 0 {
 		f.logger.Error(internal.BGRed("Search completed with errors"),
 			"totalJobs", totalJobs,
@@ -72,7 +72,7 @@ func (f *jobSinkForwarder) OnSearchCompleted(task internal.SearchTask, totalJobs
 		f.logger.Info(internal.BGGreen("Search completed successfully"),
 			"totalJobs", totalJobs)
 	}
-	f.jobSink.OnSearchCompleted(task, totalJobs, errors)
+	f.jobSink.OnSearchCompleted(task, totalJobs, errors, userID)
 	close(f.done) // Signal completion
 }
 

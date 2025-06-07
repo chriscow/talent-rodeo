@@ -49,27 +49,27 @@ type MockEventHandler struct {
 	mutex                   sync.Mutex
 }
 
-func (m *MockEventHandler) OnSearchStarted(task internal.SearchTask) {
+func (m *MockEventHandler) OnSearchStarted(task internal.SearchTask, userID *string) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.onSearchStartedCalled = true
 }
 
-func (m *MockEventHandler) OnJobListing(search internal.SearchTask, listing internal.JobListing) {
+func (m *MockEventHandler) OnJobListing(search internal.SearchTask, listing internal.JobListing, userID *string) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.onJobListingCalled = true
 	m.jobsReceived = append(m.jobsReceived, listing.ID)
 }
 
-func (m *MockEventHandler) OnJobDetail(search internal.SearchTask, details internal.JobDetail) {
+func (m *MockEventHandler) OnJobDetail(search internal.SearchTask, listing internal.JobListing, details internal.JobDetail, userID *string) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.onNewJobCalled = true
 	m.jobsReceived = append(m.jobsReceived, details.ID)
 }
 
-func (m *MockEventHandler) OnPageComplete(search internal.SearchTask, page int, jobsFound int, errors []error) {
+func (m *MockEventHandler) OnPageComplete(search internal.SearchTask, page int, jobsFound int, errors []error, userID *string) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.onSearchCompletedCalled = true
@@ -80,7 +80,7 @@ func (m *MockEventHandler) OnPageComplete(search internal.SearchTask, page int, 
 	}
 }
 
-func (m *MockEventHandler) OnSearchCompleted(search internal.SearchTask, totalJobs int, errors []error) {
+func (m *MockEventHandler) OnSearchCompleted(search internal.SearchTask, totalJobs int, errors []error, userID *string) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.onSearchCompletedCalled = true
@@ -125,7 +125,6 @@ func TestQueueTaskAndGetQueueDepth(t *testing.T) {
 	// Add a search task to the queue
 	ctx := context.Background()
 	searchTask := WorkerTask{
-		Type:       TaskTypeSearch,
 		SearchTask: &internal.SearchTask{Criteria: internal.SearchCriteria{Query: "golang"}},
 	}
 	err := wm.QueueTask(ctx, searchTask)
@@ -134,7 +133,6 @@ func TestQueueTaskAndGetQueueDepth(t *testing.T) {
 
 	// Add another search task
 	searchTask2 := WorkerTask{
-		Type:       TaskTypeSearch,
 		SearchTask: &internal.SearchTask{Criteria: internal.SearchCriteria{Query: "python"}},
 	}
 	err = wm.QueueTask(ctx, searchTask2)
@@ -166,7 +164,6 @@ func TestWorkerManagerStartAndShutdown(t *testing.T) {
 
 	// Queue a search task
 	searchTask := WorkerTask{
-		Type:       TaskTypeSearch,
 		SearchTask: &internal.SearchTask{Criteria: internal.SearchCriteria{Query: "golang"}},
 	}
 	err := wm.QueueTask(ctx, searchTask)
@@ -231,7 +228,7 @@ func TestHandleSearchTask(t *testing.T) {
 
 	// Process a search directly using the internal method
 	ctx := context.Background()
-	wm.handleSearchTask(ctx, internal.SearchTask{Criteria: criteria})
+	wm.handleSearchTask(ctx, WorkerTask{SearchTask: &internal.SearchTask{Criteria: criteria}})
 
 	// Verify the provider methods were called
 	assert.True(t, mockSearchProvider.searchJobsCalled, "SearchJobs should have been called")
@@ -257,7 +254,7 @@ func TestHandleSearchTaskWithErrors(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	wm.handleSearchTask(ctx, internal.SearchTask{Criteria: internal.SearchCriteria{Query: "golang"}})
+	wm.handleSearchTask(ctx, WorkerTask{SearchTask: &internal.SearchTask{Criteria: internal.SearchCriteria{Query: "golang"}}})
 
 	assert.True(t, mockSearchProvider.searchJobsCalled, "SearchJobs should have been called")
 	assert.True(t, mockHandler.onSearchCompletedCalled, "OnSearchCompleted should have been called")
@@ -273,7 +270,6 @@ func TestQueueTaskWhenShuttingDown(t *testing.T) {
 	// Try to queue a search task
 	ctx := context.Background()
 	searchTask := WorkerTask{
-		Type:       TaskTypeSearch,
 		SearchTask: &internal.SearchTask{Criteria: internal.SearchCriteria{Query: "golang"}},
 	}
 	err := wm.QueueTask(ctx, searchTask)
@@ -294,7 +290,6 @@ func TestQueueTaskWhenQueueIsFull(t *testing.T) {
 	// Fill the queue completely (capacity is queueSize*10 = 10)
 	for i := 0; i < 10; i++ {
 		searchTask := WorkerTask{
-			Type:       TaskTypeSearch,
 			SearchTask: &internal.SearchTask{Criteria: internal.SearchCriteria{Query: fmt.Sprintf("job%d", i)}},
 		}
 		err := wm.QueueTask(ctx, searchTask)
@@ -306,7 +301,6 @@ func TestQueueTaskWhenQueueIsFull(t *testing.T) {
 	defer cancel()
 
 	searchTask := WorkerTask{
-		Type:       TaskTypeSearch,
 		SearchTask: &internal.SearchTask{Criteria: internal.SearchCriteria{Query: "overflow"}},
 	}
 	err := wm.QueueTask(ctxWithTimeout, searchTask)

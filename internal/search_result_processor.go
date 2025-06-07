@@ -59,6 +59,16 @@ func NewSearchResultProcessor(fs *FirestoreClient, logger *slog.Logger) *SearchR
 	}
 }
 
+/*
+type JobEventHandler interface {
+	OnSearchStarted(task SearchTask, userID *string)
+	OnJobListing(task SearchTask, listing JobListing, userID *string)
+	OnJobDetail(task SearchTask, listing JobListing, details JobDetail, userID *string)
+	OnPageComplete(task SearchTask, page int, jobsFound int, errors []error, userID *string)
+	OnSearchCompleted(task SearchTask, totalJobs int, errors []error, userID *string)
+}
+*/
+
 // Start launches worker goroutines and periodic queue monitoring/requeueing.
 func (s *SearchResultProcessor) Start() {
 	// Start workers
@@ -188,36 +198,36 @@ func (s *SearchResultProcessor) tryQueueJobDetail(job JobDetail) bool {
 }
 
 // OnJobDetail runs the transaction block synchronously, then queues extraction async.
-func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, job JobDetail) {
-	s.logger.Debug("OnJobDetail", "jobID", job.ProviderJobID)
+func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, listing JobListing, jobDetail JobDetail, userID *string) {
+	s.logger.Debug("OnJobDetail", "jobID", jobDetail.ProviderJobID)
 
 	ctx := context.Background()
 
-	s.logger.Debug("saving job detail and linking", "jobID", job.ID, "criteriaID", jobSearch.Criteria.ID)
+	s.logger.Debug("saving job detail and linking", "jobID", jobDetail.ID, "criteriaID", jobSearch.Criteria.ID)
 	err := s.fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		if err := SaveJobDetailTx(ctx, s.fs, tx, &job); err != nil {
-			s.logger.Error("failed to save job detail", "error", err, "jobID", job.ID)
+		if err := SaveJobDetailTx(ctx, s.fs, tx, &jobDetail); err != nil {
+			s.logger.Error("failed to save job detail", "error", err, "jobID", jobDetail.ID)
 			SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-				"jobID":      job.ID,
+				"jobID":      jobDetail.ID,
 				"criteriaID": jobSearch.Criteria.ID,
 			})
 			return fmt.Errorf("failed to save job detail: %w", err)
 		}
 
-		if err := LinkJobDetailToSearchTaskTx(ctx, s.fs, tx, jobSearch.ID, job.ID); err != nil {
-			s.logger.Error("failed to link job detail to search task", "error", err, "jobID", job.ID, "searchTaskID", jobSearch.ID)
+		if err := LinkJobDetailToSearchTaskTx(ctx, s.fs, tx, jobSearch.ID, jobDetail.ID); err != nil {
+			s.logger.Error("failed to link job detail to search task", "error", err, "jobID", jobDetail.ID, "searchTaskID", jobSearch.ID)
 			SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-				"jobID":        job.ID,
+				"jobID":        jobDetail.ID,
 				"searchTaskID": jobSearch.ID,
 				"criteriaID":   jobSearch.Criteria.ID,
 			})
 			return fmt.Errorf("failed to add job detail to search task: %w", err)
 		}
 
-		if err := LinkJobDetailToCriteriaTx(ctx, s.fs, tx, jobSearch.Criteria.ID, job.ID); err != nil {
-			s.logger.Error("failed to link job detail to criteria", "error", err, "jobID", job.ID, "criteriaID", jobSearch.Criteria.ID)
+		if err := LinkJobDetailToCriteriaTx(ctx, s.fs, tx, jobSearch.Criteria.ID, jobDetail.ID); err != nil {
+			s.logger.Error("failed to link job detail to criteria", "error", err, "jobID", jobDetail.ID, "criteriaID", jobSearch.Criteria.ID)
 			SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-				"jobID":      job.ID,
+				"jobID":      jobDetail.ID,
 				"criteriaID": jobSearch.Criteria.ID,
 			})
 			return fmt.Errorf("failed to link job detail to criteria: %w", err)
@@ -231,23 +241,23 @@ func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, job JobDetail)
 		return
 	}
 
-	_, err = UpsertJobDetailEmbeddings(ctx, jobSearch.Criteria, []JobDetail{job})
+	_, err = UpsertJobDetailEmbeddings(ctx, jobSearch.Criteria, []JobDetail{jobDetail})
 	if err != nil {
-		s.logger.Error("failed to upsert job detail embeddings", "error", err, "jobID", job.ID)
+		s.logger.Error("failed to upsert job detail embeddings", "error", err, "jobID", jobDetail.ID)
 		SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"jobID": job.ID,
+			"jobID": jobDetail.ID,
 		})
 	}
 
 	// Only queue for extraction if not already extracted
-	if job.ExtractedData == nil {
-		if !s.tryQueueJobDetail(job) {
-			s.logger.Debug("job detail queue full, dropping job", "jobID", job.ID)
+	if jobDetail.ExtractedData == nil {
+		if !s.tryQueueJobDetail(jobDetail) {
+			s.logger.Debug("job detail queue full, dropping job", "jobID", jobDetail.ID)
 		}
 	}
 }
 
-func (s *SearchResultProcessor) OnSearchStarted(jobSearch SearchTask) {
+func (s *SearchResultProcessor) OnSearchStarted(jobSearch SearchTask, userID *string) {
 	s.logger.Debug("OnSearchStarted", "criteria", jobSearch.Criteria.GetSearchHash())
 	ctx := context.Background()
 	if err := UpdateSearchTask(ctx, s.fs, &jobSearch); err != nil {
@@ -256,7 +266,7 @@ func (s *SearchResultProcessor) OnSearchStarted(jobSearch SearchTask) {
 }
 
 // search.JobEventHandler implementation
-func (s *SearchResultProcessor) OnJobListing(jobSearch SearchTask, job JobListing) {
+func (s *SearchResultProcessor) OnJobListing(jobSearch SearchTask, job JobListing, userID *string) {
 	s.logger.Debug("OnJobListing", "job", job.ProviderJobID)
 
 	ctx := context.Background()
@@ -265,7 +275,7 @@ func (s *SearchResultProcessor) OnJobListing(jobSearch SearchTask, job JobListin
 	}
 }
 
-func (s *SearchResultProcessor) OnPageComplete(jobSearch SearchTask, page int, jobsFound int, errors []error) {
+func (s *SearchResultProcessor) OnPageComplete(jobSearch SearchTask, page int, jobsFound int, errors []error, userID *string) {
 	s.logger.Debug("OnPageComplete", "criteria", jobSearch.Criteria.ID, "page", page, "jobs_found", jobsFound, "errors", len(errors))
 
 	// Log any errors for this page
@@ -285,7 +295,7 @@ func (s *SearchResultProcessor) OnPageComplete(jobSearch SearchTask, page int, j
 	}
 }
 
-func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJobs int, errors []error) {
+func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJobs int, errors []error, userID *string) {
 	s.logger.Info("OnSearchCompleted", "criteria", jobSearch.Criteria.ID, "total_jobs", totalJobs, "errors", errors)
 
 	// TODO: Do this in a transaction
