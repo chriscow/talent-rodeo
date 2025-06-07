@@ -176,9 +176,23 @@ func (s *SearchResultProcessor) handleExtractionCompletion(task ExtractionTask) 
 		fmt.Println(Green("PROGRESS_TRACKER_UPDATE"), "searchTaskID:", task.SearchTaskID, "processed:", processed, "total:", total)
 
 		if progress.UserID != "" {
-			// Notify every 5%
+			// Notify every 1% from 0-5 and 90-100, otherwise every 5%
 			currentProgress := int(float32(processed) / float32(total) * 100)
-			if total > 0 && (currentProgress-progress.lastProgressNotified >= 5 || processed == total) {
+			shouldNotify := false
+			if total > 0 {
+				if currentProgress <= 5 {
+					// 0-5%: notify every percent
+					shouldNotify = currentProgress > progress.lastProgressNotified
+				} else if currentProgress >= 90 {
+					// 90-100%: notify every percent
+					shouldNotify = currentProgress > progress.lastProgressNotified
+				} else {
+					// 6-89%: notify every 5%
+					shouldNotify = (currentProgress-progress.lastProgressNotified >= 5) || (processed == total)
+				}
+			}
+
+			if shouldNotify {
 				s.logger.Debug("sending progress update", "user", progress.UserID, "progress", currentProgress, "searchTaskID", task.SearchTaskID)
 				SendPusherProgress(s.pusherClient, progress.UserID, "Extracting job details...", currentProgress, 100)
 				progress.mu.Lock()
