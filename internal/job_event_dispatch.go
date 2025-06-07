@@ -11,6 +11,8 @@ type JobEventHandler interface {
 	OnJobDetail(task SearchTask, listing JobListing, details JobDetail, userID *string)
 	OnPageComplete(task SearchTask, page int, jobsFound int, errors []error, userID *string)
 	OnSearchCompleted(task SearchTask, totalJobs int, errors []error, userID *string)
+	OnJobDetailExtractionComplete(task SearchTask, jobDetail JobDetail, userID *string)
+	OnAllExtractionsComplete(task SearchTask, totalJobs int, userID *string)
 }
 
 // JobEventDispatch implements JobEventHandler and dispatches events to multiple registered handlers
@@ -155,6 +157,48 @@ func (jed *JobEventDispatch) OnSearchCompleted(task SearchTask, totalJobs int, e
 				recover()
 			}()
 			handler.OnSearchCompleted(task, totalJobs, errors, userID)
+		}()
+	}
+}
+
+// OnJobDetailExtractionComplete implements JobEventHandler
+func (jed *JobEventDispatch) OnJobDetailExtractionComplete(task SearchTask, jobDetail JobDetail, userID *string) {
+	jed.mu.RLock()
+	handlers := make([]JobEventHandler, 0, len(jed.handlers))
+	for _, handler := range jed.handlers {
+		handlers = append(handlers, handler)
+	}
+	jed.mu.RUnlock()
+
+	// Call handlers sequentially, ignoring any errors
+	for _, handler := range handlers {
+		func() {
+			defer func() {
+				// Ignore panics from handlers
+				recover()
+			}()
+			handler.OnJobDetailExtractionComplete(task, jobDetail, userID)
+		}()
+	}
+}
+
+// OnAllExtractionsComplete implements JobEventHandler
+func (jed *JobEventDispatch) OnAllExtractionsComplete(task SearchTask, totalJobs int, userID *string) {
+	jed.mu.RLock()
+	handlers := make([]JobEventHandler, 0, len(jed.handlers))
+	for _, handler := range jed.handlers {
+		handlers = append(handlers, handler)
+	}
+	jed.mu.RUnlock()
+
+	// Call handlers sequentially, ignoring any errors
+	for _, handler := range handlers {
+		func() {
+			defer func() {
+				// Ignore panics from handlers
+				recover()
+			}()
+			handler.OnAllExtractionsComplete(task, totalJobs, userID)
 		}()
 	}
 }
