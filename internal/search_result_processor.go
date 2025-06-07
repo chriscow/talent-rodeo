@@ -157,7 +157,7 @@ func (s *SearchResultProcessor) worker() {
 					})
 				}
 			}
-			s.handleExtractionCompletion(task)
+			s.notifyUserExtractProgress(task)
 
 		case <-s.stopCh:
 			s.logger.Debug(BGYellow("job detail extraction worker shutting down"))
@@ -166,8 +166,7 @@ func (s *SearchResultProcessor) worker() {
 	}
 }
 
-func (s *SearchResultProcessor) handleExtractionCompletion(task ExtractionTask) {
-	fmt.Println(Yellow("PROGRESS_TRACKER_LOOKUP"), "searchTaskID:", task.SearchTaskID)
+func (s *SearchResultProcessor) notifyUserExtractProgress(task ExtractionTask) {
 	if val, ok := s.progressTrackers.Load(task.SearchTaskID); ok {
 		progress := val.(*SearchProgress)
 		processed := progress.ProcessedJobs.Add(1)
@@ -213,9 +212,6 @@ func (s *SearchResultProcessor) handleExtractionCompletion(task ExtractionTask) 
 			s.eventDispatch.OnJobDetailExtractionComplete(SearchTask{ID: task.SearchTaskID}, task.JobDetail, task.UserID)
 		}
 
-	} else {
-		fmt.Println(Red("PROGRESS_TRACKER_NOT_FOUND"), "searchTaskID:", task.SearchTaskID, "jobID:", task.JobDetail.ID, "userID:", task.UserID)
-		s.logger.Debug(BGRed("handleExtractionCompletion: progressTracker not found"), "jobID", task.JobDetail.ID)
 	}
 }
 
@@ -335,24 +331,24 @@ func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, listing JobLis
 		})
 	}
 
-	// Only queue for extraction if a progress tracker is found for the search.
-	if val, ok := s.progressTrackers.Load(jobSearch.ID); ok {
-		progress := val.(*SearchProgress)
-		task := ExtractionTask{
-			SearchTaskID: jobSearch.ID,
-			UserID:       userID,
-			JobDetail:    jobDetail,
-		}
+	// Always queue the job for extraction.
+	// Progress tracking will be handled by the worker if a progress tracker is found.
+	task := ExtractionTask{
+		SearchTaskID: jobSearch.ID,
+		UserID:       userID,
+		JobDetail:    jobDetail,
+	}
 
-		if s.tryQueueExtractionTask(task) {
+	if s.tryQueueExtractionTask(task) {
+		fmt.Println(Yellow("EXTRACTION_TASK_QUEUED"), "userID:", userIDStr, "jobID:", jobDetail.ID, "searchTaskID:", jobSearch.ID)
+		// If there is a progress tracker, update the total jobs.
+		if val, ok := s.progressTrackers.Load(jobSearch.ID); ok {
+			progress := val.(*SearchProgress)
 			progress.TotalJobs.Add(1)
 			fmt.Println(Green("PROGRESS_TRACKER_UPDATE_TOTALJOBS"), "searchTaskID:", jobSearch.ID, "TotalJobs:", progress.TotalJobs.Load(), "userID", userIDStr)
-			fmt.Println(Yellow("EXTRACTION_TASK_QUEUED"), "userID:", userID, "jobID:", jobDetail.ID, "searchTaskID:", jobSearch.ID)
-		} else {
-			s.logger.Warn("job detail queue full, dropping job", "jobID", jobDetail.ID)
 		}
 	} else {
-		s.logger.Warn("progress tracker not found, skipping extraction queue", "searchTaskID", jobSearch.ID, "jobID", jobDetail.ID)
+		s.logger.Warn("job detail queue full, dropping job", "jobID", jobDetail.ID)
 	}
 }
 
