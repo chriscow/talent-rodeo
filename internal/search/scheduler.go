@@ -274,7 +274,7 @@ func (s *Scheduler) enqueueSearch(ctx context.Context, criteria internal.SearchC
 		return fmt.Errorf("nil search")
 	}
 
-	jobSearch, err := internal.CreateSearchTask(ctx, s.fs, criteria, "scrapingdog")
+	jobSearch, err := internal.CreateSearchTask(ctx, s.fs, criteria, "scrapingdog", nil)
 	if err != nil {
 		if errors.Is(err, internal.ErrSearchTaskExists) {
 			s.logger.Debug("search task already exists", "criteria", criteria)

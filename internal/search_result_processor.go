@@ -126,45 +126,54 @@ func (s *SearchResultProcessor) Stop() {
 
 // worker processes JobDetails from the queue, running ExtractJobDetailData.
 func (s *SearchResultProcessor) worker() {
+	// s.logger.Debug(BGYellow("starting job detail extraction worker"))
 	defer s.workersWg.Done()
 	for {
 		select {
 		case task, ok := <-s.queue:
 			if !ok {
+				s.logger.Debug(BGYellow("job detail extraction worker shutting down"))
 				return
 			}
-			ctx := context.Background()
-			start := time.Now()
-			err := ExtractJobDetailData(ctx, &task.JobDetail)
-			if err != nil {
-				s.logger.Error("failed to extract job detail data (async)", "error", err, "jobID", task.JobDetail.ID)
-				SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-					"jobID": task.JobDetail.ID,
-				})
-				continue
-			}
-			s.logger.Debug("extracted job detail data (async)", "jobID", task.JobDetail.ID, "duration", time.Since(start).String())
-			// Save updated job detail
-			err = SaveJobDetail(ctx, s.fs, &task.JobDetail)
-			if err != nil {
-				s.logger.Error("failed to save job detail after extraction", "error", err, "jobID", task.JobDetail.ID)
-				SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-					"jobID": task.JobDetail.ID,
-				})
+			if task.JobDetail.ExtractedData == nil {
+				s.logger.Debug(Cyan("extracting job detail data (async)"), "jobID", task.JobDetail.ID)
+				ctx := context.Background()
+				start := time.Now()
+				err := ExtractJobDetailData(ctx, &task.JobDetail)
+				if err != nil {
+					s.logger.Error("failed to extract job detail data (async)", "error", err, "jobID", task.JobDetail.ID)
+					SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+						"jobID": task.JobDetail.ID,
+					})
+					continue
+				}
+				s.logger.Debug(Cyan("job detail extraction complete (async)"), "jobID", task.JobDetail.ID, "duration", time.Since(start).String())
+				// Save updated job detail
+				err = SaveJobDetail(ctx, s.fs, &task.JobDetail)
+				if err != nil {
+					s.logger.Error("failed to save job detail after extraction", "error", err, "jobID", task.JobDetail.ID)
+					SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+						"jobID": task.JobDetail.ID,
+					})
+				}
 			}
 			s.handleExtractionCompletion(task)
 
 		case <-s.stopCh:
+			s.logger.Debug(BGYellow("job detail extraction worker shutting down"))
 			return
 		}
 	}
 }
 
 func (s *SearchResultProcessor) handleExtractionCompletion(task ExtractionTask) {
+	fmt.Println(Yellow("PROGRESS_TRACKER_LOOKUP"), "searchTaskID:", task.SearchTaskID)
 	if val, ok := s.progressTrackers.Load(task.SearchTaskID); ok {
-		progress := val.(SearchProgress)
+		progress := val.(*SearchProgress)
 		processed := progress.ProcessedJobs.Add(1)
 		total := progress.TotalJobs.Load()
+
+		fmt.Println(Green("PROGRESS_TRACKER_UPDATE"), "searchTaskID:", task.SearchTaskID, "processed:", processed, "total:", total)
 
 		if progress.UserID != "" {
 			// Notify every 5%
@@ -176,13 +185,23 @@ func (s *SearchResultProcessor) handleExtractionCompletion(task ExtractionTask) 
 				progress.lastProgressNotified = currentProgress
 				progress.mu.Unlock()
 			}
+		} else {
+			s.logger.Debug(BGRed("no user ID"), "jobID", task.JobDetail.ID)
 		}
 
 		if progress.AllJobsQueued.Load() && processed == total {
-			s.logger.Info("all extractions complete for search", "searchTaskID", task.SearchTaskID)
+			fmt.Println(Blue("PROGRESS_TRACKER_DELETE"), "searchTaskID:", task.SearchTaskID)
+			s.logger.Info(Green("all extractions complete for search"), "searchTaskID", task.SearchTaskID)
+			SendPusherRedirect(s.pusherClient, progress.UserID, "/dashboard")
 			s.eventDispatch.OnAllExtractionsComplete(SearchTask{ID: task.SearchTaskID}, int(total), task.UserID)
 			s.progressTrackers.Delete(task.SearchTaskID)
+		} else {
+			s.eventDispatch.OnJobDetailExtractionComplete(SearchTask{ID: task.SearchTaskID}, task.JobDetail, task.UserID)
 		}
+
+	} else {
+		fmt.Println(Red("PROGRESS_TRACKER_NOT_FOUND"), "searchTaskID:", task.SearchTaskID, "jobID:", task.JobDetail.ID, "userID:", task.UserID)
+		s.logger.Debug(BGRed("handleExtractionCompletion: progressTracker not found"), "jobID", task.JobDetail.ID)
 	}
 }
 
@@ -227,15 +246,9 @@ func (s *SearchResultProcessor) requeueUnprocessedJobDetails() {
 	}
 	added := 0
 	for _, job := range jobDetails {
-		// We don't have search task info here, so we can't create a proper ExtractionTask.
-		// For now, we'll just log it. This is a background recovery task.
-		// A proper implementation would require storing more context with the job detail.
-		s.logger.Warn("skipping requeue of unprocessed job detail, context missing", "jobID", job.ID)
-		// if !s.tryQueueExtractionTask(ExtractionTask{JobDetail: job}) {
-		// 	s.logger.Debug("job detail queue full, dropping job", "jobID", job.ID)
-		// 	continue
-		// }
-		// added++
+		s.logger.Debug(Blue("requeueing job detail"), "jobID", job.ID)
+		added++
+		s.tryQueueExtractionTask(ExtractionTask{JobDetail: job})
 	}
 	if added > 0 {
 		s.logger.Info("requeued unprocessed job details", "count", added)
@@ -254,11 +267,15 @@ func (s *SearchResultProcessor) tryQueueExtractionTask(task ExtractionTask) bool
 
 // OnJobDetail runs the transaction block synchronously, then queues extraction async.
 func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, listing JobListing, jobDetail JobDetail, userID *string) {
-	s.logger.Debug("OnJobDetail", "jobID", jobDetail.ProviderJobID)
+	userIDStr := "[none]"
+	if userID != nil {
+		userIDStr = *userID
+	}
+	s.logger.Debug("OnJobDetail", "jobID", jobDetail.ProviderJobID, "userID", userIDStr)
 
 	ctx := context.Background()
 
-	s.logger.Debug("saving job detail and linking", "jobID", jobDetail.ID, "criteriaID", jobSearch.Criteria.ID)
+	s.logger.Debug("saving job detail and linking", "jobID", jobDetail.ID, "criteriaID", jobSearch.Criteria.ID, "userID", userIDStr)
 	err := s.fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		if err := SaveJobDetailTx(ctx, s.fs, tx, &jobDetail); err != nil {
 			s.logger.Error("failed to save job detail", "error", err, "jobID", jobDetail.ID)
@@ -292,33 +309,36 @@ func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, listing JobLis
 	})
 
 	if err != nil {
-		s.logger.Error("failed to save job detail and link", "error", err)
+		s.logger.Error("failed to save job detail and link", "error", err, "jobID", jobDetail.ID, "criteriaID", jobSearch.Criteria.ID, "userID", userIDStr)
 		return
 	}
 
 	_, err = UpsertJobDetailEmbeddings(ctx, jobSearch.Criteria, []JobDetail{jobDetail})
 	if err != nil {
-		s.logger.Error("failed to upsert job detail embeddings", "error", err, "jobID", jobDetail.ID)
+		s.logger.Error("failed to upsert job detail embeddings", "error", err, "jobID", jobDetail.ID, "criteriaID", jobSearch.Criteria.ID, "userID", userIDStr)
 		SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"jobID": jobDetail.ID,
 		})
 	}
 
-	// Only queue for extraction if not already extracted
-	if jobDetail.ExtractedData == nil {
-		if val, ok := s.progressTrackers.Load(jobSearch.ID); ok {
-			progress := val.(SearchProgress)
-			progress.TotalJobs.Add(1)
-		}
-
+	// Only queue for extraction if a progress tracker is found for the search.
+	if val, ok := s.progressTrackers.Load(jobSearch.ID); ok {
+		progress := val.(*SearchProgress)
 		task := ExtractionTask{
 			SearchTaskID: jobSearch.ID,
 			UserID:       userID,
 			JobDetail:    jobDetail,
 		}
-		if !s.tryQueueExtractionTask(task) {
-			s.logger.Debug("job detail queue full, dropping job", "jobID", jobDetail.ID)
+
+		if s.tryQueueExtractionTask(task) {
+			progress.TotalJobs.Add(1)
+			fmt.Println(Green("PROGRESS_TRACKER_UPDATE_TOTALJOBS"), "searchTaskID:", jobSearch.ID, "TotalJobs:", progress.TotalJobs.Load(), "userID", userIDStr)
+			fmt.Println(Yellow("EXTRACTION_TASK_QUEUED"), "userID:", userID, "jobID:", jobDetail.ID, "searchTaskID:", jobSearch.ID)
+		} else {
+			s.logger.Warn("job detail queue full, dropping job", "jobID", jobDetail.ID)
 		}
+	} else {
+		s.logger.Warn("progress tracker not found, skipping extraction queue", "searchTaskID", jobSearch.ID, "jobID", jobDetail.ID)
 	}
 }
 
@@ -326,11 +346,13 @@ func (s *SearchResultProcessor) OnSearchStarted(jobSearch SearchTask, userID *st
 	s.logger.Debug("OnSearchStarted", "criteria", jobSearch.Criteria.GetSearchHash())
 
 	if userID != nil && *userID != "" {
+		fmt.Println(Green("PROGRESS_TRACKER_CREATE"), "userID:", *userID, "searchTaskID:", jobSearch.ID)
 		s.logger.Info("tracking search progress for user", "userID", *userID, "searchTaskID", jobSearch.ID)
-		s.progressTrackers.Store(jobSearch.ID, SearchProgress{
+		s.progressTrackers.Store(jobSearch.ID, &SearchProgress{
 			UserID:       *userID,
 			SearchTaskID: jobSearch.ID,
 		})
+		fmt.Println(Blue("PROGRESS_TRACKER_STORE"), "searchTaskID:", jobSearch.ID)
 	}
 
 	ctx := context.Background()
@@ -373,7 +395,7 @@ func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJob
 	s.logger.Info("OnSearchCompleted", "criteria", jobSearch.Criteria.ID, "total_jobs", totalJobs, "errors", errors)
 
 	if val, ok := s.progressTrackers.Load(jobSearch.ID); ok {
-		progress := val.(SearchProgress)
+		progress := val.(*SearchProgress)
 		progress.AllJobsQueued.Store(true)
 		// It's possible OnJobDetail hasn't run for all jobs yet when OnSearchCompleted is called.
 		// The TotalJobs is set in OnJobDetail. We check for completion in handleExtractionCompletion.
@@ -423,11 +445,14 @@ func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJob
 func (s *SearchResultProcessor) OnJobDetailExtractionComplete(task SearchTask, jobDetail JobDetail, userID *string) {
 	// Business logic is handled in the worker.
 	// This is here to satisfy the interface.
+	if userID != nil && *userID != "" {
+		s.logger.Debug(Gray("OnJobDetailExtractionComplete"), "jobID", jobDetail.ID)
+	}
 }
 
 func (s *SearchResultProcessor) OnAllExtractionsComplete(task SearchTask, totalJobs int, userID *string) {
-	s.logger.Info("all extractions complete, sending redirect", "searchTaskID", task.ID, "user", *userID)
 	if userID != nil && *userID != "" {
+		s.logger.Info(BGGreen("all extractions complete, sending redirect"), "searchTaskID", task.ID, "user", *userID)
 		SendPusherRedirect(s.pusherClient, *userID, "/dashboard")
 	}
 }

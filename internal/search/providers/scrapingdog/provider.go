@@ -205,7 +205,7 @@ func (p *Provider) Start(ctx context.Context) error {
 	// Start the settings updater
 	go p.startSettingsUpdater(ctx)
 
-	return p.workerManager.Start(ctx, DefaultConcurrency*4) // More workers since API calls are rate-limited
+	return p.workerManager.Start(ctx, DefaultConcurrency) // More workers since API calls are rate-limited
 }
 
 // Close gracefully stops the background workers
@@ -289,12 +289,17 @@ func (p *Provider) GetJobDetails(ctx context.Context, jobID string) (*internal.J
 
 // QueueSearch adds a search to the background processing queue
 func (p *Provider) QueueSearch(ctx context.Context, searchJob internal.SearchTask) error {
-	p.logger.Info("queueing search",
+	userID := ""
+	if searchJob.UserID != nil {
+		userID = *searchJob.UserID
+	}
+	p.logger.Info("provider queueing search to workers",
 		"query", searchJob.Criteria.Query,
 		"geoID", searchJob.Criteria.GeoID,
-		"maxPages", searchJob.Criteria.MaxPages)
+		"maxPages", searchJob.Criteria.MaxPages,
+		"userID", userID)
 
-	return p.workerManager.QueueTask(ctx, WorkerTask{SearchTask: &searchJob})
+	return p.workerManager.QueueTask(ctx, WorkerTask{UserID: &userID, SearchTask: &searchJob})
 }
 
 // GetQueueDepth returns the current number of items in the queue

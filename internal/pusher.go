@@ -1,10 +1,13 @@
 package internal
 
 import (
+	"fmt"
+
 	"github.com/pusher/pusher-http-go/v5"
 )
 
 func SendPusherMessage(psh *pusher.Client, userID string, message string, err *string) error {
+	fmt.Println(Gray("SendPusherMessage"), userID, message, err)
 	if psh == nil {
 		return nil // ignore silently if pusher is not configured
 	}
@@ -22,6 +25,7 @@ func SendPusherMessage(psh *pusher.Client, userID string, message string, err *s
 }
 
 func SendPusherRedirect(psh *pusher.Client, userID string, url string) error {
+	fmt.Println(Gray("SendPusherRedirect"), userID, url)
 	if psh == nil {
 		return nil // ignore silently if pusher is not configured
 	}
@@ -34,6 +38,7 @@ func SendPusherRedirect(psh *pusher.Client, userID string, url string) error {
 }
 
 func SendPusherProgress(psh *pusher.Client, userID string, message string, progress int, total int) error {
+	fmt.Println(Gray("SendPusherProgress"), userID, message, progress, total)
 	if psh == nil {
 		return nil // ignore silently if pusher is not configured
 	}

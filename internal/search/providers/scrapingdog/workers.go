@@ -169,6 +169,8 @@ func (wm *WorkerManager) Shutdown(ctx context.Context) error {
 
 // QueueTask adds a WorkerTask to the shared queue
 func (wm *WorkerManager) QueueTask(ctx context.Context, task WorkerTask) error {
+	wm.logger.Debug(internal.Cyan("QueueTask"), "task", task)
+
 	// Check if we're shutting down
 	if atomic.LoadInt32(&wm.shutdownFlag) == 1 {
 		internal.SentryReportError(ctx, fmt.Errorf("worker manager is shutting down"), sentry.LevelError, map[string]string{
@@ -177,17 +179,10 @@ func (wm *WorkerManager) QueueTask(ctx context.Context, task WorkerTask) error {
 		return fmt.Errorf("worker manager is shutting down")
 	}
 
-	taskType := "unknown"
-	if task.SearchTask != nil {
-		taskType = "search"
-	} else if task.JobDetailTask != nil {
-		taskType = "job_detail"
-	}
-
 	// Try to add to the queue
 	select {
 	case wm.taskQueue <- task:
-		wm.logger.Info("task queued successfully", "type", taskType)
+		wm.logger.Info("task queued successfully", "task", task)
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -254,6 +249,8 @@ func (wm *WorkerManager) startWorker(ctx context.Context, workerID int) {
 					logger.Info("task queue closed, worker exiting")
 					return
 				}
+
+				logger.Debug("received task", "task", task)
 			case <-wm.shutdownCtx.Done():
 				logger.Info("shutting down worker")
 				return
@@ -271,29 +268,24 @@ func (wm *WorkerManager) startWorker(ctx context.Context, workerID int) {
 				return
 			}
 
-			taskType := "unknown"
-			if task.SearchTask != nil {
-				taskType = "search"
-			} else if task.JobDetailTask != nil {
-				taskType = "job_detail"
-			}
-
 			// Process the task
 			startTime := time.Now()
-			wm.processWorkerTask(ctx, task, logger)
+			wm.processWorkerTask(ctx, task)
 
 			// Release the semaphore
 			<-wm.semaphore
 
 			// Log the result
 			duration := time.Since(startTime)
-			logger.Debug("completed task", "type", taskType, "duration", duration)
+			logger.Debug("completed task", "task", task, "duration", duration)
 		}
 	}
 }
 
 // processWorkerTask dispatches a WorkerTask by type
-func (wm *WorkerManager) processWorkerTask(ctx context.Context, task WorkerTask, logger *slog.Logger) {
+func (wm *WorkerManager) processWorkerTask(ctx context.Context, task WorkerTask) {
+	wm.logger.Debug(internal.Cyan("processWorkerTask"), "task", task)
+
 	if task.SearchTask != nil {
 		wm.handleSearchTask(ctx, task)
 	}
@@ -302,14 +294,22 @@ func (wm *WorkerManager) processWorkerTask(ctx context.Context, task WorkerTask,
 	}
 }
 
-// handleSearchTask processes a SearchTask (pagination, enqueues job detail tasks)
+// handleSearchTask Worsses a SearchTask (pagination, enqueues job detail tasks)
 func (wm *WorkerManager) handleSearchTask(ctx context.Context, wt WorkerTask) {
 	if wt.SearchTask == nil {
 		wm.logger.Error("search task is nil, skipping", "task", wt)
 		return
 	}
 	searchJob := *wt.SearchTask
-	logger := wm.logger.With("search", searchJob.Criteria.Query)
+	logger := wm.logger.With("search", "jobID", searchJob.ID, "task", wt)
+	if wt.UserID != nil {
+		logger = logger.With("userID", *wt.UserID)
+	}
+
+	if wm.eventHandler != nil {
+		wm.eventHandler.OnSearchStarted(searchJob, wt.UserID)
+	}
+
 	logger.Info(internal.Cyan("processing search task"))
 	var searchErrors []error
 	var allJobs []internal.JobListing
@@ -350,12 +350,17 @@ func (wm *WorkerManager) handleSearchTask(ctx context.Context, wt WorkerTask) {
 				JobListing: job,
 			}
 			workerTask := WorkerTask{UserID: wt.UserID, JobDetailTask: &jobDetailTask}
+			logger.Debug(internal.Cyan("created WorkerTask for job detail fetch"))
 			select {
 			case wm.taskQueue <- workerTask:
-				logger.Debug("enqueued job detail fetch", "jobID", job.ID)
+				logger.Debug("enqueued job detail fetch")
 				validJobs = append(validJobs, job)
 			default:
-				logger.Warn("task queue full, dropping job detail fetch", "jobID", job.ID)
+				logger.Warn("task queue full, dropping job detail fetch")
+			}
+
+			if wm.eventHandler != nil {
+				wm.eventHandler.OnJobListing(searchJob, job, wt.UserID)
 			}
 		}
 		logger.Debug("found job listings", "page", page, "count", len(listings), "validJobs", len(validJobs))
@@ -384,7 +389,12 @@ func (wm *WorkerManager) handleJobDetailTask(ctx context.Context, wt WorkerTask)
 	}
 	task := *wt.JobDetailTask
 	logger := wm.logger.With("jobID", task.JobListing.ID)
-	logger.Debug(internal.Green("processing job detail task"))
+
+	if wt.UserID != nil {
+		logger = logger.With("userID", *wt.UserID)
+	}
+	logger.Debug("handleJobDetailTask")
+
 	jobDetailID := task.JobListing.ID
 	if jobDetailID == "" {
 		logger.Error("job listing missing ID, skipping", "job", task.JobListing)

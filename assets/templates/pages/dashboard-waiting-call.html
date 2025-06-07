@@ -3,44 +3,37 @@
 {{define "page:main"}}
 <main class="container-narrow">
     <article>
-        {{if eq .Appointment.Status "scheduled"}}
-            <hgroup>
-                <h1 id="page-title">We'll be calling you shortly</h1>
-                <p>Please stand by!</p>
-            </hgroup>
-            <section>
-                <h3>What to expect:</h3>
-                <ul>
-                    <li>Our AI assistant will introduce itself</li>
-                    <li>You'll discuss your work preferences</li>
-                    <li>The conversation will be natural and casual</li>
-                    <li>You can ask questions at any time</li>
-                </ul>
-            </section>
-        {{else if eq .Appointment.Status "running"}}
-            <hgroup>
-                <h1 id="page-title">We're calling you now!</h1>
-                <p>Please answer your phone when it rings.</p>
-            </hgroup>
-        {{else if eq .Appointment.Status "processing"}}
-            <hgroup>
-                <h1 id="page-title">Processing your conversation</h1>
-                <p>This takes a several minutes.</p>
-            </hgroup>
-            <progress></progress>
-            <p>
-                We are building your personalized job search criteria.
-            </p>
-        {{else if eq .Appointment.Status "completed"}}
-            <hgroup>
-                <h1 id="page-title">We're running your first search</h1>
-                <p>This may take a few minutes.</p>
-            </hgroup>
-            <progress></progress>
-            <p>
-                This page will automatically refresh when your first results are ready.
-            </p>
-        {{end}}
+        <div id="progress-container">
+            {{if eq .Appointment.Status "scheduled"}}
+                <hgroup>
+                    <h1 id="page-title">We'll be calling you shortly</h1>
+                    <p>Please stand by!</p>
+                </hgroup>
+                <section>
+                    <h3>What to expect:</h3>
+                    <ul>
+                        <li>Our AI assistant will introduce itself</li>
+                        <li>You'll discuss your work preferences</li>
+                        <li>The conversation will be natural and casual</li>
+                        <li>You can ask questions at any time</li>
+                    </ul>
+                </section>
+            {{else if eq .Appointment.Status "running"}}
+                <hgroup>
+                    <h1 id="page-title">We're calling you now!</h1>
+                    <p>Please answer your phone when it rings.</p>
+                </hgroup>
+            {{else if eq .Appointment.Status "processing"}}
+                <hgroup>
+                    <h1 id="page-title">Processing your conversation</h1>
+                    <p>This takes a several minutes.</p>
+                </hgroup>
+                <progress id="progress-bar" value="0" max="100"></progress>
+                <p id="progress-message">
+                    We are building your personalized job search criteria.
+                </p>
+            {{end}}
+        </div>
 
         <footer class="grid">
             <div style="text-align: center;">
@@ -82,6 +75,19 @@
             const message = data.message;
 
             statusContent.textContent = message;
+        });
+
+        channel.bind('server-progress', function(data) {
+            console.log('Received server progress:', data); // Add logging to help debug
+            const progressBar = document.querySelector('#progress-bar');
+            const progressMessage = document.querySelector('#progress-message');
+            if (progressBar) {
+                progressBar.value = data.progress;
+                progressBar.max = data.total;
+            }
+            if (progressMessage) {
+                progressMessage.textContent = data.message;
+            }
         });
 
         channel.bind('server-redirect', function(data) {

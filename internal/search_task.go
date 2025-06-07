@@ -26,6 +26,8 @@ const (
 // SearchTask represents a queued job search with a provider.
 type SearchTask struct {
 	ID string
+	// ADD: UserID to track who initiated the search for progress updates
+	UserID *string
 	// Snapshot of the search criteria used for this task
 	Criteria       SearchCriteria
 	Provider       string
@@ -43,7 +45,7 @@ type JobDetailRef struct {
 
 var ErrSearchTaskExists = errors.New("search task already exists")
 
-func CreateSearchTask(ctx context.Context, fs *FirestoreClient, criteria SearchCriteria, provider string) (*SearchTask, error) {
+func CreateSearchTask(ctx context.Context, fs *FirestoreClient, criteria SearchCriteria, provider string, userID *string) (*SearchTask, error) {
 	// Check for existing active tasks for this criteria
 	activeTasks := fs.Collection(SearchTaskCollection).
 		Where("Criteria.ID", "==", criteria.ID).
@@ -68,6 +70,7 @@ func CreateSearchTask(ctx context.Context, fs *FirestoreClient, criteria SearchC
 	nowUTC := time.Now().UTC()
 	jobSearch := &SearchTask{
 		ID:             uuid.New().String(),
+		UserID:         userID,
 		Criteria:       criteria,
 		Provider:       provider,
 		Status:         SearchTaskStatusQueued,
@@ -79,10 +82,11 @@ func CreateSearchTask(ctx context.Context, fs *FirestoreClient, criteria SearchC
 	return jobSearch, err
 }
 
-func CreateSearchTaskTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, criteria SearchCriteria, provider string) (*SearchTask, error) {
+func CreateSearchTaskTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, criteria SearchCriteria, provider string, userID *string) (*SearchTask, error) {
 	nowUTC := time.Now().UTC()
 	jobSearch := &SearchTask{
 		ID:        uuid.New().String(),
+		UserID:    userID,
 		Criteria:  criteria,
 		Provider:  provider,
 		Status:    SearchTaskStatusQueued,

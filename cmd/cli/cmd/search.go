@@ -76,6 +76,21 @@ func (f *jobSinkForwarder) OnSearchCompleted(task internal.SearchTask, totalJobs
 	close(f.done) // Signal completion
 }
 
+func (f *jobSinkForwarder) OnJobDetailExtractionComplete(task internal.SearchTask, jobDetail internal.JobDetail, userID *string) {
+	f.logger.Info(internal.BGGreen("Job detail extraction complete"),
+		"jobID", jobDetail.ID,
+		"title", jobDetail.Title,
+		"company", jobDetail.Company,
+		"location", jobDetail.Location)
+	f.jobSink.OnJobDetailExtractionComplete(task, jobDetail, userID)
+}
+
+func (f *jobSinkForwarder) OnAllExtractionsComplete(task internal.SearchTask, totalJobs int, userID *string) {
+	f.logger.Info(internal.BGGreen("All extractions complete"),
+		"totalJobs", totalJobs)
+	f.jobSink.OnAllExtractionsComplete(task, totalJobs, userID)
+}
+
 func init() {
 	searchCmd := &cobra.Command{
 		Use:   "search",
@@ -145,7 +160,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		"geo_id", criteria.GeoID)
 
 	// Create JobSink (no JobProcessor for MVP)
-	jobSink := internal.NewSearchResultProcessor(fs, logger)
+	jobSink := internal.NewSearchResultProcessor(fs, logger, nil, nil)
 	// Wrap with forwarder for logging
 	eventHandler := &jobSinkForwarder{
 		logger:  logger,
@@ -165,7 +180,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	// Start workers
 	provider.Start(ctx)
 
-	searchTask, err := internal.CreateSearchTask(ctx, fs, criteria, "scrapingdog")
+	searchTask, err := internal.CreateSearchTask(ctx, fs, criteria, "scrapingdog", nil)
 	if err != nil {
 		return fmt.Errorf("failed to create search task: %w", err)
 	}

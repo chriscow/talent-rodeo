@@ -41,12 +41,14 @@ func (m *MockSearchProvider) GetJobDetails(ctx context.Context, jobID string) (*
 	return m.mockJobDetail, m.getJobDetailsError
 } // MockEventHandler implements the JobEventHandler interface for testing
 type MockEventHandler struct {
-	onJobListingCalled      bool
-	onNewJobCalled          bool
-	onSearchCompletedCalled bool
-	onSearchStartedCalled   bool
-	jobsReceived            []string
-	mutex                   sync.Mutex
+	onJobListingCalled                  bool
+	onNewJobCalled                      bool
+	onSearchCompletedCalled             bool
+	onSearchStartedCalled               bool
+	onAllExtractionsCompleteCalled      bool
+	onJobDetailExtractionCompleteCalled bool
+	jobsReceived                        []string
+	mutex                               sync.Mutex
 }
 
 func (m *MockEventHandler) OnSearchStarted(task internal.SearchTask, userID *string) {
@@ -84,6 +86,18 @@ func (m *MockEventHandler) OnSearchCompleted(search internal.SearchTask, totalJo
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.onSearchCompletedCalled = true
+}
+
+func (m *MockEventHandler) OnJobDetailExtractionComplete(search internal.SearchTask, jobDetail internal.JobDetail, userID *string) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	m.onJobDetailExtractionCompleteCalled = true
+}
+
+func (m *MockEventHandler) OnAllExtractionsComplete(search internal.SearchTask, totalJobs int, userID *string) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	m.onAllExtractionsCompleteCalled = true
 }
 
 func TestNewWorkerManager(t *testing.T) {
