@@ -60,12 +60,12 @@ func SubscribeToCriteria(ctx context.Context, fs *FirestoreClient, userID, crite
 	}
 
 	// Use a transaction to update both the subscription and increment the subscriber count
-	err = fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+	return fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		// Create/update the subscription
 		subscriptionRef := fs.Collection(userCriteriaCollection).Doc(subscriptionID)
 		err := tx.Set(subscriptionRef, subscription)
 		if err != nil {
-			return err
+			return fmt.Errorf("SubscribeToCriteria: firestore.Transaction.Set: %w", err)
 		}
 
 		// Increment the subscriber count for the criteria
@@ -74,13 +74,12 @@ func SubscribeToCriteria(ctx context.Context, fs *FirestoreClient, userID, crite
 			{Path: "SubscriberCount", Value: firestore.Increment(1)},
 		})
 		if err != nil {
-			return err
+			return fmt.Errorf("SubscribeToCriteria: firestore.Transaction.Update: %w", err)
 		}
 
 		return nil
 	})
 
-	return err
 }
 
 // UnsubscribeFromCriteria removes a user's subscription to a criteria
@@ -98,26 +97,26 @@ func UnsubscribeFromCriteria(ctx context.Context, fs *FirestoreClient, userID, c
 	subscriptionID := funcs.Slugify(fmt.Sprintf("%s_%s", userID, criteriaID))
 
 	// Use a transaction to update both the subscription and decrement the subscriber count
-	err := fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+	return fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		// First get the current count to ensure we don't go below zero
 		criteriaRef := fs.Collection(searchCriteriaCollection).Doc(criteriaID)
 		doc, err := tx.Get(criteriaRef)
 		if err != nil {
-			return err
+			return fmt.Errorf("UnsubscribeFromCriteria: firestore.Transaction.Get: %w", err)
 		}
 
 		var criteria struct {
 			SubscriberCount int `firestore:"SubscriberCount"`
 		}
 		if err := doc.DataTo(&criteria); err != nil {
-			return err
+			return fmt.Errorf("UnsubscribeFromCriteria: firestore.Transaction.DataTo: %w", err)
 		}
 
 		// Delete the subscription
 		subscriptionRef := fs.Collection(userCriteriaCollection).Doc(subscriptionID)
 		err = tx.Delete(subscriptionRef)
 		if err != nil {
-			return err
+			return fmt.Errorf("UnsubscribeFromCriteria: firestore.Transaction.Delete: %w", err)
 		}
 
 		// Only decrement if count is > 0
@@ -126,14 +125,12 @@ func UnsubscribeFromCriteria(ctx context.Context, fs *FirestoreClient, userID, c
 				{Path: "SubscriberCount", Value: firestore.Increment(-1)},
 			})
 			if err != nil {
-				return err
+				return fmt.Errorf("UnsubscribeFromCriteria: firestore.Transaction.Update: %w", err)
 			}
 		}
 
 		return nil
 	})
-
-	return err
 }
 
 func UnsubscribeFromCriteriaTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, userID, criteriaID string) error {
@@ -150,7 +147,11 @@ func UnsubscribeFromCriteriaTx(ctx context.Context, fs *FirestoreClient, tx *fir
 
 	// Delete the subscription
 	subscriptionRef := fs.Collection(userCriteriaCollection).Doc(subscriptionID)
-	return tx.Delete(subscriptionRef)
+	err := tx.Delete(subscriptionRef)
+	if err != nil {
+		return fmt.Errorf("UnsubscribeFromCriteriaTx: firestore.Transaction.Delete: %w", err)
+	}
+	return nil
 }
 
 // GetSubscriptionsForUser retrieves all criteria a user is subscribed to
@@ -158,7 +159,7 @@ func GetSubscriptionsForUser(ctx context.Context, fs *FirestoreClient, userID st
 
 	// Validate input
 	if userID == "" {
-		return nil, fmt.Errorf("user ID is required")
+		return nil, fmt.Errorf("GetSubscriptionsForUser: user ID is required")
 	}
 
 	// Query all subscriptions for the user
@@ -173,12 +174,12 @@ func GetSubscriptionsForUser(ctx context.Context, fs *FirestoreClient, userID st
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("error iterating user criteria: %w", err)
+			return nil, fmt.Errorf("GetSubscriptionsForUser: error iterating user criteria: %w", err)
 		}
 
 		var subscription SearchCriteriaSubscription
 		if err := doc.DataTo(&subscription); err != nil {
-			return nil, fmt.Errorf("error parsing subscription data: %w", err)
+			return nil, fmt.Errorf("GetSubscriptionsForUser: error parsing subscription data: %w", err)
 		}
 
 		subscriptions = append(subscriptions, subscription)
@@ -192,7 +193,7 @@ func GetCriteriaSubscribers(ctx context.Context, fs *FirestoreClient, criteriaID
 
 	// Validate input
 	if criteriaID == "" {
-		return nil, fmt.Errorf("criteria ID is required")
+		return nil, fmt.Errorf("GetCriteriaSubscribers: criteria ID is required")
 	}
 
 	// Query all subscriptions for the criteria
@@ -207,7 +208,7 @@ func GetCriteriaSubscribers(ctx context.Context, fs *FirestoreClient, criteriaID
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("error iterating user criteria: %w", err)
+			return nil, fmt.Errorf("GetCriteriaSubscribers: error iterating user criteria: %w", err)
 		}
 
 		var subscription SearchCriteriaSubscription

@@ -151,7 +151,7 @@ func (wm *WorkerManager) Shutdown(ctx context.Context) error {
 	if !atomic.CompareAndSwapInt32(&wm.shutdownFlag, 0, 1) {
 		return nil
 	}
-	wm.logger.InfoContext(ctx, "Shutting down worker manager")
+	wm.logger.Info("shutting down scrapingdog workers")
 	wm.shutdownFunc()
 	done := make(chan struct{})
 	go func() {
@@ -160,7 +160,7 @@ func (wm *WorkerManager) Shutdown(ctx context.Context) error {
 	}()
 	select {
 	case <-done:
-		wm.logger.InfoContext(ctx, "Worker manager shutdown complete")
+		wm.logger.Info("scrapingdog workers shutdown complete")
 		return nil
 	case <-ctx.Done():
 		return fmt.Errorf("shutdown timed out: %w", ctx.Err())
@@ -229,7 +229,6 @@ func (wm *WorkerManager) startWorker(ctx context.Context, workerID int) {
 	for {
 		select {
 		case <-wm.shutdownCtx.Done():
-			logger.Info("shutting down worker")
 			return
 		default:
 			// Check if paused
@@ -252,7 +251,6 @@ func (wm *WorkerManager) startWorker(ctx context.Context, workerID int) {
 
 				logger.Debug("received task", "task", task)
 			case <-wm.shutdownCtx.Done():
-				logger.Info("shutting down worker")
 				return
 			case <-time.After(1 * time.Second):
 				// Timeout to allow pause check
@@ -264,7 +262,6 @@ func (wm *WorkerManager) startWorker(ctx context.Context, workerID int) {
 			case wm.semaphore <- struct{}{}:
 				// Continue processing
 			case <-wm.shutdownCtx.Done():
-				logger.Info("shutting down worker")
 				return
 			}
 

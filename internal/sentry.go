@@ -42,7 +42,7 @@ func SentrySetScope(ctx context.Context, extras map[string]any) {
 }
 
 // SentryReportError captures an error with a specific severity level
-func SentryReportError(ctx context.Context, err error, level sentry.Level, tags map[string]string) error {
+func SentryReportError(ctx context.Context, err error, level sentry.Level, tags map[string]string) {
 	if hub := sentry.GetHubFromContext(ctx); hub != nil {
 		hub.WithScope(func(scope *sentry.Scope) {
 			scope.SetLevel(level)
@@ -52,7 +52,6 @@ func SentryReportError(ctx context.Context, err error, level sentry.Level, tags 
 			hub.CaptureException(err)
 		})
 	}
-	return err
 }
 
 func SentryBreadcrumb(ctx context.Context, breadcrumb sentry.Breadcrumb) {

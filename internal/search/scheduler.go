@@ -137,7 +137,7 @@ func (s *Scheduler) RefreshSettings() error {
 				internal.SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
 					"action": "NewScheduler::RefreshSettings: failed to set default search scheduler settings",
 				})
-				return err
+				return fmt.Errorf("NewScheduler::RefreshSettings: failed to set default search scheduler settings: %w", err)
 			}
 			s.logger.Info("Default search scheduler settings saved to Cloudflare KV", "settings", settings)
 		}
@@ -284,7 +284,7 @@ func (s *Scheduler) enqueueSearch(ctx context.Context, criteria internal.SearchC
 			"action":   "NewScheduler::enqueueSearch: failed to save job search",
 			"criteria": criteria.Query,
 		})
-		return err
+		return fmt.Errorf("NewScheduler::enqueueSearch: failed to save job search: %w", err)
 	}
 
 	// Queue the search with the provider
@@ -294,7 +294,7 @@ func (s *Scheduler) enqueueSearch(ctx context.Context, criteria internal.SearchC
 			"action":   "NewScheduler::enqueueSearch: failed to queue search",
 			"criteria": criteria.Query,
 		})
-		return err
+		return fmt.Errorf("NewScheduler::enqueueSearch: failed to queue search: %w", err)
 	}
 
 	return nil
@@ -339,7 +339,7 @@ func (s *Scheduler) RecoverIncompleteSearches() error {
 		internal.SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
 			"action": "NewScheduler::RecoverIncompleteSearches: failed to get incomplete search tasks",
 		})
-		return err
+		return fmt.Errorf("NewScheduler::RecoverIncompleteSearches: failed to get incomplete search tasks: %w", err)
 	}
 
 	for _, searchTask := range searchTasks {
@@ -347,13 +347,13 @@ func (s *Scheduler) RecoverIncompleteSearches() error {
 			internal.SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
 				"action": "NewScheduler::RecoverIncompleteSearches: failed to set search task status",
 			})
-			return err
+			return fmt.Errorf("NewScheduler::RecoverIncompleteSearches: failed to set search task status: %w", err)
 		}
 		if err := s.queue.QueueSearch(context.Background(), *searchTask); err != nil {
 			internal.SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
 				"action": "NewScheduler::RecoverIncompleteSearches: failed to requeue search task",
 			})
-			return err
+			return fmt.Errorf("NewScheduler::RecoverIncompleteSearches: failed to requeue search task: %w", err)
 		}
 	}
 

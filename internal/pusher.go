@@ -18,7 +18,7 @@ func SendPusherMessage(psh *pusher.Client, userID string, message string, err *s
 	}
 
 	if err := psh.Trigger(userID, "server-message", data); err != nil {
-		return err
+		return fmt.Errorf("SendPusherMessage: pusher.Trigger: %w", err)
 	}
 
 	return nil
@@ -31,7 +31,7 @@ func SendPusherRedirect(psh *pusher.Client, userID string, url string) error {
 	}
 
 	if err := psh.Trigger(userID, "server-redirect", map[string]string{"url": url}); err != nil {
-		return err
+		return fmt.Errorf("SendPusherRedirect: pusher.Trigger: %w", err)
 	}
 
 	return nil
@@ -50,7 +50,7 @@ func SendPusherProgress(psh *pusher.Client, userID string, message string, progr
 	}
 
 	if err := psh.Trigger(userID, "server-progress", data); err != nil {
-		return err
+		return fmt.Errorf("SendPusherProgress: pusher.Trigger: %w", err)
 	}
 
 	return nil

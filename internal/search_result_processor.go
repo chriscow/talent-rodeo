@@ -132,7 +132,7 @@ func (s *SearchResultProcessor) worker() {
 		select {
 		case task, ok := <-s.queue:
 			if !ok {
-				s.logger.Debug(BGYellow("job detail extraction worker shutting down"))
+				// job detail extraction worker shutting down
 				return
 			}
 			if task.JobDetail.ExtractedData == nil {
@@ -160,7 +160,7 @@ func (s *SearchResultProcessor) worker() {
 			s.notifyUserExtractProgress(task)
 
 		case <-s.stopCh:
-			s.logger.Debug(BGYellow("job detail extraction worker shutting down"))
+			// job detail extraction worker shutting down
 			return
 		}
 	}

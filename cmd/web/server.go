@@ -48,7 +48,7 @@ func (app *application) serveHTTP() error {
 		internal.SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
 			"action": "failed_to_serve_http",
 		})
-		return err
+		return fmt.Errorf("app.serve(srv): %w", err)
 	}
 
 	app.wg.Wait()

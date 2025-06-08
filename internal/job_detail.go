@@ -193,7 +193,7 @@ func SaveJobDetail(ctx context.Context, fs *FirestoreClient, job *JobDetail) err
 
 	_, err := fs.Collection(JobDetailsCollection).Doc(job.ID).Set(ctx, job)
 	if err != nil {
-		return err
+		return fmt.Errorf("firestore.Set: %w", err)
 	}
 
 	fs.jobDetailCache.SetWithTTL(job.ID, job, 1, 1*time.Hour)
@@ -204,7 +204,7 @@ func SaveJobDetailTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Tra
 	initJobDetail(ctx, fs, job)
 
 	if err := tx.Set(fs.Collection(JobDetailsCollection).Doc(job.ID), job); err != nil {
-		return err
+		return fmt.Errorf("firestore.Transaction.Set: %w", err)
 	}
 
 	fs.jobDetailCache.SetWithTTL(job.ID, job, 1, 1*time.Hour)

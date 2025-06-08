@@ -2,6 +2,7 @@ package internal
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -73,7 +74,7 @@ func (t *Task) GetPayload(v any) error {
 func (t *Task) SetPayload(v any) error {
 	payloadBytes, err := json.Marshal(v)
 	if err != nil {
-		return err
+		return fmt.Errorf("Task.SetPayload: json.Marshal: %w", err)
 	}
 	t.Payload = payloadBytes
 	return nil

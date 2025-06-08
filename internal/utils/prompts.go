@@ -107,25 +107,25 @@ func CreateTemplate(filepath string) (Prompt, error) {
 func SavePromptTemplate(filePath string, header PromptHeader, body string) error {
 	file, err := os.Create(filepath.Join("assets", filePath))
 	if err != nil {
-		return err
+		return fmt.Errorf("SavePromptTemplate: os.Create: %w", err)
 	}
 	defer file.Close()
 
 	if _, err := file.WriteString("---\n"); err != nil {
-		return err
+		return fmt.Errorf("SavePromptTemplate: file.WriteString: %w", err)
 	}
 	meta, err := yaml.Marshal(header)
 	if err != nil {
-		return err
+		return fmt.Errorf("SavePromptTemplate: yaml.Marshal: %w", err)
 	}
 	if _, err := file.Write(meta); err != nil {
-		return err
+		return fmt.Errorf("SavePromptTemplate: file.Write: %w", err)
 	}
 	if _, err := file.WriteString("\n---\n"); err != nil {
-		return err
+		return fmt.Errorf("SavePromptTemplate: file.WriteString: %w", err)
 	}
 	if _, err := file.WriteString(body); err != nil {
-		return err
+		return fmt.Errorf("SavePromptTemplate: file.WriteString: %w", err)
 	}
 	return nil
 }
