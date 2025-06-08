@@ -140,7 +140,7 @@ func userFromReader(reader io.Reader, user *goth.User) error {
 
 	err := json.NewDecoder(reader).Decode(&u)
 	if err != nil {
-		return err
+		return fmt.Errorf("userFromReader: json.NewDecoder.Decode: %w", err)
 	}
 
 	// Populate the goth.User fields

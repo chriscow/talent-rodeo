@@ -296,7 +296,7 @@ func GetJobIDsForCriteriaCreatedAfter(ctx context.Context, fs *FirestoreClient, 
 func UpdateSearchCriteria(ctx context.Context, fs *FirestoreClient, criteria *SearchCriteria) error {
 	_, err := fs.Collection(searchCriteriaCollection).Doc(criteria.ID).Set(ctx, criteria)
 	if err != nil {
-		return err
+		return fmt.Errorf("UpdateSearchCriteria: firestore.Set: %w", err)
 	}
 	return nil
 }

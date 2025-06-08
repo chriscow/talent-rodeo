@@ -43,6 +43,7 @@ type Processor struct {
 
 // NewProcessor creates a new task processor
 func NewProcessor(storage TaskStorage, logger *slog.Logger) *Processor {
+	logger = logger.With("pkg", "tasks.Processor")
 	return &Processor{
 		storage:      storage,
 		handlers:     make(map[string]TaskHandler),
@@ -90,7 +91,6 @@ func (p *Processor) Start(ctx context.Context) error {
 
 // Stop gracefully shuts down the processor
 func (p *Processor) Stop() {
-	p.logger.Debug("stopping task processor")
 	close(p.done)
 	p.wg.Wait()
 	p.logger.Debug("task processor stopped, all tasks completed")

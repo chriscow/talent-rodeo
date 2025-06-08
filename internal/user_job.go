@@ -142,7 +142,7 @@ func CreateUserJobsBatch(ctx context.Context, fs *FirestoreClient, userID string
 		for _, job := range jobs {
 			docRef := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Doc(job.ID)
 			if err := tx.Set(docRef, job); err != nil {
-				return err
+				return fmt.Errorf("CreateUserJobsBatch: firestore.Transaction.Set: %w", err)
 			}
 		}
 		return nil
@@ -155,12 +155,12 @@ func GetUserJob(ctx context.Context, fs *FirestoreClient, userID, jobID string) 
 		if status.Code(err) == codes.NotFound {
 			return nil, false, nil
 		}
-		return nil, false, fmt.Errorf("failed to get user job: %w", err)
+		return nil, false, fmt.Errorf("GetUserJob: firestore.Get: %w", err)
 	}
 
 	var job UserJob
 	if err := doc.DataTo(&job); err != nil {
-		return nil, false, fmt.Errorf("failed to unmarshal user job: %w", err)
+		return nil, false, fmt.Errorf("GetUserJob: firestore.DataTo: %w", err)
 	}
 
 	return &job, true, nil

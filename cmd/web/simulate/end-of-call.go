@@ -47,7 +47,7 @@ func EndOfCall(ctx context.Context, processor TaskProcessor, userID, appointment
 
 	// Check if context is already canceled
 	if err := ctx.Err(); err != nil {
-		return err
+		return fmt.Errorf("context is already canceled: %w", err)
 	}
 
 	// Load test data

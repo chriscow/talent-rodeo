@@ -256,7 +256,7 @@ func run(logger *slog.Logger) error {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"error_type": "firestore_client_new",
 		})
-		return err
+		return fmt.Errorf("failed to create firestore client: %w", err)
 	}
 	defer FirestoreClient.Close()
 
@@ -280,12 +280,12 @@ func run(logger *slog.Logger) error {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"error_type": "smtp_mailer_new",
 		})
-		return err
+		return fmt.Errorf("failed to create new mailer: %w", err)
 	}
 
 	sessionManager, err := setupSessionManager(cfg, FirestoreClient, logger)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to setup session manager: %w", err)
 	}
 
 	// Create and set our adapter as the gothic store

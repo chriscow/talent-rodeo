@@ -346,7 +346,7 @@ func SendRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user *int
 			"step":           "GenerateRecapEmail",
 		})
 		internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
-		return err
+		return fmt.Errorf("SendRecapEmail: GenerateRecapEmail: %w", err)
 	}
 
 	appointment.RecapSent = true
@@ -360,7 +360,7 @@ func SendRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user *int
 			"step":           "UpdateAppointment-RecapSent",
 		})
 		internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
-		return err
+		return fmt.Errorf("SendRecapEmail: UpdateAppointment: %w", err)
 	}
 	logger.Debug("recap email sent", "user-id", user.ID, "appointment-id", appointment.ID)
 
@@ -373,7 +373,7 @@ func GenerateRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user 
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"error_type": "smtp_mailer_new",
 		})
-		return err
+		return fmt.Errorf("SendRecapEmail: tools.GeneratePrompt: %w", err)
 	}
 
 	promptData := map[string]any{
@@ -387,7 +387,7 @@ func GenerateRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user 
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"error_type": "assets_read_file",
 		})
-		return fmt.Errorf("failed to read recap email template: %w", err)
+		return fmt.Errorf("SendRecapEmail: tools.GeneratePrompt: %w", err)
 	}
 
 	prompt, err := tools.GeneratePrompt(tmpl, promptData)
@@ -395,7 +395,7 @@ func GenerateRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user 
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"error_type": "tools_generate_prompt",
 		})
-		return fmt.Errorf("failed to generate prompt for recap email: %w", err)
+		return fmt.Errorf("SendRecapEmail: tools.GeneratePrompt: %w", err)
 	}
 
 	resp, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat))
@@ -403,7 +403,7 @@ func GenerateRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user 
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"error_type": "tools_ask",
 		})
-		return fmt.Errorf("failed to ask LLM for recap email body: %w", err)
+		return fmt.Errorf("SendRecapEmail: tools.Ask: %w", err)
 	}
 
 	bodyData, err := extractEmailData(ctx, resp)
@@ -412,7 +412,7 @@ func GenerateRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user 
 			"error_type": "extract_email_data",
 		})
 		logger.Error("failed to extract email data", "error", err, "user-id", user.ID, "resp", resp)
-		return fmt.Errorf("failed to extract email data: %w", err)
+		return fmt.Errorf("SendRecapEmail: extractEmailData: %w", err)
 	}
 
 	err = mailer.Send(user.Email, bodyData, "recap-email.html")
@@ -420,7 +420,7 @@ func GenerateRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user 
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"error_type": "smtp_mailer_send",
 		})
-		return fmt.Errorf("failed to send recap email: %w", err)
+		return fmt.Errorf("SendRecapEmail: mailer.Send: %w", err)
 	}
 
 	return nil
@@ -428,40 +428,40 @@ func GenerateRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user 
 
 func extractEmailData(_ context.Context, data string) (map[string]any, error) {
 	if !strings.Contains(data, "<plain_email_body>") {
-		return nil, fmt.Errorf("failed to extract email content: <plain_email_body> tag not found")
+		return nil, fmt.Errorf("extractEmailData: <plain_email_body> tag not found")
 	}
 
 	start := strings.Index(data, "<plain_email_body>")
 	if start == -1 {
-		return nil, fmt.Errorf("failed to extract email content: <plain_email_body> tag not found")
+		return nil, fmt.Errorf("extractEmailData: <plain_email_body> tag not found")
 	}
 	end := strings.Index(data, "</plain_email_body>")
 	if end == -1 {
-		return nil, fmt.Errorf("failed to extract email content: </plain_email_body> tag not found")
+		return nil, fmt.Errorf("extractEmailData: </plain_email_body> tag not found")
 	}
 
 	plainBody := data[start+len("<plain_email_body>") : end]
 
 	if plainBody == "" {
-		return nil, fmt.Errorf("failed to extract email content: body is empty")
+		return nil, fmt.Errorf("extractEmailData: body is empty")
 	}
 
 	// If HTML body is present, extract it as well
 	if !strings.Contains(data, "<html_email_body>") {
-		return nil, fmt.Errorf("failed to extract email content: <html_email_body> tag not found")
+		return nil, fmt.Errorf("extractEmailData: <html_email_body> tag not found")
 	}
 
 	htmlStart := strings.Index(data, "<html_email_body>")
 	if htmlStart == -1 {
-		return nil, fmt.Errorf("failed to extract email content: <html_email_body> tag not found")
+		return nil, fmt.Errorf("extractEmailData: <html_email_body> tag not found")
 	}
 	htmlEnd := strings.Index(data, "</html_email_body>")
 	if htmlEnd == -1 {
-		return nil, fmt.Errorf("failed to extract email content: </html_email_body> tag not found")
+		return nil, fmt.Errorf("extractEmailData: </html_email_body> tag not found")
 	}
 	htmlBody := data[htmlStart+len("<html_email_body>") : htmlEnd]
 	if htmlBody == "" {
-		return nil, fmt.Errorf("failed to extract email content: HTML body is empty")
+		return nil, fmt.Errorf("extractEmailData: HTML body is empty")
 	}
 	return map[string]any{
 		"PlainBody": plainBody,
@@ -484,7 +484,7 @@ func RecoverProcessingAppointments(hub *sentry.Hub, fs *internal.FirestoreClient
 	appointments, err := internal.ListAppointmentsNeedingProcessing(ctx, fs, logger)
 	if err != nil {
 		logger.Error("failed to list appointments needing processing", "error", err)
-		return fmt.Errorf("failed to list appointments needing processing: %w", err)
+		return fmt.Errorf("RecoverProcessingAppointments: ListAppointmentsNeedingProcessing: %w", err)
 	}
 
 	if len(appointments) == 0 {
@@ -517,7 +517,7 @@ func RecoverProcessingAppointments(hub *sentry.Hub, fs *internal.FirestoreClient
 	users, err := internal.GetUsersByIDs(ctx, fs, userIDs)
 	if err != nil {
 		logger.Error("failed to get users by ids", "error", err, "requested-count", len(userIDs))
-		return fmt.Errorf("failed to get users by ids: %w", err)
+		return fmt.Errorf("RecoverProcessingAppointments: GetUsersByIDs: %w", err)
 	}
 	logger.Debug("retrieved users", "found-count", len(users), "requested-count", len(userIDs))
 
@@ -585,19 +585,19 @@ type searchCriteriaResult struct {
 
 func getOrCreateSearchCriteria(ctx context.Context, fs *internal.FirestoreClient, user *internal.User) ([]searchCriteriaResult, error) {
 	if user.SteeringQuery == nil || user.LocationPreference == nil {
-		return nil, fmt.Errorf("user steering query or work preferences not found")
+		return nil, fmt.Errorf("getOrCreateSearchCriteria: user steering query or work preferences not found")
 	}
 
 	sq := user.SteeringQuery
 	if err := sq.Validate(); err != nil {
-		return nil, fmt.Errorf("steering query is invalid: %w", err)
+		return nil, fmt.Errorf("getOrCreateSearchCriteria: steering query is invalid: %w", err)
 	}
 
 	locPref := *user.LocationPreference
 
 	geoID, err := internal.ExtractGeoID(ctx, fs, locPref)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract geo id: %w", err)
+		return nil, fmt.Errorf("getOrCreateSearchCriteria: ExtractGeoID: %w", err)
 	}
 
 	maxPages := internal.DefaultMaxPages
@@ -612,7 +612,7 @@ func getOrCreateSearchCriteria(ctx context.Context, fs *internal.FirestoreClient
 		id := internal.MakeSearchCriteriaID(query, geoID, sq.WorkType, sq.ExperienceLevel)
 		criteria, found, err := internal.GetSearchCriteria(ctx, fs, id)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get search criteria: %w", err)
+			return nil, fmt.Errorf("getOrCreateSearchCriteria: GetSearchCriteria: %w", err)
 		}
 
 		if found {
@@ -625,7 +625,7 @@ func getOrCreateSearchCriteria(ctx context.Context, fs *internal.FirestoreClient
 
 		criteria, err = internal.CreateSearchCriteria(ctx, fs, query, geoID, sq.WorkType, sq.ExperienceLevel, maxPages, internal.DefaultListingAge)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create search criteria: %w", err)
+			return nil, fmt.Errorf("getOrCreateSearchCriteria: CreateSearchCriteria: %w", err)
 		}
 
 		results = append(results, searchCriteriaResult{
@@ -640,21 +640,21 @@ func getOrCreateSearchCriteria(ctx context.Context, fs *internal.FirestoreClient
 func generateSteeringQuery(ctx context.Context, fs *internal.FirestoreClient, user *internal.User, transcript *internal.Transcript) error {
 	resume, found, err := internal.GetLatestResume(ctx, fs, user.ID)
 	if err != nil {
-		return fmt.Errorf("generateSteeringQuery: failed to get user resume: %w", err)
+		return fmt.Errorf("generateSteeringQuery: GetLatestResume: %w", err)
 	}
 	if !found {
-		return fmt.Errorf("generateSteeringQuery: no resume found for user %s", user.ID)
+		return fmt.Errorf("generateSteeringQuery: GetLatestResume: no resume found for user %s", user.ID)
 	}
 
 	query, err := internal.GenerateSteeringQuery(ctx, *resume, *transcript)
 	if err != nil {
-		return fmt.Errorf("generateSteeringQuery: failed to ask LLM for steering query: %w", err)
+		return fmt.Errorf("generateSteeringQuery: GenerateSteeringQuery: %w", err)
 	}
 
 	user.SteeringQuery = query
 
 	if err := internal.SetUserSteeringQuery(ctx, fs, user.ID, *query); err != nil {
-		return fmt.Errorf("generateSteeringQuery: failed to update user with steering query: %w", err)
+		return fmt.Errorf("generateSteeringQuery: SetUserSteeringQuery: %w", err)
 	}
 	return nil
 }
@@ -663,15 +663,15 @@ func extractWorkPreferences(_ context.Context, data string) (*string, error) {
 	if strings.Contains(data, "<final_determinations>") {
 		start := strings.Index(data, "<final_determinations>")
 		if start == -1 {
-			return nil, fmt.Errorf("failed to generate work preferences: <final_determinations> tag not found")
+			return nil, fmt.Errorf("extractWorkPreferences: <final_determinations> tag not found")
 		}
 		end := strings.Index(data, "</final_determinations>")
 		if end == -1 {
-			return nil, fmt.Errorf("failed to generate work preferences: </final_determinations> tag not found")
+			return nil, fmt.Errorf("extractWorkPreferences: </final_determinations> tag not found")
 		}
 		data = data[start+len("<final_determinations>") : end]
 	} else {
-		return nil, fmt.Errorf("failed to generate work preferences: <final_determinations> tag not found")
+		return nil, fmt.Errorf("extractWorkPreferences: <final_determinations> tag not found")
 	}
 
 	return &data, nil
@@ -679,7 +679,7 @@ func extractWorkPreferences(_ context.Context, data string) (*string, error) {
 func getWorkPreferences(ctx context.Context, fs *internal.FirestoreClient, transcript *internal.Transcript, locations []string, user *internal.User) error {
 	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/transcript.work-location.txt")
 	if err != nil {
-		return fmt.Errorf("getWorkPreferences: failed to read work location prompt: %w", err)
+		return fmt.Errorf("getWorkPreferences: ReadFile: %w", err)
 	}
 
 	prompt, err := tools.GeneratePrompt(tmpl, map[string]any{
@@ -687,22 +687,22 @@ func getWorkPreferences(ctx context.Context, fs *internal.FirestoreClient, trans
 		"Locations":  locations,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to generate prompt: %w", err)
+		return fmt.Errorf("getWorkPreferences: GeneratePrompt: %w", err)
 	}
 
 	data, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat))
 	if err != nil {
-		return fmt.Errorf("getWorkPreferences: failed to ask LLM: %w", err)
+		return fmt.Errorf("getWorkPreferences: Ask: %w", err)
 	}
 
 	prefs, err := extractWorkPreferences(ctx, data)
 	if err != nil {
-		return fmt.Errorf("getWorkPreferences: failed to extract work preferences: %w", err)
+		return fmt.Errorf("getWorkPreferences: extractWorkPreferences: %w", err)
 	}
 
 	user.LocationPreference = prefs
 	if err := internal.SetUserWorkPreferences(ctx, fs, user.ID, *prefs); err != nil {
-		return fmt.Errorf("getWorkPreferences: failed to update appointment with work preferences: %w", err)
+		return fmt.Errorf("getWorkPreferences: SetUserWorkPreferences: %w", err)
 	}
 
 	return nil

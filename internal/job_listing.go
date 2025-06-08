@@ -57,7 +57,7 @@ func SaveJobListing(ctx context.Context, fs *FirestoreClient, jobSearch SearchTa
 
 	_, err := fs.Collection(JobListingCollection).Doc(jobListing.ID).Set(ctx, jobListing)
 	if err != nil {
-		return err
+		return fmt.Errorf("SaveJobListing: firestore.Set: %w", err)
 	}
 
 	fs.jobListingCache.SetWithTTL(jobListing.ID, jobListing, 1, 1*time.Hour)
@@ -71,12 +71,12 @@ func GetJobListing(ctx context.Context, fs *FirestoreClient, id string) (*JobLis
 
 	doc, err := fs.Collection(JobListingCollection).Doc(id).Get(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("GetJobListing: firestore.Get: %w", err)
 	}
 
 	var jobListing JobListing
 	if err := doc.DataTo(&jobListing); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("GetJobListing: firestore.DataTo: %w", err)
 	}
 
 	return &jobListing, nil

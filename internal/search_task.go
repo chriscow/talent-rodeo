@@ -102,7 +102,10 @@ func CreateSearchTaskTx(ctx context.Context, fs *FirestoreClient, tx *firestore.
 
 func UpdateSearchTask(ctx context.Context, fs *FirestoreClient, task *SearchTask) error {
 	_, err := fs.Collection(SearchTaskCollection).Doc(task.ID).Set(ctx, task)
-	return err
+	if err != nil {
+		return fmt.Errorf("UpdateSearchTask: firestore.Set: %w", err)
+	}
+	return nil
 }
 
 func GetIncompleteSearchTasks(ctx context.Context, fs *FirestoreClient) ([]*SearchTask, error) {
@@ -115,11 +118,11 @@ func GetIncompleteSearchTasks(ctx context.Context, fs *FirestoreClient) ([]*Sear
 			break
 		}
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("GetIncompleteSearchTasks: error iterating search tasks: %w", err)
 		}
 		searchTask := &SearchTask{}
 		if err = doc.DataTo(searchTask); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("GetIncompleteSearchTasks: error parsing search task data: %w", err)
 		}
 		searchTasks = append(searchTasks, searchTask)
 	}
@@ -141,7 +144,10 @@ func SetSearchTaskStatus(ctx context.Context, fs *FirestoreClient, id string, st
 	}
 
 	_, err := fs.Collection(SearchTaskCollection).Doc(id).Update(ctx, fsUpdates)
-	return err
+	if err != nil {
+		return fmt.Errorf("SetSearchTaskStatus: firestore.Update: %w", err)
+	}
+	return nil
 }
 
 // LinkJobDetailToSearchTaskTx adds a JobDetail as a subcollection doc under a SearchTask.
@@ -172,11 +178,11 @@ func GetJobIDsForSearchTask(ctx context.Context, fs *FirestoreClient, searchTask
 			break
 		}
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("GetJobIDsForSearchTask: error iterating job details: %w", err)
 		}
 		var job JobDetailRef
 		if err := doc.DataTo(&job); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("GetJobIDsForSearchTask: error parsing job detail: %w", err)
 		}
 		jobIDs = append(jobIDs, job.JobID)
 	}

@@ -337,7 +337,7 @@ func ProcessAppointmentStarted(ctx context.Context, fs *FirestoreClient, user *U
 		appointment.UpdatedAt = time.Now()
 
 		if err := UpdateAppointmentTx(ctx, fs, tx, appointment); err != nil {
-			return err
+			return fmt.Errorf("failed to update appointment in transaction: %w", err)
 		}
 
 		// Add reference to the processing tracking collection

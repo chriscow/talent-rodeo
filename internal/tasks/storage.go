@@ -57,18 +57,21 @@ func (s *FirestoreTaskStorage) tasksCollection() string {
 
 func (s *FirestoreTaskStorage) CreateTask(ctx context.Context, task *internal.Task) error {
 	_, err := s.client.Collection(s.tasksCollection()).Doc(task.ID).Set(ctx, task)
-	return err
+	if err != nil {
+		return fmt.Errorf("CreateTask: firestore.Set: %w", err)
+	}
+	return nil
 }
 
 func (s *FirestoreTaskStorage) GetTask(ctx context.Context, id string) (*internal.Task, error) {
 	doc, err := s.client.Collection(s.tasksCollection()).Doc(id).Get(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("GetTask: firestore.Get: %w", err)
 	}
 
 	var task internal.Task
 	if err := doc.DataTo(&task); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("GetTask: firestore.DataTo: %w", err)
 	}
 
 	return &task, nil
@@ -77,12 +80,18 @@ func (s *FirestoreTaskStorage) GetTask(ctx context.Context, id string) (*interna
 func (s *FirestoreTaskStorage) UpdateTask(ctx context.Context, task *internal.Task) error {
 	task.UpdatedAt = time.Now()
 	_, err := s.client.Collection(s.tasksCollection()).Doc(task.ID).Set(ctx, task)
-	return err
+	if err != nil {
+		return fmt.Errorf("UpdateTask: firestore.Set: %w", err)
+	}
+	return nil
 }
 
 func (s *FirestoreTaskStorage) DeleteTask(ctx context.Context, id string) error {
 	_, err := s.client.Collection(s.tasksCollection()).Doc(id).Delete(ctx)
-	return err
+	if err != nil {
+		return fmt.Errorf("DeleteTask: firestore.Delete: %w", err)
+	}
+	return nil
 }
 
 func (s *FirestoreTaskStorage) GetPendingTasks(ctx context.Context) ([]*internal.Task, error) {

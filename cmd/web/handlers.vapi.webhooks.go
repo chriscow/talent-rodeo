@@ -217,7 +217,7 @@ func handleEndOfCallReport(r *http.Request, app *application, msg []byte) error 
 			"action":       "failed_to_validate_end_of_call_report",
 			"webhook_body": string(msg),
 		})
-		return err
+		return fmt.Errorf("failed to validate end of call report: %w", err)
 	}
 
 	report := envelope.EndOfCallReport
@@ -238,7 +238,7 @@ func validateEndOfCallReport(r *http.Request, webhookMsg []byte) (*vapi.EndOfCal
 			"action":       "failed_to_unmarshal_end_of_call_report",
 			"webhook_body": string(webhookMsg),
 		})
-		return nil, err
+		return nil, fmt.Errorf("missing call object in end of call report: %w", err)
 	}
 
 	// call.name is the appointment ID
@@ -252,7 +252,7 @@ func validateEndOfCallReport(r *http.Request, webhookMsg []byte) (*vapi.EndOfCal
 			"action":       "missing_call_object_in_end_of_call_report",
 			"webhook_body": string(webhookMsg),
 		})
-		return nil, err
+		return nil, fmt.Errorf("missing `Call` object in end of call report: %w", err)
 	}
 
 	if report.Call.ID == nil {
@@ -261,7 +261,7 @@ func validateEndOfCallReport(r *http.Request, webhookMsg []byte) (*vapi.EndOfCal
 			"action":       "missing_call_id_in_end_of_call_report",
 			"webhook_body": string(webhookMsg),
 		})
-		return nil, err
+		return nil, fmt.Errorf("missing `Call.ID` in end of call report: %w", err)
 	}
 
 	// The appointment ID is stored in the call name
@@ -271,7 +271,7 @@ func validateEndOfCallReport(r *http.Request, webhookMsg []byte) (*vapi.EndOfCal
 			"action":       "missing_call_name_in_end_of_call_report",
 			"webhook_body": string(webhookMsg),
 		})
-		return nil, err
+		return nil, fmt.Errorf("missing `Call.Name` in end of call report: %w", err)
 	}
 
 	if report.Call.Customer == nil {
@@ -280,7 +280,7 @@ func validateEndOfCallReport(r *http.Request, webhookMsg []byte) (*vapi.EndOfCal
 			"action":       "missing_customer_object_in_end_of_call_report",
 			"webhook_body": string(webhookMsg),
 		})
-		return nil, err
+		return nil, fmt.Errorf("missing `Call.Customer` object in end of call report: %w", err)
 	}
 
 	// The customer ID is required for getting the appointment
@@ -290,7 +290,7 @@ func validateEndOfCallReport(r *http.Request, webhookMsg []byte) (*vapi.EndOfCal
 			"action":       "missing_customer_name_in_end_of_call_report",
 			"webhook_body": string(webhookMsg),
 		})
-		return nil, err
+		return nil, fmt.Errorf("missing `Call.Customer.Name` in end of call report: %w", err)
 	}
 
 	return &env, nil
