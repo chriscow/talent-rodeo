@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"errors"
 
 	"github.com/getsentry/sentry-go"
 )
@@ -43,6 +44,12 @@ func SentrySetScope(ctx context.Context, extras map[string]any) {
 
 // SentryReportError captures an error with a specific severity level
 func SentryReportError(ctx context.Context, err error, level sentry.Level, tags map[string]string) {
+	// Check if the error is context.Canceled
+	if errors.Is(err, context.Canceled) {
+		// Ignore the error if it's context.Canceled
+		return
+	}
+
 	if hub := sentry.GetHubFromContext(ctx); hub != nil {
 		hub.WithScope(func(scope *sentry.Scope) {
 			scope.SetLevel(level)
