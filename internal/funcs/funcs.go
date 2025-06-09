@@ -29,7 +29,7 @@ var TemplateFuncs = template.FuncMap{
 	"timeSince":      time.Since,
 	"timeUntil":      time.Until,
 	"formatTime":     formatTime,
-	"approxAge":      ApproxAge,
+	"approxTime":     ApproxTime,
 	"approxDuration": ApproxDuration,
 	"humanDate":      humanDate,
 
@@ -99,7 +99,7 @@ func formatTime(format string, t time.Time) string {
 	return t.Format(format)
 }
 
-func ApproxAge(t time.Time) string {
+func ApproxTime(t time.Time) string {
 	if t.IsZero() {
 		return "unknown"
 	}
