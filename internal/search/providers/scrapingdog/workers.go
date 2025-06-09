@@ -224,8 +224,6 @@ func (wm *WorkerManager) IsPaused() bool {
 func (wm *WorkerManager) startWorker(ctx context.Context, workerID int) {
 	logger := wm.logger.With("pkg", "scrapingdog", "workerID", workerID)
 
-	logger.Debug("starting worker")
-
 	for {
 		select {
 		case <-wm.shutdownCtx.Done():
