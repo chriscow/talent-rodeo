@@ -64,6 +64,11 @@ func BuildAssistantOverrides(ctx context.Context, user *User, fs *FirestoreClien
 		firstName = user.FirstName
 	}
 
+	searchStrategy := ""
+	if resume != nil {
+		searchStrategy = *resume.SearchAnalysis
+	}
+
 	// Get previous discussions if needed
 	phoneCalls, err := ListAppointments(ctx, fs, user.ID)
 	if err != nil {
@@ -99,7 +104,7 @@ func BuildAssistantOverrides(ctx context.Context, user *User, fs *FirestoreClien
 		FirstName:          firstName,
 		FullName:           fullName,
 		Resume:             resumeText,
-		SearchStrategy:     *resume.SearchAnalysis,
+		SearchStrategy:     searchStrategy,
 		PreviousDiscussion: previousDiscussions,
 	}
 
