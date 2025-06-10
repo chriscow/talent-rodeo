@@ -320,7 +320,11 @@ func processSearchResults(_ context.Context, logger *slog.Logger, searchResult *
 		var postedDate time.Time
 		if dateStr := meta.Fields["postedDate"].GetStringValue(); dateStr != "" {
 			// the postedDate is of the format postedDate: "2025-05-11T23:52:36.312383Z"
-			postedDate, _ = time.Parse(time.RFC3339, dateStr)
+			var err error
+			postedDate, err = time.Parse(time.RFC3339, dateStr)
+			if err != nil {
+				logger.Error("failed to parse posted date", "error", err)
+			}
 		}
 
 		match, exists := allMatches[id]
@@ -549,7 +553,7 @@ func fusionScore(denseScore, sparseScore float64, method string, denseWeight, sp
 		return math.Min(denseScore, sparseScore)
 	case "harmonic":
 		// Harmonic mean weighted by the params
-		if denseScore == 0 || sparseScore == 0 {
+		if denseScore == 0 || sparseScore == 0 || denseWeight == 0 || sparseWeight == 0 {
 			return 0
 		}
 		return 2 * (denseWeight * denseScore * sparseWeight * sparseScore) /

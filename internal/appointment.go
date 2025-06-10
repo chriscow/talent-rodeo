@@ -46,7 +46,7 @@ type Appointment struct {
 	Timezone      string
 	Status        AppointmentStatus
 
-	// This is the end reson given by VAPI when we get the end of call report
+	// This is the end reason given by VAPI when we get the end of call report
 	EndReason *string
 
 	// Error is an internal error that occurred during the appointment
@@ -61,18 +61,7 @@ type Appointment struct {
 	Notes       *string
 
 	RecapSent bool // Whether the recap has been sent to the user
-
-	// New fields for storing promptLLM responses
-	// ExtractedData *ExtractedData
 }
-
-// type ExtractedData struct {
-// 	TranscriptExtract *string
-// 	WorkPreferences   *string
-// 	SearchQueries     []string
-// 	UserStatement     *string
-// 	JobDescription    *string
-// }
 
 func CreateAppointment(ctx context.Context, fs *FirestoreClient, userID string, appointment *Appointment) error {
 	// Validate user exists first
@@ -213,11 +202,9 @@ func ListCompletedAppointments(ctx context.Context, fs *FirestoreClient, userID 
 	}
 
 	// Sort appointments by CompletedAt field in descending order (newest first)
-	if len(appointments) > 1 {
-		sort.SliceStable(appointments, func(i, j int) bool {
-			return appointments[i].CompletedAt.After(*appointments[j].CompletedAt)
-		})
-	}
+	sort.SliceStable(appointments, func(i, j int) bool {
+		return appointments[i].CompletedAt.After(*appointments[j].CompletedAt)
+	})
 
 	return appointments, nil
 }
@@ -225,6 +212,9 @@ func ListCompletedAppointments(ctx context.Context, fs *FirestoreClient, userID 
 func UpdateAppointment(ctx context.Context, fs *FirestoreClient, appointment *Appointment) error {
 	if appointment == nil {
 		return fmt.Errorf("appointment cannot be nil")
+	}
+	if appointment.ID == "" || appointment.UserID == "" {
+		return fmt.Errorf("appointment ID and UserID are required")
 	}
 	_, err := fs.Collection(usersCollection).Doc(appointment.UserID).Collection(appointmentsCollection).Doc(appointment.ID).Set(ctx, appointment)
 	if err != nil {
@@ -274,47 +264,6 @@ func GetAppointmentTranscript(ctx context.Context, fs *FirestoreClient, appointm
 	return NewTranscriptFromCallResult(*call), nil
 }
 
-// MapVapiEndReasonToAppointmentStatus maps a VAPI call end reason to our appointment status
-// and returns both the status and whether the reason should be stored in OtherStatus
-func MapVapiEndReasonToAppointmentStatus(endReason string) (string, bool) {
-	// Successful completions
-	// switch endReason {
-	// case "vonage-completed",
-	// 	"assistant-ended-call",
-	// 	"assistant-said-end-call-phrase",
-	// 	"assistant-ended-call-with-hangup-task",
-	// 	"assistant-ended-call-after-message-spoken":
-	// 	return AppointmentStatusCompleted, false
-	// }
-
-	// // Customer-initiated endings that we consider completed
-	// switch endReason {
-	// case "customer-ended-call":
-	// 	return AppointmentStatusCompleted, true
-	// }
-
-	// // Customer-initiated cancellations
-	// switch endReason {
-	// case "customer-busy",
-	// 	"customer-did-not-answer",
-	// 	"customer-did-not-give-microphone-permission",
-	// 	"voicemail":
-	// 	return AppointmentStatusCancelled, true
-	// }
-
-	// // System cancellations
-	// switch endReason {
-	// case "exceeded-max-duration",
-	// 	"manually-canceled",
-	// 	"silence-timed-out",
-	// 	"assistant-forwarded-call":
-	// 	return AppointmentStatusCancelled, true
-	// }
-
-	// All other cases are considered failures and should store the specific reason
-	return endReason, true
-}
-
 func DeleteAppointment(ctx context.Context, fs *FirestoreClient, userID, appointmentID string) error {
 	_, err := fs.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).Doc(appointmentID).Delete(ctx)
 	if err != nil {
@@ -341,11 +290,6 @@ func ProcessAppointmentStarted(ctx context.Context, fs *FirestoreClient, user *U
 		}
 
 		// Add reference to the processing tracking collection
-		// processingRef := map[string]interface{}{
-		// 	"UserID":        appointment.UserID,
-		// 	"AppointmentID": appointment.ID,
-		// 	"StartedAt":     time.Now(),
-		// }
 		processingRef := processingAppointment{
 			UserID:        appointment.UserID,
 			AppointmentID: appointment.ID,
@@ -467,7 +411,8 @@ func GenerateJobDescription(ctx context.Context, resume Resume, appointment Appo
 		return "", fmt.Errorf("failed to generate prompt: %w", err)
 	}
 
-	desc, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat), tools.WithMaxTokens(3000))
+	const maxTokens = 8192
+	desc, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat), tools.WithMaxTokens(maxTokens))
 	if err != nil {
 		return "", fmt.Errorf("failed to generate job description: %w", err)
 	}
@@ -482,37 +427,6 @@ func GenerateJobDescription(ctx context.Context, resume Resume, appointment Appo
 
 	return desc, nil
 }
-
-// func GenerateSearchQueries(ctx context.Context, resume Resume, appointment Appointment) ([]string, error) {
-// 	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/transcript-040-search.txt")
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to read search prompt: %w", err)
-// 	}
-
-// 	prompt, err := tools.GeneratePrompt(tmpl, map[string]any{
-// 		"TranscriptExtract":     appointment.ExtractedData,
-// 		"InitialSearchAnalysis": resume.SearchAnalysis,
-// 	})
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to generate prompt: %w", err)
-// 	}
-
-// 	result, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat))
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to generate search queries: %w", err)
-// 	}
-
-// 	type searchQueries struct {
-// 		Queries []string `json:"search-queries" description:"A list of search queries from the primary and additional queries to use for the job description search"`
-// 	}
-
-// 	queries, err := tools.StructuredAsk[searchQueries](ctx, "search-queries", `Extract a list of search queries from the following text: `+result, tools.WithModel(tools.GPT41Nano))
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to generate search queries: %w", err)
-// 	}
-
-// 	return queries.Queries, nil
-// }
 
 // ListAppointmentsNeedingProcessing retrieves all appointments that are currently marked as processing
 func ListAppointmentsNeedingProcessing(ctx context.Context, fs *FirestoreClient, logger *slog.Logger) ([]*Appointment, error) {
