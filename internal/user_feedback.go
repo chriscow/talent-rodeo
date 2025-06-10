@@ -34,6 +34,9 @@ type UserFeedback struct {
 
 // UpsertUserFeedback creates or updates user feedback document in Firestore
 func UpsertUserFeedback(ctx context.Context, fs *FirestoreClient, feedback *UserFeedback) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
 	if feedback.UserID == "" {
 		return fmt.Errorf("user ID is required")
 	}
@@ -78,6 +81,9 @@ func UpsertUserFeedback(ctx context.Context, fs *FirestoreClient, feedback *User
 
 // GetUserFeedback retrieves a specific feedback by ID
 func GetUserFeedback(ctx context.Context, fs *FirestoreClient, id string) (*UserFeedback, bool, error) {
+	if fs == nil {
+		return nil, false, fmt.Errorf("firestore client is nil")
+	}
 	doc, err := fs.Collection(userFeedbackCollection).Doc(id).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -96,6 +102,9 @@ func GetUserFeedback(ctx context.Context, fs *FirestoreClient, id string) (*User
 
 // GetUnprocessedUserFeedback retrieves all unprocessed feedback for a specific user
 func GetUnprocessedUserFeedback(ctx context.Context, fs *FirestoreClient, userID string) ([]*UserFeedback, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("firestore client is nil")
+	}
 	iter := fs.Collection(userFeedbackCollection).
 		Where("UserID", "==", userID).
 		Where("ProcessedAt", "==", nil).
@@ -124,6 +133,9 @@ func GetUnprocessedUserFeedback(ctx context.Context, fs *FirestoreClient, userID
 
 // GetUserFeedbackByDateRange retrieves feedback for a user within a date range
 func GetUserFeedbackByDateRange(ctx context.Context, fs *FirestoreClient, userID string, startDate, endDate time.Time) ([]*UserFeedback, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("firestore client is nil")
+	}
 	iter := fs.Collection(userFeedbackCollection).
 		Where("UserID", "==", userID).
 		Where("CreatedAt", ">=", startDate).
@@ -152,6 +164,9 @@ func GetUserFeedbackByDateRange(ctx context.Context, fs *FirestoreClient, userID
 }
 
 func GetUserFeedbackForJobIDs(ctx context.Context, fs *FirestoreClient, userID string, jobIDs []string) ([]*UserFeedback, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("firestore client is nil")
+	}
 	query := fs.Collection(userFeedbackCollection).
 		Where("UserID", "==", userID).
 		Where("JobID", "in", jobIDs).
@@ -181,6 +196,9 @@ func GetUserFeedbackForJobIDs(ctx context.Context, fs *FirestoreClient, userID s
 
 // MarkFeedbackAsProcessed marks multiple feedback items as processed
 func MarkFeedbackAsProcessed(ctx context.Context, fs *FirestoreClient, feedbackIDs []string, processedAt time.Time) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
 	bulkWriter := fs.BulkWriter(ctx)
 
 	for _, id := range feedbackIDs {
@@ -200,6 +218,9 @@ func MarkFeedbackAsProcessed(ctx context.Context, fs *FirestoreClient, feedbackI
 // GetAllUnprocessedFeedback retrieves all unprocessed feedback across all users
 // This is useful for batch processing operations
 func GetAllUnprocessedFeedback(ctx context.Context, fs *FirestoreClient, limit int) ([]*UserFeedback, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("firestore client is nil")
+	}
 	query := fs.Collection(userFeedbackCollection).
 		Where("ProcessedAt", "==", nil).
 		OrderBy("CreatedAt", firestore.Asc)
@@ -241,6 +262,9 @@ type UserFeedbackStats struct {
 }
 
 func GetUserFeedbackStats(ctx context.Context, fs *FirestoreClient, userID string) (*UserFeedbackStats, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("firestore client is nil")
+	}
 	iter := fs.Collection(userFeedbackCollection).
 		Where("UserID", "==", userID).
 		OrderBy("CreatedAt", firestore.Desc).
@@ -289,6 +313,9 @@ func GetUserFeedbackStats(ctx context.Context, fs *FirestoreClient, userID strin
 // DeleteUserFeedback deletes all feedback for a specific user
 // This should be called when a user account is deleted
 func DeleteUserFeedback(ctx context.Context, fs *FirestoreClient, userID string) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
 	// Get all feedback documents for the user
 	iter := fs.Collection(userFeedbackCollection).
 		Where("UserID", "==", userID).
@@ -332,6 +359,9 @@ func DeleteUserFeedback(ctx context.Context, fs *FirestoreClient, userID string)
 
 // DeleteUserFeedbackByID deletes a specific feedback by ID
 func DeleteUserFeedbackByID(ctx context.Context, fs *FirestoreClient, id string) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
 	_, err := fs.Collection(userFeedbackCollection).Doc(id).Delete(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
