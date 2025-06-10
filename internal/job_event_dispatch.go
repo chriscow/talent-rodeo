@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"fmt"
 	"sync"
 )
 
@@ -28,12 +29,20 @@ func NewJobEventDispatch() *JobEventDispatch {
 	}
 }
 
-// Register adds a new handler with the given ID
-// If a handler with the same ID already exists, it will be replaced
-func (jed *JobEventDispatch) Register(id string, handler JobEventHandler) {
+// Register adds a new handler with the given ID.
+// If a handler with the same ID already exists, it will be replaced.
+// Returns an error if the id is empty or the handler is nil.
+func (jed *JobEventDispatch) Register(id string, handler JobEventHandler) error {
+	if id == "" {
+		return fmt.Errorf("handler ID cannot be empty")
+	}
+	if handler == nil {
+		return fmt.Errorf("handler cannot be nil")
+	}
 	jed.mu.Lock()
 	defer jed.mu.Unlock()
 	jed.handlers[id] = handler
+	return nil
 }
 
 // Deregister removes a handler by ID

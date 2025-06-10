@@ -60,6 +60,7 @@ type SearchResultProcessor struct {
 	stopCh    chan struct{}
 	stoppedCh chan struct{}
 	workersWg sync.WaitGroup
+	stopOnce  sync.Once
 
 	logTicker     *time.Ticker
 	requeueTicker *time.Ticker
@@ -69,6 +70,12 @@ type SearchResultProcessor struct {
 }
 
 func NewSearchResultProcessor(fs *FirestoreClient, logger *slog.Logger, psh *pusher.Client, dispatch *JobEventDispatch) *SearchResultProcessor {
+	if fs == nil {
+		panic("firestore client cannot be nil")
+	}
+	if logger == nil {
+		panic("logger cannot be nil")
+	}
 	logger = logger.With("pkg", "SearchResultProcessor")
 	return &SearchResultProcessor{
 		fs:            fs,
@@ -113,15 +120,17 @@ func (s *SearchResultProcessor) Start() {
 
 // Stop signals workers to stop after finishing current job, and stops log/requeue tickers.
 func (s *SearchResultProcessor) Stop() {
-	close(s.stopCh)
-	if s.logTicker != nil {
-		s.logTicker.Stop()
-	}
-	if s.requeueTicker != nil {
-		s.requeueTicker.Stop()
-	}
-	s.workersWg.Wait()
-	close(s.stoppedCh)
+	s.stopOnce.Do(func() {
+		close(s.stopCh)
+		if s.logTicker != nil {
+			s.logTicker.Stop()
+		}
+		if s.requeueTicker != nil {
+			s.requeueTicker.Stop()
+		}
+		s.workersWg.Wait()
+		close(s.stoppedCh)
+	})
 }
 
 // worker processes JobDetails from the queue, running ExtractJobDetailData.
@@ -172,18 +181,15 @@ func (s *SearchResultProcessor) notifyUserExtractProgress(task ExtractionTask) {
 		processed := progress.ProcessedJobs.Add(1)
 		total := progress.TotalJobs.Load()
 
-		fmt.Println(Green("PROGRESS_TRACKER_UPDATE"), "searchTaskID:", task.SearchTaskID, "processed:", processed, "total:", total)
+		s.logger.Debug("progress tracker update", "searchTaskID", task.SearchTaskID, "processed", processed, "total", total)
 
-		if progress.UserID != "" {
+		if progress.UserID != "" && s.pusherClient != nil {
 			// Notify every 1% from 0-5 and 90-100, otherwise every 5%
 			currentProgress := int(float32(processed) / float32(total) * 100)
 			shouldNotify := false
 			if total > 0 {
-				if currentProgress <= 5 {
-					// 0-5%: notify every percent
-					shouldNotify = currentProgress > progress.lastProgressNotified
-				} else if currentProgress >= 90 {
-					// 90-100%: notify every percent
+				if currentProgress <= 5 || currentProgress >= 90 {
+					// 0-5% and 90-100%: notify every percent
 					shouldNotify = currentProgress > progress.lastProgressNotified
 				} else {
 					// 6-89%: notify every 5%
@@ -198,18 +204,21 @@ func (s *SearchResultProcessor) notifyUserExtractProgress(task ExtractionTask) {
 				progress.lastProgressNotified = currentProgress
 				progress.mu.Unlock()
 			}
-		} else {
-			s.logger.Debug(BGRed("no user ID"), "jobID", task.JobDetail.ID)
 		}
 
 		if progress.AllJobsQueued.Load() && processed == total {
-			fmt.Println(Blue("PROGRESS_TRACKER_DELETE"), "searchTaskID:", task.SearchTaskID)
-			s.logger.Info(Green("all extractions complete for search"), "searchTaskID", task.SearchTaskID)
-			SendPusherRedirect(s.pusherClient, progress.UserID, "/dashboard")
-			s.eventDispatch.OnAllExtractionsComplete(SearchTask{ID: task.SearchTaskID}, int(total), task.UserID)
+			s.logger.Info("all extractions complete for search", "searchTaskID", task.SearchTaskID)
+			if s.pusherClient != nil && progress.UserID != "" {
+				SendPusherRedirect(s.pusherClient, progress.UserID, "/dashboard")
+			}
+			if s.eventDispatch != nil {
+				s.eventDispatch.OnAllExtractionsComplete(SearchTask{ID: task.SearchTaskID}, int(total), task.UserID)
+			}
 			s.progressTrackers.Delete(task.SearchTaskID)
 		} else {
-			s.eventDispatch.OnJobDetailExtractionComplete(SearchTask{ID: task.SearchTaskID}, task.JobDetail, task.UserID)
+			if s.eventDispatch != nil {
+				s.eventDispatch.OnJobDetailExtractionComplete(SearchTask{ID: task.SearchTaskID}, task.JobDetail, task.UserID)
+			}
 		}
 
 	}
@@ -248,6 +257,10 @@ func (s *SearchResultProcessor) periodicRequeue() {
 
 // requeueUnprocessedJobDetails fetches JobDetails with nil ExtractedData and queues them.
 func (s *SearchResultProcessor) requeueUnprocessedJobDetails() {
+	if s.fs == nil {
+		s.logger.Error("firestore client is nil, cannot requeue unprocessed job details")
+		return
+	}
 	ctx := context.Background()
 	jobDetails, err := GetJobDetailsWithNoExtractedData(ctx, s.fs)
 	if err != nil {
@@ -277,6 +290,10 @@ func (s *SearchResultProcessor) tryQueueExtractionTask(task ExtractionTask) bool
 
 // OnJobDetail runs the transaction block synchronously, then queues extraction async.
 func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, listing JobListing, jobDetail JobDetail, userID *string) {
+	if s.fs == nil {
+		s.logger.Error("firestore client is nil, cannot process job detail")
+		return
+	}
 	userIDStr := "[none]"
 	if userID != nil {
 		userIDStr = *userID
@@ -286,7 +303,43 @@ func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, listing JobLis
 	ctx := context.Background()
 
 	s.logger.Debug("saving job detail and linking", "jobID", jobDetail.ID, "criteriaID", jobSearch.Criteria.ID, "userID", userIDStr)
-	err := s.fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+	err := s.saveAndLinkJobDetail(ctx, jobSearch, jobDetail)
+	if err != nil {
+		s.logger.Error("failed to save job detail and link", "error", err, "jobID", jobDetail.ID, "criteriaID", jobSearch.Criteria.ID, "userID", userIDStr)
+		return
+	}
+
+	_, err = UpsertJobDetailEmbeddings(ctx, jobSearch.Criteria, []JobDetail{jobDetail})
+	if err != nil {
+		s.logger.Error("failed to upsert job detail embeddings", "error", err, "jobID", jobDetail.ID, "criteriaID", jobSearch.Criteria.ID, "userID", userIDStr)
+		SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"jobID": jobDetail.ID,
+		})
+	}
+
+	// Always queue the job for extraction.
+	// Progress tracking will be handled by the worker if a progress tracker is found.
+	task := ExtractionTask{
+		SearchTaskID: jobSearch.ID,
+		UserID:       userID,
+		JobDetail:    jobDetail,
+	}
+
+	if s.tryQueueExtractionTask(task) {
+		s.logger.Debug("extraction task queued", "userID", userIDStr, "jobID", jobDetail.ID, "searchTaskID", jobSearch.ID)
+		// If there is a progress tracker, update the total jobs.
+		if val, ok := s.progressTrackers.Load(jobSearch.ID); ok {
+			progress := val.(*SearchProgress)
+			progress.TotalJobs.Add(1)
+			s.logger.Debug("progress tracker update: total jobs", "searchTaskID", jobSearch.ID, "totalJobs", progress.TotalJobs.Load(), "userID", userIDStr)
+		}
+	} else {
+		s.logger.Warn("job detail queue full, dropping job", "jobID", jobDetail.ID)
+	}
+}
+
+func (s *SearchResultProcessor) saveAndLinkJobDetail(ctx context.Context, jobSearch SearchTask, jobDetail JobDetail) error {
+	return s.fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		if err := SaveJobDetailTx(ctx, s.fs, tx, &jobDetail); err != nil {
 			s.logger.Error("failed to save job detail", "error", err, "jobID", jobDetail.ID)
 			SentryReportError(ctx, err, sentry.LevelError, map[string]string{
@@ -317,62 +370,33 @@ func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, listing JobLis
 
 		return nil
 	})
-
-	if err != nil {
-		s.logger.Error("failed to save job detail and link", "error", err, "jobID", jobDetail.ID, "criteriaID", jobSearch.Criteria.ID, "userID", userIDStr)
-		return
-	}
-
-	_, err = UpsertJobDetailEmbeddings(ctx, jobSearch.Criteria, []JobDetail{jobDetail})
-	if err != nil {
-		s.logger.Error("failed to upsert job detail embeddings", "error", err, "jobID", jobDetail.ID, "criteriaID", jobSearch.Criteria.ID, "userID", userIDStr)
-		SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"jobID": jobDetail.ID,
-		})
-	}
-
-	// Always queue the job for extraction.
-	// Progress tracking will be handled by the worker if a progress tracker is found.
-	task := ExtractionTask{
-		SearchTaskID: jobSearch.ID,
-		UserID:       userID,
-		JobDetail:    jobDetail,
-	}
-
-	if s.tryQueueExtractionTask(task) {
-		fmt.Println(Yellow("EXTRACTION_TASK_QUEUED"), "userID:", userIDStr, "jobID:", jobDetail.ID, "searchTaskID:", jobSearch.ID)
-		// If there is a progress tracker, update the total jobs.
-		if val, ok := s.progressTrackers.Load(jobSearch.ID); ok {
-			progress := val.(*SearchProgress)
-			progress.TotalJobs.Add(1)
-			fmt.Println(Green("PROGRESS_TRACKER_UPDATE_TOTALJOBS"), "searchTaskID:", jobSearch.ID, "TotalJobs:", progress.TotalJobs.Load(), "userID", userIDStr)
-		}
-	} else {
-		s.logger.Warn("job detail queue full, dropping job", "jobID", jobDetail.ID)
-	}
 }
 
 func (s *SearchResultProcessor) OnSearchStarted(jobSearch SearchTask, userID *string) {
 	s.logger.Debug("OnSearchStarted", "criteria", jobSearch.Criteria.GetSearchHash())
 
 	if userID != nil && *userID != "" {
-		fmt.Println(Green("PROGRESS_TRACKER_CREATE"), "userID:", *userID, "searchTaskID:", jobSearch.ID)
 		s.logger.Info("tracking search progress for user", "userID", *userID, "searchTaskID", jobSearch.ID)
 		s.progressTrackers.Store(jobSearch.ID, &SearchProgress{
 			UserID:       *userID,
 			SearchTaskID: jobSearch.ID,
 		})
-		fmt.Println(Blue("PROGRESS_TRACKER_STORE"), "searchTaskID:", jobSearch.ID)
 	}
 
 	ctx := context.Background()
-	if err := UpdateSearchTask(ctx, s.fs, &jobSearch); err != nil {
-		s.logger.Error("failed to update search task", "error", err)
+	if s.fs != nil {
+		if err := UpdateSearchTask(ctx, s.fs, &jobSearch); err != nil {
+			s.logger.Error("failed to update search task", "error", err)
+		}
 	}
 }
 
 // search.JobEventHandler implementation
 func (s *SearchResultProcessor) OnJobListing(jobSearch SearchTask, job JobListing, userID *string) {
+	if s.fs == nil {
+		s.logger.Error("firestore client is nil, cannot process job listing")
+		return
+	}
 	s.logger.Debug("OnJobListing", "job", job.ProviderJobID)
 
 	ctx := context.Background()
@@ -382,6 +406,10 @@ func (s *SearchResultProcessor) OnJobListing(jobSearch SearchTask, job JobListin
 }
 
 func (s *SearchResultProcessor) OnPageComplete(jobSearch SearchTask, page int, jobsFound int, errors []error, userID *string) {
+	if s.fs == nil {
+		s.logger.Error("firestore client is nil, cannot process page completion")
+		return
+	}
 	s.logger.Debug("OnPageComplete", "criteria", jobSearch.Criteria.ID, "page", page, "jobs_found", jobsFound, "errors", len(errors))
 
 	// Log any errors for this page
@@ -402,6 +430,10 @@ func (s *SearchResultProcessor) OnPageComplete(jobSearch SearchTask, page int, j
 }
 
 func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJobs int, errors []error, userID *string) {
+	if s.fs == nil {
+		s.logger.Error("firestore client is nil, cannot process search completion")
+		return
+	}
 	s.logger.Info("OnSearchCompleted", "criteria", jobSearch.Criteria.ID, "total_jobs", totalJobs, "errors", errors)
 
 	if val, ok := s.progressTrackers.Load(jobSearch.ID); ok {
@@ -413,13 +445,13 @@ func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJob
 
 		if progress.AllJobsQueued.Load() && progress.ProcessedJobs.Load() == progress.TotalJobs.Load() {
 			s.logger.Info("all extractions complete for search at OnSearchCompleted", "searchTaskID", jobSearch.ID)
-			s.eventDispatch.OnAllExtractionsComplete(jobSearch, int(progress.TotalJobs.Load()), userID)
+			if s.eventDispatch != nil {
+				s.eventDispatch.OnAllExtractionsComplete(jobSearch, int(progress.TotalJobs.Load()), userID)
+			}
 			s.progressTrackers.Delete(jobSearch.ID)
 		}
 	}
 
-	// TODO: Do this in a transaction
-	jobSearch.Status = SearchTaskStatusCompleted
 	// join all the errors into a single string
 	if len(errors) > 0 {
 		allErrors := ""
@@ -430,26 +462,32 @@ func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJob
 	}
 
 	ctx := context.Background()
-	if err := UpdateSearchTask(ctx, s.fs, &jobSearch); err != nil {
+	err := s.fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		jobSearch.Status = SearchTaskStatusCompleted
+		if err := UpdateSearchTaskTx(ctx, s.fs, tx, &jobSearch); err != nil {
+			return fmt.Errorf("failed to update search task in transaction: %w", err)
+		}
+
+		criteria := jobSearch.Criteria
+		nowUTC := time.Now().UTC()
+		criteria.LastSearchedAt = &nowUTC
+		criteria.LastSearchJobID = jobSearch.ID
+		criteria.MaxPages = DefaultMaxPages
+		criteria.ListingAge = DefaultListingAge
+		if err := UpdateSearchCriteriaTx(ctx, s.fs, tx, &criteria); err != nil {
+			return fmt.Errorf("failed to update search criteria in transaction: %w", err)
+		}
+		return nil
+	})
+
+	if err != nil {
 		SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"criteriaID": jobSearch.Criteria.ID,
 			"totalJobs":  strconv.Itoa(totalJobs),
 			"errors":     strconv.Itoa(len(errors)),
 		})
-		s.logger.Error("failed to update search task", "error", err)
+		s.logger.Error("failed to update search task and criteria", "error", err)
 	}
-
-	criteria := jobSearch.Criteria
-
-	nowUTC := time.Now().UTC()
-	criteria.LastSearchedAt = &nowUTC
-	criteria.LastSearchJobID = jobSearch.ID
-
-	// If a user is new, we bump the first search to have a higher max pages and listing age
-	// so that we can get more results. Reset it back to default after the first search.
-	criteria.MaxPages = DefaultMaxPages
-	criteria.ListingAge = DefaultListingAge
-	UpdateSearchCriteria(ctx, s.fs, &criteria)
 }
 
 func (s *SearchResultProcessor) OnJobDetailExtractionComplete(task SearchTask, jobDetail JobDetail, userID *string) {
@@ -462,8 +500,10 @@ func (s *SearchResultProcessor) OnJobDetailExtractionComplete(task SearchTask, j
 
 func (s *SearchResultProcessor) OnAllExtractionsComplete(task SearchTask, totalJobs int, userID *string) {
 	if userID != nil && *userID != "" {
-		s.logger.Info(BGGreen("all extractions complete, sending redirect"), "searchTaskID", task.ID, "user", *userID)
-		SendPusherRedirect(s.pusherClient, *userID, "/dashboard")
+		s.logger.Info("all extractions complete, sending redirect", "searchTaskID", task.ID, "user", *userID)
+		if s.pusherClient != nil {
+			SendPusherRedirect(s.pusherClient, *userID, "/dashboard")
+		}
 	}
 }
 

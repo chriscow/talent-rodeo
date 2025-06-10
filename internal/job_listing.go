@@ -39,6 +39,15 @@ func (j *JobListing) GetCacheKey() string {
 }
 
 func SaveJobListing(ctx context.Context, fs *FirestoreClient, jobSearch SearchTask, jobListing *JobListing) error {
+	if fs == nil {
+		return fmt.Errorf("SaveJobListing: FirestoreClient is nil")
+	}
+	if jobListing == nil {
+		return fmt.Errorf("SaveJobListing: jobListing is nil")
+	}
+	if fs.jobListingCache == nil {
+		return fmt.Errorf("SaveJobListing: jobListingCache is nil")
+	}
 	if jobListing.ID == "" {
 		jobListing.ID = jobListing.GetCacheKey()
 	}
@@ -65,6 +74,15 @@ func SaveJobListing(ctx context.Context, fs *FirestoreClient, jobSearch SearchTa
 }
 
 func GetJobListing(ctx context.Context, fs *FirestoreClient, id string) (*JobListing, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("GetJobListing: FirestoreClient is nil")
+	}
+	if fs.jobListingCache == nil {
+		return nil, fmt.Errorf("GetJobListing: jobListingCache is nil")
+	}
+	if id == "" {
+		return nil, fmt.Errorf("GetJobListing: id is empty")
+	}
 	if jobListing, ok := fs.jobListingCache.Get(id); ok {
 		return jobListing, nil
 	}
@@ -84,6 +102,15 @@ func GetJobListing(ctx context.Context, fs *FirestoreClient, id string) (*JobLis
 
 // ListJobListings retrieves all job listings with optional limit and offset
 func ListJobListings(ctx context.Context, fs *FirestoreClient, limit int, offset int) ([]map[string]any, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("ListJobListings: FirestoreClient is nil")
+	}
+	if limit < 0 {
+		return nil, fmt.Errorf("ListJobListings: limit cannot be negative")
+	}
+	if offset < 0 {
+		return nil, fmt.Errorf("ListJobListings: offset cannot be negative")
+	}
 	query := fs.Collection("job_listings").OrderBy("CreatedAt", firestore.Desc)
 	if limit > 0 {
 		query = query.Limit(limit)
@@ -112,6 +139,9 @@ func ListJobListings(ctx context.Context, fs *FirestoreClient, limit int, offset
 
 // DeleteJobListingsByPrefix deletes all job listings with IDs starting with the given prefix
 func DeleteJobListingsByPrefix(ctx context.Context, fs *FirestoreClient, prefix string) (int, error) {
+	if fs == nil {
+		return 0, fmt.Errorf("DeleteJobListingsByPrefix: FirestoreClient is nil")
+	}
 	if prefix == "" {
 		return 0, fmt.Errorf("prefix is required")
 	}

@@ -23,15 +23,18 @@ const userCriteriaCollection = "user_criteria"
 
 // SearchCriteriaSubscription represents a user's subscription to a search criteria
 type SearchCriteriaSubscription struct {
-	UserID       string
-	CriteriaID   string
-	SubscribedAt time.Time
-	LastViewedAt time.Time
-	DisplayName  string
+	UserID       string    `firestore:"UserID"`
+	CriteriaID   string    `firestore:"CriteriaID"`
+	SubscribedAt time.Time `firestore:"SubscribedAt"`
+	LastViewedAt time.Time `firestore:"LastViewedAt"`
+	DisplayName  string    `firestore:"DisplayName"`
 }
 
 // SubscribeToCriteria creates a subscription for a user to a search criteria
 func SubscribeToCriteria(ctx context.Context, fs *FirestoreClient, userID, criteriaID string) error {
+	if fs == nil {
+		return fmt.Errorf("FirestoreClient is nil")
+	}
 	// Validate inputs
 	if userID == "" {
 		return fmt.Errorf("user ID is required")
@@ -43,10 +46,10 @@ func SubscribeToCriteria(ctx context.Context, fs *FirestoreClient, userID, crite
 	// Check if the criteria exists
 	_, found, err := GetSearchCriteria(ctx, fs, criteriaID)
 	if err != nil {
-		return fmt.Errorf("criteria not found: %w", err)
+		return fmt.Errorf("failed to check existence of criteria ID '%s': %w", criteriaID, err)
 	}
 	if !found {
-		return fmt.Errorf("criteria not found")
+		return fmt.Errorf("criteria with ID '%s' not found", criteriaID)
 	}
 
 	// Create subscription document ID by combining user and criteria IDs
@@ -84,6 +87,9 @@ func SubscribeToCriteria(ctx context.Context, fs *FirestoreClient, userID, crite
 
 // UnsubscribeFromCriteria removes a user's subscription to a criteria
 func UnsubscribeFromCriteria(ctx context.Context, fs *FirestoreClient, userID, criteriaID string) error {
+	if fs == nil {
+		return fmt.Errorf("FirestoreClient is nil")
+	}
 
 	// Validate inputs
 	if userID == "" {
@@ -134,6 +140,12 @@ func UnsubscribeFromCriteria(ctx context.Context, fs *FirestoreClient, userID, c
 }
 
 func UnsubscribeFromCriteriaTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, userID, criteriaID string) error {
+	if fs == nil {
+		return fmt.Errorf("FirestoreClient is nil")
+	}
+	if tx == nil {
+		return fmt.Errorf("Transaction is nil")
+	}
 	// Validate inputs
 	if userID == "" {
 		return fmt.Errorf("user ID is required")
@@ -156,6 +168,9 @@ func UnsubscribeFromCriteriaTx(ctx context.Context, fs *FirestoreClient, tx *fir
 
 // GetSubscriptionsForUser retrieves all criteria a user is subscribed to
 func GetSubscriptionsForUser(ctx context.Context, fs *FirestoreClient, userID string) ([]SearchCriteriaSubscription, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("FirestoreClient is nil")
+	}
 
 	// Validate input
 	if userID == "" {
@@ -190,6 +205,9 @@ func GetSubscriptionsForUser(ctx context.Context, fs *FirestoreClient, userID st
 
 // GetCriteriaSubscribers retrieves all users subscribed to a specific criteria
 func GetCriteriaSubscribers(ctx context.Context, fs *FirestoreClient, criteriaID string) ([]SearchCriteriaSubscription, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("FirestoreClient is nil")
+	}
 
 	// Validate input
 	if criteriaID == "" {
@@ -222,8 +240,11 @@ func GetCriteriaSubscribers(ctx context.Context, fs *FirestoreClient, criteriaID
 	return subscribers, nil
 }
 
-// ListSubscribedCriteria retrieves all criteria that has a user subscribed to it.
+// ListSubscribedCriteriaIDs retrieves all criteria that has a user subscribed to it.
 func ListSubscribedCriteriaIDs(ctx context.Context, fs *FirestoreClient) ([]string, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("FirestoreClient is nil")
+	}
 	// Query all subscriptions for the user
 	query := fs.Collection(userCriteriaCollection)
 	iter := query.Documents(ctx)

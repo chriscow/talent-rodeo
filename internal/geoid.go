@@ -19,6 +19,9 @@ type GeoID struct {
 }
 
 func CreateGeoID(ctx context.Context, fs *FirestoreClient, geoID GeoID) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client cannot be nil")
+	}
 	// Ensure the ID field is not empty
 	if geoID.ID == "" {
 		return fmt.Errorf("geoID ID cannot be empty")
@@ -35,8 +38,15 @@ func CreateGeoID(ctx context.Context, fs *FirestoreClient, geoID GeoID) error {
 }
 
 func GetGeoID(ctx context.Context, fs *FirestoreClient, id string) (GeoID, error) {
+	if fs == nil {
+		return GeoID{}, fmt.Errorf("firestore client cannot be nil")
+	}
+	if id == "" {
+		return GeoID{}, fmt.Errorf("geoID ID cannot be empty")
+	}
+
 	doc, err := fs.Collection(geoIDCollection).Doc(id).Get(ctx)
-	if err != nil {
+	if err != nil { // also handles not found error
 		return GeoID{}, err
 	}
 
@@ -48,8 +58,15 @@ func GetGeoID(ctx context.Context, fs *FirestoreClient, id string) (GeoID, error
 }
 
 func ListGeoIDs(ctx context.Context, fs *FirestoreClient) ([]GeoID, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("firestore client cannot be nil")
+	}
+
 	geoIDs := []GeoID{}
 	iter := fs.Collection(geoIDCollection).Documents(ctx)
+	if iter == nil {
+		return nil, fmt.Errorf("failed to create document iterator")
+	}
 
 	for {
 		doc, err := iter.Next()
@@ -59,17 +76,29 @@ func ListGeoIDs(ctx context.Context, fs *FirestoreClient) ([]GeoID, error) {
 		if err != nil {
 			return nil, err
 		}
+		if doc == nil {
+			continue // Skip nil documents
+		}
+
 		var geoID GeoID
 		if err := doc.DataTo(&geoID); err != nil {
 			return nil, err
 		}
-		geoID.ID = doc.Ref.ID
+
+		// Check if doc.Ref is nil before accessing ID
+		if doc.Ref != nil {
+			geoID.ID = doc.Ref.ID
+		}
 		geoIDs = append(geoIDs, geoID)
 	}
 	return geoIDs, nil
 }
 
 func GetGeoIDKeys(ctx context.Context, fs *FirestoreClient) ([]string, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("firestore client cannot be nil")
+	}
+
 	geoIDs, err := ListGeoIDs(ctx, fs)
 	if err != nil {
 		return nil, err
@@ -82,6 +111,13 @@ func GetGeoIDKeys(ctx context.Context, fs *FirestoreClient) ([]string, error) {
 }
 
 func ExtractGeoID(ctx context.Context, fs *FirestoreClient, data string) (string, error) {
+	if fs == nil {
+		return "", fmt.Errorf("firestore client cannot be nil")
+	}
+	if data == "" {
+		return "", fmt.Errorf("data cannot be empty")
+	}
+
 	geoids, err := ListGeoIDs(ctx, fs)
 	if err != nil {
 		return "", err

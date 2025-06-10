@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"talent-rodeo/assets"
+	"talent-rodeo/internal/utils"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -154,14 +155,12 @@ func initJobDetail(_ context.Context, _ *FirestoreClient, job *JobDetail) {
 	}
 
 	if job.CreatedAt.IsZero() {
-		job.CreatedAt = time.Now()
+		job.CreatedAt = time.Now().UTC()
 	}
 
 	if job.SearchJobIDs == nil {
 		job.SearchJobIDs = []string{}
 	}
-
-	job.CreatedAt = time.Now().UTC()
 }
 
 func ExtractJobDetailData(ctx context.Context, job *JobDetail) error {
@@ -189,6 +188,12 @@ func ExtractJobDetailData(ctx context.Context, job *JobDetail) error {
 }
 
 func SaveJobDetail(ctx context.Context, fs *FirestoreClient, job *JobDetail) error {
+	if fs == nil {
+		return fmt.Errorf("SaveJobDetail: fs is nil")
+	}
+	if job == nil {
+		return fmt.Errorf("SaveJobDetail: job is nil")
+	}
 	initJobDetail(ctx, fs, job)
 
 	_, err := fs.Collection(JobDetailsCollection).Doc(job.ID).Set(ctx, job)
@@ -201,6 +206,15 @@ func SaveJobDetail(ctx context.Context, fs *FirestoreClient, job *JobDetail) err
 }
 
 func SaveJobDetailTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, job *JobDetail) error {
+	if fs == nil {
+		return fmt.Errorf("SaveJobDetailTx: fs is nil")
+	}
+	if tx == nil {
+		return fmt.Errorf("SaveJobDetailTx: tx is nil")
+	}
+	if job == nil {
+		return fmt.Errorf("SaveJobDetailTx: job is nil")
+	}
 	initJobDetail(ctx, fs, job)
 
 	if err := tx.Set(fs.Collection(JobDetailsCollection).Doc(job.ID), job); err != nil {
@@ -213,7 +227,13 @@ func SaveJobDetailTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Tra
 }
 
 func GetJobDetail(ctx context.Context, fs *FirestoreClient, id string) (*JobDetail, bool, error) {
+	if fs == nil {
+		return nil, false, fmt.Errorf("GetJobDetail: fs is nil")
+	}
 	if jobDetail, ok := fs.jobDetailCache.Get(id); ok {
+		if jobDetail == nil {
+			return nil, false, fmt.Errorf("GetJobDetail: jobDetail in cache is nil")
+		}
 		return jobDetail, true, nil
 	}
 
@@ -234,6 +254,9 @@ func GetJobDetail(ctx context.Context, fs *FirestoreClient, id string) (*JobDeta
 }
 
 func GetJobDetailsWithNoExtractedData(ctx context.Context, fs *FirestoreClient) ([]JobDetail, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("GetJobDetailsWithNoExtractedData: fs is nil")
+	}
 	iter := fs.Collection(JobDetailsCollection).Where("ExtractedData", "==", nil).Documents(ctx)
 
 	var jobDetails []JobDetail
@@ -244,6 +267,9 @@ func GetJobDetailsWithNoExtractedData(ctx context.Context, fs *FirestoreClient) 
 		}
 		if err != nil {
 			return nil, err
+		}
+		if doc == nil {
+			continue // skip nil doc
 		}
 
 		var jobDetail JobDetail
@@ -259,6 +285,12 @@ func GetJobDetailsWithNoExtractedData(ctx context.Context, fs *FirestoreClient) 
 
 // linkJobToCriteria creates a link between a job and criteria
 func LinkJobDetailToCriteriaTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, criteriaID, jobID string) error {
+	if fs == nil {
+		return fmt.Errorf("LinkJobDetailToCriteriaTx: fs is nil")
+	}
+	if tx == nil {
+		return fmt.Errorf("LinkJobDetailToCriteriaTx: tx is nil")
+	}
 	if criteriaID == "" || jobID == "" {
 		return fmt.Errorf("criteriaID and jobID cannot be empty")
 	}
@@ -279,6 +311,12 @@ func LinkJobDetailToCriteriaTx(ctx context.Context, fs *FirestoreClient, tx *fir
 }
 
 func UnlinkJobDetailFromCriteriaTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, criteriaID, jobID string) error {
+	if fs == nil {
+		return fmt.Errorf("UnlinkJobDetailFromCriteriaTx: fs is nil")
+	}
+	if tx == nil {
+		return fmt.Errorf("UnlinkJobDetailFromCriteriaTx: tx is nil")
+	}
 	if criteriaID == "" || jobID == "" {
 		return fmt.Errorf("criteriaID and jobID cannot be empty")
 	}
@@ -292,6 +330,9 @@ func UnlinkJobDetailFromCriteriaTx(ctx context.Context, fs *FirestoreClient, tx 
 
 // ListJobDetails retrieves all job details with optional limit and offset
 func ListJobDetails(ctx context.Context, fs *FirestoreClient, limit int, offset int) ([]JobDetail, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("ListJobDetails: fs is nil")
+	}
 	query := fs.Collection("job_details").OrderBy("CreatedAt", firestore.Desc)
 	if limit > 0 {
 		query = query.Limit(limit)
@@ -311,6 +352,9 @@ func ListJobDetails(ctx context.Context, fs *FirestoreClient, limit int, offset 
 		if err != nil {
 			return nil, fmt.Errorf("failed to iterate job details: %w", err)
 		}
+		if doc == nil {
+			continue // skip nil doc
+		}
 
 		var jobDetail JobDetail
 		if err := doc.DataTo(&jobDetail); err != nil {
@@ -325,6 +369,9 @@ func ListJobDetails(ctx context.Context, fs *FirestoreClient, limit int, offset 
 
 // DeleteJobDetailsByPrefix deletes all job details with IDs starting with the given prefix
 func DeleteJobDetailsByPrefix(ctx context.Context, fs *FirestoreClient, prefix string) (int, error) {
+	if fs == nil {
+		return 0, fmt.Errorf("DeleteJobDetailsByPrefix: fs is nil")
+	}
 	if prefix == "" {
 		return 0, fmt.Errorf("prefix is required")
 	}
@@ -341,6 +388,9 @@ func DeleteJobDetailsByPrefix(ctx context.Context, fs *FirestoreClient, prefix s
 		if err != nil {
 			return deleted, fmt.Errorf("failed to iterate job details: %w", err)
 		}
+		if doc == nil {
+			continue // skip nil doc
+		}
 
 		// Check if document ID starts with prefix
 		if len(doc.Ref.ID) >= len(prefix) && doc.Ref.ID[:len(prefix)] == prefix {
@@ -356,6 +406,9 @@ func DeleteJobDetailsByPrefix(ctx context.Context, fs *FirestoreClient, prefix s
 
 // GetJobDetailsByIDs retrieves multiple job details by their IDs
 func GetJobDetailsByIDs(ctx context.Context, fs *FirestoreClient, ids []string) ([]JobDetail, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("GetJobDetailsByIDs: fs is nil")
+	}
 	if len(ids) == 0 {
 		return []JobDetail{}, nil
 	}
@@ -366,7 +419,9 @@ func GetJobDetailsByIDs(ctx context.Context, fs *FirestoreClient, ids []string) 
 
 	for _, id := range ids {
 		if jobDetail, ok := fs.jobDetailCache.Get(id); ok {
-			result = append(result, *jobDetail)
+			if jobDetail != nil {
+				result = append(result, *jobDetail)
+			} // else skip nil
 		} else {
 			missingIDs = append(missingIDs, id)
 		}
@@ -408,40 +463,55 @@ func GetJobDetailsByIDs(ctx context.Context, fs *FirestoreClient, ids []string) 
 	return result, nil
 }
 
-// SearchJobDetails retrieves semantic search results for a user with 1-hour caching
-// This function is used by the dashboard for the "New" job status tab
-func SearchJobDetails(ctx context.Context, fs *FirestoreClient, userID string, steeringQuery SteeringQuery, topK int, params *HybridSearchParams) ([]ScoredJobDetail, error) {
-	// Create cache key based on user ID, criteria ID, topK, params hash, and steering query hash
-	// paramsHash := "default"
-	// if params != nil {
-	// 	paramsHash = fmt.Sprintf("%.2f-%.2f-%.2f-%.2f-%.2f-%s",
-	// 		params.DenseWeight, params.SparseWeight, params.RecencyWeight,
-	// 		params.RecencyHalfLife, params.ScoreThreshold, params.ScoreFusion)
-	// }
+func getSemanticJobsCacheKey(userID string, topK int, params *HybridSearchParams, steeringQuery SteeringQuery) (string, error) {
+	if userID == "" {
+		return "", fmt.Errorf("userID is required")
+	}
+	if topK <= 0 {
+		return "", fmt.Errorf("topK must be greater than 0")
+	}
+	paramsHash := "default"
+	if params != nil {
+		b, err := json.Marshal(params)
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal params: %w", err)
+		}
+		hash, err := utils.SHA256Hash(b)
+		if err != nil {
+			return "", fmt.Errorf("failed to hash params: %w", err)
+		}
+		paramsHash = hash
+	}
 
 	// Include steering query in cache key to handle custom queries
-	// steeringHash := fmt.Sprintf("%s|%s|%.2f", steeringQuery.Queries, steeringQuery.RerankQuery, steeringQuery.ForceAway)
-	// if steeringQuery.MoveToward != "" {
-	// 	steeringHash += "|" + steeringQuery.MoveToward
-	// }
-	// if steeringQuery.MoveAway != "" {
-	// 	steeringHash += "|" + steeringQuery.MoveAway
-	// }
+	b, err := json.Marshal(steeringQuery)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal steering query: %w", err)
+	}
+	steeringHash, err := utils.SHA256Hash(b)
+	if err != nil {
+		return "", fmt.Errorf("failed to hash steering query: %w", err)
+	}
 
-	// criteria, found, err := GetSearchCriteria(ctx, fs, criteriaID)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("failed to get criteria by ID %s: %w", criteriaID, err)
-	// }
-	// if !found {
-	// 	return nil, fmt.Errorf("criteria with ID %s not found", criteriaID)
-	// }
+	combo := fmt.Sprintf("semantic_jobs:%s:%d:%s:%s", userID, topK, paramsHash, steeringHash)
+	cacheKey, err := utils.SHA256Hash([]byte(combo))
+	if err != nil {
+		return "", fmt.Errorf("failed to hash combo: %w", err)
+	}
 
-	// cacheKey := fmt.Sprintf("semantic_jobs:%s:%s:%d:%s:%s", userID, criteriaID, topK, paramsHash, steeringHash)
+	return cacheKey, nil
+}
 
-	// Check cache first
-	// if cachedJobs, found := fs.semanticJobsCache.Get(cacheKey); found {
-	// 	return cachedJobs, nil
-	// }
+func getSemanticJobsFilter(ctx context.Context, fs *FirestoreClient, userID string, steeringQuery SteeringQuery) (map[string]any, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("getSemanticJobsFilter: fs is nil")
+	}
+	if userID == "" {
+		return nil, fmt.Errorf("userID is required")
+	}
+	if err := steeringQuery.Validate(); err != nil {
+		return nil, fmt.Errorf("failed to validate steering query: %w", err)
+	}
 
 	filter := map[string]any{
 		"workType": map[string]any{
@@ -467,6 +537,30 @@ func SearchJobDetails(ctx context.Context, fs *FirestoreClient, userID string, s
 		filter["ID"] = map[string]any{
 			"$nin": jobIDs, // Exclude jobs already in user's job list
 		}
+	}
+
+	return filter, nil
+}
+
+// SearchJobDetails retrieves semantic search results for a user with 1-hour caching
+// This function is used by the dashboard for the "New" job status tab
+func SearchJobDetails(ctx context.Context, fs *FirestoreClient, userID string, steeringQuery SteeringQuery, topK int, params *HybridSearchParams) ([]ScoredJobDetail, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("SearchJobDetails: fs is nil")
+	}
+	cacheKey, err := getSemanticJobsCacheKey(userID, topK, params, steeringQuery)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get semantic jobs cache key: %w", err)
+	}
+
+	// Check cache first
+	if cachedJobs, found := fs.semanticJobsCache.Get(cacheKey); found {
+		return cachedJobs, nil
+	}
+
+	filter, err := getSemanticJobsFilter(ctx, fs, userID, steeringQuery)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get semantic jobs filter: %w", err)
 	}
 
 	// Cache miss - perform semantic search
@@ -527,7 +621,7 @@ func SearchJobDetails(ctx context.Context, fs *FirestoreClient, userID string, s
 	})
 
 	// Cache the results with 1-hour TTL
-	// fs.semanticJobsCache.SetWithTTL(cacheKey, updatedScoredJobs, 1, 1*time.Hour)
+	fs.semanticJobsCache.SetWithTTL(cacheKey, updatedScoredJobs, 1, 1*time.Hour)
 
 	return updatedScoredJobs, nil
 }
