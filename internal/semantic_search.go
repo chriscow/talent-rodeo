@@ -6,9 +6,7 @@ import (
 	"log/slog"
 	"math"
 	"os"
-	"runtime"
 	"sort"
-	"strings"
 	"talent-rodeo/internal/utils"
 	"time"
 
@@ -333,7 +331,7 @@ func processSearchResults(_ context.Context, logger *slog.Logger, searchResult *
 				JobDetail: JobDetail{
 					ID:            id,
 					Provider:      meta.Fields["provider"].GetStringValue(),
-					ProviderJobID: meta.Fields["providerID"].GetStringValue(),
+					ProviderJobID: meta.Fields["providerJobID"].GetStringValue(),
 					Title:         meta.Fields["title"].GetStringValue(),
 					Company:       meta.Fields["company"].GetStringValue(),
 					Location:      meta.Fields["location"].GetStringValue(),
@@ -417,21 +415,22 @@ func processSearchResults(_ context.Context, logger *slog.Logger, searchResult *
 
 		// Apply recency boosting if we have a date
 		if !match.JobDetail.PostedDate.IsZero() {
-			// Log details about the posted date and recency calculation
 			daysSince := time.Since(match.JobDetail.PostedDate).Hours() / 24.0
 			decayFactor := math.Exp(-daysSince / params.RecencyHalfLife)
+			recencyBoostedScore := (1.0-params.RecencyWeight)*fused + params.RecencyWeight*decayFactor
 
-			// Calculate the boosted score separately for logging
-			recencyBoosted := (1.0-params.RecencyWeight)*fused + params.RecencyWeight*decayFactor
-
-			// Use a logger that doesn't affect production but works in tests
-			// We'll use fmt.Printf in a way that only outputs during tests
-			if _, file, _, ok := runtime.Caller(1); ok && strings.Contains(file, "_test.go") {
-				fmt.Printf("ID=%s, Dense=%.4f, Sparse=%.4f, Fused=%.4f, PostedDate=%v, DaysSince=%.2f, DecayFactor=%.4f, Recency=%.4f, Final=%.4f\n",
-					match.JobDetail.ID, match.DenseScore, match.SparseScore, fused,
-					match.JobDetail.PostedDate.Format(time.RFC3339), daysSince,
-					decayFactor, params.RecencyWeight, recencyBoosted)
-			}
+			// Use structured logging for debug information
+			logger.Debug("Recency boosting details",
+				"ID", match.JobDetail.ID,
+				"DenseScore", match.DenseScore,
+				"SparseScore", match.SparseScore,
+				"FusedBeforeRecency", fused,
+				"PostedDate", match.JobDetail.PostedDate.Format(time.RFC3339),
+				"DaysSince", daysSince,
+				"DecayFactor", decayFactor,
+				"RecencyWeight", params.RecencyWeight,
+				"FinalScoreAfterRecency", recencyBoostedScore,
+			)
 
 			fused = recencyBoost(fused, match.JobDetail.PostedDate, params.RecencyWeight, params.RecencyHalfLife)
 		}
@@ -487,10 +486,8 @@ func processSearchResults(_ context.Context, logger *slog.Logger, searchResult *
 	// Create final results from sorted matches
 	results := make([]*ScoredJobDetail, 0, len(scoredMatches))
 	for _, match := range scoredMatches {
-		if match.JobDetail.Description == "" {
-			continue
-		}
-
+		// The check for match.JobDetail.Description == "" is redundant here,
+		// as items with empty descriptions are filtered out before deduplication.
 		results = append(results, match)
 	}
 
@@ -553,15 +550,32 @@ func fusionScore(denseScore, sparseScore float64, method string, denseWeight, sp
 		return math.Min(denseScore, sparseScore)
 	case "harmonic":
 		// Harmonic mean weighted by the params
-		if denseScore == 0 || sparseScore == 0 || denseWeight == 0 || sparseWeight == 0 {
+		if denseScore == 0 || sparseScore == 0 { // denseWeight or sparseWeight being 0 is fine
 			return 0
 		}
-		return 2 * (denseWeight * denseScore * sparseWeight * sparseScore) /
-			(denseWeight*denseScore + sparseWeight*sparseScore)
+		// Avoid division by zero if weights are zero, though normalized weights should prevent this.
+		// However, if one score is zero, the harmonic mean effectively becomes zero.
+		// The original formula: 2 * (denseWeight * denseScore * sparseWeight * sparseScore) / (denseWeight*denseScore + sparseWeight*sparseScore)
+		// If denseWeight*denseScore + sparseWeight*sparseScore is 0 (e.g. both scores are 0), this would divide by zero.
+		// The check above (denseScore == 0 || sparseScore == 0) handles cases where one or both scores are zero.
+		// If weights can be zero, and scores non-zero, the denominator could still be zero if one weight makes its term zero.
+		// Assuming weights are normalized and > 0 if used.
+		denominator := denseWeight*denseScore + sparseWeight*sparseScore
+		if denominator == 0 {
+			return 0
+		}
+		return 2 * (denseWeight * denseScore * sparseWeight * sparseScore) / denominator
 	case "reciprocal_rank_fusion":
 		// RRF score fusion (popular in information retrieval)
-		k := 60.0 // constant to prevent division by zero issues
-		return 1.0/(k+(1.0/denseScore)) + 1.0/(k+(1.0/sparseScore))
+		k := 60.0 // constant
+		rrfScore := 0.0
+		if denseScore > 0 {
+			rrfScore += 1.0 / (k + (1.0 / denseScore))
+		}
+		if sparseScore > 0 {
+			rrfScore += 1.0 / (k + (1.0 / sparseScore))
+		}
+		return rrfScore
 	default:
 		return (denseWeight * denseScore) + (sparseWeight * sparseScore)
 	}

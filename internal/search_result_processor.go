@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"runtime/debug"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -54,7 +55,7 @@ type SearchResultProcessor struct {
 	fs            *FirestoreClient
 	logger        *slog.Logger
 	pusherClient  *pusher.Client
-	eventDispatch *JobEventDispatch
+	eventDispatch JobEventHandler
 
 	queue     chan ExtractionTask
 	stopCh    chan struct{}
@@ -69,7 +70,7 @@ type SearchResultProcessor struct {
 	progressTrackers sync.Map
 }
 
-func NewSearchResultProcessor(fs *FirestoreClient, logger *slog.Logger, psh *pusher.Client, dispatch *JobEventDispatch) *SearchResultProcessor {
+func NewSearchResultProcessor(fs *FirestoreClient, logger *slog.Logger, psh *pusher.Client, dispatch JobEventHandler) *SearchResultProcessor {
 	if fs == nil {
 		panic("firestore client cannot be nil")
 	}
@@ -135,93 +136,137 @@ func (s *SearchResultProcessor) Stop() {
 
 // worker processes JobDetails from the queue, running ExtractJobDetailData.
 func (s *SearchResultProcessor) worker() {
-	// s.logger.Debug(BGYellow("starting job detail extraction worker"))
+	defer func() {
+		if r := recover(); r != nil {
+			s.logger.Error("worker panic", "error", r)
+			debug.PrintStack()
+		}
+		s.workersWg.Done()
+	}()
 	defer s.workersWg.Done()
 	for {
 		select {
 		case task, ok := <-s.queue:
 			if !ok {
-				// job detail extraction worker shutting down
 				return
 			}
-			if task.JobDetail.ExtractedData == nil {
-				s.logger.Debug(Cyan("extracting job detail data (async)"), "jobID", task.JobDetail.ID)
-				ctx := context.Background()
-				start := time.Now()
-				err := ExtractJobDetailData(ctx, &task.JobDetail)
-				if err != nil {
-					s.logger.Error("failed to extract job detail data (async)", "error", err, "jobID", task.JobDetail.ID)
-					SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-						"jobID": task.JobDetail.ID,
-					})
-					continue
-				}
-				s.logger.Debug(Cyan("job detail extraction complete (async)"), "jobID", task.JobDetail.ID, "duration", time.Since(start).String())
-				// Save updated job detail
-				err = SaveJobDetail(ctx, s.fs, &task.JobDetail)
-				if err != nil {
-					s.logger.Error("failed to save job detail after extraction", "error", err, "jobID", task.JobDetail.ID)
-					SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-						"jobID": task.JobDetail.ID,
-					})
-				}
+			updatedTask, err := s.processJobDetail(task)
+			if err != nil {
+				s.logger.Error("failed to extract job detail data (async)", "error", err, "jobID", task.JobDetail.ID)
+				SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
+					"jobID": task.JobDetail.ID,
+				})
+				continue
 			}
-			s.notifyUserExtractProgress(task)
+			s.saveExtractedJobDetail(context.Background(), &updatedTask.JobDetail)
+			s.notifyUserExtractProgress(*updatedTask)
 
 		case <-s.stopCh:
-			// job detail extraction worker shutting down
 			return
 		}
 	}
 }
 
-func (s *SearchResultProcessor) notifyUserExtractProgress(task ExtractionTask) {
-	if val, ok := s.progressTrackers.Load(task.SearchTaskID); ok {
-		progress := val.(*SearchProgress)
-		processed := progress.ProcessedJobs.Add(1)
-		total := progress.TotalJobs.Load()
-
-		s.logger.Debug("progress tracker update", "searchTaskID", task.SearchTaskID, "processed", processed, "total", total)
-
-		if progress.UserID != "" && s.pusherClient != nil {
-			// Notify every 1% from 0-5 and 90-100, otherwise every 5%
-			currentProgress := int(float32(processed) / float32(total) * 100)
-			shouldNotify := false
-			if total > 0 {
-				if currentProgress <= 5 || currentProgress >= 90 {
-					// 0-5% and 90-100%: notify every percent
-					shouldNotify = currentProgress > progress.lastProgressNotified
-				} else {
-					// 6-89%: notify every 5%
-					shouldNotify = (currentProgress-progress.lastProgressNotified >= 5) || (processed == total)
-				}
-			}
-
-			if shouldNotify {
-				s.logger.Debug("sending progress update", "user", progress.UserID, "progress", currentProgress, "searchTaskID", task.SearchTaskID)
-				SendPusherProgress(s.pusherClient, progress.UserID, "Extracting job details...", currentProgress, 100)
-				progress.mu.Lock()
-				progress.lastProgressNotified = currentProgress
-				progress.mu.Unlock()
-			}
+// processJobDetail contains the testable business logic for the worker.
+// It extracts data from the job detail if it hasn't been extracted yet.
+func (s *SearchResultProcessor) processJobDetail(task ExtractionTask) (*ExtractionTask, error) {
+	if task.JobDetail.ExtractedData == nil {
+		s.logger.Debug("extracting job detail data (async)", "jobID", task.JobDetail.ID)
+		start := time.Now()
+		err := ExtractJobDetailData(context.Background(), &task.JobDetail)
+		if err != nil {
+			return nil, fmt.Errorf("ExtractJobDetailData: %w", err)
 		}
-
-		if progress.AllJobsQueued.Load() && processed == total {
-			s.logger.Info("all extractions complete for search", "searchTaskID", task.SearchTaskID)
-			if s.pusherClient != nil && progress.UserID != "" {
-				SendPusherRedirect(s.pusherClient, progress.UserID, "/dashboard")
-			}
-			if s.eventDispatch != nil {
-				s.eventDispatch.OnAllExtractionsComplete(SearchTask{ID: task.SearchTaskID}, int(total), task.UserID)
-			}
-			s.progressTrackers.Delete(task.SearchTaskID)
-		} else {
-			if s.eventDispatch != nil {
-				s.eventDispatch.OnJobDetailExtractionComplete(SearchTask{ID: task.SearchTaskID}, task.JobDetail, task.UserID)
-			}
-		}
-
+		s.logger.Debug("job detail extraction complete (async)", "jobID", task.JobDetail.ID, "duration", time.Since(start).String())
 	}
+	return &task, nil
+}
+
+// saveExtractedJobDetail is an untestable wrapper for a Firestore call.
+func (s *SearchResultProcessor) saveExtractedJobDetail(ctx context.Context, jobDetail *JobDetail) {
+	if s.fs == nil {
+		s.logger.Error("firestore client is nil, cannot save job detail")
+		return
+	}
+	err := SaveJobDetail(ctx, s.fs, jobDetail)
+	if err != nil {
+		s.logger.Error("failed to save job detail after extraction", "error", err, "jobID", jobDetail.ID)
+		SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"jobID": jobDetail.ID,
+		})
+	}
+}
+
+func (s *SearchResultProcessor) notifyUserExtractProgress(task ExtractionTask) {
+	val, ok := s.progressTrackers.Load(task.SearchTaskID)
+	if !ok {
+		return
+	}
+	progress := val.(*SearchProgress)
+	processed := progress.ProcessedJobs.Add(1)
+	total := progress.TotalJobs.Load()
+
+	// Check if we should send a progress update
+	if progress.UserID != "" {
+		if s.shouldNotifyProgress(progress, processed, total) {
+			s.sendProgressUpdate(progress, processed, total)
+		}
+	}
+
+	// Check for completion
+	if progress.AllJobsQueued.Load() && processed == total {
+		s.handleSearchCompletion(task, int(total))
+	} else {
+		// If not complete, dispatch event
+		if s.eventDispatch != nil {
+			s.eventDispatch.OnJobDetailExtractionComplete(SearchTask{ID: task.SearchTaskID}, task.JobDetail, task.UserID)
+		}
+	}
+}
+
+// shouldNotifyProgress contains the testable business logic for deciding when to send a notification.
+func (s *SearchResultProcessor) shouldNotifyProgress(progress *SearchProgress, processed, total int32) bool {
+	if total == 0 {
+		return false
+	}
+	currentProgress := int(float32(processed) / float32(total) * 100)
+	lastNotified := progress.lastProgressNotified
+
+	if currentProgress <= 5 || currentProgress >= 90 {
+		// 0-5% and 90-100%: notify every percent
+		return currentProgress > lastNotified
+	}
+	// 6-89%: notify every 5%
+	return (currentProgress-lastNotified >= 5) || (processed == total)
+}
+
+// sendProgressUpdate is an untestable wrapper for a Pusher call.
+func (s *SearchResultProcessor) sendProgressUpdate(progress *SearchProgress, processed, total int32) {
+	if s.pusherClient == nil {
+		return
+	}
+	currentProgress := int(float32(processed) / float32(total) * 100)
+	s.logger.Debug("sending progress update", "user", progress.UserID, "progress", currentProgress, "searchTaskID", progress.SearchTaskID)
+	SendPusherProgress(s.pusherClient, progress.UserID, "Extracting job details...", currentProgress, 100)
+	progress.mu.Lock()
+	progress.lastProgressNotified = currentProgress
+	progress.mu.Unlock()
+}
+
+// handleSearchCompletion is an untestable wrapper for Pusher and event dispatch calls.
+func (s *SearchResultProcessor) handleSearchCompletion(task ExtractionTask, totalJobs int) {
+	s.logger.Info("all extractions complete for search", "searchTaskID", task.SearchTaskID, "totalJobs", totalJobs)
+
+	if progress, ok := s.progressTrackers.Load(task.SearchTaskID); ok {
+		if p, ok := progress.(*SearchProgress); ok && p.UserID != "" && s.pusherClient != nil {
+			SendPusherRedirect(s.pusherClient, p.UserID, "/dashboard")
+		}
+	}
+
+	if s.eventDispatch != nil {
+		s.eventDispatch.OnAllExtractionsComplete(SearchTask{ID: task.SearchTaskID}, totalJobs, task.UserID)
+	}
+	s.progressTrackers.Delete(task.SearchTaskID)
 }
 
 // queueLogger logs the queue size every 5s if it has items, and logs when it drains.
@@ -452,9 +497,19 @@ func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJob
 		}
 	}
 
+	s.updateSearchAndCriteria(jobSearch, errors)
+}
+
+// updateSearchAndCriteria is an untestable wrapper for a Firestore transaction.
+func (s *SearchResultProcessor) updateSearchAndCriteria(jobSearch SearchTask, errors []error) {
+	if s.fs == nil {
+		s.logger.Error("firestore client is nil, cannot process search completion")
+		return
+	}
+
 	// join all the errors into a single string
 	if len(errors) > 0 {
-		allErrors := ""
+		var allErrors string
 		for _, err := range errors {
 			allErrors += err.Error() + "\n"
 		}
@@ -483,7 +538,6 @@ func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJob
 	if err != nil {
 		SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"criteriaID": jobSearch.Criteria.ID,
-			"totalJobs":  strconv.Itoa(totalJobs),
 			"errors":     strconv.Itoa(len(errors)),
 		})
 		s.logger.Error("failed to update search task and criteria", "error", err)
@@ -491,8 +545,7 @@ func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJob
 }
 
 func (s *SearchResultProcessor) OnJobDetailExtractionComplete(task SearchTask, jobDetail JobDetail, userID *string) {
-	// Business logic is handled in the worker.
-	// This is here to satisfy the interface.
+	// Business logic is handled in notifyUserExtractProgress.
 	if userID != nil && *userID != "" {
 		s.logger.Debug(Gray("OnJobDetailExtractionComplete"), "jobID", jobDetail.ID)
 	}

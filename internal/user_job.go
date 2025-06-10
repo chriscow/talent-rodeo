@@ -104,6 +104,9 @@ type FinalJudgment struct {
 
 // CreateUserJob saves a job reference for a user
 func CreateUserJob(ctx context.Context, fs *FirestoreClient, userID, jobRefID string) (*UserJob, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("firestore client is nil")
+	}
 	if userID == "" {
 		return nil, fmt.Errorf("user ID is required")
 	}
@@ -130,6 +133,9 @@ func CreateUserJob(ctx context.Context, fs *FirestoreClient, userID, jobRefID st
 }
 
 func CreateUserJobsBatch(ctx context.Context, fs *FirestoreClient, userID string, jobs []UserJob) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
 	if userID == "" {
 		return fmt.Errorf("user ID is required")
 	}
@@ -150,6 +156,9 @@ func CreateUserJobsBatch(ctx context.Context, fs *FirestoreClient, userID string
 }
 
 func GetUserJob(ctx context.Context, fs *FirestoreClient, userID, jobID string) (*UserJob, bool, error) {
+	if fs == nil {
+		return nil, false, fmt.Errorf("firestore client is nil")
+	}
 	doc, err := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Doc(jobID).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -171,6 +180,9 @@ func GetUserJob(ctx context.Context, fs *FirestoreClient, userID, jobID string) 
 // single query counts as one read, even if it had to go through 500 docs
 // searching for it in the cloud firestore.
 func ListUserJobs(ctx context.Context, fs *FirestoreClient, userID string) ([]UserJob, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("firestore client is nil")
+	}
 	iter := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Documents(ctx)
 	var jobs []UserJob
 
@@ -256,6 +268,9 @@ func GetUserJobsSorted(ctx context.Context, fs *FirestoreClient, userID string, 
 
 // GetJobsCount returns the count of jobs with the specified status for a user
 func GetJobsCount(ctx context.Context, fs *FirestoreClient, userID string, status JobStatus) (int64, error) {
+	if fs == nil {
+		return 0, fmt.Errorf("firestore client is nil")
+	}
 	if userID == "" {
 		return 0, fmt.Errorf("user ID is required")
 	}
@@ -283,6 +298,9 @@ func GetJobsCount(ctx context.Context, fs *FirestoreClient, userID string, statu
 
 // GetAllJobStatusCounts returns a map with counts for all job statuses for a user
 func GetAllJobStatusCounts(ctx context.Context, fs *FirestoreClient, userID string) (map[string]int64, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("firestore client is nil")
+	}
 	if userID == "" {
 		return nil, fmt.Errorf("user ID is required")
 	}
@@ -309,6 +327,9 @@ func GetAllJobStatusCounts(ctx context.Context, fs *FirestoreClient, userID stri
 
 // UserHasAnyJobs checks if a user has any jobs, without counting them all
 func UserHasAnyJobs(ctx context.Context, fs *FirestoreClient, userID string) (bool, error) {
+	if fs == nil {
+		return false, fmt.Errorf("firestore client is nil")
+	}
 	if userID == "" {
 		return false, fmt.Errorf("user ID is required")
 	}
@@ -402,6 +423,9 @@ func UpdateUserJobNotes(ctx context.Context, fs *FirestoreClient, userID, jobID,
 
 // DeleteUserJob deletes a job for a user
 func DeleteUserJob(ctx context.Context, fs *FirestoreClient, userID, jobID string) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
 	if userID == "" {
 		return fmt.Errorf("user ID is required")
 	}
@@ -419,6 +443,9 @@ func DeleteUserJob(ctx context.Context, fs *FirestoreClient, userID, jobID strin
 
 // DeleteAllUserJobsByPrefix deletes all user jobs with IDs starting with the given prefix across all users
 func DeleteAllUserJobsByPrefix(ctx context.Context, fs *FirestoreClient, prefix string) (int, error) {
+	if fs == nil {
+		return 0, fmt.Errorf("firestore client is nil")
+	}
 	if prefix == "" {
 		return 0, fmt.Errorf("prefix is required")
 	}

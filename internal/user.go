@@ -68,6 +68,9 @@ func (e ErrUserExists) Error() string {
 
 // CreateUser creates a new user document in Firestore
 func CreateUser(ctx context.Context, fs *FirestoreClient, u *User) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
 	if u.Name == "" {
 		return fmt.Errorf("user name is required")
 	}
@@ -105,6 +108,9 @@ func CreateUser(ctx context.Context, fs *FirestoreClient, u *User) error {
 
 // GetUser retrieves a user by ID
 func GetUser(ctx context.Context, fs *FirestoreClient, id string) (*User, bool, error) {
+	if fs == nil {
+		return nil, false, fmt.Errorf("firestore client is nil")
+	}
 	if user, found := fs.GetUserFromCache(id); found {
 		return user, true, nil
 	}
@@ -127,6 +133,9 @@ func GetUser(ctx context.Context, fs *FirestoreClient, id string) (*User, bool, 
 
 // GetUserByEmail retrieves a user by email
 func GetUserByEmail(ctx context.Context, fs *FirestoreClient, email string) (*User, bool, error) {
+	if fs == nil {
+		return nil, false, fmt.Errorf("firestore client is nil")
+	}
 	iter := fs.Collection(usersCollection).Where("Email", "==", email).Limit(1).Documents(ctx)
 	doc, err := iter.Next()
 	if err != nil {
@@ -146,6 +155,9 @@ func GetUserByEmail(ctx context.Context, fs *FirestoreClient, email string) (*Us
 
 // GetUserByPhone retrieves a user by phone number
 func GetUserByPhone(ctx context.Context, fs *FirestoreClient, phone string) (*User, bool, error) {
+	if fs == nil {
+		return nil, false, fmt.Errorf("firestore client is nil")
+	}
 	iter := fs.Collection(usersCollection).Where("Phone", "==", phone).Limit(1).Documents(ctx)
 	doc, err := iter.Next()
 	if err != nil {
@@ -164,6 +176,9 @@ func GetUserByPhone(ctx context.Context, fs *FirestoreClient, phone string) (*Us
 }
 
 func GetUsersByIDs(ctx context.Context, fs *FirestoreClient, ids []string) ([]*User, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("firestore client is nil")
+	}
 	iter := fs.Collection(usersCollection).Where("ID", "in", ids).Documents(ctx)
 	docs, err := iter.GetAll()
 	if err != nil {
@@ -183,6 +198,9 @@ func GetUsersByIDs(ctx context.Context, fs *FirestoreClient, ids []string) ([]*U
 }
 
 func GetUserSteeringQuery(ctx context.Context, fs *FirestoreClient, id string) (*SteeringQuery, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("firestore client is nil")
+	}
 	doc, err := fs.Collection(usersCollection).Doc(id).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -204,6 +222,9 @@ func GetUserSteeringQuery(ctx context.Context, fs *FirestoreClient, id string) (
 }
 
 func SetUserSteeringQuery(ctx context.Context, fs *FirestoreClient, id string, sq SteeringQuery) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
 	// if the steering query is not valid, return an error
 	if err := sq.Validate(); err != nil {
 		return fmt.Errorf("invalid steering query: %w", err)
@@ -228,6 +249,9 @@ func SetUserSteeringQuery(ctx context.Context, fs *FirestoreClient, id string, s
 }
 
 func SetUserWorkPreferences(ctx context.Context, fs *FirestoreClient, id string, wp string) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
 	// if the work preferences is not valid, return an error
 	if len(wp) > 1000 {
 		println("work preferences is too long", len(wp))
@@ -252,6 +276,9 @@ func SetUserWorkPreferences(ctx context.Context, fs *FirestoreClient, id string,
 
 // UpdateUser updates an existing user document
 func UpdateUser(ctx context.Context, fs *FirestoreClient, id string, updates map[string]any) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
 	var fsUpdates []firestore.Update
 
 	for field, value := range updates {
@@ -285,7 +312,9 @@ func UpdateUser(ctx context.Context, fs *FirestoreClient, id string, updates map
 }
 
 func UpdateUserTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, id string, updates map[string]any) error {
-
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
 	var fsUpdates []firestore.Update
 
 	for field, value := range updates {
@@ -306,7 +335,9 @@ func UpdateUserTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transa
 
 // DeleteUser deletes a user document and all its subcollections
 func DeleteUser(ctx context.Context, fs *FirestoreClient, id string) error {
-
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
 	// Find all subcollections and delete each one
 	subcollections := fs.Collection(usersCollection).Doc(id).Collections(ctx)
 	for {
@@ -335,7 +366,9 @@ func DeleteUser(ctx context.Context, fs *FirestoreClient, id string) error {
 
 // ListUsers retrieves all users with optional limit and offset
 func ListUsers(ctx context.Context, fs *FirestoreClient, limit int, offset int) ([]*User, error) {
-
+	if fs == nil {
+		return nil, fmt.Errorf("firestore client is nil")
+	}
 	query := fs.Collection(usersCollection).OrderBy("CreatedAt", firestore.Asc)
 	if limit > 0 {
 		query = query.Limit(limit)
@@ -368,6 +401,9 @@ func ListUsers(ctx context.Context, fs *FirestoreClient, limit int, offset int) 
 
 // SaveUser saves or updates a user in Firestore
 func SaveUser(ctx context.Context, fs *FirestoreClient, user *User) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
 	if user.ID == "" {
 		return fmt.Errorf("user ID cannot be empty")
 	}
