@@ -143,7 +143,6 @@ func (s *SearchResultProcessor) worker() {
 		}
 		s.workersWg.Done()
 	}()
-	defer s.workersWg.Done()
 	for {
 		select {
 		case task, ok := <-s.queue:
