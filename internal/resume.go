@@ -67,6 +67,10 @@ type Resume struct {
 
 // CreateResume creates a resume for a user in Firestore (using subcollection).
 func CreateResume(ctx context.Context, fs *FirestoreClient, user User, resume *Resume) error {
+	if fs == nil {
+		return fmt.Errorf("Firestore client is nil")
+	}
+
 	if resume.RawText == "" {
 		return fmt.Errorf("resume text is required")
 	}
@@ -106,6 +110,10 @@ func CreateResume(ctx context.Context, fs *FirestoreClient, user User, resume *R
 }
 
 func GetResume(ctx context.Context, fs *FirestoreClient, userID string, resumeID string) (*Resume, bool, error) {
+	if fs == nil {
+		return nil, false, fmt.Errorf("Firestore client is nil")
+	}
+
 	if userID == "" {
 		return nil, false, fmt.Errorf("user ID for Firestore is required")
 	}
@@ -127,6 +135,10 @@ func GetResume(ctx context.Context, fs *FirestoreClient, userID string, resumeID
 }
 
 func ListResumes(ctx context.Context, fs *FirestoreClient, userID string) ([]*Resume, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("Firestore client is nil")
+	}
+
 	if userID == "" {
 		return nil, fmt.Errorf("user ID for Firestore is required")
 	}
@@ -155,6 +167,18 @@ func ListResumes(ctx context.Context, fs *FirestoreClient, userID string) ([]*Re
 
 // AnnotateResume uses an LLM to annotate the resume text and output it as YAML.
 func AnnotateResume(ctx context.Context, fs *FirestoreClient, logger *slog.Logger, user *User, resume *Resume) error {
+	if fs == nil {
+		return fmt.Errorf("Firestore client is nil")
+	}
+
+	if resume == nil {
+		return fmt.Errorf("resume is nil")
+	}
+
+	if user == nil {
+		return fmt.Errorf("user is nil")
+	}
+
 	var analysis *annotatedResume
 	var searchAnalysis string
 	var err error
@@ -212,6 +236,10 @@ func AnnotateResume(ctx context.Context, fs *FirestoreClient, logger *slog.Logge
 }
 
 func UpdateResume(ctx context.Context, fs *FirestoreClient, resume Resume) error {
+	if fs == nil {
+		return fmt.Errorf("Firestore client is nil")
+	}
+
 	resume.UpdatedAt = time.Now()
 	_, err := fs.Collection(usersCollection).Doc(resume.UserID).Collection(resumeCollection).Doc(resume.ID).Set(ctx, resume)
 	if err != nil {
@@ -221,6 +249,10 @@ func UpdateResume(ctx context.Context, fs *FirestoreClient, resume Resume) error
 }
 
 func GetResumes(ctx context.Context, fs *FirestoreClient, userID string) ([]*Resume, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("Firestore client is nil")
+	}
+
 	if userID == "" {
 		return nil, fmt.Errorf("user ID for Firestore is required")
 	}
@@ -248,6 +280,10 @@ func GetResumes(ctx context.Context, fs *FirestoreClient, userID string) ([]*Res
 }
 
 func GetLatestResume(ctx context.Context, fs *FirestoreClient, userID string) (*Resume, bool, error) {
+	if fs == nil {
+		return nil, false, fmt.Errorf("Firestore client is nil")
+	}
+
 	if userID == "" {
 		return nil, false, fmt.Errorf("user ID for Firestore is required")
 	}
@@ -270,6 +306,10 @@ func GetLatestResume(ctx context.Context, fs *FirestoreClient, userID string) (*
 }
 
 func DeleteResume(ctx context.Context, fs *FirestoreClient, userID string, resumeID string) error {
+	if fs == nil {
+		return fmt.Errorf("Firestore client is nil")
+	}
+
 	if userID == "" {
 		return fmt.Errorf("user ID for Firestore is required")
 	}

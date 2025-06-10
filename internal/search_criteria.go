@@ -85,6 +85,9 @@ func MakeSearchCriteriaID(query, geoID string, workType WorkType, expLevel Exper
 }
 
 func CreateSearchCriteria(ctx context.Context, fs *FirestoreClient, query, geoID string, workType WorkType, expLevel ExperienceLevel, maxPages int, age ListingAge) (*SearchCriteria, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("firestore client is nil")
+	}
 	if query == "" {
 		return nil, fmt.Errorf("query cannot be empty")
 	}
@@ -122,6 +125,9 @@ func CreateSearchCriteria(ctx context.Context, fs *FirestoreClient, query, geoID
 }
 
 func GetSearchCriteria(ctx context.Context, fs *FirestoreClient, id string) (*SearchCriteria, bool, error) {
+	if fs == nil {
+		return nil, false, fmt.Errorf("firestore client is nil")
+	}
 	criteria := &SearchCriteria{}
 
 	doc, err := fs.Collection(searchCriteriaCollection).Doc(id).Get(ctx)
@@ -144,6 +150,9 @@ func GetSearchCriteria(ctx context.Context, fs *FirestoreClient, id string) (*Se
 // that either have never been searched (LastSearchedAt is nil) or haven't
 // been searched in the last 24 hours, and don't already have incomplete search tasks.
 func GetSearchCriteriaNeedsSearch(ctx context.Context, fs *FirestoreClient) ([]SearchCriteria, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("firestore client is nil")
+	}
 	ids, err := ListSubscribedCriteriaIDs(ctx, fs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list subscribed criteria IDs: %w", err)
@@ -214,6 +223,9 @@ func GetSearchCriteriaNeedsSearch(ctx context.Context, fs *FirestoreClient) ([]S
 
 // ListSearchCriteria retrieves all search criteria from Firestore
 func ListSearchCriteria(ctx context.Context, fs *FirestoreClient) ([]SearchCriteria, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("firestore client is nil")
+	}
 	coll := fs.Collection(searchCriteriaCollection)
 
 	// Query all documents in the collection
@@ -244,6 +256,9 @@ func ListSearchCriteria(ctx context.Context, fs *FirestoreClient) ([]SearchCrite
 }
 
 func GetJobIDsForCriteria(ctx context.Context, fs *FirestoreClient, criteriaID string) ([]string, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("firestore client is nil")
+	}
 	// Query the subcollection under search_criteria/{criteriaID}/job_details/
 	iter := fs.Collection(searchCriteriaCollection).Doc(criteriaID).Collection(JobDetailsCollection).Documents(ctx)
 	defer iter.Stop()
@@ -269,6 +284,9 @@ func GetJobIDsForCriteria(ctx context.Context, fs *FirestoreClient, criteriaID s
 }
 
 func GetJobIDsForCriteriaCreatedAfter(ctx context.Context, fs *FirestoreClient, criteriaID string, createdAfter time.Time) ([]string, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("firestore client is nil")
+	}
 	// Query the subcollection under search_criteria/{criteriaID}/job_details/ with CreatedAt filter
 	iter := fs.Collection(searchCriteriaCollection).Doc(criteriaID).Collection(JobDetailsCollection).WhereEntity(firestore.PropertyFilter{Path: "CreatedAt", Operator: ">", Value: createdAfter}).Documents(ctx)
 	defer iter.Stop()
@@ -294,6 +312,9 @@ func GetJobIDsForCriteriaCreatedAfter(ctx context.Context, fs *FirestoreClient, 
 }
 
 func UpdateSearchCriteria(ctx context.Context, fs *FirestoreClient, criteria *SearchCriteria) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
 	_, err := fs.Collection(searchCriteriaCollection).Doc(criteria.ID).Set(ctx, criteria)
 	if err != nil {
 		return fmt.Errorf("UpdateSearchCriteria: firestore.Set: %w", err)
@@ -301,11 +322,29 @@ func UpdateSearchCriteria(ctx context.Context, fs *FirestoreClient, criteria *Se
 	return nil
 }
 
+func UpdateSearchCriteriaTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, criteria *SearchCriteria) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
+	if tx == nil {
+		return fmt.Errorf("transaction is nil")
+	}
+	if criteria == nil {
+		return fmt.Errorf("criteria is nil")
+	}
+
+	criteriaRef := fs.Collection(searchCriteriaCollection).Doc(criteria.ID)
+	return tx.Set(criteriaRef, criteria)
+}
+
 // DeleteSearchCriteria deletes a search criteria and all related data:
 // - Unsubscribes all users from the criteria
 // - Unlinks all job details from the criteria
 // - Deletes all search tasks associated with the criteria
 func DeleteSearchCriteria(ctx context.Context, fs *FirestoreClient, id string) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
 	subscribers, err := GetCriteriaSubscribers(ctx, fs, id)
 	if err != nil {
 		return fmt.Errorf("failed to get subscribers for search criteria ID %s: %w", id, err)

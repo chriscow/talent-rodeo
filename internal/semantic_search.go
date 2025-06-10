@@ -608,7 +608,19 @@ func normalizeScores(scores map[string]float32) map[string]float32 {
 	return normalized
 }
 
-// recencyBoost adjusts a score based on how recent a job posting is
+// recencyBoost adjusts a score based on how recent a job posting is.
+// It calculates the number of days that have passed since the `postedDate`.
+// An exponential decay factor is then computed using `daysSince` and `halfLifeDays`.
+// This `decayFactor` ranges from 1.0 (for a job posted now) down towards 0.0 as the job gets older.
+// The `halfLifeDays` parameter serves as the time constant for the decay; after `halfLifeDays` have passed
+// (i.e., when `daysSince == halfLifeDays`), the `decayFactor` will be `math.Exp(-1)` (approximately 0.368).
+// A smaller `halfLifeDays` value results in a faster decay.
+// Finally, the original `score` is combined with this `decayFactor` using a weighted average:
+// `boostedScore = (1.0 - weight) * score + weight * decayFactor`.
+// The `weight` parameter (0.0-1.0) determines the influence of recency on the final score.
+// A small `weight` (e.g., 0.1) means recency has a small influence (original score dominates).
+// A large `weight` (e.g., 0.9) means recency has a strong influence.
+// If `postedDate` is the zero value, the original score is returned unmodified.
 func recencyBoost(score float64, postedDate time.Time, weight float64, halfLifeDays float64) float64 {
 	if postedDate.IsZero() {
 		return score

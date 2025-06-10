@@ -45,7 +45,17 @@ type JobDetailRef struct {
 
 var ErrSearchTaskExists = errors.New("search task already exists")
 
+// Added: Define common errors for nil parameters
+var (
+	ErrFirestoreClientIsNil = errors.New("firestore client is nil")
+	ErrTransactionIsNil     = errors.New("firestore transaction is nil")
+	ErrSearchTaskIsNil      = errors.New("search task is nil")
+)
+
 func CreateSearchTask(ctx context.Context, fs *FirestoreClient, criteria SearchCriteria, provider string, userID *string) (*SearchTask, error) {
+	if fs == nil {
+		return nil, ErrFirestoreClientIsNil
+	}
 	// Check for existing active tasks for this criteria
 	activeTasks := fs.Collection(SearchTaskCollection).
 		Where("Criteria.ID", "==", criteria.ID).
@@ -83,6 +93,12 @@ func CreateSearchTask(ctx context.Context, fs *FirestoreClient, criteria SearchC
 }
 
 func CreateSearchTaskTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, criteria SearchCriteria, provider string, userID *string) (*SearchTask, error) {
+	if fs == nil {
+		return nil, ErrFirestoreClientIsNil
+	}
+	if tx == nil {
+		return nil, ErrTransactionIsNil
+	}
 	nowUTC := time.Now().UTC()
 	jobSearch := &SearchTask{
 		ID:        uuid.New().String(),
@@ -101,6 +117,12 @@ func CreateSearchTaskTx(ctx context.Context, fs *FirestoreClient, tx *firestore.
 }
 
 func UpdateSearchTask(ctx context.Context, fs *FirestoreClient, task *SearchTask) error {
+	if fs == nil {
+		return ErrFirestoreClientIsNil
+	}
+	if task == nil {
+		return ErrSearchTaskIsNil
+	}
 	_, err := fs.Collection(SearchTaskCollection).Doc(task.ID).Set(ctx, task)
 	if err != nil {
 		return fmt.Errorf("UpdateSearchTask: firestore.Set: %w", err)
@@ -108,7 +130,27 @@ func UpdateSearchTask(ctx context.Context, fs *FirestoreClient, task *SearchTask
 	return nil
 }
 
+func UpdateSearchTaskTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, task *SearchTask) error {
+	if fs == nil {
+		return ErrFirestoreClientIsNil
+	}
+	if tx == nil {
+		return ErrTransactionIsNil
+	}
+	if task == nil {
+		return ErrSearchTaskIsNil
+	}
+
+	if err := tx.Set(fs.Collection(SearchTaskCollection).Doc(task.ID), task); err != nil {
+		return fmt.Errorf("UpdateSearchTaskTx: firestore.Transaction.Set: %w", err)
+	}
+	return nil
+}
+
 func GetIncompleteSearchTasks(ctx context.Context, fs *FirestoreClient) ([]*SearchTask, error) {
+	if fs == nil {
+		return nil, ErrFirestoreClientIsNil
+	}
 	iter := fs.Collection(SearchTaskCollection).Where("Status", "in", []SearchTaskStatus{SearchTaskStatusQueued, SearchTaskStatusProcessing}).Documents(ctx)
 
 	searchTasks := []*SearchTask{}
@@ -131,6 +173,9 @@ func GetIncompleteSearchTasks(ctx context.Context, fs *FirestoreClient) ([]*Sear
 }
 
 func SetSearchTaskStatus(ctx context.Context, fs *FirestoreClient, id string, status SearchTaskStatus) error {
+	if fs == nil {
+		return ErrFirestoreClientIsNil
+	}
 	now := time.Now().UTC()
 	fsUpdates := []firestore.Update{
 		{
@@ -152,6 +197,12 @@ func SetSearchTaskStatus(ctx context.Context, fs *FirestoreClient, id string, st
 
 // LinkJobDetailToSearchTaskTx adds a JobDetail as a subcollection doc under a SearchTask.
 func LinkJobDetailToSearchTaskTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, searchTaskID string, jobID string) error {
+	if fs == nil {
+		return ErrFirestoreClientIsNil
+	}
+	if tx == nil {
+		return ErrTransactionIsNil
+	}
 	if searchTaskID == "" || jobID == "" {
 		return fmt.Errorf("searchTaskID and job.ID are required")
 	}
@@ -166,6 +217,9 @@ func LinkJobDetailToSearchTaskTx(ctx context.Context, fs *FirestoreClient, tx *f
 }
 
 func GetJobIDsForSearchTask(ctx context.Context, fs *FirestoreClient, searchTaskID string) ([]string, error) {
+	if fs == nil {
+		return nil, ErrFirestoreClientIsNil
+	}
 	if searchTaskID == "" {
 		return nil, fmt.Errorf("searchTaskID is required")
 	}
@@ -190,6 +244,9 @@ func GetJobIDsForSearchTask(ctx context.Context, fs *FirestoreClient, searchTask
 }
 
 func GetSearchTasksForCriteria(ctx context.Context, fs *FirestoreClient, criteriaID string) ([]SearchTask, error) {
+	if fs == nil {
+		return nil, ErrFirestoreClientIsNil
+	}
 	if criteriaID == "" {
 		return nil, fmt.Errorf("criteriaID is required")
 	}
@@ -216,6 +273,12 @@ func GetSearchTasksForCriteria(ctx context.Context, fs *FirestoreClient, criteri
 }
 
 func DeleteSearchTaskTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, searchTaskID string) error {
+	if fs == nil {
+		return ErrFirestoreClientIsNil
+	}
+	if tx == nil {
+		return ErrTransactionIsNil
+	}
 	if searchTaskID == "" {
 		return fmt.Errorf("searchTaskID is required")
 	}
