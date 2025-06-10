@@ -37,6 +37,14 @@ func GetAssistantTemplate(userID string) (*utils.Prompt, error) {
 // BuildAssistantOverrides creates assistant overrides for a given user ID.
 // It returns the assistant request response which includes the overrides and any error encountered.
 func BuildAssistantOverrides(ctx context.Context, user *User, fs *FirestoreClient, logger *slog.Logger) (*vapi.Assistant, error) {
+	if user == nil {
+		return nil, fmt.Errorf("user is nil")
+	}
+
+	if os.Getenv("VAPI_WEBHOOK_URL") == "" {
+		return nil, fmt.Errorf("VAPI_WEBHOOK_URL is not set")
+	}
+
 	assistantID := GetAssistantID(user.ID)
 
 	// Create template and data structure
@@ -46,8 +54,8 @@ func BuildAssistantOverrides(ctx context.Context, user *User, fs *FirestoreClien
 	}
 
 	resume, found, err := GetLatestResume(ctx, fs, user.ID)
-	if err != nil || !found {
-		return nil, fmt.Errorf("failed to get latest resume (found:%v) : %w", found, err)
+	if err != nil || !found || resume == nil {
+		return nil, fmt.Errorf("failed to get latest resume (userID:%s) (found:%v) : %w", user.ID, found, err)
 	}
 
 	resumeText := ""
@@ -65,7 +73,7 @@ func BuildAssistantOverrides(ctx context.Context, user *User, fs *FirestoreClien
 	}
 
 	searchStrategy := ""
-	if resume != nil {
+	if resume.SearchAnalysis != nil {
 		searchStrategy = *resume.SearchAnalysis
 	}
 
@@ -83,12 +91,21 @@ func BuildAssistantOverrides(ctx context.Context, user *User, fs *FirestoreClien
 	previousDiscussions := []previousDiscussion{}
 
 	for _, phoneCall := range phoneCalls {
+		endReason := ""
+		if phoneCall.EndReason != nil {
+			endReason = *phoneCall.EndReason
+		}
+
+		when := ""
+		if phoneCall.CompletedAt != nil {
+			when = funcs.ApproxDuration(-time.Until(*phoneCall.CompletedAt)) + " ago"
+		}
 		if phoneCall.Summary != nil {
 			previousDiscussions = append(previousDiscussions, previousDiscussion{
 				Summary: *phoneCall.Summary,
 				// time.Until returns negative for past times, so we negate it to get a positive duration
-				When:   funcs.ApproxDuration(-time.Until(*phoneCall.CompletedAt)) + " ago",
-				Status: *phoneCall.EndReason,
+				When:   when,
+				Status: endReason,
 			})
 		}
 	}
