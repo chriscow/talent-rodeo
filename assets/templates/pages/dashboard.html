@@ -85,6 +85,12 @@
 
 {{define "page:scripts"}}
 <script>
+    window.addEventListener('pageshow', function(event) {
+        // Only scroll if this is a new navigation, not a back/forward cache restore
+        if (event.persisted === false) {
+            window.scrollTo(0, 0);
+        }
+    });
     document.addEventListener('DOMContentLoaded', function() {
         console.log('Dashboard: Initializing...');
         
