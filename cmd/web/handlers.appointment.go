@@ -51,8 +51,8 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 	endReason := report.EndedReason
 
 	// Update appointment status based on call result
-	status, shouldLog := internal.MapVapiEndReasonToAppointmentStatus(endReason)
-	appt.EndReason = &status
+	shouldLog := true
+	appt.EndReason = &endReason
 
 	if err := internal.UpdateAppointment(r.Context(), app.fs, appt); err != nil {
 		wrappedErr := fmt.Errorf("failed to update appointment: %w", err)
@@ -88,7 +88,7 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 	if shouldLog {
 		app.logger.Info("appointment status updated",
 			"appointment_id", appointmentID,
-			"status", status,
+			"status", endReason,
 			"end_reason", endReason)
 	}
 

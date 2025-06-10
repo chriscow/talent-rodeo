@@ -558,47 +558,6 @@ func TestAppointment(t *testing.T) {
 	})
 }
 
-// Test MapVapiEndReasonToAppointmentStatus function
-func TestMapVapiEndReasonToAppointmentStatus(t *testing.T) {
-	tests := []struct {
-		name          string
-		endReason     string
-		wantStatus    string
-		wantShouldLog bool
-	}{
-		{
-			name:          "unknown reason returns reason and should log",
-			endReason:     "unknown-reason",
-			wantStatus:    "unknown-reason",
-			wantShouldLog: true,
-		},
-		{
-			name:          "empty reason returns empty and should log",
-			endReason:     "",
-			wantStatus:    "",
-			wantShouldLog: true,
-		},
-		{
-			name:          "custom reason returns reason and should log",
-			endReason:     "custom-end-reason",
-			wantStatus:    "custom-end-reason",
-			wantShouldLog: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gotStatus, gotShouldLog := MapVapiEndReasonToAppointmentStatus(tt.endReason)
-			if gotStatus != tt.wantStatus {
-				t.Errorf("MapVapiEndReasonToAppointmentStatus() status = %v, want %v", gotStatus, tt.wantStatus)
-			}
-			if gotShouldLog != tt.wantShouldLog {
-				t.Errorf("MapVapiEndReasonToAppointmentStatus() shouldLog = %v, want %v", gotShouldLog, tt.wantShouldLog)
-			}
-		})
-	}
-}
-
 // Test edge cases and error conditions
 func TestAppointmentEdgeCases(t *testing.T) {
 	ctx := context.Background()
