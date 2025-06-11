@@ -25,7 +25,7 @@ func NewMindsClient() LLMClient {
 
 // AnalyzeFeedback uses a structured LLM call to analyze user feedback.
 func (c *mindsClient) AnalyzeFeedback(ctx context.Context, prompt string) (*SemanticFeedbackAnalysis, error) {
-	analysis, err := tools.StructuredAsk[SemanticFeedbackAnalysis](ctx, "semantic-feedback-analysis", prompt,
+	analysis, err := tools.StructuredAsk[SemanticFeedbackAnalysis](ctx, prompt,
 		tools.WithModel(tools.DeepSeekChat),
 		tools.WithMaxTokens(8192),
 	)
@@ -37,7 +37,7 @@ func (c *mindsClient) AnalyzeFeedback(ctx context.Context, prompt string) (*Sema
 
 // UpdateSteeringQuery uses a structured LLM call to update a steering query.
 func (c *mindsClient) UpdateSteeringQuery(ctx context.Context, prompt string) (*internal.SteeringQuery, error) {
-	updatedSQ, err := tools.StructuredAsk[internal.SteeringQuery](ctx, "steering-query-update", prompt,
+	updatedSQ, err := tools.StructuredAsk[internal.SteeringQuery](ctx, prompt,
 		tools.WithModel(tools.DeepSeekChat),
 		tools.WithMaxTokens(2048),
 	)

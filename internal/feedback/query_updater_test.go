@@ -26,7 +26,7 @@ func TestSteeringQueryUpdateChain_Run(t *testing.T) {
 			},
 		}
 
-		chain := NewSteeringQueryUpdateChain(mockClient, logger)
+		chain := newQueryUpdater(mockClient, logger)
 		currentSQ := internal.SteeringQuery{}
 		analysis := &SemanticFeedbackAnalysis{}
 		updatedSQ, err := chain.Run(ctx, currentSQ, analysis)
@@ -50,7 +50,7 @@ func TestSteeringQueryUpdateChain_Run(t *testing.T) {
 			},
 		}
 
-		chain := NewSteeringQueryUpdateChain(mockClient, logger)
+		chain := newQueryUpdater(mockClient, logger)
 		_, err := chain.Run(ctx, internal.SteeringQuery{}, &SemanticFeedbackAnalysis{})
 		if err == nil {
 			t.Fatalf("Run() expected an error, got nil")

@@ -30,7 +30,7 @@ func TestFeedbackAnalysisChain_Run(t *testing.T) {
 			},
 		}
 
-		chain := NewFeedbackAnalysisChain(mockClient, logger)
+		chain := newAnalyzer(mockClient, logger)
 		analysis, err := chain.Run(ctx, []*internal.UserFeedback{}, internal.SteeringQuery{})
 		if err != nil {
 			t.Fatalf("Run() unexpected error = %v", err)
@@ -49,7 +49,7 @@ func TestFeedbackAnalysisChain_Run(t *testing.T) {
 			},
 		}
 
-		chain := NewFeedbackAnalysisChain(mockClient, logger)
+		chain := newAnalyzer(mockClient, logger)
 		_, err := chain.Run(ctx, []*internal.UserFeedback{}, internal.SteeringQuery{})
 		if err == nil {
 			t.Fatalf("Run() expected an error, got nil")

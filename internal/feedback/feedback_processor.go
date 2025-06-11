@@ -182,13 +182,19 @@ func (p *Processor) process(ctx context.Context) error {
 		return nil
 	}
 	p.logger.Info("processing user feedback for all users with enhanced processor...")
-	llmProcessor := NewLLMFeedbackProcessor(NewFirestoreStore(p.fs), p.logger, NewMindsClient())
-	return ProcessAllUsersFeedbackEnhanced(ctx, p.fs, llmProcessor, p.logger)
+	return ProcessAllUsersFeedback(ctx, p.fs, p.logger)
+}
+
+func ProcessUserFeedback(ctx context.Context, fs *internal.FirestoreClient, logger *slog.Logger, userID string) error {
+	llmProcessor := newLLMProcessor(newFeedbackStore(fs), logger, NewMindsClient())
+	return llmProcessor.ProcessUserFeedback(ctx, userID)
 }
 
 // ProcessAllUsersFeedbackEnhanced processes feedback for all users who have unprocessed feedback
 // using the enhanced LLM processor.
-func ProcessAllUsersFeedbackEnhanced(ctx context.Context, fs *internal.FirestoreClient, llmProcessor *LLMFeedbackProcessor, logger *slog.Logger) error {
+func ProcessAllUsersFeedback(ctx context.Context, fs *internal.FirestoreClient, logger *slog.Logger) error {
+	llmProcessor := newLLMProcessor(newFeedbackStore(fs), logger, NewMindsClient())
+
 	// Get all unprocessed feedback
 	allFeedback, err := internal.GetAllUnprocessedFeedback(ctx, fs, 1000) // Limit to prevent memory issues
 	if err != nil {
@@ -210,7 +216,7 @@ func ProcessAllUsersFeedbackEnhanced(ctx context.Context, fs *internal.Firestore
 	processedUsers := 0
 
 	for userID := range userFeedbackMap {
-		if err := llmProcessor.ProcessUserFeedbackEnhanced(ctx, userID); err != nil {
+		if err := llmProcessor.ProcessUserFeedback(ctx, userID); err != nil {
 			// Log error but continue processing other users
 			errors = append(errors, fmt.Errorf("failed to process enhanced feedback for user %s: %w", userID, err))
 			continue

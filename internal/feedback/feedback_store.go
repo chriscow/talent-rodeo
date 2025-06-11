@@ -21,7 +21,7 @@ type firestoreStore struct {
 }
 
 // NewFirestoreStore creates a new firestoreStore.
-func NewFirestoreStore(fs *internal.FirestoreClient) FeedbackStore {
+func newFeedbackStore(fs *internal.FirestoreClient) FeedbackStore {
 	return &firestoreStore{fs: fs}
 }
 

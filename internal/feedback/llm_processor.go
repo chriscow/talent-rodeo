@@ -9,26 +9,55 @@ import (
 	"talent-rodeo/internal"
 )
 
-type LLMFeedbackProcessor struct {
-	store            FeedbackStore
-	logger           *slog.Logger
-	analysisChain    *FeedbackAnalysisChain
-	queryUpdateChain *SteeringQueryUpdateChain
-	validationChain  *ValidationChain
+// Supporting types and functions
+type SemanticFeedbackAnalysis struct {
+	LikedThemes      []SemanticTheme
+	DislikedThemes   []SemanticTheme
+	ConfidenceScore  float64
+	TrendingPatterns []string
+	Reasoning        string
 }
 
-func NewLLMFeedbackProcessor(store FeedbackStore, logger *slog.Logger, llm LLMClient) *LLMFeedbackProcessor {
-	return &LLMFeedbackProcessor{
+type SemanticTheme struct {
+	Theme      string
+	Keywords   []string
+	Confidence float64
+	Frequency  int
+}
+
+type FeedbackData struct {
+	LikedItems    []FeedbackItem
+	DislikedItems []FeedbackItem
+	TotalCount    int
+}
+
+type FeedbackItem struct {
+	JobID    string
+	ItemID   string
+	ItemText string
+	Date     string
+}
+
+type llmProcessor struct {
+	store            FeedbackStore
+	logger           *slog.Logger
+	analysisChain    *analyzer
+	queryUpdateChain *queryUpdater
+	validationChain  *validator
+}
+
+func newLLMProcessor(store FeedbackStore, logger *slog.Logger, llm LLMClient) *llmProcessor {
+	return &llmProcessor{
 		store:            store,
 		logger:           logger.With("component", "llm_feedback_processor"),
-		analysisChain:    NewFeedbackAnalysisChain(llm, logger),
-		queryUpdateChain: NewSteeringQueryUpdateChain(llm, logger),
-		validationChain:  NewValidationChain(llm, logger),
+		analysisChain:    newAnalyzer(llm, logger),
+		queryUpdateChain: newQueryUpdater(llm, logger),
+		validationChain:  newValidator(llm, logger),
 	}
 }
 
 // ProcessUserFeedbackEnhanced method replacing current ProcessUserFeedbackForSteeringQuery
-func (p *LLMFeedbackProcessor) ProcessUserFeedbackEnhanced(ctx context.Context, userID string) error {
+func (p *llmProcessor) ProcessUserFeedback(ctx context.Context, userID string) error {
 	// Get unprocessed feedback
 	feedbacks, err := p.store.GetUnprocessedUserFeedback(ctx, userID)
 	if err != nil {
@@ -84,35 +113,6 @@ func (p *LLMFeedbackProcessor) ProcessUserFeedbackEnhanced(ctx context.Context, 
 	)
 
 	return nil
-}
-
-// Supporting types and functions
-type SemanticFeedbackAnalysis struct {
-	LikedThemes      []SemanticTheme `json:"liked_themes"`
-	DislikedThemes   []SemanticTheme `json:"disliked_themes"`
-	ConfidenceScore  float64         `json:"confidence_score"`
-	TrendingPatterns []string        `json:"trending_patterns"`
-	Reasoning        string          `json:"reasoning"`
-}
-
-type SemanticTheme struct {
-	Theme      string   `json:"theme"`
-	Keywords   []string `json:"keywords"`
-	Confidence float64  `json:"confidence"`
-	Frequency  int      `json:"frequency"`
-}
-
-type FeedbackData struct {
-	LikedItems    []FeedbackItem `json:"liked_items"`
-	DislikedItems []FeedbackItem `json:"disliked_items"`
-	TotalCount    int            `json:"total_count"`
-}
-
-type FeedbackItem struct {
-	JobID    string `json:"job_id"`
-	ItemID   string `json:"item_id"`
-	ItemText string `json:"item_text"`
-	Date     string `json:"date"`
 }
 
 func prepareFeedbackData(feedbacks []*internal.UserFeedback) FeedbackData {

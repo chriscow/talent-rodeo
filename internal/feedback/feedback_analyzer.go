@@ -12,19 +12,19 @@ import (
 	"github.com/chriscow/minds/tools"
 )
 
-type FeedbackAnalysisChain struct {
+type analyzer struct {
 	llm    LLMClient
 	logger *slog.Logger
 }
 
-func NewFeedbackAnalysisChain(llm LLMClient, logger *slog.Logger) *FeedbackAnalysisChain {
-	return &FeedbackAnalysisChain{
+func newAnalyzer(llm LLMClient, logger *slog.Logger) *analyzer {
+	return &analyzer{
 		llm:    llm,
 		logger: logger.With("chain", "feedback_analysis"),
 	}
 }
 
-func (c *FeedbackAnalysisChain) Run(ctx context.Context, feedbacks []*internal.UserFeedback, currentSQ internal.SteeringQuery) (*SemanticFeedbackAnalysis, error) {
+func (c *analyzer) Run(ctx context.Context, feedbacks []*internal.UserFeedback, currentSQ internal.SteeringQuery) (*SemanticFeedbackAnalysis, error) {
 	// Load analysis prompt
 	promptTemplate, err := assets.EmbeddedFiles.ReadFile("prompts/feedback-analysis-semantic.v001.txt")
 	if err != nil {

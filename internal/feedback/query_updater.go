@@ -12,19 +12,19 @@ import (
 	"github.com/chriscow/minds/tools"
 )
 
-type SteeringQueryUpdateChain struct {
+type queryUpdater struct {
 	llm    LLMClient
 	logger *slog.Logger
 }
 
-func NewSteeringQueryUpdateChain(llm LLMClient, logger *slog.Logger) *SteeringQueryUpdateChain {
-	return &SteeringQueryUpdateChain{
+func newQueryUpdater(llm LLMClient, logger *slog.Logger) *queryUpdater {
+	return &queryUpdater{
 		llm:    llm,
 		logger: logger.With("chain", "steering_query_update"),
 	}
 }
 
-func (c *SteeringQueryUpdateChain) Run(ctx context.Context, currentSQ internal.SteeringQuery, analysis *SemanticFeedbackAnalysis) (*internal.SteeringQuery, error) {
+func (c *queryUpdater) Run(ctx context.Context, currentSQ internal.SteeringQuery, analysis *SemanticFeedbackAnalysis) (*internal.SteeringQuery, error) {
 	promptTemplate, err := assets.EmbeddedFiles.ReadFile("prompts/feedback-query-update.v001.txt")
 	if err != nil {
 		return nil, fmt.Errorf("failed to load query update prompt: %w", err)
