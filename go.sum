@@ -685,6 +685,8 @@ github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UF
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/cheggaaa/pb v1.0.29 h1:FckUN5ngEk2LpvuG0fw1GEFx6LtyY2pWI/Z2QgCnEYo=
 github.com/cheggaaa/pb v1.0.29/go.mod h1:W40334L7FMC5JKWldsTWbdGjLo0RxUKK73K+TuPxX30=
+github.com/chriscow/minds v0.0.7 h1:IU5NvT8g5czWg9qLjc+Rx0cnf17x4xx+uLJRVlD5s5M=
+github.com/chriscow/minds v0.0.7/go.mod h1:iznO9umfPFv30TzYbhmhSk5h1LiVPsNw//LX46AUH2k=
 github.com/chriscow/minds v0.0.8-0.20250303171538-dc7c074db869 h1:Xu1lu2mVX075rYoVBSOV2HWJYgohGYKGT8eu6A1eBsE=
 github.com/chriscow/minds v0.0.8-0.20250303171538-dc7c074db869/go.mod h1:iznO9umfPFv30TzYbhmhSk5h1LiVPsNw//LX46AUH2k=
 github.com/chriscow/minds v0.0.8-0.20250530181520-20db29a161e6 h1:x6cX52CRhYabGGgtzneDmk8qSRfJoMbKEEHUS5wNbhI=
@@ -695,6 +697,10 @@ github.com/chriscow/minds v0.0.8-0.20250530190108-e5b0a4eae6d2 h1:AG6BoQ8Hba3A4z
 github.com/chriscow/minds v0.0.8-0.20250530190108-e5b0a4eae6d2/go.mod h1:iznO9umfPFv30TzYbhmhSk5h1LiVPsNw//LX46AUH2k=
 github.com/chriscow/minds v0.0.8-0.20250530192353-64faec553f50 h1:3wyguCsQTYCZqq3AdUlKPx7oBqY0xVxPSQZT1Nj49zk=
 github.com/chriscow/minds v0.0.8-0.20250530192353-64faec553f50/go.mod h1:iznO9umfPFv30TzYbhmhSk5h1LiVPsNw//LX46AUH2k=
+github.com/chriscow/minds v0.0.8-0.20250611153444-a9174fb40717 h1:ZdDtj32sKUrk4H3Yx1VfQj0kd5GkiJNw4XpUypMEhl4=
+github.com/chriscow/minds v0.0.8-0.20250611153444-a9174fb40717/go.mod h1:iznO9umfPFv30TzYbhmhSk5h1LiVPsNw//LX46AUH2k=
+github.com/chriscow/minds v0.0.8-0.20250611164108-8c44fd9f3d71 h1:xy56RRjkPCFe/WDqWqubMh8jDgIpRQRwFxjxOpSMa34=
+github.com/chriscow/minds v0.0.8-0.20250611164108-8c44fd9f3d71/go.mod h1:iznO9umfPFv30TzYbhmhSk5h1LiVPsNw//LX46AUH2k=
 github.com/chriscow/minds/providers/gemini v0.0.5-0.20250303171538-dc7c074db869 h1:JYzasCLTj1sP34Xq+5fVJZz89qvPNdu/oq2FoGsBEyc=
 github.com/chriscow/minds/providers/gemini v0.0.5-0.20250303171538-dc7c074db869/go.mod h1:zHJ2ZVGxoiOVlsrRxigpGTqV0OlErkC1d/DfLfazeJU=
 github.com/chriscow/minds/providers/openai v0.0.5 h1:myTeCXszsKK+e7usfIbO5dBBb2+kgAF95yB5r51KX10=
@@ -705,6 +711,12 @@ github.com/chriscow/minds/tools v0.0.3-0.20250530190108-e5b0a4eae6d2 h1:Q0JMrr1K
 github.com/chriscow/minds/tools v0.0.3-0.20250530190108-e5b0a4eae6d2/go.mod h1:BJ00UsqPC+D6R5KeIQsoePb3eDe+aCJDMp09zC0LqLQ=
 github.com/chriscow/minds/tools v0.0.3-0.20250530192353-64faec553f50 h1:D0vlq96g3kJ1JGEfpVXd55jnfx0g5d6Pwl1SQjXNYGo=
 github.com/chriscow/minds/tools v0.0.3-0.20250530192353-64faec553f50/go.mod h1:BJ00UsqPC+D6R5KeIQsoePb3eDe+aCJDMp09zC0LqLQ=
+github.com/chriscow/minds/tools v0.0.3-0.20250611153444-a9174fb40717 h1:BIfe/HZ07JrU72flfFrp0PBVJgVtMRQVSFemeL36NPk=
+github.com/chriscow/minds/tools v0.0.3-0.20250611153444-a9174fb40717/go.mod h1:BJ00UsqPC+D6R5KeIQsoePb3eDe+aCJDMp09zC0LqLQ=
+github.com/chriscow/minds/tools v0.0.3-0.20250611164108-8c44fd9f3d71 h1:QiLMG98fgkrglZ80eNFYOhIrnVZDJ6l0ghElIdKlcEY=
+github.com/chriscow/minds/tools v0.0.3-0.20250611164108-8c44fd9f3d71/go.mod h1:BJ00UsqPC+D6R5KeIQsoePb3eDe+aCJDMp09zC0LqLQ=
+github.com/chriscow/minds/tools v0.0.3 h1:147bEFgDiZSDTi8rrMIhKfKd35GKctP/uF7lSuE1yS8=
+github.com/chriscow/minds/tools v0.0.3/go.mod h1:vbsZy8PcqkO1MBO5x4d0S3YhFU4QtdOM6CH9DHtJ71A=
 github.com/chriscow/vapi-go v0.0.0-20250527195805-6e2047355010 h1:S3j3un7Y+3ytVxV7HyKdTIr6I+UNJgqhLWb5DUl3llY=
 github.com/chriscow/vapi-go v0.0.0-20250527195805-6e2047355010/go.mod h1:vte5a9rQGpiLR7sXIczbnsxfF/2ozgmRk7FYlkvKPSQ=
 github.com/chzyer/logex v1.1.10/go.mod h1:+Ywpsq7O8HXn0nuIou7OrIPyXbp3wmkHB+jjWRnGsAI=

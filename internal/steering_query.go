@@ -327,13 +327,13 @@ Extract the data below into a JSON structure:
 
 %s`
 
-		query, err = tools.StructuredAsk[SteeringQuery](ctx, "steering-query", fmt.Sprintf(prompt, err.Error(), string(jsonB), data), tools.WithModel(tools.GPT41Mini))
+		query, err = tools.StructuredAsk[SteeringQuery](ctx, fmt.Sprintf(prompt, err.Error(), string(jsonB), data), tools.WithModel(tools.GPT41Mini))
 		if err != nil {
 			return nil, fmt.Errorf("LLM failed to parse steering query: %w", err)
 		}
 
 		if err := query.Validate(); err != nil {
-			query, err = tools.StructuredAsk[SteeringQuery](ctx, "steering-query", fmt.Sprintf(prompt, err.Error(), string(jsonB), data), tools.WithModel(tools.GPT41Mini))
+			query, err = tools.StructuredAsk[SteeringQuery](ctx, fmt.Sprintf(prompt, err.Error(), string(jsonB), data), tools.WithModel(tools.GPT41Mini))
 			if err != nil {
 				return nil, fmt.Errorf("LLM failed to parse steering query: %w", err)
 			}

@@ -359,7 +359,7 @@ func getAnnotatedResume(ctx context.Context, resume Resume) (*annotatedResume, e
 func extractResumeAnalysisLLM(ctx context.Context, analysis string) (*annotatedResume, error) {
 	prompt := "Extract the resume analysis from the following text: " + analysis
 
-	res, err := tools.StructuredAsk[annotatedResume](ctx, "resume_analysis", prompt, tools.WithModel(tools.GPT41Nano), tools.WithMaxTokens(4096))
+	res, err := tools.StructuredAsk[annotatedResume](ctx, prompt, tools.WithModel(tools.GPT41Nano), tools.WithMaxTokens(4096))
 	if err != nil {
 		return nil, fmt.Errorf("convertResume: failed to ask LLM: %w", err)
 	}
