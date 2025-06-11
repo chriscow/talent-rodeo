@@ -176,7 +176,7 @@ func ExtractJobDetailData(ctx context.Context, job *JobDetail) error {
 
 	prompt := string(pb) + "\n\n```json\n" + string(b) + "\n```\n\n"
 
-	data, err := tools.StructuredAsk[JobDetailExtractedData](ctx, "extracted-data", prompt,
+	data, err := tools.StructuredAsk[JobDetailExtractedData](ctx, prompt,
 		tools.WithModel(tools.DeepSeekChat),
 		tools.WithMaxTokens(8192))
 	if err != nil {

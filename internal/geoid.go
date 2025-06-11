@@ -132,7 +132,7 @@ func ExtractGeoID(ctx context.Context, fs *FirestoreClient, data string) (string
 		return "", err
 	}
 
-	type result struct {
+	type locationID struct {
 		ID string `json:"id"`
 	}
 
@@ -146,7 +146,7 @@ func ExtractGeoID(ctx context.Context, fs *FirestoreClient, data string) (string
 	Statement: %s
 	`
 
-	res, err := tools.StructuredAsk[result](ctx, "location-id", fmt.Sprintf(prompt, string(geoidJSON), data), tools.WithModel(tools.GPT41Mini))
+	res, err := tools.StructuredAsk[locationID](ctx, fmt.Sprintf(prompt, string(geoidJSON), data), tools.WithModel(tools.GPT41Mini))
 	if err != nil {
 		return "", err
 	}

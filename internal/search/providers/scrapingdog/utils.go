@@ -54,7 +54,7 @@ func parseSalaryRange(ctx context.Context, basePay string) (*internal.SalaryRang
 		return nil, fmt.Errorf("failed to generate prompt: %w", err)
 	}
 
-	salary, err := tools.StructuredAsk[internal.SalaryRange](ctx, "salary_data", prompt,
+	salary, err := tools.StructuredAsk[internal.SalaryRange](ctx, prompt,
 		tools.WithModel(tools.GPT41Nano))
 	if err != nil {
 		return nil, fmt.Errorf("failed to ask: %w", err)
@@ -202,7 +202,7 @@ func SummarizeJobDetails(ctx context.Context, jobDetail *internal.JobDetail) err
 		return fmt.Errorf("failed to generate prompt: %w", err)
 	}
 
-	summary, err := tools.StructuredAsk[internal.JobDetailExtractedData](ctx, "job_summary", prompt)
+	summary, err := tools.StructuredAsk[internal.JobDetailExtractedData](ctx, prompt)
 	if err != nil {
 		return fmt.Errorf("failed to ask: %w", err)
 	}
