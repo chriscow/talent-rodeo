@@ -21,6 +21,7 @@ func init() {
 	usersCmd.AddCommand(listGeoIDsCmd)
 	usersCmd.AddCommand(createUserCmd)
 	usersCmd.AddCommand(importUsersCmd)
+	usersCmd.AddCommand(matchUserCmd)
 
 	// Add flags
 	listUsersCmd.Flags().IntP("limit", "l", 100, "Maximum number of users to return per page")
@@ -32,6 +33,11 @@ func init() {
 	createUserCmd.Flags().StringP("name", "n", "", "Name of the user")
 	createUserCmd.Flags().StringP("email", "e", "", "Email of the user")
 	createUserCmd.Flags().StringP("phone", "p", "", "Phone number of the user")
+
+	matchUserCmd.Flags().StringVarP(&userID, "user", "u", "", "User ID to match jobs for")
+	matchUserCmd.MarkFlagRequired("user")
+	matchUserCmd.Flags().IntVarP(&topK, "topk", "t", 3, "Number of top jobs to return")
+	matchUserCmd.Flags().BoolVarP(&allUsers, "all", "a", false, "Match jobs for all users instead of a single user")
 }
 
 var usersCmd = &cobra.Command{

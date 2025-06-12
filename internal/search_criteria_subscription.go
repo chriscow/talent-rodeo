@@ -23,11 +23,11 @@ const userCriteriaCollection = "user_criteria"
 
 // SearchCriteriaSubscription represents a user's subscription to a search criteria
 type SearchCriteriaSubscription struct {
-	UserID       string    `firestore:"UserID"`
-	CriteriaID   string    `firestore:"CriteriaID"`
-	SubscribedAt time.Time `firestore:"SubscribedAt"`
-	LastViewedAt time.Time `firestore:"LastViewedAt"`
-	DisplayName  string    `firestore:"DisplayName"`
+	UserID       string
+	CriteriaID   string
+	SubscribedAt time.Time
+	DisplayName  string
+	UpdatedAt    time.Time
 }
 
 // SubscribeToCriteria creates a subscription for a user to a search criteria
@@ -112,7 +112,7 @@ func UnsubscribeFromCriteria(ctx context.Context, fs *FirestoreClient, userID, c
 		}
 
 		var criteria struct {
-			SubscriberCount int `firestore:"SubscriberCount"`
+			SubscriberCount int
 		}
 		if err := doc.DataTo(&criteria); err != nil {
 			return fmt.Errorf("UnsubscribeFromCriteria: firestore.Transaction.DataTo: %w", err)
@@ -141,10 +141,10 @@ func UnsubscribeFromCriteria(ctx context.Context, fs *FirestoreClient, userID, c
 
 func UnsubscribeFromCriteriaTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, userID, criteriaID string) error {
 	if fs == nil {
-		return fmt.Errorf("FirestoreClient is nil")
+		return fmt.Errorf("firestore client is nil")
 	}
 	if tx == nil {
-		return fmt.Errorf("Transaction is nil")
+		return fmt.Errorf("transaction is nil")
 	}
 	// Validate inputs
 	if userID == "" {
@@ -271,4 +271,36 @@ func ListSubscribedCriteriaIDs(ctx context.Context, fs *FirestoreClient) ([]stri
 	keys := lo.Keys(criteria)
 
 	return keys, nil
+}
+
+func MarkSubscriptionUpdated(ctx context.Context, fs *FirestoreClient, userID, criteriaID string) error {
+	if fs == nil {
+		return fmt.Errorf("FirestoreClient is nil")
+	}
+
+	// Validate inputs
+	if userID == "" {
+		return fmt.Errorf("user ID is required")
+	}
+	if criteriaID == "" {
+		return fmt.Errorf("criteria ID is required")
+	}
+
+	subscriptionID := funcs.Slugify(fmt.Sprintf("%s_%s", userID, criteriaID))
+	doc, err := fs.Collection(userCriteriaCollection).Doc(subscriptionID).Get(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get subscription: %w", err)
+	}
+
+	var subscription SearchCriteriaSubscription
+	if err := doc.DataTo(&subscription); err != nil {
+		return fmt.Errorf("failed to parse subscription data: %w", err)
+	}
+	subscription.UpdatedAt = time.Now()
+	_, err = fs.Collection(userCriteriaCollection).Doc(subscriptionID).Set(ctx, subscription)
+	if err != nil {
+		return fmt.Errorf("failed to update subscription: %w", err)
+	}
+
+	return nil
 }

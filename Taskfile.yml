@@ -30,7 +30,7 @@ tasks:
       - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
   test:
-    desc: Run all tests
+    desc: Run all test
     cmds:
       - go test -v -race -buildvcs ./...
 
@@ -91,7 +91,7 @@ tasks:
     cmds:
       - go build -o=/tmp/bin/web ./cmd/web
       - go build -o=/tmp/bin/cli ./cmd/cli
-      - cd cmd/mcp && go build -o=./bin/talent-rodeo-mcp .
+      - cd cmd/mcp && go mod tidy && go build -o=./bin/talent-rodeo-mcp .
     # deps:
     #   - build:templ
 

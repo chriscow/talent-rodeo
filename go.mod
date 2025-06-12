@@ -4,14 +4,14 @@ go 1.24
 
 toolchain go1.24.0
 
-// replace (
+replace (
 // 	github.com/chriscow/go-openai-realtime => ../go-openai-realtime
-// 	github.com/chriscow/minds => ../thoughtnet/minds
+	// github.com/chriscow/minds => ../thoughtnet/minds
+	// github.com/chriscow/minds/tools => ../thoughtnet/minds/tools
 // 	github.com/chriscow/minds/providers/gemini => ../thoughtnet/minds/providers/gemini
 // 	github.com/chriscow/minds/providers/openai => ../thoughtnet/minds/providers/openai
-// 	github.com/chriscow/minds/tools => ../thoughtnet/minds/tools
 // 	github.com/chriscow/vapi-go => ../vapi-go
-// )
+)
 
 require (
 	cloud.google.com/go/firestore v1.18.0

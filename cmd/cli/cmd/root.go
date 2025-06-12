@@ -11,6 +11,7 @@ import (
 var (
 	jsonOutput bool
 	envFile    string
+	verbose    bool
 )
 
 var RootCmd = &cobra.Command{
@@ -28,4 +29,5 @@ var RootCmd = &cobra.Command{
 func init() {
 	RootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 	RootCmd.PersistentFlags().StringVar(&envFile, "env", ".env", "Path to environment file for configuration")
+	RootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Verbose output")
 }

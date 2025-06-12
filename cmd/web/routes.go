@@ -96,6 +96,9 @@ func (app *application) routes() http.Handler {
 			mux.HandleFunc("/testing/reset-user-state", app.handleTestingResetUserState, "POST")
 
 			mux.HandleFunc("/logout", app.logoutUser, "POST")
+
+			// Pusher authentication
+			mux.HandleFunc("/pusher/auth", app.pusherAuth, "POST")
 		})
 
 		mux.Group(func(mux *flow.Mux) {

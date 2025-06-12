@@ -129,7 +129,7 @@ var genSearchQueriesCmd = &cobra.Command{
 			log.Fatalf("Appointment is not completed: %s", appointmentID)
 		}
 
-		transcript, err := internal.GetAppointmentTranscript(ctx, fs, *appointment)
+		transcript, err := internal.GetAppointmentTranscript(ctx, fs, *appointment.CallID)
 		if err != nil {
 			log.Fatalf("Error getting appointment transcript: %v", err)
 		}

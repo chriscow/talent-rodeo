@@ -529,7 +529,7 @@ func TestAppointment(t *testing.T) {
 		appointment := CreateTestAppointment(t, client, user)
 		// appointment.CallID is nil by default
 
-		_, err := GetAppointmentTranscript(ctx, client, *appointment)
+		_, err := GetAppointmentTranscript(ctx, client, *appointment.CallID)
 		if err == nil {
 			t.Error("GetAppointmentTranscript() with nil CallID should return error")
 		}

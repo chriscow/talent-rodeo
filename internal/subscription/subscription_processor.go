@@ -14,11 +14,12 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/pusher/pusher-http-go/v5"
 )
 
 const (
-	// DefaultTickInterval is the default interval for processing subscriptions (24 hours)
-	DefaultTickInterval = 24 * time.Hour
+	// DefaultTickInterval is the default interval for processing subscriptions
+	DefaultTickInterval = 4 * time.Hour
 
 	// FeatureFlag for subscription processor
 	SubscriptionProcessorKey = "subscription-processor"
@@ -46,6 +47,7 @@ var DefaultSettings = ProcessorSettings{
 type Processor struct {
 	fs         *internal.FirestoreClient // Firestore client for database operations
 	logger     *slog.Logger              // Logger for recording processor activities
+	psh        *pusher.Client            // Pusher client for real-time notifications
 	ticker     *time.Ticker              // Ticker for scheduling periodic processing
 	done       chan bool                 // Channel to signal shutdown
 	wg         sync.WaitGroup            // WaitGroup to manage goroutines
@@ -58,7 +60,7 @@ type Processor struct {
 // NewProcessor creates a new subscription processor with the provided Firestore client and logger.
 // If no logger is provided, it creates a default logger that writes to stdout.
 // The Firestore client is required and the function will panic if nil is provided.
-func NewProcessor(fs *internal.FirestoreClient, logger *slog.Logger) *Processor {
+func NewProcessor(fs *internal.FirestoreClient, psh *pusher.Client, logger *slog.Logger) *Processor {
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 	}
@@ -75,6 +77,7 @@ func NewProcessor(fs *internal.FirestoreClient, logger *slog.Logger) *Processor 
 	return &Processor{
 		fs:       fs,
 		logger:   logger,
+		psh:      psh,
 		done:     make(chan bool),
 		settings: settings,
 	}
@@ -198,8 +201,7 @@ func (p *Processor) RefreshSettings() error {
 	}
 	// Set default time window if not configured
 	if p.settings.StartHour == 0 && p.settings.EndHour == 0 {
-		p.settings.StartHour = DefaultSettings.StartHour
-		p.settings.EndHour = DefaultSettings.EndHour
+		// Default to 24/7 operation if no hours are set
 	}
 	if p.ticker != nil {
 		p.ticker.Stop()
@@ -334,8 +336,8 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 		return nil
 	}
 
-	// Get all jobs found in the last 24 hours for this criteria
-	twentyFourHoursAgo := time.Now().Add(-24 * time.Hour)
+	// Get all jobs found in the last 7 days for this criteria (jobs that have been analyzed for the user will be excluded)
+	twentyFourHoursAgo := time.Now().Add(-7 * 24 * time.Hour)
 	jobIDs, err := internal.GetJobIDsForCriteriaCreatedAfter(ctx, p.fs, criteria.ID, twentyFourHoursAgo)
 	if err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
@@ -358,7 +360,7 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 	p.logger.Info("found new jobs for criteria", "jobs-count", len(jobIDs), "id", criteria.ID, "user-count", len(userIDs))
 
 	// Get all users in one call
-	_, err = internal.GetUsersByIDs(ctx, p.fs, userIDs)
+	users, err := internal.GetUsersByIDs(ctx, p.fs, userIDs)
 	if err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"action": "Processor::processCriteria: failed to get users",
@@ -366,19 +368,19 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 		return fmt.Errorf("failed to get users: %w", err)
 	}
 
-	// for _, user := range users {
-	// 	p.logger.Info("refreshing user jobs", "user-id", user.ID, "criteria-id", criteria.ID)
-	// 	if err := internal.RefreshUserJobs(ctx, p.fs, user, criteria, p.settings.JobThresholdScore); err != nil {
-	// 		// Log error but continue with other users
-	// 		p.logger.Error("Error processing jobs for user", "user-id", user.ID, "error", err)
-	// 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-	// 			"source":      "subscription_processor",
-	// 			"criteria_id": criteria.ID,
-	// 			"user_id":     user.ID,
-	// 		})
-	// 		continue
-	// 	}
-	// }
+	for _, user := range users {
+		p.logger.Info("refreshing user jobs", "user-id", user.ID, "criteria-id", criteria.ID)
+		if err := RefreshUserJobs(ctx, p.fs, p.psh, p.logger, *user, criteria, jobIDs); err != nil {
+			// Log error but continue with other users
+			p.logger.Error("Error processing jobs for user", "user-id", user.ID, "error", err)
+			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+				"source":      "subscription_processor",
+				"criteria_id": criteria.ID,
+				"user_id":     user.ID,
+			})
+			continue
+		}
+	}
 
 	// Update LastPublishedAt for this criteria
 	now := time.Now()

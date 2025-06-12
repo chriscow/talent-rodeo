@@ -1,0 +1,72 @@
+<user_input>
+    I'm looking for a fully remote backend development role where I can focus on building systems in Go, particularly those that integrate with large language models and generative AI. My ideal position would allow me to work on the technical implementation of these systems, avoiding frontend development entirely. I have experience with Python as well, but I'd prefer to focus primarily on Go in my next role.
+
+    I thrive in smaller companies or startups where I can have a direct impact and work closely with the core technology. While remote is my preference, I'd be open to hybrid arrangements or even relocation for the right opportunity that aligns perfectly with my skills and interests. 
+
+    Career-wise, I'm looking to continue growing my expertise in AI/ML applications, specifically in how they interface with distributed systems. I want to be in an environment that values technical depth and innovation, where I can contribute meaningfully to cutting-edge projects. The ability to focus deeply on backend development without the distraction of frontend work is important to me.
+
+
+    <resume>
+        CHRIS COWHERD 425-829-5443 | madcow@gmail.com | linkedin.com/in/chriscowherd | github.com/chriscow PROFESSIONAL SUMMARY Software Engineering Leader with decades of experience in technical leadership roles, engineering management, and hands-on development. Proven track record of growing companies from zero to exit, scaling engineering organizations, implementing robust infrastructure, and driving innovation. CORE SKILLS Software Development | Cloud Native Architecture | Engineering Leadership | Go | Python | C# PostgreSQL | Google Cloud (GCP) | AWS | Docker | GDPR | OpenAI Integration  Vector Databases | Retrieval Augmented Generation (RAG) | Prompt Engineering Distributed Systems | Team Building | Domain Name Infrastructure Internet Protocols (DNS, SMTP, IMAP, HTTP) | IETF Participant PROFESSIONAL EXPERIENCE BACKEND SOFTWARE ENGINEER, GENERATIVE AI BlestX Ventures, LLC | Redmond, WA | 2023 - 2025 Private research integrating generative AI for manufacturing processes ● Architect and implement generative AI solutions using OpenAI technology and custom-built systems ● Develop advanced PDF parsing and information extraction pipelines for document intelligence ● Design and implement Retrieval Augmented Generation (RAG) systems with Weaviate and Pinecone vector databases ● Create specialized prompt engineering frameworks for manufacturing-specific applications ● Optimize search results using cross-encoder reranking techniques for improved accuracy ● Implement distributed LLM agent coordination for complex manufacturing processes ● Lead fine-tuning efforts to enhance model performance for code generation tasks  CHIEF TECHNOLOGY OFFICER i2 Holdings dba Ambassador Software | Seattle, WA | 2020 - 2022 Private equity funded SaaS company executing roll-up strategy in marketing technology AI & Analytics ● Led 18 geographically distributed engineers across onshore, nearshore, and offshore teams ● Managed full technology stack responsibility including security, compliance, and strategic direction ● Drove product roadmap development and strategic technology planning ● Oversaw full software development lifecycle from design to deployment and maintenance ● Mentored engineering team members for career development and skill advancement ● Delivered consistent project execution through methodical planning and expectation management ● Maintained GDPR, CCPA, and SOC2 compliance across all technology assets PRINCIPAL SOFTWARE ENGINEER Stahurricane LLC | Bellevue, WA | 2018 - 2021 Venture vehicle for ex-CEO of Donuts & eNom ● Led R&D software design and development for VR and mathematical research projects ● Architected distributed system for mathematical visualization using cloud GPUs ● Developed cloud-native system for scalable ML inference (github.com/chriscow/cloud-scanner-go) ● Created distributed computing system for discovering mathematical constants (github.com/chriscow/ramanujan-machine) ● Built Unity application leveraging GPU acceleration for visualizing high-dimensional structures CHIEF TECHNOLOGY OFFICER Donuts Inc. | Bellevue, WA | 2012 - 2018 World's largest top-level domain registry operator ● Directed technology strategy for critical Internet naming infrastructure ● Managed 45-person technology organization with 15 direct reports ● Led company through 600x growth (2013-2016), achieving #1 ranking on Deloitte Fast 500 ● Successfully launched and operated over 200 TLDs without incident ● Maintained ICANN-mandated uptime requirements for global Internet infrastructure ● Oversaw platform development, quality assurance, corporate IT, and production engineering ● Managed data warehousing, analytics, AI initiatives, and financial backend integration SENIOR ENGINEERING MANAGER, R&D Demand Media (RightSide / Leaf Group) | Kirkland, WA | 2008 - 2012 Content & media generation, monetization ● Led and mentored team of 12 cross-discipline engineers ● Developed successful proof-of-concept projects  ● Designed initial architecture for world's largest domain name registry SOFTWARE ENGINEERING MANAGER eNom, Inc | Redmond, WA | 2000 - 2008 Wholesale white-label platform for domains, email, and SSL ● Managed team of 7 engineers while maintaining individual contributor responsibilities ● Architected scalable server infrastructure for critical services including DNS ● Developed networking protocols for DNS, SMTP, POP, IMAP, and related systems ● Designed fault-tolerant distributed systems for high availability services SOFTWARE DESIGN ENGINEER Microsoft | Redmond, WA | 1997 - 2000 ● Core development of early Internet Explorer. Contributed to Windows, and Office products PROGRAMMER / ANALYST Advanced Semiconductor | Phoenix, AZ | 1994 - 1996 ● Implemented software for engineering change control and manufacturing process PATENTS ● U.S. Patent #US11552923B2: Whitelist domain name registry ● U.S. Patent #US20160173440A1: Communication using DNS repurposing ● U.S. Patent #US20150100507A1: Domain Protected Marks List Service ● U.S. Patent #US20080273077: Virtual Video Message Answering Machine Platform ● U.S. Patent #US20080281676: Methods for Keyword Bid Arbitrage with Advertisement Placement EDUCATION Glendale College | Mathematics & Computer Science | 1996     
+    </resume>
+
+
+    <job_description>
+        About the job
+        Summary:
+
+        We are seeking a passionate Senior GenAI Engineer who will play a key role in designing, developing, and supporting 
+        cutting-edge Generative AI solutions. This position requires working with many cross functional teams and applications.
+
+        Required Skills & Experience:
+
+        Hands-on software development and design experience.
+        Strong experience in one or more of the following areas: Deep Learning, LLMs, NLP, Speech, Conversational AI, or AI Infrastructure.
+        Proficiency in at least one programming language such as Python, Java, Go, Rust, or C/C++.
+        Practical experience with at least one Large Language Model (LLM) like Llama, GPT, Claude, or Falcon.
+        Experience with at least one deep learning framework, such as PyTorch or JAX.
+        Familiarity with building cloud solutions, preferably on AWS.
+        Ability to present technical information clearly to diverse audiences.
+        Strong willingness to learn and master new technologies and concepts.
+        Good verbal and written communication skills for technical documentation.
+    </job_description>
+</user_input>
+<assistant_output>
+    <job_match_analysis>
+    <summary>
+    This job appears to be a strong match for your background and interests. It aligns well with your GenAI experience, technical skills, and career goals, though there are some important details about the role that would need clarification to determine if it's an excellent fit.
+    </summary>
+
+    <strengths>
+    - Perfect alignment with your GenAI expertise from BlestX Ventures, including OpenAI integration, RAG systems, and LLM experience
+    - Matches your programming language preferences with Go and Python both listed as options
+    - Focuses on backend AI/ML systems development, avoiding frontend work
+    - Leverages your extensive experience with cloud platforms (AWS mentioned, you have GCP/AWS background)
+    - Aligns with your preference for technical depth and cutting-edge AI projects
+    - Your leadership background could be valuable for cross-functional collaboration requirements
+    </strengths>
+
+    <concerns>
+    - No mention of remote work policy - this is critical given your strong preference for fully remote work
+    - Company size and culture details are missing - you prefer smaller companies/startups for direct impact
+    - Role level unclear - as a former CTO with extensive leadership experience, the seniority level may not match your background
+    - Cross-functional collaboration emphasis might involve more coordination than pure technical focus you're seeking
+    - Java, Rust, C/C++ options suggest they may not prioritize Go development specifically
+    - It is not clear that you have experience with specific deep learning frameworks like PyTorch or JAX
+    </concerns>
+
+    <rating>
+    <numeric_rating>3</numeric_rating>
+    <rating_explaination>Strong technical alignment with your GenAI expertise and programming skills, but critical unknowns about remote work policy, company culture, and role focus prevent a higher rating.</rating_explaination>
+    </rating>
+
+    <follow_up_questions>
+    - What is your flexibility on remote work arrangements? Would you consider roles that are hybrid or require relocation for exceptional AI/GenAI opportunities?
+    - How important is company size to you? Would you consider larger, more established companies if the technical work was compelling?
+    - Are you open to senior individual contributor roles, or do you prefer positions that include some technical leadership responsibilities?
+    - How much cross-functional collaboration are you comfortable with, versus pure heads-down technical development?
+    - Besides Go, how comfortable are you working primarily in other languages like Java or Rust if the AI/ML focus is strong?
+    - Do you have specific experience with PyTorch or JAX?
+    </follow_up_questions>
+    </job_match_analysis>
+</assistant_output>

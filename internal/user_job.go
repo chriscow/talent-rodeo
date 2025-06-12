@@ -57,8 +57,11 @@ func ParseJobStatus(statusStr string) (JobStatus, bool) {
 type UserJob struct {
 	// ID is the same as the job_details document ID (provider_job_id)
 	ID     string
+	UserID string
+
 	Status JobStatus
 	Score  float64 // Semantic search score, if applicable
+	Rating int     // Analysis rating for the job, if applicable
 
 	// User interaction metadata
 	SavedAt    *time.Time
@@ -69,9 +72,7 @@ type UserJob struct {
 	// Reference to the job_details document
 	JobRef *firestore.DocumentRef
 
-	// Job metadata for display
-	// CompanyName string
-	// CompanyLogo string
+	JobMatchAnalysis JobMatchAnalysis
 
 	// Search context
 	// SearchHash string
@@ -79,27 +80,22 @@ type UserJob struct {
 	UpdatedAt time.Time
 }
 
-type JobAnalysis struct {
-	CandidateRequirementsAnalysis []RequirementAnalysis
-	JobRequirementsAnalysis       []RequirementAnalysis
-	Summary                       Summary
-	FinalJudgment                 FinalJudgment
+type JobMatchAnalysis struct {
+	Summary            string
+	Strengths          string
+	Concerns           string
+	Rating             Rating
+	FollowUpQuestions  string
+	RawAnalysis        string
+	Model              string `jsonschema:"-"`
+	PromptTokens       int    `jsonschema:"-"`
+	CompletionTokens   int    `jsonschema:"-"`
+	ProcessingComplete bool   `jsonschema:"-"`
 }
 
-type RequirementAnalysis struct {
-	Requirement string
-	Fit         string
-	Examples    string
-}
-
-type Summary struct {
-	Matches []string
-	Gaps    []string
-}
-
-type FinalJudgment struct {
-	Explanation string
-	Rating      string `enum:"Definitely Yes,Strong Yes,Yes,Maybe,No"` // One of: "Definitely Yes", "Strong Yes", "Yes", "Maybe", "No"
+type Rating struct {
+	NumericRating     int
+	RatingExplanation string
 }
 
 // CreateUserJob saves a job reference for a user
@@ -175,11 +171,11 @@ func GetUserJob(ctx context.Context, fs *FirestoreClient, userID, jobID string) 
 	return &job, true, nil
 }
 
-// ListUserJobs retrieves all jobs for a user. Firebase counts as one read for
+// GetUserJobs retrieves all jobs for a user. Firebase counts as one read for
 // each query, it doesn't matter if your collection has 500 docs or 5000 doc. A
 // single query counts as one read, even if it had to go through 500 docs
 // searching for it in the cloud firestore.
-func ListUserJobs(ctx context.Context, fs *FirestoreClient, userID string) ([]UserJob, error) {
+func GetUserJobs(ctx context.Context, fs *FirestoreClient, userID string) ([]UserJob, error) {
 	if fs == nil {
 		return nil, fmt.Errorf("firestore client is nil")
 	}
@@ -212,7 +208,7 @@ func GetUserJobsSorted(ctx context.Context, fs *FirestoreClient, userID string, 
 		Where("Status", "==", string(status))
 
 	// Add ordering after filters
-	baseQuery = baseQuery.OrderBy("Score", firestore.Desc)
+	baseQuery = baseQuery.OrderBy("Rating", firestore.Desc)
 
 	// Apply paging if a page token is provided
 	var query firestore.Query
@@ -326,33 +322,33 @@ func GetAllJobStatusCounts(ctx context.Context, fs *FirestoreClient, userID stri
 }
 
 // UserHasAnyJobs checks if a user has any jobs, without counting them all
-func UserHasAnyJobs(ctx context.Context, fs *FirestoreClient, userID string) (bool, error) {
-	if fs == nil {
-		return false, fmt.Errorf("firestore client is nil")
-	}
-	if userID == "" {
-		return false, fmt.Errorf("user ID is required")
-	}
+// func UserHasAnyJobs(ctx context.Context, fs *FirestoreClient, userID string) (bool, error) {
+// 	if fs == nil {
+// 		return false, fmt.Errorf("firestore client is nil")
+// 	}
+// 	if userID == "" {
+// 		return false, fmt.Errorf("user ID is required")
+// 	}
 
-	// Just get the first job document - if any exist
-	iter := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Where("Status", "!=", string(JobStatusUnprocessed)).Limit(1).Documents(ctx)
+// 	// Just get the first job document - if any exist
+// 	iter := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Where("Status", "!=", string(JobStatusUnprocessed)).Limit(1).Documents(ctx)
 
-	// Check if there's at least one document
-	_, err := iter.Next()
-	if err == iterator.Done {
-		// No documents found
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("failed to check for user jobs: %w", err)
-	}
+// 	// Check if there's at least one document
+// 	_, err := iter.Next()
+// 	if err == iterator.Done {
+// 		// No documents found
+// 		return false, nil
+// 	}
+// 	if err != nil {
+// 		return false, fmt.Errorf("failed to check for user jobs: %w", err)
+// 	}
 
-	// Don't forget to close the iterator
-	iter.Stop()
+// 	// Don't forget to close the iterator
+// 	iter.Stop()
 
-	// If we got here, at least one job exists
-	return true, nil
-}
+// 	// If we got here, at least one job exists
+// 	return true, nil
+// }
 
 // GetJobStatuses returns a slice of all possible job statuses with proper casing
 func GetJobStatuses() []string {
@@ -380,6 +376,60 @@ func StatusToDisplayName(status string) string {
 	}
 }
 
+func UpdateUserJobAnalysisTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, userID, jobID string, analysis JobMatchAnalysis) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
+	if userID == "" {
+		return fmt.Errorf("user ID is required")
+	}
+	if jobID == "" {
+		return fmt.Errorf("job ID is required")
+	}
+
+	if tx == nil {
+		return fmt.Errorf("transaction is nil")
+	}
+	docRef := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Doc(jobID)
+	updates := []firestore.Update{
+		{Path: "JobMatchAnalysis", Value: analysis},
+		{Path: "UpdatedAt", Value: time.Now()},
+	}
+
+	if err := tx.Update(docRef, updates); err != nil {
+		return fmt.Errorf("failed to update user job analysis: %w", err)
+	}
+
+	return nil
+}
+
+func UpdateUserJobRatingTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, userID, jobID string, rating int) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
+	if userID == "" {
+		return fmt.Errorf("user ID is required")
+	}
+	if jobID == "" {
+		return fmt.Errorf("job ID is required")
+	}
+
+	if tx == nil {
+		return fmt.Errorf("transaction is nil")
+	}
+
+	docRef := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Doc(jobID)
+	updates := []firestore.Update{
+		{Path: "Rating", Value: rating},
+		{Path: "UpdatedAt", Value: time.Now()},
+	}
+
+	if err := tx.Update(docRef, updates); err != nil {
+		return fmt.Errorf("failed to update user job score: %w", err)
+	}
+	return nil
+}
+
 // UpdateUserJobStatus updates the status and corresponding timestamp of a user's job
 func UpdateUserJobStatus(ctx context.Context, fs *FirestoreClient, userID, jobID string, status JobStatus) error {
 	now := time.Now()
@@ -400,6 +450,46 @@ func UpdateUserJobStatus(ctx context.Context, fs *FirestoreClient, userID, jobID
 
 	_, err := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Doc(jobID).Update(ctx, updates)
 	if err != nil {
+		return fmt.Errorf("failed to update user job status: %w", err)
+	}
+
+	return nil
+}
+
+func UpdateUserJobStatusTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, userID, jobID string, status JobStatus) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
+	if userID == "" {
+		return fmt.Errorf("user ID is required")
+	}
+	if jobID == "" {
+		return fmt.Errorf("job ID is required")
+	}
+
+	if tx == nil {
+		return fmt.Errorf("transaction is nil")
+	}
+
+	updates := []firestore.Update{
+		{Path: "Status", Value: status},
+		{Path: "UpdatedAt", Value: time.Now()},
+	}
+
+	// Add timestamp based on status
+	now := time.Now()
+	switch status {
+	case JobStatusSaved:
+		updates = append(updates, firestore.Update{Path: "SavedAt", Value: now})
+	case JobStatusApplied:
+		updates = append(updates, firestore.Update{Path: "AppliedAt", Value: now})
+	case JobStatusArchived:
+		updates = append(updates, firestore.Update{Path: "ArchivedAt", Value: now})
+	}
+
+	docRef := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Doc(jobID)
+
+	if err := tx.Update(docRef, updates); err != nil {
 		return fmt.Errorf("failed to update user job status: %w", err)
 	}
 

@@ -151,8 +151,7 @@ func (s *Scheduler) RefreshSettings() error {
 	}
 	// Set default time window if not configured
 	if s.settings.StartHour == 0 && s.settings.EndHour == 0 {
-		s.settings.StartHour = DefaultSchedulerSettings.StartHour
-		s.settings.EndHour = DefaultSchedulerSettings.EndHour
+		// Default to 24/7 operation if no hours are set
 	}
 	s.ticker.Reset(s.settings.Interval)
 	return nil

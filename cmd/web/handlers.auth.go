@@ -8,9 +8,12 @@ import (
 
 	"talent-rodeo/internal"
 
+	"io"
+
 	"github.com/alexedwards/flow"
 	"github.com/google/uuid"
 	"github.com/markbates/goth/gothic"
+	"github.com/pusher/pusher-http-go/v5"
 )
 
 // HTTP Status Code Notes:
@@ -179,4 +182,37 @@ func (app *application) logoutUser(w http.ResponseWriter, r *http.Request) {
 	app.logger.Debug("Logout redirect sent",
 		"location", "/",
 		"status", http.StatusSeeOther)
+}
+
+func (app *application) pusherAuth(w http.ResponseWriter, r *http.Request) {
+	user := contextGetAuthenticatedUser(r)
+	if user == nil {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	params, err := io.ReadAll(r.Body)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	// Presence data to send to other clients
+	presenceData := pusher.MemberData{
+		UserID: user.ID,
+		UserInfo: map[string]string{
+			"name":      user.Name,
+			"avatarURL": user.AvatarURL,
+		},
+	}
+
+	// AuthenticatePresenceChannel is deprecated, use AuthorizePresenceChannel instead
+	response, err := app.pusher.AuthorizePresenceChannel(params, presenceData)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(response)
 }
