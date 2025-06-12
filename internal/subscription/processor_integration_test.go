@@ -44,7 +44,7 @@ func TestProcessorIntegration(t *testing.T) {
 
 	t.Run("TestStart_AlreadyRunning", func(t *testing.T) {
 		// Create a processor and start it
-		processor := NewProcessor(fs, logger)
+		processor := NewProcessor(fs, nil, logger)
 		processor.WithInterval(50 * time.Millisecond) // Use short interval for testing
 
 		// Start the processor
@@ -63,7 +63,7 @@ func TestProcessorIntegration(t *testing.T) {
 
 	t.Run("TestProcess_EligibleCriteria", func(t *testing.T) {
 		// Create processor with shorter interval for testing
-		processor := NewProcessor(fs, logger)
+		processor := NewProcessor(fs, nil, logger)
 		processor.WithInterval(100 * time.Millisecond)
 
 		// Create a test user with steering query
@@ -179,7 +179,7 @@ func TestProcessorIntegration(t *testing.T) {
 
 	t.Run("TestProcessCriteria_NoSubscribers", func(t *testing.T) {
 		// Create a processor (not started)
-		processor := NewProcessor(fs, logger)
+		processor := NewProcessor(fs, nil, logger)
 
 		// Create test criteria with no subscribers
 		criteriaQuery := fmt.Sprintf("%s-no-subs", testPrefix)
@@ -228,7 +228,7 @@ func TestProcessorIntegration(t *testing.T) {
 
 	t.Run("TestProcessCriteria_NoNewJobs", func(t *testing.T) {
 		// Create a processor (not started)
-		processor := NewProcessor(fs, logger)
+		processor := NewProcessor(fs, nil, logger)
 
 		// Create a test user
 		userEmail := fmt.Sprintf("%s-nojobs@example.com", testPrefix)
@@ -282,39 +282,9 @@ func TestProcessorIntegration(t *testing.T) {
 		}
 	})
 
-	// t.Run("TestProcessUserJobs_NoSteeringQuery", func(t *testing.T) {
-	// 	// Create a test user without steering query
-	// 	userEmail := fmt.Sprintf("%s-nosteering@example.com", testPrefix)
-	// 	userPhone := "+12345678902"
-	// 	testUser := internal.CreateTestUser(t, fs, fmt.Sprintf("%s-nosteering", testPrefix), userEmail, userPhone, false)
-
-	// 	// Create test criteria
-	// 	criteriaQuery := fmt.Sprintf("%s-nosteering", testPrefix)
-	// 	criteria, err := internal.CreateSearchCriteria(ctx, fs, criteriaQuery, "us-tx-dallas", 2)
-	// 	if err != nil {
-	// 		t.Fatalf("Failed to create test criteria: %v", err)
-	// 	}
-
-	// 	// Process user jobs - should skip due to no steering query
-	// 	err = internal.RefreshUserJobs(ctx, fs, testUser, *criteria, 0)
-	// 	if err == nil {
-	// 		t.Fatalf("RefreshUserJobs should return an error for user without steering query")
-	// 	}
-
-	// 	// Verify no user jobs were created
-	// 	userJobs, err := internal.ListUserJobs(ctx, fs, testUser.ID)
-	// 	if err != nil {
-	// 		t.Fatalf("Failed to list user jobs: %v", err)
-	// 	}
-
-	// 	if len(userJobs) > 0 {
-	// 		t.Fatal("User jobs were created when they should not have been")
-	// 	}
-	// })
-
 	t.Run("TestProcess_EnsureFrequencyThresholds", func(t *testing.T) {
 		// Create a processor (not started)
-		processor := NewProcessor(fs, logger)
+		processor := NewProcessor(fs, nil, logger)
 
 		// Create test criteria that has been published recently
 		criteriaQuery := fmt.Sprintf("%s-recent-pub", testPrefix)

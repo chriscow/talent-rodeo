@@ -50,6 +50,7 @@ type User struct {
 
 	SteeringQuery      *SteeringQuery
 	LocationPreference *string
+	Statement          *string // first person statement of work preferences
 
 	Tier            UserTier
 	CompletedAt     *time.Time
@@ -244,7 +245,8 @@ func SetUserSteeringQuery(ctx context.Context, fs *FirestoreClient, id string, s
 		}
 		return fmt.Errorf("failed to update steering query: %w", err)
 	}
-
+	// Invalidate cache so next read is fresh
+	fs.EvictUserCache(id)
 	return nil
 }
 
@@ -271,6 +273,32 @@ func SetUserWorkPreferences(ctx context.Context, fs *FirestoreClient, id string,
 		}
 		return fmt.Errorf("failed to update work preferences: %w", err)
 	}
+	// Invalidate cache so next read is fresh
+	fs.EvictUserCache(id)
+	return nil
+}
+
+func SetUserStatement(ctx context.Context, fs *FirestoreClient, id string, statement string) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
+
+	fsUpdates := []firestore.Update{
+		{
+			Path:  "Statement",
+			Value: statement,
+		},
+	}
+
+	_, err := fs.Collection(usersCollection).Doc(id).Update(ctx, fsUpdates)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return fmt.Errorf("user not found")
+		}
+		return fmt.Errorf("failed to update statement: %w", err)
+	}
+	// Invalidate cache so next read is fresh
+	fs.EvictUserCache(id)
 	return nil
 }
 

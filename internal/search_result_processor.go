@@ -246,7 +246,7 @@ func (s *SearchResultProcessor) sendProgressUpdate(progress *SearchProgress, pro
 	}
 	currentProgress := int(float32(processed) / float32(total) * 100)
 	s.logger.Debug("sending progress update", "user", progress.UserID, "progress", currentProgress, "searchTaskID", progress.SearchTaskID)
-	SendPusherProgress(s.pusherClient, progress.UserID, "Extracting job details...", currentProgress, 100)
+	SendPusherProgress(s.pusherClient, progress.UserID, "server-progress", "Extracting job details...", currentProgress, 100)
 	progress.mu.Lock()
 	progress.lastProgressNotified = currentProgress
 	progress.mu.Unlock()

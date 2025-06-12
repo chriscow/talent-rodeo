@@ -6,6 +6,7 @@
 .vscode
 .weaviate
 .boardy-calls
+.logs
 **/dist/
 __pycache__
 **/*.csv

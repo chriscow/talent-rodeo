@@ -502,7 +502,7 @@ func getSemanticJobsCacheKey(userID string, topK int, params *HybridSearchParams
 	return cacheKey, nil
 }
 
-func getSemanticJobsFilter(ctx context.Context, fs *FirestoreClient, userID string, steeringQuery SteeringQuery) (map[string]any, error) {
+func getSemanticJobsFilter(ctx context.Context, fs *FirestoreClient, userID, criteriaID string, steeringQuery SteeringQuery) (map[string]any, error) {
 	if fs == nil {
 		return nil, fmt.Errorf("getSemanticJobsFilter: fs is nil")
 	}
@@ -514,16 +514,19 @@ func getSemanticJobsFilter(ctx context.Context, fs *FirestoreClient, userID stri
 	}
 
 	filter := map[string]any{
-		"workType": map[string]any{
-			"$eq": string(steeringQuery.WorkType),
+		"criteriaID": map[string]any{
+			"$eq": criteriaID,
 		},
-		"experienceLevel": map[string]any{
-			"$eq": string(steeringQuery.ExperienceLevel),
-		},
+		// "workType": map[string]any{
+		// 	"$eq": string(steeringQuery.WorkType),
+		// },
+		// "experienceLevel": map[string]any{
+		// 	"$eq": string(steeringQuery.ExperienceLevel),
+		// },
 	}
 
 	// Get all IDs for UserJobs for this user
-	userJobs, err := ListUserJobs(ctx, fs, userID)
+	userJobs, err := GetUserJobs(ctx, fs, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user jobs: %w", err)
 	}
@@ -544,7 +547,7 @@ func getSemanticJobsFilter(ctx context.Context, fs *FirestoreClient, userID stri
 
 // SearchJobDetails retrieves semantic search results for a user with 1-hour caching
 // This function is used by the dashboard for the "New" job status tab
-func SearchJobDetails(ctx context.Context, fs *FirestoreClient, userID string, steeringQuery SteeringQuery, topK int, params *HybridSearchParams) ([]ScoredJobDetail, error) {
+func SearchJobDetails(ctx context.Context, fs *FirestoreClient, userID, criteriaID string, steeringQuery SteeringQuery, topK int, params *HybridSearchParams) ([]ScoredJobDetail, error) {
 	if fs == nil {
 		return nil, fmt.Errorf("SearchJobDetails: fs is nil")
 	}
@@ -558,7 +561,7 @@ func SearchJobDetails(ctx context.Context, fs *FirestoreClient, userID string, s
 		return cachedJobs, nil
 	}
 
-	filter, err := getSemanticJobsFilter(ctx, fs, userID, steeringQuery)
+	filter, err := getSemanticJobsFilter(ctx, fs, userID, criteriaID, steeringQuery)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get semantic jobs filter: %w", err)
 	}

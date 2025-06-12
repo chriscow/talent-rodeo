@@ -1,5 +1,6 @@
 {{define "page:main"}}
 <main class="container">
+    
     <!-- Job Status Tabs -->
     <nav class="job-status-tabs">
         <ul>
@@ -27,7 +28,20 @@
         </div>
     </ins>
 
-
+    <!-- Subscription processing status -->
+    <div id="subscription-status-container" style="text-align: center; margin-bottom: 1rem;">
+        {{if .NextSearchTime}}
+            {{if lt .NextSearchTime.Unix (now.Unix)}}
+                <p id="next-search-time">Your job update is starting shortly.</p>
+            {{else}}
+                <p id="next-search-time">Your next job update will start processing {{.NextSearchTime | approxFuture}}.</p>
+            {{end}}
+        {{end}}
+        <div id="subscription-progress-container" style="display: none;">
+            <p id="subscription-progress-message"></p>
+            <progress id="subscription-progress-bar" value="0" max="100" style="width: 50%; margin: auto;"></progress>
+        </div>
+    </div>
 
     <!-- Job listings for selected status -->
     <section id="jobs-container">
@@ -67,6 +81,10 @@
 <!-- Add user data for browser functionality -->
 <div data-next-search-time="{{.NextSearchTime.Unix}}" hidden></div>
 <div data-user-feedback="{{.UserFeedback | json}}" hidden></div>
+<div data-session-id="{{.User.ID}}"
+     data-pusher-key="{{.PusherKey}}"
+     data-pusher-cluster="{{.PusherCluster}}"
+     hidden></div>
 {{end}}
 
 {{define "waitlist-opt-out"}}
@@ -84,6 +102,7 @@
 {{end}}
 
 {{define "page:scripts"}}
+<script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
 <script>
     window.addEventListener('pageshow', function(event) {
         // Only scroll if this is a new navigation, not a back/forward cache restore
@@ -113,6 +132,53 @@
                 element.textContent = `${formattedDate} at ${formattedTime}`;
             }
         });        
+        
+        const userElement = document.querySelector('[data-session-id]');
+        if (userElement && userElement.dataset.pusherKey) {
+            const pusher = new Pusher(userElement.dataset.pusherKey, {
+                cluster: userElement.dataset.pusherCluster,
+                authEndpoint: '/pusher/auth',
+                auth: {
+                    headers: {
+                        'X-CSRF-Token': '{{.CSRFToken}}'
+                    }
+                }
+            });
+
+            const channel = pusher.subscribe(`${userElement.dataset.sessionId}`);
+            const presenceChannel = pusher.subscribe(`presence-${userElement.dataset.sessionId}`);
+
+            presenceChannel.bind('pusher:subscription_succeeded', function() {
+                console.log('Pusher subscription succeeded');
+                const pusherUserPresenceEl = document.getElementById('pusher-user-presence');
+                if (pusherUserPresenceEl) pusherUserPresenceEl.style.display = 'block';
+            });
+            
+
+            channel.bind('subscription-progress', function(data) {
+                console.log('Received subscription progress:', data);
+                const nextSearchTimeEl = document.getElementById('next-search-time');
+                const progressContainerEl = document.getElementById('subscription-progress-container');
+                const progressBarEl = document.getElementById('subscription-progress-bar');
+                const progressMessageEl = document.getElementById('subscription-progress-message');
+
+                if (nextSearchTimeEl) nextSearchTimeEl.style.display = 'none';
+                if (progressContainerEl) progressContainerEl.style.display = 'block';
+                
+                if (progressBarEl) {
+                    progressBarEl.value = data.progress;
+                    progressBarEl.max = data.total;
+                }
+                if (progressMessageEl) {
+                    progressMessageEl.textContent = data.message;
+                }
+            });
+
+            channel.bind('server-redirect', function(data) {
+                console.log('Received server redirect:', data);
+                window.location.href = data.url;
+            });
+        }
     });
 
     // AlpineJS function for job feedback

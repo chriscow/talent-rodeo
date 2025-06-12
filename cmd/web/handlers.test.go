@@ -31,7 +31,7 @@ func (app *application) triggerPusherProgress(w http.ResponseWriter, r *http.Req
 
 	app.logger.Info("triggering pusher progress", "userID", userID, "message", message, "progress", progressInt, "total", totalInt)
 
-	err := internal.SendPusherProgress(app.pusher, userID, message, progressInt, totalInt)
+	err := internal.SendPusherProgress(app.pusher, userID, "server-progress", message, progressInt, totalInt)
 	if err != nil {
 		app.serverError(w, r, err)
 		return

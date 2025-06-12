@@ -40,4 +40,5 @@
 **/build-errors.log
 **/.venv
 **/testdata
+**/.logs
 fly.toml

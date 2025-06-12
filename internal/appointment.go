@@ -249,14 +249,14 @@ func CancelAppointment(ctx context.Context, fs *FirestoreClient, userID string, 
 	return nil
 }
 
-func GetAppointmentTranscript(ctx context.Context, fs *FirestoreClient, appointment Appointment) (*Transcript, error) {
+func GetAppointmentTranscript(ctx context.Context, fs *FirestoreClient, callID string) (*Transcript, error) {
 	// Check if the appointment has a call ID
-	if appointment.CallID == nil {
+	if callID == "" {
 		return nil, fmt.Errorf("appointment does not have a call ID")
 	}
 
 	// Get the call from VAPI
-	call, err := vapi.GetCall(ctx, *appointment.CallID)
+	call, err := vapi.GetCall(ctx, callID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get call from VAPI: %w", err)
 	}

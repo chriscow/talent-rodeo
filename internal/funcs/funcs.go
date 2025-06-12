@@ -30,6 +30,7 @@ var TemplateFuncs = template.FuncMap{
 	"timeUntil":      time.Until,
 	"formatTime":     formatTime,
 	"approxTime":     ApproxTime,
+	"approxFuture":   ApproxFuture,
 	"approxDuration": ApproxDuration,
 	"humanDate":      humanDate,
 
@@ -61,6 +62,7 @@ var TemplateFuncs = template.FuncMap{
 	},
 	"rrfPercentage": rrfPercentage,
 	"rrfStars":      rrfStars,
+	"ratingStars":   ratingStars,
 	"sub": func(a, b int) int {
 		return a - b
 	},
@@ -157,6 +159,59 @@ func ApproxTime(t time.Time) string {
 		return "just now"
 	}
 	return fmt.Sprintf("%d years ago", dy)
+}
+
+func ApproxFuture(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+
+	d := time.Until(t)
+	if d < 0 {
+		return ApproxTime(t) // It's in the past, use ApproxTime
+	}
+
+	if d < time.Second {
+		return "any second now"
+	}
+
+	ds := int(math.Round(d.Seconds()))
+	if ds < 60 {
+		if ds <= 1 {
+			return "in a second"
+		}
+		return fmt.Sprintf("in %d seconds", ds)
+	}
+
+	dm := int(math.Round(d.Minutes()))
+	if dm < 60 {
+		if dm <= 1 {
+			return "in about a minute"
+		}
+		return fmt.Sprintf("in %d minutes", dm)
+	}
+
+	dh := int(math.Round(d.Hours()))
+	if dh < 12 {
+		if dh <= 1 {
+			return "in about an hour"
+		}
+		return fmt.Sprintf("in %d hours", dh)
+	}
+
+	dd := int(math.Round(float64(d / day)))
+	if dd < 365 {
+		if dd <= 1 {
+			return "in about a day"
+		}
+		return fmt.Sprintf("in %d days", dd)
+	}
+
+	dy := int(math.Round(float64(d / year)))
+	if dy <= 1 {
+		return "in about a year"
+	}
+	return fmt.Sprintf("in %d years", dy)
 }
 
 func ApproxDuration(d time.Duration) string {
@@ -474,6 +529,23 @@ func rrfStars(score float64) string {
 	case percentage >= 10: // 10-29%
 		return "★☆☆☆☆"
 	default: // 0-9%
+		return "☆☆☆☆☆"
+	}
+}
+
+func ratingStars(rating int) string {
+	switch rating {
+	case 5:
+		return "★★★★★"
+	case 4:
+		return "★★★★☆"
+	case 3:
+		return "★★★☆☆"
+	case 2:
+		return "★★☆☆☆"
+	case 1:
+		return "★☆☆☆☆"
+	default:
 		return "☆☆☆☆☆"
 	}
 }

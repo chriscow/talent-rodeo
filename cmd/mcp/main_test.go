@@ -160,7 +160,7 @@ func TestListUserJobs(t *testing.T) {
 		t.Logf("Using test user ID: %s", testUserID)
 
 		// Test direct GetUserJobs function
-		jobs, err := internal.ListUserJobs(ctx, fs, testUserID)
+		jobs, err := internal.GetUserJobs(ctx, fs, testUserID)
 		if err != nil {
 			t.Fatalf("ListUserJobs failed: %v", err)
 		}

@@ -585,7 +585,7 @@ func (app *application) startServices(ctx context.Context) error {
 		return fmt.Errorf("failed to start feedback processor: %w", err)
 	}
 
-	app.subscriptionProcessor = subscription.NewProcessor(app.fs, app.logger)
+	app.subscriptionProcessor = subscription.NewProcessor(app.fs, app.pusher, app.logger)
 
 	app.jobDispatch = internal.NewJobEventDispatch()
 	app.searchResultProcessor = internal.NewSearchResultProcessor(app.fs, app.logger, app.pusher, app.jobDispatch)

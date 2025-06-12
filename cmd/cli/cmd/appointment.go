@@ -329,7 +329,8 @@ var reprocessCmd = &cobra.Command{
 		defer fs.Close()
 
 		// Initialize logger with debug level
-		tmpFile, err := os.CreateTemp("", "appt-reprocess-*.log")
+		os.MkdirAll(".logs", 0755)
+		tmpFile, err := os.OpenFile(".logs/appt-reprocess.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		if err != nil {
 			return fmt.Errorf("failed to create temp log file: %w", err)
 		}
@@ -435,7 +436,7 @@ var sendRecapCmd = &cobra.Command{
 		}
 
 		// Get the transcript
-		appointmentTranscript, err := internal.GetAppointmentTranscript(ctx, fs, *appointment)
+		appointmentTranscript, err := internal.GetAppointmentTranscript(ctx, fs, *appointment.CallID)
 		if err != nil {
 			return fmt.Errorf("failed to get appointment transcript: %w", err)
 		}

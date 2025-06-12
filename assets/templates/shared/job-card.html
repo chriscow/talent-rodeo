@@ -1,5 +1,6 @@
 {{define "job-card"}}
 <article class="job-card" x-data="jobFeedback()" data-job-id="{{.JobDetail.ID}}">
+
     <button class="job-close-btn" @click="dismissJob($el)" title="Dismiss this job" aria-label="Dismiss job" type="button">
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
             <line x1="5" y1="5" x2="15" y2="15" stroke="currentColor" stroke-width="2"/>
@@ -8,35 +9,7 @@
     </button>
     <!-- Determine context: check if we have ScoredJobDetail fields directly (admin) or nested in JobWithDetails (dashboard) -->
     {{$isAdmin := false}}
-    
-    {{if .DenseScore}}
-        {{$isAdmin = true}}
-    {{end}}
-    
-    {{if $isAdmin}}
-    <!-- Admin-only debug info -->
-    <button class="outline secondary" disabled>
-        <strong>Debug Info:</strong>
-        Dense: {{printf "%.4f" .DenseScore}} | 
-        Sparse: {{printf "%.4f" .SparseScore}} | 
-        Combined: {{printf "%.4f" .Score}} |
-        Job ID: {{.JobDetail.ID}}
-    </button>
-    <hr />
-    {{end}}
-    
-    <div style="display: none;">
-        <!-- Direct ScoredJobDetail access -->
-        <span>{{.JobDetail.ProviderJobID}}</span>
-        <span>{{.DenseScore}}</span>
-        <span>{{.SparseScore}}</span>
-        <span>{{.Score}}</span>
-        <span>{{.JobDetail.ProviderJobID}}</span>
-        <span>{{.DenseScore}}</span>
-        <span>{{.SparseScore}}</span>
-        <span>{{.Score}}</span>
-    </div>
-
+        
     <hgroup>
         <h3 class="feedback-item job-title-feedback"
             data-item-id="job-title"
@@ -73,26 +46,50 @@
 
     {{if .JobDetail.ExtractedData}}
     <section>
-        {{.JobDetail.ExtractedData.Summary}}
+        <p>{{.JobDetail.ExtractedData.Summary}}</p>
+        {{if .UserJob.JobMatchAnalysis}}
+        <p style="color: var(--pico-muted-color)"><em>{{.UserJob.JobMatchAnalysis.Rating.RatingExplanation}}</em></p>
+        {{end}}
     </section>
     {{end}}
 
-    <section>
+    <hr />
+
+    <section class="grid">
+
     {{with .JobDetail.ExtractedData}}
-        {{template "job-section" dict "Title" "Responsibilities" "Items" .Responsibilities "Prefix" "resp"}}
-        {{template "job-section" dict "Title" "Skills" "Items" .Skills "Prefix" "skill"}}
-        {{template "job-section" dict "Title" "Requirements" "Items" .Requirements "Prefix" "req"}}
-        {{template "job-section" dict "Title" "Qualifications" "Items" .Qualifications "Prefix" "qual"}}
-        {{template "job-section" dict "Title" "Bonus Qualifications" "Items" .BonusQualifications "Prefix" "bonus"}}
+    
+        <div>
+            <details name="job-section">
+              <summary>Responsibilities</summary>
+              {{template "job-section" dict "Title" "Responsibilities" "Items" .Responsibilities "Prefix" "resp"}}
+            </details>
+            <details name="job-section">
+              <summary>Skills</summary>
+              {{template "job-section" dict "Title" "Skills" "Items" .Skills "Prefix" "skill"}}
+            </details>
+        </div>
+        <div>
+            <details name="job-section">
+              <summary>Requirements</summary>
+              {{template "job-section" dict "Title" "Requirements" "Items" .Requirements "Prefix" "req"}}
+            </details>
+            <details name="job-section">
+              <summary>Qualifications</summary>
+              {{template "job-section" dict "Title" "Qualifications" "Items" .Qualifications "Prefix" "qual"}}
+            </details>
+        </div>
+        <div>
+            <details name="job-section">
+              <summary>Bonus Qualifications</summary>
+              {{template "job-section" dict "Title" "Bonus Qualifications" "Items" .BonusQualifications "Prefix" "bonus"}}
+            </details>
+        </div>
     {{end}}
     </section>
 
     <footer>
-        {{if .Score}}
-        <small>Added {{.JobDetail.CreatedAt | humanDate}} &nbsp; | &nbsp; {{rrfStars .Score}}</small>
-        {{else}}
-        <small>Added {{.JobDetail.CreatedAt | humanDate}} &nbsp; | &nbsp; {{rrfStars .ScoredJobDetail.Score}}</small>
-        {{end}}
+        <small>Added {{.JobDetail.CreatedAt | humanDate}} &nbsp; | &nbsp; {{ratingStars .UserJob.Rating}}</small>
     </footer>
 </article>
 {{end}}
