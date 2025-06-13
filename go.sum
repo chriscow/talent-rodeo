@@ -701,6 +701,8 @@ github.com/chriscow/minds v0.0.8-0.20250611153444-a9174fb40717 h1:ZdDtj32sKUrk4H
 github.com/chriscow/minds v0.0.8-0.20250611153444-a9174fb40717/go.mod h1:iznO9umfPFv30TzYbhmhSk5h1LiVPsNw//LX46AUH2k=
 github.com/chriscow/minds v0.0.8-0.20250611164108-8c44fd9f3d71 h1:xy56RRjkPCFe/WDqWqubMh8jDgIpRQRwFxjxOpSMa34=
 github.com/chriscow/minds v0.0.8-0.20250611164108-8c44fd9f3d71/go.mod h1:iznO9umfPFv30TzYbhmhSk5h1LiVPsNw//LX46AUH2k=
+github.com/chriscow/minds v0.0.8-0.20250612003644-10b6847e6d80 h1:ULMrfYudCJvm7EZQIG+CpKEiQ+/h651MZUPrfSmLxdw=
+github.com/chriscow/minds v0.0.8-0.20250612003644-10b6847e6d80/go.mod h1:iznO9umfPFv30TzYbhmhSk5h1LiVPsNw//LX46AUH2k=
 github.com/chriscow/minds/providers/gemini v0.0.5-0.20250303171538-dc7c074db869 h1:JYzasCLTj1sP34Xq+5fVJZz89qvPNdu/oq2FoGsBEyc=
 github.com/chriscow/minds/providers/gemini v0.0.5-0.20250303171538-dc7c074db869/go.mod h1:zHJ2ZVGxoiOVlsrRxigpGTqV0OlErkC1d/DfLfazeJU=
 github.com/chriscow/minds/providers/openai v0.0.5 h1:myTeCXszsKK+e7usfIbO5dBBb2+kgAF95yB5r51KX10=
@@ -715,6 +717,8 @@ github.com/chriscow/minds/tools v0.0.3-0.20250611153444-a9174fb40717 h1:BIfe/HZ0
 github.com/chriscow/minds/tools v0.0.3-0.20250611153444-a9174fb40717/go.mod h1:BJ00UsqPC+D6R5KeIQsoePb3eDe+aCJDMp09zC0LqLQ=
 github.com/chriscow/minds/tools v0.0.3-0.20250611164108-8c44fd9f3d71 h1:QiLMG98fgkrglZ80eNFYOhIrnVZDJ6l0ghElIdKlcEY=
 github.com/chriscow/minds/tools v0.0.3-0.20250611164108-8c44fd9f3d71/go.mod h1:BJ00UsqPC+D6R5KeIQsoePb3eDe+aCJDMp09zC0LqLQ=
+github.com/chriscow/minds/tools v0.0.3-0.20250612003644-10b6847e6d80 h1:hcSYbRc96OsEx69flm3EV8Hts6De3pqbxcEru9AJn/M=
+github.com/chriscow/minds/tools v0.0.3-0.20250612003644-10b6847e6d80/go.mod h1:BJ00UsqPC+D6R5KeIQsoePb3eDe+aCJDMp09zC0LqLQ=
 github.com/chriscow/minds/tools v0.0.3 h1:147bEFgDiZSDTi8rrMIhKfKd35GKctP/uF7lSuE1yS8=
 github.com/chriscow/minds/tools v0.0.3/go.mod h1:vbsZy8PcqkO1MBO5x4d0S3YhFU4QtdOM6CH9DHtJ71A=
 github.com/chriscow/vapi-go v0.0.0-20250527195805-6e2047355010 h1:S3j3un7Y+3ytVxV7HyKdTIr6I+UNJgqhLWb5DUl3llY=

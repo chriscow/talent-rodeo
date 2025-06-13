@@ -336,28 +336,13 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 		return nil
 	}
 
-	// Get all jobs found in the last 7 days for this criteria (jobs that have been analyzed for the user will be excluded)
-	twentyFourHoursAgo := time.Now().Add(-7 * 24 * time.Hour)
-	jobIDs, err := internal.GetJobIDsForCriteriaCreatedAfter(ctx, p.fs, criteria.ID, twentyFourHoursAgo)
-	if err != nil {
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"action": "Processor::processCriteria: failed to get recent jobs for criteria",
-		})
-		return fmt.Errorf("failed to get recent jobs for criteria %s: %w", criteria.ID, err)
-	}
-
-	if len(jobIDs) == 0 {
-		p.logger.Info("no new jobs found for criteria, skipping", "id", criteria.ID)
-		return nil
-	}
-
 	// Extract user IDs from subscriptions
 	userIDs := make([]string, len(subscribers))
 	for i, sub := range subscribers {
 		userIDs[i] = sub.UserID
 	}
 
-	p.logger.Info("found new jobs for criteria", "jobs-count", len(jobIDs), "id", criteria.ID, "user-count", len(userIDs))
+	p.logger.Info("found new jobs for criteria", "id", criteria.ID, "user-count", len(userIDs))
 
 	// Get all users in one call
 	users, err := internal.GetUsersByIDs(ctx, p.fs, userIDs)
@@ -370,7 +355,7 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 
 	for _, user := range users {
 		p.logger.Info("refreshing user jobs", "user-id", user.ID, "criteria-id", criteria.ID)
-		if err := RefreshUserJobs(ctx, p.fs, p.psh, p.logger, *user, criteria, jobIDs); err != nil {
+		if err := RefreshUserJobs(ctx, p.fs, p.psh, p.logger, *user, criteria); err != nil {
 			// Log error but continue with other users
 			p.logger.Error("Error processing jobs for user", "user-id", user.ID, "error", err)
 			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
@@ -417,63 +402,3 @@ func (p *Processor) IsWithinAllowedHours() bool {
 		return currentHour >= p.settings.StartHour && currentHour < p.settings.EndHour
 	}
 }
-
-/*
-func (app *application) saveUploadedFile(file multipart.File, filepath string) error {
-	// Read the entire file into a byte slice
-	b, err := io.ReadAll(file)
-	if err != nil {
-		return fmt.Errorf("couldn't read file: %v", err)
-	}
-
-	fileSize := int64(len(b))
-
-	// Convert the byte slice back into a reader
-	fileReader := bytes.NewReader(b)
-
-	// Create the S3 Bucket object
-	bucket := os.Getenv("SPACES_BUCKET")
-
-	app.logger.Info("Uploading file to DigitalOcean Spaces", "bucket", bucket, "key", filepath, "size", fileSize)
-
-	// Create the parameters for the upload
-	params := &s3.PutObjectInput{
-		Bucket:        aws.String(bucket),
-		Key:           aws.String(filepath),
-		Body:          fileReader,
-		ACL:           aws.String("public-read"), // or "public-read" if you want the file to be publicly accessible
-		ContentLength: aws.Int64(fileSize),
-	}
-
-	// Upload the file to S3
-	_, err = app.s3.PutObject(params)
-	if err != nil {
-		return fmt.Errorf("couldn't upload file: %v", err)
-	}
-
-	return nil
-}
-
-func (app *application) deleteImageByName(imageName string) error {
-	// Create the S3 Bucket object
-	bucket := os.Getenv("SPACES_BUCKET")
-
-	app.logger.Info("Deleting file from DigitalOcean Spaces", "bucket", bucket, "key", imageName)
-
-	// Create the parameters for the delete operation
-	params := &s3.DeleteObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(imageName),
-	}
-
-	// Delete the object from S3
-	_, err := app.s3.DeleteObject(params)
-	if err != nil {
-		return fmt.Errorf("couldn't delete file: %v", err)
-	}
-
-	app.logger.Info("File deleted successfully", "bucket", bucket, "key", imageName)
-
-	return nil
-}
-*/

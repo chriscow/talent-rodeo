@@ -211,3 +211,8 @@ func (jed *JobEventDispatch) OnAllExtractionsComplete(task SearchTask, totalJobs
 		}()
 	}
 }
+
+// Waiter is an interface for waiting on a specific event.
+type Waiter interface {
+	Wait() <-chan struct{}
+}
