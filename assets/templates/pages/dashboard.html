@@ -33,6 +33,7 @@
         {{if .NextSearchTime}}
             {{if lt .NextSearchTime.Unix (now.Unix)}}
                 <p id="next-search-time">Your job update is starting shortly.</p>
+                <progress style="width: 50%; margin: auto;"></progress>
             {{else}}
                 <p id="next-search-time">Your next job update will start processing {{.NextSearchTime | approxFuture}}.</p>
             {{end}}

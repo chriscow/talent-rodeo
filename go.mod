@@ -4,21 +4,16 @@ go 1.24
 
 toolchain go1.24.0
 
-replace (
-// 	github.com/chriscow/go-openai-realtime => ../go-openai-realtime
-	// github.com/chriscow/minds => ../thoughtnet/minds
-	// github.com/chriscow/minds/tools => ../thoughtnet/minds/tools
-// 	github.com/chriscow/minds/providers/gemini => ../thoughtnet/minds/providers/gemini
-// 	github.com/chriscow/minds/providers/openai => ../thoughtnet/minds/providers/openai
-// 	github.com/chriscow/vapi-go => ../vapi-go
-)
-
 require (
 	cloud.google.com/go/firestore v1.18.0
 	firebase.google.com/go/v4 v4.15.2
 	github.com/ThreeDotsLabs/watermill v1.4.4
 	github.com/alexedwards/flow v0.1.0
-	github.com/chriscow/minds v0.0.8-0.20250611164108-8c44fd9f3d71
+	github.com/chriscow/minds v0.0.8-0.20250612003644-10b6847e6d80
+	github.com/chriscow/minds/providers/gemini v0.0.5-0.20250303171538-dc7c074db869
+	github.com/chriscow/minds/providers/openai v0.0.5
+	github.com/chriscow/minds/tools v0.0.3-0.20250612003644-10b6847e6d80
+	github.com/chriscow/vapi-go v0.0.0-20250527195805-6e2047355010
 	github.com/fatih/color v1.16.0
 	github.com/fumiama/go-docx v0.0.0-20241231153056-9f8f327c74a5
 	github.com/go-playground/form/v4 v4.2.1
@@ -67,10 +62,6 @@ require (
 	github.com/alexedwards/scs/v2 v2.8.0
 	github.com/aws/aws-sdk-go v1.55.6
 	github.com/cheggaaa/pb v1.0.29
-	github.com/chriscow/minds/providers/gemini v0.0.5-0.20250303171538-dc7c074db869
-	github.com/chriscow/minds/providers/openai v0.0.5
-	github.com/chriscow/minds/tools v0.0.3-0.20250611164108-8c44fd9f3d71
-	github.com/chriscow/vapi-go v0.0.0-20250527195805-6e2047355010
 	github.com/cloudflare/cloudflare-go v0.115.0
 	github.com/dgraph-io/ristretto/v2 v2.2.0
 	github.com/getsentry/sentry-go v0.32.0

@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"talent-rodeo/internal/smtp"
+	"talent-rodeo/internal/subscription"
 
 	// Removing self-import of internal package
 	"talent-rodeo/assets"
@@ -281,7 +282,7 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 			// If a new criteria was created, we need to queue an immediate search.
 			// We also increase / broaden the first search for a new criteria.
 			//
-			maxPages := internal.DefaultMaxPages * 5 // Increase the first search to get more results
+			maxPages := internal.DefaultMaxPages //* 5 // Increase the first search to get more results
 			testing := os.Getenv("TESTING_MODE") == "true"
 			if testing {
 				maxPages = 2
@@ -306,6 +307,15 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 			}
 			logger.Debug("search task created", "userID", user.ID, "job-search-id", jobSearch.ID)
 
+			handlerID := fmt.Sprintf("search-completion-%s", jobSearch.ID)
+			completionHandler := newSearchCompletionHandler(jobSearch.ID, user.ID, logger)
+			if err := dispatch.Register(handlerID, completionHandler); err != nil {
+				logger.Error("failed to register search completion handler", "error", err, "userID", user.ID, "job-search-id", jobSearch.ID)
+				internal.ProcessAppointmentFailed(ctx, fs, user, appointment, fmt.Errorf("failed to register search completion handler: %w", err))
+				return
+			}
+			defer dispatch.Deregister(handlerID)
+
 			logger.Debug("queueing search", "userID", user.ID, "job-search-id", jobSearch.ID)
 			if err := queue.QueueSearch(ctx, *jobSearch); err != nil {
 				logger.Error("failed to queue search", "error", err, "userID", user.ID, "job-search-id", jobSearch.ID)
@@ -322,21 +332,25 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 			}
 			logger.Debug("search queued successfully", "userID", user.ID, "job-search-id", jobSearch.ID)
 			internal.SendPusherMessage(psh, user.ID, "", nil)
-		} else {
-			logger.Debug("refreshing user jobs", "userID", user.ID, "criteria-id", searchCriteria.Criteria.ID)
-			internal.SendPusherMessage(psh, user.ID, "Refreshing your results", nil)
-			// if err := internal.RefreshUserJobs(ctx, fs, user, *criteria, 0); err != nil {
-			// 	logger.Error("failed to refresh user jobs", "error", err)
-			// 	hub.CaptureException(err)
-			// 	return
-			// }
-			internal.SendPusherRedirect(psh, user.ID, "/dashboard")
+
+			// Block here until the initial search is complete.
+			logger.Info("waiting for initial search to complete", "userID", user.ID, "job-search-id", jobSearch.ID, "timeout", "10m")
+			select {
+			case <-completionHandler.Wait():
+				logger.Info("initial search completed", "userID", user.ID, "job-search-id", jobSearch.ID)
+			case <-time.After(30 * time.Minute):
+				logger.Error("timed out waiting for initial search to complete", "userID", user.ID, "job-search-id", jobSearch.ID)
+				internal.SentryReportError(ctx, fmt.Errorf("timed out waiting for search %s", jobSearch.ID), sentry.LevelError, map[string]string{
+					"user_id":        user.ID,
+					"appointment_id": appointment.ID,
+					"job_search_id":  jobSearch.ID,
+					"step":           "WaitForInitialSearch",
+				})
+			}
 		}
 
-		logger.Debug(internal.Blue("⏱️ appointment processing took"), "duration", time.Since(start).String())
-
 		//
-		// Set the apppointment status to completed
+		// We set the user status to call completed so they will be redirected to the dashboard on the next refresh.
 		//
 		logger.Debug("marking appointment as completed", "userID", user.ID, "appointment-id", appointment.ID)
 		if err := internal.ProcessAppointmentComplete(ctx, fs, user, appointment); err != nil {
@@ -351,11 +365,24 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 			internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
 			return
 		}
-		logger.Debug("appointment marked as completed", "userID", user.ID, "appointment-id", appointment.ID)
+
+		internal.SendPusherMessage(psh, user.ID, "Refreshing your results", nil)
+		internal.SendPusherRedirect(psh, user.ID, "/dashboard")
+
+		logger.Debug("refreshing user jobs", "userID", user.ID, "criteria-id", searchCriteria.Criteria.ID)
+		if err := subscription.RefreshUserJobs(ctx, fs, psh, logger, *user, searchCriteria.Criteria); err != nil {
+			logger.Error("failed to refresh user jobs", "error", err)
+			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+				"user_id":    user.ID,
+				"user_email": user.Email,
+				"step":       "refreshUserJobs",
+			})
+		}
 	}
 
 	SendRecapEmail(ctx, fs, user, appointment, transcript, smtpCfg, logger)
 
+	logger.Debug(internal.Blue("⏱️ appointment processing took"), "duration", time.Since(start).String())
 	logger.Debug(internal.Green("✅ appointment processing completed"), "userID", user.ID, "appointment-id", appointment.ID)
 }
 
@@ -817,6 +844,60 @@ func extractUserStatement(_ context.Context, data string) (string, error) {
 	}
 
 	return statement, nil
+}
+
+// searchCompletionHandler waits for a specific search task to complete.
+type searchCompletionHandler struct {
+	doneCh       chan struct{}
+	searchTaskID string
+	userID       string
+	logger       *slog.Logger
+}
+
+// newSearchCompletionHandler creates a new searchCompletionHandler.
+func newSearchCompletionHandler(searchTaskID string, userID string, logger *slog.Logger) *searchCompletionHandler {
+	return &searchCompletionHandler{
+		doneCh:       make(chan struct{}),
+		searchTaskID: searchTaskID,
+		userID:       userID,
+		logger:       logger.With("component", "searchCompletionHandler", "searchTaskID", searchTaskID, "userID", userID),
+	}
+}
+
+// Wait implements the Waiter interface.
+func (h *searchCompletionHandler) Wait() <-chan struct{} {
+	return h.doneCh
+}
+
+func (h *searchCompletionHandler) OnSearchStarted(task internal.SearchTask, userID *string) {}
+func (h *searchCompletionHandler) OnJobListing(task internal.SearchTask, listing internal.JobListing, userID *string) {
+}
+func (h *searchCompletionHandler) OnJobDetail(task internal.SearchTask, listing internal.JobListing, details internal.JobDetail, userID *string) {
+}
+func (h *searchCompletionHandler) OnPageComplete(task internal.SearchTask, page int, jobsFound int, errors []error, userID *string) {
+}
+func (h *searchCompletionHandler) OnSearchCompleted(task internal.SearchTask, totalJobs int, errors []error, userID *string) {
+}
+func (h *searchCompletionHandler) OnJobDetailExtractionComplete(task internal.SearchTask, jobDetail internal.JobDetail, userID *string) {
+}
+
+func (h *searchCompletionHandler) OnAllExtractionsComplete(task internal.SearchTask, totalJobs int, userID *string) {
+	if task.ID != h.searchTaskID {
+		return
+	}
+
+	uid := "nil"
+	if userID != nil {
+		uid = *userID
+	}
+	h.logger.Debug("received OnAllExtractionsComplete", "task.ID", task.ID, "totalJobs", totalJobs, "userID", uid)
+
+	if h.userID != "" && userID != nil && h.userID == *userID {
+		h.logger.Debug("all extractions complete event received, closing done channel")
+		close(h.doneCh)
+	} else {
+		h.logger.Warn("user ID mismatch for all extractions complete event", "event-user-id", uid, "handler-user-id", h.userID)
+	}
 }
 
 // func (p *processor) getJobDescription(ctx context.Context, resume *internal.Resume, appointment *internal.Appointment) error {

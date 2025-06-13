@@ -256,7 +256,7 @@ func (p *UserJobProcessor) checkUserOnDashboard() (bool, error) {
 }
 
 // RefreshUserJobs evaluates new jobs for a user against their preferences.
-func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pusher.Client, logger *slog.Logger, user internal.User, criteria internal.SearchCriteria, jobIDs []string) error {
+func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pusher.Client, logger *slog.Logger, user internal.User, criteria internal.SearchCriteria) error {
 	if logger == nil {
 		// Create a silent logger (discards all output) or stderr logger based on environment
 		// Set REFRESH_USER_JOBS_LOG=stderr to log to stderr, otherwise logs are discarded
@@ -274,12 +274,16 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 		logger = slog.New(handler).With("pkg", "RefreshUserJobs")
 	}
 
+	weekAgo := time.Now().Add(-7 * 24 * time.Hour)
+	jobIDs, err := internal.GetJobIDsForCriteriaCreatedAfter(ctx, fs, criteria.ID, weekAgo)
+	if err != nil {
+		logger.Error("failed to get job ids for criteria created after", "error", err)
+		return err
+	}
+
 	userJobs, err := internal.GetUserJobs(ctx, fs, user.ID)
 	if err != nil {
 		return fmt.Errorf("failed to get user jobs: %w", err)
-	}
-	if len(userJobs) > 0 {
-		logger.Info("user jobs already exist, skipping", "jobCount", len(userJobs))
 	}
 
 	// TODO: remove job IDs that the user already has
@@ -298,6 +302,7 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 
 	if len(jobIDs) == 0 {
 		logger.Info("no new jobs found for user/criteria", "userID", user.ID, "criteriaID", criteria.ID)
+		internal.SendPusherRedirect(psh, user.ID, "/dashboard")
 		return nil // No new jobs to process
 	}
 
