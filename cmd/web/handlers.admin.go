@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"talent-rodeo/internal"
@@ -397,6 +398,13 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 	for _, job := range jobs {
 		jobsSlice = append(jobsSlice, job)
 	}
+	// Resort jobsSlice by UserJob.Rating descending
+	sort.Slice(jobsSlice, func(i, j int) bool {
+		if jobsSlice[i].UserJob != nil && jobsSlice[j].UserJob != nil {
+			return jobsSlice[i].UserJob.Rating > jobsSlice[j].UserJob.Rating
+		}
+		return false
+	})
 	data["HasJobs"] = len(jobs) > 0 || statusJobCount > 0
 	data["Jobs"] = jobsSlice
 	data["NextPageToken"] = nextPageToken
