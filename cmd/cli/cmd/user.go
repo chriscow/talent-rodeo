@@ -39,12 +39,18 @@ func init() {
 	matchUserCmd.MarkFlagRequired("user")
 	matchUserCmd.Flags().IntVarP(&topK, "topk", "t", 3, "Number of top jobs to return")
 	matchUserCmd.Flags().BoolVarP(&allUsers, "all", "a", false, "Match jobs for all users instead of a single user")
+
+	// UserJobs update command
+	userJobsUpdateCmd.Flags().Bool("all-users", false, "Update jobs for all users")
+	userJobsUpdateCmd.Flags().String("user-id", "", "User ID to update jobs for (if not using --all-users)")
+	userJobsCmd.AddCommand(userJobsUpdateCmd)
+	RootCmd.AddCommand(userJobsCmd)
 }
 
 var usersCmd = &cobra.Command{
-	Use:   "users",
-	Short: "Manage users",
-	Long:  `Users command allows you to manage users in the system`,
+	Use:   "user",
+	Short: "Manage a user",
+	Long:  `User command allows you to manage a user in the system`,
 }
 
 var createUserCmd = &cobra.Command{
