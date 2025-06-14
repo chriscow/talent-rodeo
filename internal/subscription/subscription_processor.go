@@ -276,6 +276,7 @@ func (p *Processor) process(ctx context.Context) error {
 	// - LastSearchedAt within the last 24 hours
 	// - SubscriberCount > 0
 	twentyFourHoursAgo := time.Now().Add(-24 * time.Hour)
+	twoHoursAgo := time.Now().Add(-2 * time.Hour)
 	var eligibleCriteria []internal.SearchCriteria
 
 	for _, criteria := range allCriteria {
@@ -286,7 +287,7 @@ func (p *Processor) process(ctx context.Context) error {
 		}
 
 		// Must not have been published recently
-		if criteria.LastPublishedAt != nil && criteria.LastPublishedAt.After(twentyFourHoursAgo) {
+		if criteria.LastPublishedAt != nil && criteria.LastPublishedAt.After(twoHoursAgo) {
 			continue
 		}
 
