@@ -19,8 +19,7 @@ import (
 
 const (
 	// DefaultTickInterval is the default interval for processing subscriptions
-	DefaultTickInterval = 4 * time.Hour
-
+	DefaultTickInterval = 5 * time.Minute
 	// FeatureFlag for subscription processor
 	SubscriptionProcessorKey = "subscription-processor"
 
