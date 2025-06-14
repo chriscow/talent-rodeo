@@ -146,13 +146,13 @@ func GetSearchCriteria(ctx context.Context, fs *FirestoreClient, id string) (*Se
 	return criteria, true, nil
 }
 
-// GetSearchCriteriaNeedsSearch retrieves all search criteria from Firestore
-// that either have never been searched (LastSearchedAt is nil) or haven't
-// been searched in the last 24 hours, and don't already have incomplete search tasks.
+// GetSearchCriteriaNeedsSearch retrieves all search criteria that either have never been searched (LastSearchedAt is nil)
+// or haven't been searched in the last 24 hours, and don't already have incomplete search tasks.
 func GetSearchCriteriaNeedsSearch(ctx context.Context, fs *FirestoreClient) ([]SearchCriteria, error) {
 	if fs == nil {
 		return nil, fmt.Errorf("firestore client is nil")
 	}
+
 	ids, err := ListSubscribedCriteriaIDs(ctx, fs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list subscribed criteria IDs: %w", err)
@@ -161,61 +161,41 @@ func GetSearchCriteriaNeedsSearch(ctx context.Context, fs *FirestoreClient) ([]S
 		// No subscribed criteria, return empty slice
 		return []SearchCriteria{}, nil
 	}
+	idSet := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		idSet[id] = struct{}{}
+	}
 
 	// Get incomplete search tasks to exclude criteria that are already being processed
 	incompleteTasks, err := GetIncompleteSearchTasks(ctx, fs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get incomplete search tasks: %w", err)
 	}
-
-	// Create a set of criteria IDs that already have incomplete tasks
-	excludedCriteriaIDs := make(map[string]bool)
+	excludedCriteriaIDs := make(map[string]struct{})
 	for _, task := range incompleteTasks {
-		excludedCriteriaIDs[task.Criteria.ID] = true
+		excludedCriteriaIDs[task.Criteria.ID] = struct{}{}
 	}
 
-	coll := fs.Collection(searchCriteriaCollection)
-	// Filter the collection to only include criteria that are subscribed
-	baseQuery := coll.WhereEntity(firestore.PropertyFilter{Path: "ID", Operator: "in", Value: ids})
+	allCriteria, err := ListSearchCriteria(ctx, fs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list search criteria: %w", err)
+	}
 
-	// Calculate 24 hours ago
 	twentyFourHoursAgo := time.Now().Add(-24 * time.Hour)
-
-	// Add condition for search timing using an OR filter
-	q := baseQuery.WhereEntity(firestore.OrFilter{
-		Filters: []firestore.EntityFilter{
-			firestore.PropertyFilter{Path: "LastSearchedAt", Operator: "==", Value: nil},
-			firestore.PropertyFilter{Path: "LastSearchedAt", Operator: "<", Value: twentyFourHoursAgo},
-		},
-	})
-
-	iter := q.Documents(ctx)
-	defer iter.Stop() // Ensure the iterator is properly closed
-
 	var items []SearchCriteria
-	for {
-		doc, err := iter.Next()
-		if err != nil {
-			if err == iterator.Done {
-				break // End of results
-			}
-			// Return any other error encountered during iteration
-			return nil, fmt.Errorf("failed iterating search criteria: %w", err)
-		}
-
-		var criteria SearchCriteria
-		if err := doc.DataTo(&criteria); err != nil {
-			// Log or handle documents that fail to parse, maybe continue?
-			// For now, return the error to avoid partial results.
-			return nil, fmt.Errorf("failed parsing criteria data (ID: %s): %w", doc.Ref.ID, err)
-		}
-
-		// Skip criteria that already have incomplete search tasks
-		if excludedCriteriaIDs[criteria.ID] {
+	for _, criteria := range allCriteria {
+		// Only include criteria with subscribers
+		if _, ok := idSet[criteria.ID]; !ok {
 			continue
 		}
-
-		items = append(items, criteria)
+		// Exclude criteria with incomplete search tasks
+		if _, ok := excludedCriteriaIDs[criteria.ID]; ok {
+			continue
+		}
+		// Only include if never searched or not searched in last 24 hours
+		if criteria.LastSearchedAt == nil || criteria.LastSearchedAt.Before(twentyFourHoursAgo) {
+			items = append(items, criteria)
+		}
 	}
 
 	return items, nil
