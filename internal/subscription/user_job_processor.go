@@ -182,6 +182,7 @@ func (p *UserJobProcessor) evaluateJob(ctx context.Context, task userJobEvaluati
 		UserID:           p.userID,
 		CreatedAt:        time.Now(),
 		Status:           status,
+		Rating:           matchAnalysis.Rating.NumericRating,
 		JobMatchAnalysis: matchAnalysis,
 		JobRef:           p.fs.Collection(internal.JobDetailsCollection).Doc(task.Job.ID),
 	}
