@@ -119,31 +119,10 @@ var matchUserCmd = &cobra.Command{
 
 			fmt.Printf("Processing %d new jobs for user %s...\n", len(newJobIDs), user.ID)
 
-			// Process jobs for each subscription's criteria
+			// Refresh jobs for each subscription's criteria
 			for criteriaID, criteria := range subscriptionMap {
-				// Filter jobs that match this criteria
-				criteriaJobIDs, err := internal.GetJobIDsForCriteria(ctx, fs, criteriaID)
-				if err != nil {
-					continue // Skip this criteria if we can't get its jobs
-				}
-
-				// Find intersection of new jobs and this criteria's jobs
-				criteriaNewJobs := []string{}
-				criteriaJobSet := map[string]struct{}{}
-				for _, id := range criteriaJobIDs {
-					criteriaJobSet[id] = struct{}{}
-				}
-
-				for _, jobID := range newJobIDs {
-					if _, exists := criteriaJobSet[jobID]; exists {
-						criteriaNewJobs = append(criteriaNewJobs, jobID)
-					}
-				}
-
-				if len(criteriaNewJobs) > 0 {
-					fmt.Printf("Refreshing %d jobs for criteria %s...\n", len(criteriaNewJobs), criteriaID)
-					subscription.RefreshUserJobs(ctx, fs, nil, nil, *user, criteria, criteriaNewJobs)
-				}
+				fmt.Printf("Refreshing jobs for criteria %s...\n", criteriaID)
+				subscription.RefreshUserJobs(ctx, fs, nil, nil, *user, criteria)
 			}
 		}
 

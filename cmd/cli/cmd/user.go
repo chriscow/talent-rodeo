@@ -26,9 +26,10 @@ func init() {
 	// Add flags
 	listUsersCmd.Flags().IntP("limit", "l", 100, "Maximum number of users to return per page")
 	listUsersCmd.Flags().IntP("offset", "o", 0, "Number of users to skip")
-	deleteUserCmd.Flags().StringP("id", "i", "", "Delete user by ID")
+
+	deleteUserCmd.Flags().StringP("user-id", "u", "", "Delete user by ID")
 	deleteUserCmd.Flags().StringP("email", "e", "", "Delete user by email")
-	deleteUserCmd.Flags().StringP("prefix", "p", "", "Delete all users with this prefix")
+	deleteUserCmd.Flags().StringP("prefix", "p", "", "Delete all users with this ID prefix")
 
 	createUserCmd.Flags().StringP("name", "n", "", "Name of the user")
 	createUserCmd.Flags().StringP("email", "e", "", "Email of the user")
@@ -146,12 +147,12 @@ var deleteUserCmd = &cobra.Command{
 	Short: "Delete user(s)",
 	Long:  `Delete user(s) by ID, email, or prefix`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, _ := cmd.Flags().GetString("id")
+		id, _ := cmd.Flags().GetString("user-id")
 		email, _ := cmd.Flags().GetString("email")
 		prefix, _ := cmd.Flags().GetString("prefix")
 
 		if id == "" && email == "" && prefix == "" {
-			return fmt.Errorf("must specify either --id, --email, or --prefix")
+			return fmt.Errorf("must specify either --user-id, --email, or --prefix")
 		}
 
 		ctx := context.Background()

@@ -14,7 +14,7 @@ replace (
 require (
 	cloud.google.com/go/firestore v1.18.0
 	firebase.google.com/go v3.13.0+incompatible
-	github.com/chriscow/minds v0.0.8-0.20250611164108-8c44fd9f3d71
+	github.com/chriscow/minds v0.0.8-0.20250612003644-10b6847e6d80
 	github.com/joho/godotenv v1.5.1
 	github.com/mark3labs/mcp-go v0.26.0
 	google.golang.org/api v0.234.0

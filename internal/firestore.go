@@ -218,6 +218,76 @@ func DeleteCollection(ctx context.Context, fs *FirestoreClient, collectionPath s
 	return nil
 }
 
+func (fs *FirestoreClient) DeleteCollectionTx(ctx context.Context, tx *firestore.Transaction, collectionPath string, batchSize int, recursive bool) error {
+	if tx == nil {
+		return fmt.Errorf("DeleteCollectionTx: transaction is nil")
+	}
+
+	colRef := fs.Collection(collectionPath)
+	if colRef == nil {
+		return fmt.Errorf("DeleteCollectionTx: collection %s is nil", collectionPath)
+	}
+
+	// Keep deleting documents until the collection is empty
+	for {
+		// Get a batch of documents
+		iter := colRef.Limit(batchSize).Documents(ctx)
+		if iter == nil {
+			return fmt.Errorf("DeleteCollectionTx: iterator for collection %s is nil", collectionPath)
+		}
+
+		numDeleted := 0
+
+		// Iterate through the documents, adding delete operations to the BulkWriter
+		for {
+			doc, err := iter.Next()
+			if err == iterator.Done {
+				break
+			}
+			if err != nil {
+				return fmt.Errorf("DeleteCollectionTx: failed to get document in collection %s: %w", collectionPath, err)
+			}
+
+			if doc == nil {
+				return fmt.Errorf("DeleteCollectionTx: document in collection %s is nil", collectionPath)
+			}
+
+			// If recursive, delete all subcollections for this document first
+			if recursive {
+				subcollections := doc.Ref.Collections(ctx)
+				if subcollections == nil {
+					return fmt.Errorf("DeleteCollectionTx: subcollections for document %s is nil", doc.Ref.Path)
+				}
+
+				for {
+					subCol, err := subcollections.Next()
+					if err == iterator.Done {
+						break
+					}
+					if err != nil {
+						return fmt.Errorf("DeleteCollectionTx: failed to get subcollection: %w", err)
+					}
+
+					if subCol == nil {
+						return fmt.Errorf("DeleteCollectionTx: subcollection for document %s is nil", doc.Ref.Path)
+					}
+
+					// Recursively delete the subcollection
+					err = fs.DeleteCollectionTx(ctx, tx, subCol.Path, batchSize, recursive)
+					if err != nil {
+						return fmt.Errorf("DeleteCollectionTx: failed to delete subcollection %s: %w", subCol.Path, err)
+					}
+				}
+			}
+
+			tx.Delete(doc.Ref, firestore.Exists)
+			numDeleted++
+		}
+	}
+
+	return nil
+}
+
 func (fs *FirestoreClient) GetUserFromCache(id string) (*User, bool) {
 	if fs.userCache == nil {
 		return nil, false

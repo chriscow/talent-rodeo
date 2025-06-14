@@ -282,7 +282,7 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 			// If a new criteria was created, we need to queue an immediate search.
 			// We also increase / broaden the first search for a new criteria.
 			//
-			maxPages := internal.DefaultMaxPages //* 5 // Increase the first search to get more results
+			maxPages := internal.DefaultMaxPages * 3 // Increase the first search to get more results
 			testing := os.Getenv("TESTING_MODE") == "true"
 			if testing {
 				maxPages = 2

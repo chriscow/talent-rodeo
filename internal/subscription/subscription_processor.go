@@ -23,6 +23,8 @@ const (
 
 	// FeatureFlag for subscription processor
 	SubscriptionProcessorKey = "subscription-processor"
+
+	subscriptionConcurrency = 5
 )
 
 type ProcessorSettings struct {
@@ -353,19 +355,32 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 		return fmt.Errorf("failed to get users: %w", err)
 	}
 
+	// Use a semaphore to limit concurrency to 5
+	sem := make(chan struct{}, subscriptionConcurrency)
+	var wg sync.WaitGroup
+
 	for _, user := range users {
-		p.logger.Info("refreshing user jobs", "user-id", user.ID, "criteria-id", criteria.ID)
-		if err := RefreshUserJobs(ctx, p.fs, p.psh, p.logger, *user, criteria); err != nil {
-			// Log error but continue with other users
-			p.logger.Error("Error processing jobs for user", "user-id", user.ID, "error", err)
-			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-				"source":      "subscription_processor",
-				"criteria_id": criteria.ID,
-				"user_id":     user.ID,
-			})
-			continue
-		}
+		sem <- struct{}{} // acquire a slot
+		wg.Add(1)
+		go func(user *internal.User) {
+			defer func() {
+				<-sem // release the slot
+				wg.Done()
+			}()
+			p.logger.Info("refreshing user jobs", "user-id", user.ID, "criteria-id", criteria.ID)
+			if err := RefreshUserJobs(ctx, p.fs, p.psh, p.logger, *user, criteria); err != nil {
+				// Log error but continue with other users
+				p.logger.Error("Error processing jobs for user", "user-id", user.ID, "error", err)
+				internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+					"source":      "subscription_processor",
+					"criteria_id": criteria.ID,
+					"user_id":     user.ID,
+				})
+			}
+		}(user)
 	}
+
+	wg.Wait()
 
 	// Update LastPublishedAt for this criteria
 	now := time.Now()
