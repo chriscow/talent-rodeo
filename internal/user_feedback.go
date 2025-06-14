@@ -100,6 +100,34 @@ func GetUserFeedback(ctx context.Context, fs *FirestoreClient, id string) (*User
 	return &feedback, true, nil
 }
 
+func ListUserFeedback(ctx context.Context, fs *FirestoreClient, userID string) ([]*UserFeedback, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("firestore client is nil")
+	}
+	iter := fs.Collection(userFeedbackCollection).
+		Where("UserID", "==", userID).
+		Documents(ctx)
+
+	var feedbacks []*UserFeedback
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to iterate user feedback: %w", err)
+		}
+
+		var feedback UserFeedback
+		if err := doc.DataTo(&feedback); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal user feedback data: %w", err)
+		}
+		feedbacks = append(feedbacks, &feedback)
+	}
+
+	return feedbacks, nil
+}
+
 // GetUnprocessedUserFeedback retrieves all unprocessed feedback for a specific user
 func GetUnprocessedUserFeedback(ctx context.Context, fs *FirestoreClient, userID string) ([]*UserFeedback, error) {
 	if fs == nil {
@@ -352,6 +380,29 @@ func DeleteUserFeedback(ctx context.Context, fs *FirestoreClient, userID string)
 		if _, err := batch.Commit(ctx); err != nil {
 			return fmt.Errorf("failed to delete remaining user feedback: %w", err)
 		}
+	}
+
+	return nil
+}
+
+func DeleteUserFeedbackTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, userID string) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
+
+	iter := fs.Collection(userFeedbackCollection).
+		Where("UserID", "==", userID).
+		Documents(ctx)
+
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("failed to iterate user feedback for deletion: %w", err)
+		}
+		tx.Delete(doc.Ref, firestore.Exists)
 	}
 
 	return nil

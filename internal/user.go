@@ -366,28 +366,73 @@ func DeleteUser(ctx context.Context, fs *FirestoreClient, id string) error {
 	if fs == nil {
 		return fmt.Errorf("firestore client is nil")
 	}
-	// Find all subcollections and delete each one
-	subcollections := fs.Collection(usersCollection).Doc(id).Collections(ctx)
-	for {
-		colRef, err := subcollections.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("failed to get subcollection: %w", err)
-		}
 
-		// Delete this subcollection using the generic DeleteCollection function
-		if err := DeleteCollection(ctx, fs, colRef.Path, 100, true); err != nil {
-			return fmt.Errorf("failed to delete subcollection %s: %w", colRef.Path, err)
-		}
+	subscriptions, err := GetSubscriptionsForUser(ctx, fs, id)
+	if err != nil {
+		return fmt.Errorf("failed to get user subscriptions: %w", err)
 	}
 
-	// Now delete the main user document
-	_, err := fs.Collection(usersCollection).Doc(id).Delete(ctx)
+	feedbacks, err := ListUserFeedback(ctx, fs, id)
+	if err != nil {
+		return fmt.Errorf("failed to get user feedback: %w", err)
+	}
+
+	err = fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		if tx == nil {
+			return fmt.Errorf("transaction is nil")
+		}
+
+		// Find all subcollections and delete each one
+		subcollections := fs.Collection(usersCollection).Doc(id).Collections(ctx)
+		for {
+			colRef, err := subcollections.Next()
+			if err == iterator.Done {
+				break
+			}
+			if err != nil {
+				return fmt.Errorf("failed to get subcollection: %w", err)
+			}
+
+			if colRef == nil {
+				return fmt.Errorf("DeleteCollectionTx: subcollection for document %s is nil", id)
+			}
+
+			path := fs.Collection(colRef.Path)
+			if path == nil {
+				continue
+			}
+
+			// Delete this subcollection using the generic DeleteCollection function
+			if err := fs.DeleteCollectionTx(ctx, tx, colRef.Path, 100, true); err != nil {
+				return fmt.Errorf("failed to delete subcollection %s: %w", colRef.Path, err)
+			}
+		}
+
+		// Now delete the main user document
+		userRef := fs.Collection(usersCollection).Doc(id)
+		if err := tx.Delete(userRef, firestore.Exists); err != nil {
+			return fmt.Errorf("failed to delete user: %w", err)
+		}
+
+		for _, subscription := range subscriptions {
+			if err := UnsubscribeFromCriteriaTx(ctx, fs, tx, id, subscription.CriteriaID); err != nil {
+				return fmt.Errorf("failed to unsubscribe from criteria %s: %w", subscription.CriteriaID, err)
+			}
+		}
+
+		for _, feedback := range feedbacks {
+			if err := DeleteUserFeedbackTx(ctx, fs, tx, feedback.ID); err != nil {
+				return fmt.Errorf("failed to delete user feedback %s: %w", feedback.ID, err)
+			}
+		}
+
+		return nil
+	})
+
 	if err != nil {
 		return fmt.Errorf("failed to delete user: %w", err)
 	}
+
 	fs.EvictUserCache(id)
 	return nil
 }
