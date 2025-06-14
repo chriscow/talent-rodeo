@@ -383,6 +383,18 @@ func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, listing JobLis
 }
 
 func (s *SearchResultProcessor) saveAndLinkJobDetail(ctx context.Context, jobSearch SearchTask, jobDetail JobDetail) error {
+	detail, found, err := GetJobDetail(ctx, s.fs, jobDetail.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get job detail: %w", err)
+	}
+	if found {
+		if detail.ExtractedData != nil {
+			return nil
+		}
+
+		jobDetail = *detail
+	}
+
 	return s.fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		if err := SaveJobDetailTx(ctx, s.fs, tx, &jobDetail); err != nil {
 			s.logger.Error("failed to save job detail", "error", err, "jobID", jobDetail.ID)
