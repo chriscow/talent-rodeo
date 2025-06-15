@@ -53,9 +53,18 @@ Then, follow these steps to complete your analysis:
       </rating_explaination>
    </rating>
 
-   <follow_up_questions>
-   If the job may be a match (rating 3 or better), list any follow-up questions that the AI assistant should ask the user to determine if similar jobs would be a good match. Don't assume the user has seen the job under analysis.  If the match is poor (rating 2 or lower) leave this section blank.
-   </follow_up_questions>
-   </job_match_analysis>
+   <follow_up_questions> 
+    If the job may be a match (rating 3 or better), list
+    any follow-up questions that the AI assistant should ask the user to
+    determine if similar jobs would be a good match. Don't assume the user has
+    seen the job under analysis.  If the match is poor (rating 2 or lower) leave
+    this section blank. 
+    List each question on a new line starting with a "-" like this:
+    - Question 1
+    - Question 2
+    - Question 3
+    - ...
+   </follow_up_questions> 
+</job_match_analysis>
 
 Important: Base your analysis solely on the facts provided in the transcript, resume, and job description. Do not make assumptions or include information not present in these sources. Your final output should only include the content within the <job_match_analysis> tags.
