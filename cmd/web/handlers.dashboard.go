@@ -219,7 +219,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.logger.Debug("showDashboard", "name", user.Name, "user_id", user.ID, "status", user.State.Status.String())
+	app.logger.Debug("showDashboard", "name", user.Name, "userID", user.ID, "status", user.State.Status.String())
 
 	status, isValid := internal.ParseJobStatus(r.URL.Query().Get("status"))
 	if !isValid {
@@ -305,7 +305,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 	var nextSearchTime time.Time
 	subscriptions, err := internal.GetSubscriptionsForUser(r.Context(), app.fs, user.ID)
 	if err != nil {
-		app.logger.Error("failed to get user subscriptions", "error", err, "user_id", user.ID)
+		app.logger.Error("failed to get user subscriptions", "error", err, "userID", user.ID)
 	} else {
 		for _, sub := range subscriptions {
 			criteria, found, err := internal.GetSearchCriteria(r.Context(), app.fs, sub.CriteriaID)
@@ -328,7 +328,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 		internal.SentryReportError(r.Context(), fmt.Errorf("next search time is in the past"), sentry.LevelError, map[string]string{
 			"error_type":  "database_retrieval",
 			"entity_type": "search_criteria",
-			"user_id":     user.ID,
+			"userID":      user.ID,
 		})
 		// it will start at 17:00 UTC
 		nextSearchTime = time.Date(time.Now().Year(), time.Now().Month(), time.Now().Day(), 17, 0, 0, 0, time.UTC)
@@ -366,7 +366,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 
 	isPusherUserPresent, err := internal.IsPusherUserPresent(app.pusher, user.ID)
 	if err != nil {
-		app.logger.Error("failed to check if user is present", "error", err, "user_id", user.ID)
+		app.logger.Error("failed to check if user is present", "error", err, "userID", user.ID)
 	}
 	data["IsPusherUserPresent"] = isPusherUserPresent
 
@@ -393,7 +393,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 	if len(jobIDs) > 0 {
 		userFeedback, err := internal.GetUserFeedbackForJobIDs(r.Context(), app.fs, user.ID, jobIDs)
 		if err != nil {
-			app.logger.Warn("Failed to get user feedback for jobs", "error", err, "user_id", user.ID)
+			app.logger.Warn("Failed to get user feedback for jobs", "error", err, "userID", user.ID)
 			userFeedback = []*internal.UserFeedback{} // Continue with empty feedback
 		}
 

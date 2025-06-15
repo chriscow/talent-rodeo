@@ -18,7 +18,7 @@ import (
 // internal.reportToSentry(r.Context(), err, sentry.LevelFatal, tags)   // Application-crashing errors
 
 func (app *application) processCompletedAppointment(r *http.Request, userID, appointmentID string, env vapi.EndOfCallReportEnvelope) error {
-	app.logger.Debug("processCompletedAppointment: received end of call report", "user_id", userID, "appointmentID", appointmentID)
+	app.logger.Debug("processCompletedAppointment: received end of call report", "userID", userID, "appointmentID", appointmentID)
 
 	ipaddr := r.Header.Get("X-Forwarded-For")
 	internal.SentrySetUserContext(r.Context(), userID, ipaddr, map[string]interface{}{

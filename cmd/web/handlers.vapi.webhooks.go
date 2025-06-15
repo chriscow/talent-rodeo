@@ -226,7 +226,7 @@ func handleEndOfCallReport(r *http.Request, app *application, msg []byte) error 
 
 	app.processCompletedAppointment(r, customerID, appointmentID, *envelope)
 
-	app.logger.Debug("processed end-of-call report", "appointment_id", appointmentID, "customer_id", customerID)
+	app.logger.Debug("processed end-of-call report", "appointmentID", appointmentID, "customerID", customerID)
 
 	return nil
 }
