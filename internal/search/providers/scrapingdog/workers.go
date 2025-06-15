@@ -169,7 +169,7 @@ func (wm *WorkerManager) Shutdown(ctx context.Context) error {
 
 // QueueTask adds a WorkerTask to the shared queue
 func (wm *WorkerManager) QueueTask(ctx context.Context, task WorkerTask) error {
-	wm.logger.Debug(internal.Cyan("QueueTask"), "task", task)
+	wm.logger.Debug(internal.Cyan("QueueTask"), "task", fmt.Sprintf("%+v", task))
 
 	// Check if we're shutting down
 	if atomic.LoadInt32(&wm.shutdownFlag) == 1 {
@@ -182,7 +182,7 @@ func (wm *WorkerManager) QueueTask(ctx context.Context, task WorkerTask) error {
 	// Try to add to the queue
 	select {
 	case wm.taskQueue <- task:
-		wm.logger.Info("task queued successfully", "task", task)
+		wm.logger.Info("task queued successfully", "task", fmt.Sprintf("%+v", task))
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -247,7 +247,7 @@ func (wm *WorkerManager) startWorker(ctx context.Context, workerID int) {
 					return
 				}
 
-				logger.Debug("received task", "task", task)
+				logger.Debug("received task", "task", fmt.Sprintf("%+v", task))
 			case <-wm.shutdownCtx.Done():
 				return
 			case <-time.After(1 * time.Second):
@@ -272,14 +272,14 @@ func (wm *WorkerManager) startWorker(ctx context.Context, workerID int) {
 
 			// Log the result
 			duration := time.Since(startTime)
-			logger.Debug("completed task", "task", task, "duration", duration)
+			logger.Debug("completed task", "task", fmt.Sprintf("%+v", task), "duration", duration)
 		}
 	}
 }
 
 // processWorkerTask dispatches a WorkerTask by type
 func (wm *WorkerManager) processWorkerTask(ctx context.Context, task WorkerTask) {
-	wm.logger.Debug(internal.Cyan("processWorkerTask"), "task", task)
+	wm.logger.Debug(internal.Cyan("processWorkerTask"), "task", fmt.Sprintf("%+v", task))
 
 	if task.SearchTask != nil {
 		wm.handleSearchTask(ctx, task)
@@ -292,11 +292,11 @@ func (wm *WorkerManager) processWorkerTask(ctx context.Context, task WorkerTask)
 // handleSearchTask Worsses a SearchTask (pagination, enqueues job detail tasks)
 func (wm *WorkerManager) handleSearchTask(ctx context.Context, wt WorkerTask) {
 	if wt.SearchTask == nil {
-		wm.logger.Error("search task is nil, skipping", "task", wt)
+		wm.logger.Error("search task is nil, skipping", "task", fmt.Sprintf("%+v", wt))
 		return
 	}
 	searchJob := *wt.SearchTask
-	logger := wm.logger.With("search", "jobID", searchJob.ID, "task", wt)
+	logger := wm.logger.With("jobID", searchJob.ID, "task", fmt.Sprintf("%+v", wt))
 	if wt.UserID != nil {
 		logger = logger.With("userID", *wt.UserID)
 	}
@@ -345,7 +345,7 @@ func (wm *WorkerManager) handleSearchTask(ctx context.Context, wt WorkerTask) {
 				JobListing: job,
 			}
 			workerTask := WorkerTask{UserID: wt.UserID, JobDetailTask: &jobDetailTask}
-			logger.Debug(internal.Cyan("created WorkerTask for job detail fetch"))
+			logger.Debug(internal.Cyan("created WorkerTask for job detail fetch"), "workerTask", fmt.Sprintf("%+v", workerTask))
 			select {
 			case wm.taskQueue <- workerTask:
 				logger.Debug("enqueued job detail fetch")
@@ -379,7 +379,7 @@ func (wm *WorkerManager) handleSearchTask(ctx context.Context, wt WorkerTask) {
 // handleJobDetailTask processes a JobDetail fetch (deduplication, fetch, store, event)
 func (wm *WorkerManager) handleJobDetailTask(ctx context.Context, wt WorkerTask) {
 	if wt.JobDetailTask == nil {
-		wm.logger.Error("job detail task is nil, skipping", "task", wt)
+		wm.logger.Error("job detail task is nil, skipping", "task", fmt.Sprintf("%+v", wt))
 		return
 	}
 	task := *wt.JobDetailTask
@@ -392,7 +392,7 @@ func (wm *WorkerManager) handleJobDetailTask(ctx context.Context, wt WorkerTask)
 
 	jobDetailID := task.JobListing.ID
 	if jobDetailID == "" {
-		logger.Error("job listing missing ID, skipping", "job", task.JobListing)
+		logger.Error("job listing missing ID, skipping", "job", fmt.Sprintf("%+v", task.JobListing))
 		return
 	}
 
