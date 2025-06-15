@@ -245,6 +245,7 @@ func (s *Scheduler) StartCriteriaSearch(ctx context.Context) {
 	processedCount := 0
 	s.logger.Debug("processing search criteria", "count", len(items))
 	for _, criteria := range items {
+		s.logger.Debug("queueing search for criteria", "criteria", criteria.ID)
 		if err := s.enqueueSearch(ctx, criteria); err != nil {
 			criteria.Error = err.Error()
 			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{

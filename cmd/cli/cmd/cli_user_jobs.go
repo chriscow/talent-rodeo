@@ -95,3 +95,45 @@ var userJobsUpdateCmd = &cobra.Command{
 		return nil
 	},
 }
+
+var userJobsFollowupCmd = &cobra.Command{
+	Use:   "followup",
+	Short: "Show or dump follow-up questions for user jobs",
+	Long:  `Dump all follow-up questions from JobMatchAnalysis for all jobs of a user, one per line`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := context.Background()
+		userID, _ := cmd.Flags().GetString("user")
+		dump, _ := cmd.Flags().GetBool("dump")
+		if userID == "" {
+			return fmt.Errorf("--user flag is required")
+		}
+		fs, err := internal.NewFirestoreClient(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to create Firestore client: %w", err)
+		}
+		defer fs.Close()
+
+		jobs, err := internal.GetUserJobs(ctx, fs, userID)
+		if err != nil {
+			return fmt.Errorf("failed to get user jobs: %w", err)
+		}
+		if dump {
+			for _, job := range jobs {
+				fq := job.JobMatchAnalysis.FollowUpQuestions
+				if fq != "" {
+					fmt.Println(fq)
+				}
+			}
+			return nil
+		}
+		// If not dump, just print a summary (could be extended)
+		fmt.Printf("User %s has %d jobs. Use --dump to print follow-up questions.\n", userID, len(jobs))
+		return nil
+	},
+}
+
+func init() {
+	userJobsFollowupCmd.Flags().String("user", "", "User ID to fetch jobs for (required)")
+	userJobsFollowupCmd.Flags().Bool("dump", false, "Dump all follow-up questions, one per line")
+	userJobsCmd.AddCommand(userJobsFollowupCmd)
+}

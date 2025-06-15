@@ -11,6 +11,45 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var criteriaID string
+var unsubscribe bool
+
+var userSubscribeCmd = &cobra.Command{
+	Use:   "subscribe",
+	Short: "Subscribe or unsubscribe a user to a search criteria",
+	Long:  `Subscribe a user to a search criteria, or unsubscribe if --unsubscribe is set`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := context.Background()
+		fs, err := internal.NewFirestoreClient(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to create Firestore client: %w", err)
+		}
+		defer fs.Close()
+
+		if userID == "" {
+			return fmt.Errorf("--user flag is required")
+		}
+		if criteriaID == "" {
+			return fmt.Errorf("--criteria flag is required")
+		}
+
+		if unsubscribe {
+			err = internal.UnsubscribeFromCriteria(ctx, fs, userID, criteriaID)
+			if err != nil {
+				return fmt.Errorf("failed to unsubscribe user from criteria: %w", err)
+			}
+			fmt.Printf("User %s unsubscribed from criteria %s\n", userID, criteriaID)
+		} else {
+			err = internal.SubscribeToCriteria(ctx, fs, userID, criteriaID)
+			if err != nil {
+				return fmt.Errorf("failed to subscribe user to criteria: %w", err)
+			}
+			fmt.Printf("User %s subscribed to criteria %s\n", userID, criteriaID)
+		}
+		return nil
+	},
+}
+
 func init() {
 	// Add users command
 	RootCmd.AddCommand(usersCmd)
@@ -22,6 +61,7 @@ func init() {
 	usersCmd.AddCommand(createUserCmd)
 	usersCmd.AddCommand(importUsersCmd)
 	usersCmd.AddCommand(matchUserCmd)
+	usersCmd.AddCommand(userSubscribeCmd)
 
 	// Add flags
 	listUsersCmd.Flags().IntP("limit", "l", 100, "Maximum number of users to return per page")
@@ -44,7 +84,14 @@ func init() {
 	userJobsUpdateCmd.Flags().Bool("all-users", false, "Update jobs for all users")
 	userJobsUpdateCmd.Flags().String("user-id", "", "User ID to update jobs for (if not using --all-users)")
 	userJobsCmd.AddCommand(userJobsUpdateCmd)
+	userJobsCmd.AddCommand(userJobsFollowupCmd)
 	RootCmd.AddCommand(userJobsCmd)
+
+	userSubscribeCmd.Flags().StringVarP(&userID, "user", "u", "", "User ID to subscribe/unsubscribe")
+	userSubscribeCmd.Flags().StringVarP(&criteriaID, "criteria", "c", "", "Criteria ID to subscribe to")
+	userSubscribeCmd.Flags().BoolVar(&unsubscribe, "unsubscribe", false, "Unsubscribe the user from the criteria instead of subscribing")
+	userSubscribeCmd.MarkFlagRequired("user")
+	userSubscribeCmd.MarkFlagRequired("criteria")
 }
 
 var usersCmd = &cobra.Command{
