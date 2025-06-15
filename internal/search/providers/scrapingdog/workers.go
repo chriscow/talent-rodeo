@@ -296,7 +296,7 @@ func (wm *WorkerManager) handleSearchTask(ctx context.Context, wt WorkerTask) {
 		return
 	}
 	searchJob := *wt.SearchTask
-	logger := wm.logger.With("jobID", searchJob.ID, "task", fmt.Sprintf("%+v", wt))
+	logger := wm.logger.With("jobID", searchJob.ID, "criteriaID", searchJob.Criteria.ID, "task", fmt.Sprintf("%+v", wt))
 	if wt.UserID != nil {
 		logger = logger.With("userID", *wt.UserID)
 	}
@@ -305,7 +305,7 @@ func (wm *WorkerManager) handleSearchTask(ctx context.Context, wt WorkerTask) {
 		wm.eventHandler.OnSearchStarted(searchJob, wt.UserID)
 	}
 
-	logger.Info(internal.Cyan("processing search task"))
+	logger.Info(internal.Cyan("processing search task"), "criteriaID", searchJob.Criteria.ID)
 	var searchErrors []error
 	var allJobs []internal.JobListing
 	if searchJob.Criteria.MaxPages == 0 {
@@ -314,28 +314,29 @@ func (wm *WorkerManager) handleSearchTask(ctx context.Context, wt WorkerTask) {
 	for page := searchJob.PagesCompleted + 1; page <= searchJob.Criteria.MaxPages; page++ {
 		select {
 		case <-ctx.Done():
-			logger.Warn("context cancelled during search task")
+			logger.Warn("context cancelled during search task", "criteriaID", searchJob.Criteria.ID)
 			return
 		default:
 		}
 		listings, err := wm.provider.SearchJobListings(ctx, searchJob.Criteria, page)
 		if err != nil {
 			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-				"action": "WorkerManager::handleSearchTask: failed to search for jobs",
+				"action":     "WorkerManager::handleSearchTask: failed to search for jobs",
+				"criteriaID": searchJob.Criteria.ID,
 			})
-			logger.Error("failed to search for jobs", "page", page, "error", err)
+			logger.Error("failed to search for jobs", "page", page, "criteriaID", searchJob.Criteria.ID, "error", err)
 			searchErrors = append(searchErrors, fmt.Errorf("page %d: %w", page, err))
 			break
 		}
 		if len(listings) == 0 {
-			logger.Debug("no more results found", "page", page)
+			logger.Debug("no more results found", "page", page, "criteriaID", searchJob.Criteria.ID)
 			break
 		}
 		var validJobs []internal.JobListing
 		for _, job := range listings {
 			select {
 			case <-ctx.Done():
-				logger.Warn("context cancelled during job listing processing")
+				logger.Warn("context cancelled during job listing processing", "criteriaID", searchJob.Criteria.ID)
 				return
 			default:
 			}
@@ -345,20 +346,20 @@ func (wm *WorkerManager) handleSearchTask(ctx context.Context, wt WorkerTask) {
 				JobListing: job,
 			}
 			workerTask := WorkerTask{UserID: wt.UserID, JobDetailTask: &jobDetailTask}
-			logger.Debug(internal.Cyan("created WorkerTask for job detail fetch"), "workerTask", fmt.Sprintf("%+v", workerTask))
+			logger.Debug(internal.Cyan("created WorkerTask for job detail fetch"), "criteriaID", searchJob.Criteria.ID, "workerTask", fmt.Sprintf("%+v", workerTask))
 			select {
 			case wm.taskQueue <- workerTask:
-				logger.Debug("enqueued job detail fetch")
+				logger.Debug("enqueued job detail fetch", "criteriaID", searchJob.Criteria.ID)
 				validJobs = append(validJobs, job)
 			default:
-				logger.Warn("task queue full, dropping job detail fetch")
+				logger.Warn("task queue full, dropping job detail fetch", "criteriaID", searchJob.Criteria.ID)
 			}
 
 			if wm.eventHandler != nil {
 				wm.eventHandler.OnJobListing(searchJob, job, wt.UserID)
 			}
 		}
-		logger.Debug("found job listings", "page", page, "count", len(listings), "validJobs", len(validJobs))
+		logger.Debug("found job listings", "page", page, "count", len(listings), "validJobs", len(validJobs), "criteriaID", searchJob.Criteria.ID)
 		searchJob.PagesCompleted = page
 		now := time.Now().UTC()
 		searchJob.UpdatedAt = &now

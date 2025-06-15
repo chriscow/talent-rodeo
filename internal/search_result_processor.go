@@ -429,7 +429,7 @@ func (s *SearchResultProcessor) saveAndLinkJobDetail(ctx context.Context, jobSea
 }
 
 func (s *SearchResultProcessor) OnSearchStarted(jobSearch SearchTask, userID *string) {
-	s.logger.Debug("OnSearchStarted", "criteria", jobSearch.Criteria.GetSearchHash())
+	s.logger.Debug("OnSearchStarted", "criteria", jobSearch.Criteria.ID)
 
 	if userID != nil && *userID != "" {
 		s.logger.Info("tracking search progress for user", "userID", *userID, "searchTaskID", jobSearch.ID)
@@ -453,7 +453,7 @@ func (s *SearchResultProcessor) OnJobListing(jobSearch SearchTask, job JobListin
 		s.logger.Error("firestore client is nil, cannot process job listing")
 		return
 	}
-	s.logger.Debug("OnJobListing", "job", job.ProviderJobID)
+	s.logger.Debug("OnJobListing", "jobID", job.ID, "criteria", jobSearch.Criteria.ID)
 
 	ctx := context.Background()
 	if err := SaveJobListing(ctx, s.fs, jobSearch, &job); err != nil {
@@ -466,7 +466,7 @@ func (s *SearchResultProcessor) OnPageComplete(jobSearch SearchTask, page int, j
 		s.logger.Error("firestore client is nil, cannot process page completion")
 		return
 	}
-	s.logger.Debug("OnPageComplete", "criteria", jobSearch.Criteria.ID, "page", page, "jobs_found", jobsFound, "errors", len(errors))
+	s.logger.Debug("OnPageComplete", "jobID", jobSearch.ID, "criteria", jobSearch.Criteria.ID, "page", page, "jobsFound", jobsFound, "errors", len(errors))
 
 	// Log any errors for this page
 	if len(errors) > 0 {
@@ -490,7 +490,7 @@ func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJob
 		s.logger.Error("firestore client is nil, cannot process search completion")
 		return
 	}
-	s.logger.Info("OnSearchCompleted", "criteria", jobSearch.Criteria.ID, "total_jobs", totalJobs, "errors", errors)
+	s.logger.Info("OnSearchCompleted", "jobID", jobSearch.ID, "criteria", jobSearch.Criteria.ID, "totalJobs", totalJobs, "errors", errors)
 
 	if val, ok := s.progressTrackers.Load(jobSearch.ID); ok {
 		progress := val.(*SearchProgress)

@@ -163,7 +163,7 @@ func (app *application) logoutUser(w http.ResponseWriter, r *http.Request) {
 	// Get user before destroying session
 	user := contextGetAuthenticatedUser(r)
 	if user != nil {
-		app.logger.Debug("Logging out user", "user_id", user.ID, "email", user.Email)
+		app.logger.Debug("Logging out user", "userID", user.ID, "email", user.Email)
 	}
 
 	// Destroy the session
