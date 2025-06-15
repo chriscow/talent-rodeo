@@ -6,6 +6,8 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"talent-rodeo/internal"
 	"testing"
 	"time"
@@ -202,4 +204,62 @@ func TestResumeUpload(t *testing.T) {
 			t.Errorf("want %d; got %d", http.StatusBadRequest, w.Code)
 		}
 	})
+}
+
+func TestExtractPDF(t *testing.T) {
+	tests := []struct {
+		name     string
+		filename string
+		wantErr  bool
+		wantSub  string // substring expected in output, can be empty
+	}{
+		{
+			name:     "Valid PDF Resume 1",
+			filename: "../../testdata/sample-resumes/sample-resume.pdf", // placeholder, replace as needed
+			wantErr:  false,
+			wantSub:  "\nC\nHRIS\nC\nOWHERD\n425-829-5443\nhttps",
+		},
+		{
+			name:     "Valid PDF Resume 2",
+			filename: "../../testdata/sample-resumes/Nick Beaver 2024.pdf", // placeholder, replace as needed
+			wantErr:  false,
+			wantSub:  "\n \nNICHOLAS BEAVER \n \nnicholasjbeaver@gmail.com \nwww.linkedin.com/in/nicholas-beaver/\n  \n425-241-708", // placeholder, replace as needed
+		},
+		{
+			name:     "Valid PDF Resume 3",
+			filename: "../../testdata/sample-resumes/Marco Mindemann May 2025.pdf", // placeholder, replace as needed
+			wantErr:  false,
+			wantSub:  "Marco Mindemann",
+		},
+		// {
+		// 	name:     "Corrupt or Not a PDF",
+		// 	filename: "testdata/sample-resumes/01-not-a-resume.easy.txt", // not a PDF
+		// 	wantErr:  true,
+		// 	wantSub:  "",
+		// },
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			f, err := os.Open(tc.filename)
+			if err != nil {
+				t.Fatalf("failed to open file %s: %v", tc.filename, err)
+			}
+			defer f.Close()
+
+			got, err := extractPDF(f)
+			if tc.wantErr {
+				if err == nil {
+					t.Errorf("expected error for %s, got none", tc.filename)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("unexpected error for %s: %v", tc.filename, err)
+			}
+			if tc.wantSub != "" && !strings.Contains(got, tc.wantSub) {
+				t.Errorf("output for %s does not contain expected substring. want %q, got: %.100q", tc.filename, tc.wantSub, got)
+			}
+		})
+	}
 }
