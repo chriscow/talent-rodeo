@@ -117,6 +117,9 @@ func (app *application) routes() http.Handler {
 
 			// Add user dashboard admin page
 			mux.HandleFunc("/admin/user-dashboard", app.adminUserDashboard, "GET", "POST")
+
+			// Add subscription management admin page
+			mux.HandleFunc("/admin/subscriptions", app.adminSubscriptions, "GET", "POST")
 		})
 	})
 
