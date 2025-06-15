@@ -14,7 +14,7 @@ import (
 
 const (
 	defaultAssistantModel          = "gpt-4.1"
-	defaultAssistantPromptTemplate = "prompts/shirely.general.003.txt"
+	defaultAssistantPromptTemplate = "prompts/shirely.general.004.md"
 )
 
 func GetAssistantID(userID string) string {
