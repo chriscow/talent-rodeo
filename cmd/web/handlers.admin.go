@@ -327,6 +327,57 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 	data["SelectedUser"] = selectedUser
 	data["SelectedUserID"] = selectedUserID
 
+	// --- Subscription Management Logic ---
+	subscriptionError := ""
+	subscriptionSuccess := ""
+
+	// Handle unsubscribe action
+	if unsubID := r.PostForm.Get("unsubscribe_criteria_id"); unsubID != "" {
+		err := internal.UnsubscribeFromCriteria(ctx, app.fs, selectedUserID, unsubID)
+		if err != nil {
+			subscriptionError = fmt.Sprintf("Failed to unsubscribe: %v", err)
+		} else {
+			subscriptionSuccess = "Unsubscribed successfully."
+		}
+	}
+
+	// Handle subscribe action
+	if subID := r.PostForm.Get("subscribe_criteria_id"); subID != "" {
+		err := internal.SubscribeToCriteria(ctx, app.fs, selectedUserID, subID)
+		if err != nil {
+			subscriptionError = fmt.Sprintf("Failed to subscribe: %v", err)
+		} else {
+			subscriptionSuccess = "Subscribed successfully."
+		}
+	}
+
+	// Fetch subscriptions and all criteria
+	userSubscriptions, _ := internal.GetSubscriptionsForUser(ctx, app.fs, selectedUserID)
+	allCriteria, _ := internal.ListSearchCriteria(ctx, app.fs)
+
+	// Build set of subscribed criteria IDs
+	subscribedIDs := make(map[string]struct{})
+	for _, sub := range userSubscriptions {
+		subscribedIDs[sub.CriteriaID] = struct{}{}
+	}
+	// Build list of criteria the user is NOT subscribed to
+	var availableCriteria []internal.SearchCriteria
+	for _, crit := range allCriteria {
+		if _, ok := subscribedIDs[crit.ID]; !ok {
+			availableCriteria = append(availableCriteria, crit)
+		}
+	}
+
+	data["UserSubscriptions"] = userSubscriptions
+	data["AvailableCriteria"] = availableCriteria
+	data["AllCriteria"] = allCriteria
+	if subscriptionError != "" {
+		data["SubscriptionError"] = subscriptionError
+	}
+	if subscriptionSuccess != "" {
+		data["SubscriptionSuccess"] = subscriptionSuccess
+	}
+
 	// Pagination
 	pageToken := r.PostForm.Get("page")
 	pageSize := 10
@@ -415,6 +466,97 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 	data["TestMode"] = true
 
 	if err := response.Page(w, http.StatusOK, data, "pages/admin/user-dashboard.html"); err != nil {
+		app.serverError(w, r, err)
+	}
+}
+
+// --- Subscription Management Tool ---
+func (app *application) adminSubscriptions(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	data := app.newTemplateData(r)
+
+	// Fetch all users for the dropdown
+	users, err := internal.ListUsers(ctx, app.fs, 100, 0)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+	data["Users"] = users
+
+	selectedUserID := r.FormValue("user_id")
+	if selectedUserID != "" {
+		selectedUser, found, err := internal.GetUser(ctx, app.fs, selectedUserID)
+		if err != nil {
+			app.serverError(w, r, fmt.Errorf("failed to get user: %w", err))
+			return
+		}
+		if !found {
+			data["Error"] = "User not found"
+			if err := response.Page(w, http.StatusOK, data, "pages/admin/subscriptions.html"); err != nil {
+				app.serverError(w, r, err)
+			}
+			return
+		}
+		data["SelectedUser"] = selectedUser
+		data["SelectedUserID"] = selectedUserID
+
+		subscriptionError := ""
+		subscriptionSuccess := ""
+
+		if r.Method == http.MethodPost {
+			if err := r.ParseForm(); err != nil {
+				app.serverError(w, r, fmt.Errorf("failed to parse form: %w", err))
+				return
+			}
+			// Handle unsubscribe action
+			if unsubID := r.PostForm.Get("unsubscribe_criteria_id"); unsubID != "" {
+				err := internal.UnsubscribeFromCriteria(ctx, app.fs, selectedUserID, unsubID)
+				if err != nil {
+					subscriptionError = fmt.Sprintf("Failed to unsubscribe: %v", err)
+				} else {
+					subscriptionSuccess = "Unsubscribed successfully."
+				}
+			}
+			// Handle subscribe action
+			if subID := r.PostForm.Get("subscribe_criteria_id"); subID != "" {
+				err := internal.SubscribeToCriteria(ctx, app.fs, selectedUserID, subID)
+				if err != nil {
+					subscriptionError = fmt.Sprintf("Failed to subscribe: %v", err)
+				} else {
+					subscriptionSuccess = "Subscribed successfully."
+				}
+			}
+		}
+
+		// Fetch subscriptions and all criteria
+		userSubscriptions, _ := internal.GetSubscriptionsForUser(ctx, app.fs, selectedUserID)
+		allCriteria, _ := internal.ListSearchCriteria(ctx, app.fs)
+
+		// Build set of subscribed criteria IDs
+		subscribedIDs := make(map[string]struct{})
+		for _, sub := range userSubscriptions {
+			subscribedIDs[sub.CriteriaID] = struct{}{}
+		}
+		// Build list of criteria the user is NOT subscribed to
+		var availableCriteria []internal.SearchCriteria
+		for _, crit := range allCriteria {
+			if _, ok := subscribedIDs[crit.ID]; !ok {
+				availableCriteria = append(availableCriteria, crit)
+			}
+		}
+
+		data["UserSubscriptions"] = userSubscriptions
+		data["AvailableCriteria"] = availableCriteria
+		data["AllCriteria"] = allCriteria
+		if subscriptionError != "" {
+			data["SubscriptionError"] = subscriptionError
+		}
+		if subscriptionSuccess != "" {
+			data["SubscriptionSuccess"] = subscriptionSuccess
+		}
+	}
+
+	if err := response.Page(w, http.StatusOK, data, "pages/admin/subscriptions.html"); err != nil {
 		app.serverError(w, r, err)
 	}
 }
