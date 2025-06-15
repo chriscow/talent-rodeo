@@ -25,7 +25,7 @@ func GetAssistantID(userID string) string {
 	return assistantID
 }
 
-func GetAssistantTemplate(userID string) (*utils.Prompt, error) {
+func GetAssistantPromptTemplate(userID string) (*utils.Prompt, error) {
 	// TODO: Get the custom template for the user
 	prompt, err := utils.CreateTemplate(defaultAssistantPromptTemplate)
 	if err != nil {
@@ -48,7 +48,7 @@ func BuildAssistantOverrides(ctx context.Context, user *User, fs *FirestoreClien
 	assistantID := GetAssistantID(user.ID)
 
 	// Create template and data structure
-	tmpl, err := GetAssistantTemplate(user.ID)
+	tmpl, err := GetAssistantPromptTemplate(user.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get assistant template: %w", err)
 	}
@@ -110,7 +110,6 @@ func BuildAssistantOverrides(ctx context.Context, user *User, fs *FirestoreClien
 		}
 	}
 
-	// Prepare data for template
 	data := struct {
 		FirstName          string
 		FullName           string
@@ -125,13 +124,11 @@ func BuildAssistantOverrides(ctx context.Context, user *User, fs *FirestoreClien
 		PreviousDiscussion: previousDiscussions,
 	}
 
-	// Execute template with data
 	prompt, err := tmpl.Execute(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute template: %w", err)
 	}
 
-	// Setup model configuration
 	model := vapi.DefaultModelConfig
 	model.Model = defaultAssistantModel
 	model.Messages = []vapi.ModelMessage{

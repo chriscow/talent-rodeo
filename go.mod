@@ -1,8 +1,8 @@
 module talent-rodeo
 
-go 1.24
+go 1.24.1
 
-toolchain go1.24.0
+toolchain go1.24.4
 
 require (
 	cloud.google.com/go/firestore v1.18.0
@@ -65,7 +65,7 @@ require (
 	github.com/cloudflare/cloudflare-go v0.115.0
 	github.com/dgraph-io/ristretto/v2 v2.2.0
 	github.com/getsentry/sentry-go v0.32.0
-	github.com/ledongthuc/pdf v0.0.0-20240201131950-da5b75280b06
+	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
 	github.com/pinecone-io/go-pinecone/v3 v3.1.0
 	github.com/playwright-community/playwright-go v0.5101.0
 	github.com/samber/lo v1.50.0
