@@ -25,6 +25,7 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 	if user := contextGetAuthenticatedUser(r); user != nil {
 		app.logger.Debug("Home: authenticated user",
 			"user_id", user.ID,
+			"name", user.Name,
 			"state", user.State.Status)
 
 		state := user.State

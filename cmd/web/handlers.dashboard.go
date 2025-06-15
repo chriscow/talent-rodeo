@@ -219,6 +219,8 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	app.logger.Debug("showDashboard", "name", user.Name, "user_id", user.ID, "status", user.State.Status.String())
+
 	status, isValid := internal.ParseJobStatus(r.URL.Query().Get("status"))
 	if !isValid {
 		status = internal.JobStatusNew

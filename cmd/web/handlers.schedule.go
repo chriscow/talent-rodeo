@@ -43,7 +43,7 @@ func (app *application) showSchedulePage(w http.ResponseWriter, r *http.Request)
 
 	// Check if user is in error state - redirect to resume upload
 	if user.State.Status == internal.UserStatusError {
-		app.logger.Info("User in error state, redirecting to resume upload", "user_id", user.ID)
+		app.logger.Info("User in error state, redirecting to resume upload", "name", user.Name, "user_id", user.ID)
 
 		// Get error message if available
 		errorMsg := "There was a problem with your resume. Please upload a new one."

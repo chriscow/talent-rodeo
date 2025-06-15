@@ -23,7 +23,7 @@ import (
 func (app *application) showProfilePage(w http.ResponseWriter, r *http.Request) {
 	user := contextGetAuthenticatedUser(r)
 
-	app.logger.Debug("showProfilePage", "user_id", user.ID, "status", user.State.Status)
+	app.logger.Debug("showProfilePage", "name", user.Name, "user_id", user.ID, "status", user.State.Status)
 
 	if user.State.Status >= internal.UserStatusCallScheduled {
 		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
