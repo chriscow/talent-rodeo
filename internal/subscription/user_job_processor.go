@@ -157,7 +157,8 @@ func (p *UserJobProcessor) evaluateJob(ctx context.Context, task userJobEvaluati
 		return
 	}
 
-	matchAnalysis, err := tools.StructuredAsk[internal.JobMatchAnalysis](ctx, "Please extract this analysis into structured JSON data:\n"+analysis, tools.WithModel(tools.GPT41Mini))
+	matchAnalysis, err := tools.StructuredAsk[internal.JobMatchAnalysis](ctx, "Please extract this analysis into structured JSON data:\n"+analysis,
+		tools.WithModel(tools.GPT41Mini), tools.WithMaxTokens(8192))
 	if err != nil {
 		p.logger.Error("failed to extract job match analysis", "error", err)
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
