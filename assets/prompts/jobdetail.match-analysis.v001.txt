@@ -18,6 +18,7 @@ Then, follow these steps to complete your analysis:
    - Compare the user's preferences and qualifications with the job requirements.
    - Identify areas where there is a strong match.
    - Note any potential mismatches or areas of concern.
+   - If salary is mentioned, note the salary range and the user's salary expectations.
 
 4. Identify ambiguities and follow-up questions:
    - Don't assume the user has seen the job under analysis.

@@ -3,6 +3,7 @@ package subscription
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -227,8 +228,6 @@ func (p *UserJobProcessor) evaluateJob(ctx context.Context, task userJobEvaluati
 	}
 	p.logger.Info("successfully evaluated and saved job for user", "jobID", userJob.ID, "userID", userJob.UserID, "rating", matchAnalysis.Rating.NumericRating, "onDashboard", onDashboard)
 
-	p.logger.Info(internal.HiBGCyan("User is on dashboard"), "onDashboard", onDashboard)
-
 	// Update and notify progress
 	processed := p.processedJobs.Add(1)
 	// if p.onDashboard {
@@ -353,11 +352,20 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 	}
 
 	for _, job := range jobs {
+		prompt := fmt.Sprintf("<job-description>:\n%s\n</job-description>", job.Description)
+		if job.ExtractedData != nil && job.SalaryInfo != nil {
+			salary, err := json.MarshalIndent(job.SalaryInfo, "", "  ")
+			if err != nil {
+				logger.Error("failed to marshal salary info", "error", err)
+			}
+			prompt += fmt.Sprintf("\n\nThe salary range is %s.", string(salary))
+		}
+
 		task := userJobEvaluationTask{
 			User:          user,
 			Job:           job,
 			Messages:      msgs,
-			Prompt:        fmt.Sprintf("<job-description>:\n%s\n</job-description>", job.Description),
+			Prompt:        prompt,
 			AnalysisModel: tools.DeepSeekChat,
 		}
 		processor.queue <- task
