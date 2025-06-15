@@ -50,8 +50,7 @@
                         {{if $sub.DisplayName}}
                             {{$sub.DisplayName}}
                         {{else}}
-                            {{/* Find criteria details for this subscription */}}
-                            {{with (index $.AllCriteria (call $.findCriteriaIndex $sub.CriteriaID))}}
+                            {{with (index $.CriteriaMap $sub.CriteriaID)}}
                                 {{.Query}} | {{.GeoID}} | {{.WorkType}} | {{.ExperienceLevel}}
                             {{else}}
                                 {{$sub.CriteriaID}}

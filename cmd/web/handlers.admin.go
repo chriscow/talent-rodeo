@@ -368,9 +368,16 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
+	// Build a map for fast lookup in the template
+	criteriaMap := make(map[string]internal.SearchCriteria)
+	for _, crit := range allCriteria {
+		criteriaMap[crit.ID] = crit
+	}
+
 	data["UserSubscriptions"] = userSubscriptions
 	data["AvailableCriteria"] = availableCriteria
 	data["AllCriteria"] = allCriteria
+	data["CriteriaMap"] = criteriaMap
 	if subscriptionError != "" {
 		data["SubscriptionError"] = subscriptionError
 	}
@@ -545,9 +552,16 @@ func (app *application) adminSubscriptions(w http.ResponseWriter, r *http.Reques
 			}
 		}
 
+		// Build a map for fast lookup in the template
+		criteriaMap := make(map[string]internal.SearchCriteria)
+		for _, crit := range allCriteria {
+			criteriaMap[crit.ID] = crit
+		}
+
 		data["UserSubscriptions"] = userSubscriptions
 		data["AvailableCriteria"] = availableCriteria
 		data["AllCriteria"] = allCriteria
+		data["CriteriaMap"] = criteriaMap
 		if subscriptionError != "" {
 			data["SubscriptionError"] = subscriptionError
 		}
