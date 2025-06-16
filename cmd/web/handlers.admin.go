@@ -800,7 +800,21 @@ func (app *application) adminSearchCriteria(w http.ResponseWriter, r *http.Reque
 
 	// Check for a selected criteria from the dropdown
 	selectedID := r.URL.Query().Get("id")
-	if selectedID != "" && selectedID != "new" {
+	duplicateID := r.URL.Query().Get("duplicate_id")
+
+	if duplicateID != "" {
+		// Handle duplication: load data into form for creation
+		dupCriteria, found, err := internal.GetSearchCriteria(ctx, app.fs, duplicateID)
+		if err != nil {
+			app.serverError(w, r, err)
+			return
+		}
+		if found {
+			data["SelectedCriteria"] = dupCriteria // To pre-fill form
+			data["IsDuplicate"] = true             // To show "Create" button
+		}
+	} else if selectedID != "" && selectedID != "new" {
+		// Handle editing
 		selectedCriteria, found, err := internal.GetSearchCriteria(ctx, app.fs, selectedID)
 		if err != nil {
 			app.serverError(w, r, err)
@@ -814,6 +828,105 @@ func (app *application) adminSearchCriteria(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := response.Page(w, http.StatusOK, data, "pages/admin/search-criteria.html"); err != nil {
+		app.serverError(w, r, err)
+	}
+}
+
+// --- Admin Appointment Management ---
+func (app *application) adminAppointments(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	data := app.newTemplateData(r)
+	data["AppointmentStatuses"] = []internal.AppointmentStatus{
+		internal.AppointmentStatusScheduled,
+		internal.AppointmentStatusRunning,
+		internal.AppointmentStatusProcessing,
+		internal.AppointmentStatusCompleted,
+		internal.AppointmentStatusCancelled,
+		internal.AppointmentStatusFailed,
+		internal.AppointmentStatusOther,
+	}
+
+	if r.Method == http.MethodPost {
+		if err := r.ParseForm(); err != nil {
+			app.serverError(w, r, fmt.Errorf("failed to parse form: %w", err))
+			return
+		}
+
+		userID := r.PostForm.Get("user_id")
+		appointmentID := r.PostForm.Get("appointment_id")
+		status := internal.AppointmentStatus(r.PostForm.Get("status"))
+
+		if userID == "" || appointmentID == "" {
+			data["Error"] = "User ID and Appointment ID are required for update."
+		} else {
+			appointment, err := internal.GetAppointment(ctx, app.fs, userID, appointmentID)
+			if err != nil {
+				data["Error"] = "Failed to retrieve appointment: " + err.Error()
+			} else {
+				appointment.Status = status
+				appointment.UpdatedAt = time.Now()
+				if err := internal.UpdateAppointment(ctx, app.fs, appointment); err != nil {
+					data["Error"] = "Failed to update appointment: " + err.Error()
+				} else {
+					data["Success"] = "Appointment status updated successfully."
+				}
+			}
+		}
+	}
+
+	// --- GET Data Loading ---
+	// Fetch all users for the dropdown
+	users, err := internal.ListUsers(ctx, app.fs, 100, 0)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+	data["Users"] = users
+
+	// Check for a selected user
+	selectedUserID := r.URL.Query().Get("user_id")
+	if r.Method == http.MethodPost {
+		selectedUserID = r.PostForm.Get("user_id")
+	}
+	if selectedUserID != "" {
+		data["SelectedUserID"] = selectedUserID
+		appointments, err := internal.ListAppointments(ctx, app.fs, selectedUserID)
+		if err != nil {
+			app.serverError(w, r, err)
+			return
+		}
+		sort.Slice(appointments, func(i, j int) bool {
+			return appointments[i].ScheduledTime.After(appointments[j].ScheduledTime)
+		})
+		data["Appointments"] = appointments
+
+		// Check for a selected appointment
+		selectedAppointmentID := r.URL.Query().Get("appointment_id")
+		if r.Method == http.MethodPost {
+			selectedAppointmentID = r.PostForm.Get("appointment_id")
+		}
+		if selectedAppointmentID != "" {
+			data["SelectedAppointmentID"] = selectedAppointmentID
+			appointment, err := internal.GetAppointment(ctx, app.fs, selectedUserID, selectedAppointmentID)
+			if err != nil {
+				app.serverError(w, r, err)
+				return
+			}
+			data["SelectedAppointment"] = appointment
+
+			if appointment.CallID != nil && *appointment.CallID != "" {
+				transcript, err := internal.GetAppointmentTranscript(ctx, app.fs, *appointment.CallID)
+				if err != nil {
+					app.logger.Error("failed to get transcript", "error", err, "call_id", *appointment.CallID)
+					data["Error"] = "Failed to fetch transcript: " + err.Error()
+				} else if transcript != nil {
+					data["Transcript"] = transcript.String()
+				}
+			}
+		}
+	}
+
+	if err := response.Page(w, http.StatusOK, data, "pages/admin/appointments.html"); err != nil {
 		app.serverError(w, r, err)
 	}
 }
