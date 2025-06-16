@@ -1,0 +1,18 @@
+{{define "subject"}}[Talent Rodeo] No Call{{end}}
+
+{{define "plainBody"}}
+{{.PlainBody}}
+{{end}}
+
+{{define "htmlBody"}}
+<!doctype html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width" />
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+</head>
+<body>
+  {{safeHTML .HtmlBody}}
+</body>
+</html>
+{{end}}
