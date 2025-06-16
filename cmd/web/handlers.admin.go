@@ -331,64 +331,6 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 	data["SelectedUser"] = selectedUser
 	data["SelectedUserID"] = selectedUserID
 
-	// --- Subscription Management Logic ---
-	subscriptionError := ""
-	subscriptionSuccess := ""
-
-	// Handle unsubscribe action
-	if unsubID := r.PostForm.Get("unsubscribe_criteria_id"); unsubID != "" {
-		err := internal.UnsubscribeFromCriteria(ctx, app.fs, selectedUserID, unsubID)
-		if err != nil {
-			subscriptionError = fmt.Sprintf("Failed to unsubscribe: %v", err)
-		} else {
-			subscriptionSuccess = "Unsubscribed successfully."
-		}
-	}
-
-	// Handle subscribe action
-	if subID := r.PostForm.Get("subscribe_criteria_id"); subID != "" {
-		err := internal.SubscribeToCriteria(ctx, app.fs, selectedUserID, subID)
-		if err != nil {
-			subscriptionError = fmt.Sprintf("Failed to subscribe: %v", err)
-		} else {
-			subscriptionSuccess = "Subscribed successfully."
-		}
-	}
-
-	// Fetch subscriptions and all criteria
-	userSubscriptions, _ := internal.GetSubscriptionsForUser(ctx, app.fs, selectedUserID)
-	allCriteria, _ := internal.ListSearchCriteria(ctx, app.fs)
-
-	// Build set of subscribed criteria IDs
-	subscribedIDs := make(map[string]struct{})
-	for _, sub := range userSubscriptions {
-		subscribedIDs[sub.CriteriaID] = struct{}{}
-	}
-	// Build list of criteria the user is NOT subscribed to
-	var availableCriteria []internal.SearchCriteria
-	for _, crit := range allCriteria {
-		if _, ok := subscribedIDs[crit.ID]; !ok {
-			availableCriteria = append(availableCriteria, crit)
-		}
-	}
-
-	// Build a map for fast lookup in the template
-	criteriaMap := make(map[string]internal.SearchCriteria)
-	for _, crit := range allCriteria {
-		criteriaMap[crit.ID] = crit
-	}
-
-	data["UserSubscriptions"] = userSubscriptions
-	data["AvailableCriteria"] = availableCriteria
-	data["AllCriteria"] = allCriteria
-	data["CriteriaMap"] = criteriaMap
-	if subscriptionError != "" {
-		data["SubscriptionError"] = subscriptionError
-	}
-	if subscriptionSuccess != "" {
-		data["SubscriptionSuccess"] = subscriptionSuccess
-	}
-
 	// Pagination
 	pageToken := r.PostForm.Get("page")
 	pageSize := 10
@@ -535,6 +477,19 @@ func (app *application) adminSubscriptions(w http.ResponseWriter, r *http.Reques
 					subscriptionError = fmt.Sprintf("Failed to subscribe: %v", err)
 				} else {
 					subscriptionSuccess = "Subscribed successfully."
+				}
+			}
+
+			if refreshID := r.PostForm.Get("refresh_criteria_id"); refreshID != "" {
+				criteria, found, err := internal.GetSearchCriteria(ctx, app.fs, refreshID)
+				if err != nil {
+					subscriptionError = fmt.Sprintf("Failed to get search criteria: %v", err)
+				} else if !found {
+					subscriptionError = "Search criteria not found."
+				} else {
+					app.backgroundTask(r, func() error {
+						return subscription.RefreshUserJobs(context.Background(), app.fs, nil, app.logger, *selectedUser, *criteria)
+					})
 				}
 			}
 		}
