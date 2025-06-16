@@ -353,8 +353,24 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 	}
 
 	for _, job := range jobs {
-		prompt := fmt.Sprintf("<job-description>:\n%s\n</job-description>", job.Description)
-		if job.ExtractedData != nil && job.SalaryInfo != nil {
+		workType := ""
+		location := ""
+
+		if criteria.WorkType == internal.WorkTypeRemote {
+			workType = "<work_type>remote</work_type>"
+		} else {
+			workType = "<work_type>on-site</work_type>"
+			if criteria.WorkType == internal.WorkTypeHybrid {
+				workType = "<work_type>hybrid</work_type>"
+			}
+			geoLocation, err := internal.GetGeoID(ctx, fs, criteria.GeoID)
+			if err == nil {
+				location = fmt.Sprintf("%s<work_location>%s</work_location>", workType, geoLocation.Value)
+			}
+		}
+
+		prompt := fmt.Sprintf("<job-description>:\n%s\n</job-description>\n%s\n%s", job.Description, workType, location)
+		if job.SalaryInfo != nil {
 			salary, err := json.MarshalIndent(job.SalaryInfo, "", "  ")
 			if err != nil {
 				logger.Error("failed to marshal salary info", "error", err)

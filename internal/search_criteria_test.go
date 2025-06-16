@@ -101,7 +101,7 @@ func TestSearchCriteria(t *testing.T) {
 		now := time.Now()
 		created.LastSearchedAt = &now
 
-		err = UpdateSearchCriteria(ctx, client, created)
+		err = SetSearchCriteria(ctx, client, created)
 		if err != nil {
 			t.Fatalf("UpdateSearchCriteria() error = %v", err)
 		}
@@ -180,7 +180,7 @@ func TestSearchCriteria(t *testing.T) {
 		// Set LastSearchedAt to 25 hours ago
 		oldTime := time.Now().Add(-25 * time.Hour)
 		created2.LastSearchedAt = &oldTime
-		err = UpdateSearchCriteria(ctx, client, created2)
+		err = SetSearchCriteria(ctx, client, created2)
 		if err != nil {
 			t.Fatalf("UpdateSearchCriteria() old search error = %v", err)
 		}
@@ -207,7 +207,7 @@ func TestSearchCriteria(t *testing.T) {
 		// Set LastSearchedAt to 1 hour ago
 		recentTime := time.Now().Add(-1 * time.Hour)
 		created3.LastSearchedAt = &recentTime
-		err = UpdateSearchCriteria(ctx, client, created3)
+		err = SetSearchCriteria(ctx, client, created3)
 		if err != nil {
 			t.Fatalf("UpdateSearchCriteria() recent search error = %v", err)
 		}
@@ -232,7 +232,7 @@ func TestSearchCriteria(t *testing.T) {
 		// Set LastSearchedAt to 25 hours ago and subscriber count to 0
 		oldTime = time.Now().Add(-25 * time.Hour)
 		created5.LastSearchedAt = &oldTime
-		err = UpdateSearchCriteria(ctx, client, created5)
+		err = SetSearchCriteria(ctx, client, created5)
 		if err != nil {
 			t.Fatalf("UpdateSearchCriteria() old search no subscribers error = %v", err)
 		}

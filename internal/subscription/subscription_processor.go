@@ -385,7 +385,7 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 	// Update LastPublishedAt for this criteria
 	now := time.Now()
 	criteria.LastPublishedAt = &now
-	if err := internal.UpdateSearchCriteria(ctx, p.fs, &criteria); err != nil {
+	if err := internal.SetSearchCriteria(ctx, p.fs, &criteria); err != nil {
 		return fmt.Errorf("failed to update LastPublishedAt for criteria %s: %w", criteria.ID, err)
 	}
 

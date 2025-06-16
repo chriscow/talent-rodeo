@@ -123,6 +123,10 @@ func (app *application) routes() http.Handler {
 
 			// Add upload resume for user admin page
 			mux.HandleFunc("/admin/upload-resume", app.adminUploadResume, "GET", "POST")
+
+			// Add search criteria management page
+			mux.HandleFunc("/admin/search-criteria", app.adminSearchCriteria, "GET", "POST")
+
 		})
 	})
 

@@ -538,7 +538,7 @@ func (s *SearchResultProcessor) updateSearchAndCriteria(jobSearch SearchTask, er
 		nowUTC := time.Now().UTC()
 		criteria.LastSearchedAt = &nowUTC
 		criteria.LastSearchJobID = jobSearch.ID
-		if err := UpdateSearchCriteriaTx(ctx, s.fs, tx, &criteria); err != nil {
+		if err := SetSearchCriteriaTx(ctx, s.fs, tx, &criteria); err != nil {
 			return fmt.Errorf("failed to update search criteria in transaction: %w", err)
 		}
 		return nil

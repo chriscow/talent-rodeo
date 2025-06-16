@@ -703,3 +703,117 @@ func (app *application) adminUploadResume(w http.ResponseWriter, r *http.Request
 		app.serverError(w, r, err)
 	}
 }
+
+// --- Admin Search Criteria Management ---
+func (app *application) adminSearchCriteria(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	data := app.newTemplateData(r)
+
+	// POST handling comes first
+	if r.Method == http.MethodPost {
+		if err := r.ParseForm(); err != nil {
+			app.serverError(w, r, fmt.Errorf("failed to parse form: %w", err))
+			return
+		}
+
+		action := r.PostForm.Get("action")
+		id := r.PostForm.Get("id")
+
+		switch action {
+		case "create":
+			maxPages, _ := strconv.Atoi(r.PostForm.Get("maxPages"))
+			query := r.PostForm.Get("query")
+			geoID := r.PostForm.Get("geoId")
+			workType := internal.WorkType(r.PostForm.Get("workType"))
+			experienceLevel := internal.ExperienceLevel(r.PostForm.Get("experienceLevel"))
+			listingAge := internal.ListingAge(r.PostForm.Get("listingAge"))
+
+			newCriteria, err := internal.CreateSearchCriteria(ctx, app.fs, query, geoID, workType, experienceLevel, maxPages, listingAge)
+			if err != nil {
+				data["Error"] = fmt.Sprintf("Failed to create criteria: %v", err)
+			} else {
+				data["Success"] = fmt.Sprintf("Successfully created criteria %s.", newCriteria.ID)
+				// To select the newly created item in the dropdown
+				r.URL.RawQuery = "id=" + newCriteria.ID
+			}
+		case "update":
+			maxPages, _ := strconv.Atoi(r.PostForm.Get("maxPages"))
+			updatedCriteria := internal.SearchCriteria{
+				ID:              id,
+				Query:           r.PostForm.Get("query"),
+				GeoID:           r.PostForm.Get("geoId"),
+				WorkType:        internal.WorkType(r.PostForm.Get("workType")),
+				ExperienceLevel: internal.ExperienceLevel(r.PostForm.Get("experienceLevel")),
+				ListingAge:      internal.ListingAge(r.PostForm.Get("listingAge")),
+				MaxPages:        maxPages,
+			}
+			if err := internal.SetSearchCriteria(ctx, app.fs, &updatedCriteria); err != nil {
+				data["Error"] = fmt.Sprintf("Failed to update criteria: %v", err)
+			} else {
+				data["Success"] = "Successfully updated criteria."
+			}
+		case "delete":
+			if r.PostForm.Get("confirm_delete") != "on" {
+				data["Error"] = "You must check the confirmation box to delete."
+			} else {
+				if err := internal.DeleteSearchCriteria(ctx, app.fs, id); err != nil {
+					data["Error"] = fmt.Sprintf("Failed to delete criteria: %v", err)
+				} else {
+					data["Success"] = "Successfully deleted criteria."
+					// Clear selection
+					r.URL.RawQuery = ""
+				}
+			}
+		default:
+			data["Error"] = "Invalid action."
+		}
+	}
+
+	// --- GET Data Loading ---
+
+	// Fetch all criteria for the dropdown
+	allCriteria, err := internal.ListSearchCriteria(ctx, app.fs)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+	sort.Slice(allCriteria, func(i, j int) bool {
+		return allCriteria[i].ID < allCriteria[j].ID
+	})
+	data["AllCriteria"] = allCriteria
+
+	// Fetch GeoIDs for the form dropdown
+	geoIDs, err := internal.ListGeoIDs(ctx, app.fs)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+	sort.Slice(geoIDs, func(i, j int) bool {
+		return geoIDs[i].Value < geoIDs[j].Value
+	})
+	data["GeoIDs"] = geoIDs
+
+	// Pass enum values to the template
+	data["WorkTypes"] = []internal.WorkType{internal.WorkTypeAtWork, internal.WorkTypeRemote, internal.WorkTypeHybrid}
+	data["ExperienceLevels"] = []internal.ExperienceLevel{internal.ExperienceLevelInternship, internal.ExperienceLevelEntryLevel, internal.ExperienceLevelAssociate, internal.ExperienceLevelMidSeniorLevel, internal.ExperienceLevelDirector}
+	data["ListingAges"] = []internal.ListingAge{internal.ListingAgeDay, internal.ListingAgeWeek, internal.ListingAgeMonth}
+
+	// Check for a selected criteria from the dropdown
+	selectedID := r.URL.Query().Get("id")
+	if selectedID != "" && selectedID != "new" {
+		selectedCriteria, found, err := internal.GetSearchCriteria(ctx, app.fs, selectedID)
+		if err != nil {
+			app.serverError(w, r, err)
+			return
+		}
+		if found {
+			data["SelectedCriteria"] = selectedCriteria
+		}
+	} else if selectedID == "new" {
+		data["IsNew"] = true
+	}
+
+	if err := response.Page(w, http.StatusOK, data, "pages/admin/search-criteria.html"); err != nil {
+		app.serverError(w, r, err)
+	}
+}
