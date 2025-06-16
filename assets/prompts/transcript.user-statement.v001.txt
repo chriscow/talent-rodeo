@@ -62,9 +62,9 @@ Here is the input data:
 {{.Transcript}}
 </transcript>
 
-<work_type>
-{{.SteeringQuery.WorkType}}
-</work_type>
+<work_types>
+{{.SteeringQuery.WorkTypes}}
+</work_types>
 
 <location_preference>
 {{.LocationPreference}}

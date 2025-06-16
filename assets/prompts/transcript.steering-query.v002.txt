@@ -13,7 +13,7 @@ Your goal is to extract and construct the following components:
 3. MoveAway: Multiple first-person sentences describing what the job seeker wants to avoid, phrased as if desired.
 4. RerankQuery: A comprehensive, first-person query combining all preferences and keywords.
 5. ExperienceLevel: The job seeker's experience level (options: internship, entry_level, associate, mid_senior_level, director).
-6. WorkType: The preferred work type (options: at_work, remote, hybrid).
+6. WorkTypes: The preferred work types (options: at_work, remote, hybrid).
 
 Please follow these steps:
 
@@ -60,25 +60,25 @@ Please follow these steps:
    e. ExperienceLevel:
       - List relevant quotes from both resume and transcript
       - Consider each option explicitly, providing reasoning for each:
-        * internship
-        * entry_level
-        * associate
-        * mid_senior_level
-        * director
+        * internship (no experience or very little experience, not graduated)
+        * entry_level (no experience or very little experience, undergraduate completed)
+        * associate (actual experience or graduate level)
+        * mid_senior_level (mid-career (3-5 years) or more, phd or graduate level)
+        * director (leadership, management, executive, etc.)
       - For software developers, note:
         * Choose "mid_senior_level" for senior experience in individual contributor roles
         * Don't choose "director" based solely on seniority if preference is for individual contributor roles
       - Summarize key findings
       - Explain final choice
 
-   f. WorkType:
+   f. WorkTypes:
       - List relevant quotes from both resume and transcript
       - Consider each option explicitly:
         * at_work
         * remote
         * hybrid
       - Summarize key findings
-      - Explain final choice
+      - Explain final choices
    </structured_analysis>
 
 3. After your analysis, provide the final output in the specified JSON format.
@@ -97,7 +97,7 @@ Your final output should follow this JSON structure:
   "MoveAway": "Multiple first-person sentences about aspects to avoid, but phrased as if desired",
   "RerankQuery": "Comprehensive first-person sentences combining all preferences and keywords",
   "ExperienceLevel": "One of: internship, entry_level, associate, mid_senior_level, director",
-  "WorkType": "One of: at_work, remote, hybrid"
+  "WorkTypes": ["In order of preference, any of: at_work, remote, hybrid"]
 }
 
 Please begin your analysis and provide the final JSON output. Your final output should consist only of the JSON structure and should not duplicate or rehash any of the work you did in the structured analysis block.

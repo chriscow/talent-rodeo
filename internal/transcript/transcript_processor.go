@@ -666,29 +666,31 @@ func getOrCreateSearchCriteria(ctx context.Context, fs *internal.FirestoreClient
 	results := []searchCriteriaResult{}
 
 	for _, query := range sq.Queries {
-		id := internal.MakeSearchCriteriaID(query, geoID, sq.WorkType, sq.ExperienceLevel)
-		criteria, found, err := internal.GetSearchCriteria(ctx, fs, id)
-		if err != nil {
-			return nil, fmt.Errorf("getOrCreateSearchCriteria: GetSearchCriteria: %w", err)
-		}
+		for _, workType := range sq.WorkTypes {
+			id := internal.MakeSearchCriteriaID(query, geoID, workType, sq.ExperienceLevel)
+			criteria, found, err := internal.GetSearchCriteria(ctx, fs, id)
+			if err != nil {
+				return nil, fmt.Errorf("getOrCreateSearchCriteria: GetSearchCriteria: %w", err)
+			}
 
-		if found {
+			if found {
+				results = append(results, searchCriteriaResult{
+					Criteria: *criteria,
+					IsNew:    false,
+				})
+				continue
+			}
+
+			criteria, err = internal.CreateSearchCriteria(ctx, fs, query, geoID, workType, sq.ExperienceLevel, maxPages, internal.DefaultListingAge)
+			if err != nil {
+				return nil, fmt.Errorf("getOrCreateSearchCriteria: CreateSearchCriteria: %w", err)
+			}
+
 			results = append(results, searchCriteriaResult{
 				Criteria: *criteria,
-				IsNew:    false,
+				IsNew:    true,
 			})
-			continue
 		}
-
-		criteria, err = internal.CreateSearchCriteria(ctx, fs, query, geoID, sq.WorkType, sq.ExperienceLevel, maxPages, internal.DefaultListingAge)
-		if err != nil {
-			return nil, fmt.Errorf("getOrCreateSearchCriteria: CreateSearchCriteria: %w", err)
-		}
-
-		results = append(results, searchCriteriaResult{
-			Criteria: *criteria,
-			IsNew:    true,
-		})
 	}
 	return results, nil
 }

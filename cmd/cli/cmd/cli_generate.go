@@ -14,19 +14,22 @@ var (
 	userID        string
 	appointmentID string
 	resumeID      string
+	saveFlag      bool
 )
 
 func init() {
 	RootCmd.AddCommand(generateCmd)
 	generateCmd.AddCommand(genJobDescCmd)
-	generateCmd.AddCommand(genSearchQueriesCmd)
+	generateCmd.AddCommand(genSteeringQueryCmd)
 
 	genJobDescCmd.Flags().StringVarP(&userID, "user", "u", "", "User ID")
 	genJobDescCmd.Flags().StringVarP(&appointmentID, "appointment", "a", "", "Appointment ID")
 	genJobDescCmd.Flags().StringVarP(&resumeID, "resume", "r", "", "Resume ID")
 
-	genSearchQueriesCmd.Flags().StringVarP(&userID, "user", "u", "", "User ID")
-	genSearchQueriesCmd.Flags().StringVarP(&appointmentID, "appointment", "a", "", "Appointment ID")
+	genSteeringQueryCmd.Flags().StringVarP(&userID, "user", "u", "", "User ID")
+	genSteeringQueryCmd.Flags().StringVarP(&appointmentID, "appointment", "a", "", "Appointment ID")
+	genSteeringQueryCmd.Flags().BoolVar(&saveFlag, "save", false, "Save the steering query to the database")
+	genSteeringQueryCmd.Flags().BoolVar(&allUsers, "all", false, "Generate steering queries for all users")
 }
 
 var generateCmd = &cobra.Command{
@@ -102,24 +105,91 @@ Note: The appointment must have status 'completed'.`,
 		fmt.Println(jobDesc)
 	},
 }
-var genSearchQueriesCmd = &cobra.Command{
-	Use:   "queries --user <userID> --appointment <appointmentID>",
-	Short: "Generate search queries for a completed appointment.",
-	Long:  `Generate search queries for a completed appointment.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		if userID == "" {
-			log.Fatalf("--user flag is required")
-		}
-		if appointmentID == "" {
-			log.Fatalf("--appointment flag is required")
-		}
 
+var genSteeringQueryCmd = &cobra.Command{
+	Use:     "steering-query --user <userID> --appointment <appointmentID> [--save]",
+	Aliases: []string{"query"},
+	Short:   "Generate a steering query for a completed appointment.",
+	Long:    `Generate a steering query for a completed appointment.`,
+	Example: `
+  # Generate a steering query using long flags
+  go run ./cmd/cli generate steering-query --user 1234abcd --appointment abcd5678 --save
+
+  # Generate a steering query using short flags
+  go run ./cmd/cli generate steering-query -u 1234abcd -a abcd5678 -s
+    `,
+	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		fs, err := internal.NewFirestoreClient(ctx)
 		if err != nil {
 			log.Fatalf("failed to create firestore client: %v", err)
 		}
 		defer fs.Close()
+
+		if allUsers {
+			users, err := internal.ListUsers(ctx, fs, 0, 0)
+			if err != nil {
+				log.Fatalf("failed to list users: %v", err)
+			}
+			for _, user := range users {
+				appt, found, err := internal.GetLatestCompletedAppointment(ctx, fs, user.ID)
+				if err != nil {
+					fmt.Printf("[SKIP] Error getting latest completed appointment for user %s: %v\n", user.ID, err)
+					continue
+				}
+				if !found {
+					fmt.Printf("[SKIP] No completed appointment for user %s\n", user.ID)
+					continue
+				}
+				if appt.CallID == nil {
+					fmt.Printf("[SKIP] Appointment for user %s has no CallID\n", user.ID)
+					continue
+				}
+				transcript, err := internal.GetAppointmentTranscript(ctx, fs, *appt.CallID)
+				if err != nil {
+					fmt.Printf("[SKIP] Error getting transcript for user %s: %v\n", user.ID, err)
+					continue
+				}
+				resume, found, err := internal.GetLatestResume(ctx, fs, user.ID)
+				if err != nil {
+					fmt.Printf("[SKIP] Error getting resume for user %s: %v\n", user.ID, err)
+					continue
+				}
+				if !found {
+					fmt.Printf("[SKIP] No resume found for user %s\n", user.ID)
+					continue
+				}
+				q, err := internal.GenerateSteeringQuery(ctx, *resume, *transcript)
+				if err != nil {
+					fmt.Printf("[SKIP] Error generating steering query for user %s: %v\n", user.ID, err)
+					continue
+				}
+				if saveFlag {
+					if err := internal.SetUserSteeringQuery(ctx, fs, user.ID, *q); err != nil {
+						fmt.Printf("[SKIP] Error saving steering query for user %s: %v\n", user.ID, err)
+						continue
+					}
+					fmt.Printf("[USER %s] Steering query saved to database\n", user.ID)
+				} else {
+					qJSON, err := json.MarshalIndent(q, "", "  ")
+					if err != nil {
+						fmt.Printf("[SKIP] Error marshalling steering query for user %s: %v\n", user.ID, err)
+						continue
+					}
+					fmt.Printf("[USER %s] Steering Query:\n%s\n", user.ID, string(qJSON))
+					fmt.Println()
+				}
+			}
+			return
+		}
+
+		// Single user logic (original)
+		if userID == "" {
+			log.Fatalf("--user flag is required")
+		}
+		if appointmentID == "" {
+			log.Fatalf("--appointment flag is required")
+		}
 
 		appointment, err := internal.GetAppointment(ctx, fs, userID, appointmentID)
 		if err != nil {
@@ -153,14 +223,9 @@ var genSearchQueriesCmd = &cobra.Command{
 		}
 		fmt.Println(string(qJSON))
 
-		p, err := internal.NewPineconeClient()
-		if err != nil {
-			log.Fatalf("failed to create pinecone client: %v", err)
-		}
-
-		_, err = q.GetDenseVector(ctx, p, internal.PineconeEmbedDense)
-		if err != nil {
-			log.Fatalf("Error getting dense vector: %v", err)
+		if saveFlag {
+			internal.SetUserSteeringQuery(ctx, fs, userID, *q)
+			fmt.Println("Steering query saved to database")
 		}
 	},
 }
