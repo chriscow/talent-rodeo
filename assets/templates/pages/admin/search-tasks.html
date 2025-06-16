@@ -18,7 +18,7 @@
     </article>
     {{end}}
 
-    <div id="task-list" hx-get="/admin/tasks/partial" hx-trigger="every 5s" hx-swap="innerHTML">
+    <div id="task-list" hx-get="/admin/search-tasks/partial" hx-trigger="every 5s" hx-swap="innerHTML">
         {{template "partials/tasks-list.html" .}}
     </div>
 </main>
