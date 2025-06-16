@@ -291,7 +291,7 @@ func GetJobIDsForCriteriaCreatedAfter(ctx context.Context, fs *FirestoreClient, 
 	return jobs, nil
 }
 
-func UpdateSearchCriteria(ctx context.Context, fs *FirestoreClient, criteria *SearchCriteria) error {
+func SetSearchCriteria(ctx context.Context, fs *FirestoreClient, criteria *SearchCriteria) error {
 	if fs == nil {
 		return fmt.Errorf("firestore client is nil")
 	}
@@ -302,7 +302,7 @@ func UpdateSearchCriteria(ctx context.Context, fs *FirestoreClient, criteria *Se
 	return nil
 }
 
-func UpdateSearchCriteriaTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, criteria *SearchCriteria) error {
+func SetSearchCriteriaTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, criteria *SearchCriteria) error {
 	if fs == nil {
 		return fmt.Errorf("firestore client is nil")
 	}

@@ -1,0 +1,109 @@
+{{define "title"}}Search Criteria Management{{end}}
+
+{{define "page:main"}}
+<main class="container">
+    <hgroup>
+        <h1>Search Criteria Management</h1>
+        <p>Create, edit, and delete search criteria.</p>
+    </hgroup>
+
+    {{if .Error}}
+    <article class="error" style="background-color: var(--pico-form-element-invalid-active-border-color); color: var(--pico-color-white);">
+        <strong>Error:</strong> {{.Error}}
+    </article>
+    {{end}}
+    {{if .Success}}
+    <article class="success" style="background-color: var(--pico-form-element-valid-background-color); color: var(--pico-color-white);">
+        <strong>Success:</strong> {{.Success}}
+    </article>
+    {{end}}
+
+    <section>
+        <label for="criteria-select">Select Criteria to Edit</label>
+        <select id="criteria-select" name="id" onchange="if (this.value) window.location.href='/admin/search-criteria?id=' + this.value;">
+            <option value="" {{if not .SelectedCriteria}}selected{{end}}>-- Select a Criteria --</option>
+            <option value="new" {{if .IsNew}}selected{{end}}>-- Create New Criteria --</option>
+            {{range .AllCriteria}}
+            <option value="{{.ID}}" {{if and $.SelectedCriteria (eq .ID $.SelectedCriteria.ID)}}selected{{end}}>
+                {{.ID}}
+            </option>
+            {{end}}
+        </select>
+    </section>
+
+    <form method="POST" action="/admin/search-criteria">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+        {{if .SelectedCriteria}}
+        <input type="hidden" name="id" value="{{.SelectedCriteria.ID}}">
+        {{end}}
+
+        <label for="query">
+            Query
+            <input type="text" id="query" name="query" placeholder="e.g., 'golang developer'" value="{{if .SelectedCriteria}}{{.SelectedCriteria.Query}}{{end}}" required>
+        </label>
+
+        <label for="geoId">GeoID</label>
+        <select id="geoId" name="geoId" required>
+            <option value="" disabled {{if not .SelectedCriteria}}selected{{end}}>Select a GeoID</option>
+            {{range .GeoIDs}}
+            <option value="{{.ID}}" {{if and $.SelectedCriteria (eq .ID $.SelectedCriteria.GeoID)}}selected{{end}}>{{.Value}}</option>
+            {{end}}
+        </select>
+
+        <div class="grid">
+            <label for="workType">Work Type</label>
+            <select id="workType" name="workType" required>
+                {{range .WorkTypes}}
+                <option value="{{.}}" {{if and $.SelectedCriteria (eq . $.SelectedCriteria.WorkType)}}selected{{end}}>{{.}}</option>
+                {{end}}
+            </select>
+
+            <label for="experienceLevel">Experience Level</label>
+            <select id="experienceLevel" name="experienceLevel" required>
+                {{range .ExperienceLevels}}
+                <option value="{{.}}" {{if and $.SelectedCriteria (eq . $.SelectedCriteria.ExperienceLevel)}}selected{{end}}>{{.}}</option>
+                {{end}}
+            </select>
+        </div>
+
+        <div class="grid">
+            <label for="listingAge">Listing Age</label>
+            <select id="listingAge" name="listingAge" required>
+                {{range .ListingAges}}
+                <option value="{{.}}" {{if and $.SelectedCriteria (eq . $.SelectedCriteria.ListingAge)}}selected{{end}}>{{.}}</option>
+                {{end}}
+            </select>
+            <label for="maxPages">
+                Max Pages
+                <input type="number" id="maxPages" name="maxPages" value="{{if .SelectedCriteria}}{{.SelectedCriteria.MaxPages}}{{else}}3{{end}}" required>
+            </label>
+        </div>
+
+        <hr>
+
+        <footer>
+            {{if .SelectedCriteria}}
+                <div class="grid">
+                    <button type="submit" name="action" value="update">Update Criteria</button>
+                    <a href="/admin/search-criteria?id=new" role="button" class="secondary">Clear and Create New</a>
+                </div>
+                <hr>
+                <div class="grid">
+                     <details>
+                        <summary role="button" class="outline">Delete Criteria</summary>
+                        <p>This action cannot be undone. Please confirm you want to delete this criteria.</p>
+                        <label for="confirm_delete">
+                            <input type="checkbox" id="confirm_delete" name="confirm_delete">
+                            I understand and wish to proceed.
+                        </label>
+                        <button type="submit" name="action" value="delete" class="contrast" onclick="return document.getElementById('confirm_delete').checked;">Delete Permanently</button>
+                    </details>
+                </div>
+            {{else}}
+                <button type="submit" name="action" value="create">Create New Criteria</button>
+            {{end}}
+        </footer>
+    </form>
+</main>
+{{end}} 

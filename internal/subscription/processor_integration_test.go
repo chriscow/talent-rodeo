@@ -106,7 +106,7 @@ func TestProcessorIntegration(t *testing.T) {
 		}
 		criteria.LastPublishedAt = &oldTime
 		criteria.LastSearchedAt = &recentTime
-		err = internal.UpdateSearchCriteria(ctx, fs, criteria)
+		err = internal.SetSearchCriteria(ctx, fs, criteria)
 		if err != nil {
 			t.Fatalf("Failed to update search criteria: %v", err)
 		}
@@ -200,7 +200,7 @@ func TestProcessorIntegration(t *testing.T) {
 		criteria.LastSearchedAt = &recentTime
 
 		// Update criteria
-		err = internal.UpdateSearchCriteria(ctx, fs, criteria)
+		err = internal.SetSearchCriteria(ctx, fs, criteria)
 		if err != nil {
 			t.Fatalf("Failed to update criteria: %v", err)
 		}
@@ -250,7 +250,7 @@ func TestProcessorIntegration(t *testing.T) {
 		criteria.LastSearchedAt = &recentTime
 
 		// Update criteria
-		err = internal.UpdateSearchCriteria(ctx, fs, criteria)
+		err = internal.SetSearchCriteria(ctx, fs, criteria)
 		if err != nil {
 			t.Fatalf("Failed to update criteria: %v", err)
 		}
@@ -305,7 +305,7 @@ func TestProcessorIntegration(t *testing.T) {
 		criteria.LastPublishedAt = &recentPubTime
 
 		// Update criteria
-		err = internal.UpdateSearchCriteria(ctx, fs, criteria)
+		err = internal.SetSearchCriteria(ctx, fs, criteria)
 		if err != nil {
 			t.Fatalf("Failed to update criteria: %v", err)
 		}
