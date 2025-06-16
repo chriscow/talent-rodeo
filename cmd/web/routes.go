@@ -120,6 +120,9 @@ func (app *application) routes() http.Handler {
 
 			// Add subscription management admin page
 			mux.HandleFunc("/admin/subscriptions", app.adminSubscriptions, "GET", "POST")
+
+			// Add upload resume for user admin page
+			mux.HandleFunc("/admin/upload-resume", app.adminUploadResume, "GET", "POST")
 		})
 	})
 
