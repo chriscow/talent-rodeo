@@ -930,3 +930,64 @@ func (app *application) adminAppointments(w http.ResponseWriter, r *http.Request
 		app.serverError(w, r, err)
 	}
 }
+
+func (app *application) showSearchTasksPage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	data := app.newTemplateData(r)
+
+	if r.Method == http.MethodPost {
+		if err := r.ParseForm(); err != nil {
+			app.serverError(w, r, fmt.Errorf("failed to parse form: %w", err))
+			return
+		}
+
+		taskID := r.PostForm.Get("task_id")
+		action := r.PostForm.Get("action")
+
+		if action == "cancel" && taskID != "" {
+			err := internal.SetSearchTaskStatus(ctx, app.fs, taskID, internal.SearchTaskStatusCancelled)
+			if err != nil {
+				data["Error"] = "Failed to cancel task: " + err.Error()
+			} else {
+				data["Success"] = "Task cancelled successfully."
+			}
+		}
+	}
+
+	tasks, err := internal.GetIncompleteSearchTasks(ctx, app.fs)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	sort.Slice(tasks, func(i, j int) bool {
+		return tasks[i].CreatedAt.After(tasks[j].CreatedAt)
+	})
+
+	data["Tasks"] = tasks
+
+	if err := response.Page(w, http.StatusOK, data, "pages/admin/search-tasks.html"); err != nil {
+		app.serverError(w, r, err)
+	}
+}
+
+func (app *application) getSearchTasksPartial(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	data := app.newTemplateData(r)
+
+	tasks, err := internal.GetIncompleteSearchTasks(ctx, app.fs)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	sort.Slice(tasks, func(i, j int) bool {
+		return tasks[i].CreatedAt.After(tasks[j].CreatedAt)
+	})
+
+	data["Tasks"] = tasks
+
+	if err := response.Partial(w, http.StatusOK, data, "partials/search-task-list.html"); err != nil {
+		app.serverError(w, r, err)
+	}
+}

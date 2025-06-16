@@ -21,6 +21,7 @@ const (
 	SearchTaskStatusProcessing SearchTaskStatus = "processing"
 	SearchTaskStatusCompleted  SearchTaskStatus = "completed"
 	SearchTaskStatusFailed     SearchTaskStatus = "failed"
+	SearchTaskStatusCancelled  SearchTaskStatus = "cancelled"
 )
 
 // SearchTask represents a queued job search with a provider.
