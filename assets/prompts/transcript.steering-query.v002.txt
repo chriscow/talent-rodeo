@@ -24,14 +24,13 @@ Please follow these steps:
    a. Queries:
       - List relevant quotes from both resume and transcript
       - Identify primary career field
-      - Determine if it's best searched by skills or job title
+      - Determine if it's best searched by skills or job title. Management, leadership, and executive roles should be searched by job title. Programming languages and technology stacks should be searched by skills.
       - Consider that technological areas such as "Generative AI" or "Distributed Systems" should be focus areas in MoveToward below, not the primary query
-      - Identify the specific programming language(s), technology stack(s), or job title
+      - Identify the specific programming language(s), technology stack(s), or job titles.
       - To be clear, programming languages and technology stacks should be identified by proper name. If it is an "area of interest", put it in MoveToward.
       - Use canonical forms (e.g., "Go (Golang)" instead of just "Go")
-      - List potential alternatives and explain why they weren't chosen
       - Summarize key findings
-      - Explain your final choice
+      - Explain your final choices
       - Ensure that the Queries are specific programming languages, technology stacks, or job titles, not a broad concepts
 
    b. MoveToward:
@@ -87,12 +86,12 @@ Important notes:
 - Base all components on explicit statements or strong implications from the job seeker's resume and responses.
 - Ensure ExperienceLevel and WorkType contain only the specified enum values.
 - MoveToward, MoveAway, and RerankQuery should be in first-person, as if the job seeker is speaking.
-- The Queries must be a specific programming language, technology stack, or job title that would be used in job search keywords. Avoid broad concepts like "Generative AI" for the Queries field.
+- The Queries must be specific programming language(s), technology stack(s), or job title(s) that would be used as job search keywords. Avoid broad concepts like "Generative AI" for the Queries field.
 
 Your final output should follow this JSON structure:
 
 {
-  "Queries": ["Specific programming language, technology stack, or job title"],
+  "Queries": ["Specific programming language(s), technology stack(s), or job title(s)"],
   "MoveToward": "Multiple first-person sentences about desired aspects, including work type",
   "MoveAway": "Multiple first-person sentences about aspects to avoid, but phrased as if desired",
   "RerankQuery": "Comprehensive first-person sentences combining all preferences and keywords",
