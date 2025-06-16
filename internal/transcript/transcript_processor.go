@@ -218,7 +218,7 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 	//
 	logger.Debug("getting user statement", "name", user.Name, "userID", user.ID, "appointmentID", appointment.ID)
 	internal.SendPusherMessage(psh, user.ID, "Analyzing your call", nil)
-	if err := getUserStatement(ctx, user, transcript, fs, logger); err != nil {
+	if err := GetUserStatement(ctx, user, transcript, fs, logger); err != nil {
 		logger.Error("failed to get user statement", "error", err, "userID", user.ID, "appointmentID", appointment.ID)
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"userID":         user.ID,
@@ -785,7 +785,7 @@ func getWorkPreferences(ctx context.Context, fs *internal.FirestoreClient, trans
 // 	return nil
 // }
 
-func getUserStatement(ctx context.Context, user *internal.User, transcript *internal.Transcript, fs *internal.FirestoreClient, logger *slog.Logger) error {
+func GetUserStatement(ctx context.Context, user *internal.User, transcript *internal.Transcript, fs *internal.FirestoreClient, logger *slog.Logger) error {
 	logger.Debug("generating user statement", "userID", user.ID)
 	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/transcript.user-statement.v001.txt")
 	if err != nil {

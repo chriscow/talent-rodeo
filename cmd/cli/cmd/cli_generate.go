@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
+	"os"
 	"talent-rodeo/internal"
+	"talent-rodeo/internal/transcript"
 
 	"github.com/spf13/cobra"
 )
@@ -21,6 +24,7 @@ func init() {
 	RootCmd.AddCommand(generateCmd)
 	generateCmd.AddCommand(genJobDescCmd)
 	generateCmd.AddCommand(genSteeringQueryCmd)
+	generateCmd.AddCommand(genStatementCmd)
 
 	genJobDescCmd.Flags().StringVarP(&userID, "user", "u", "", "User ID")
 	genJobDescCmd.Flags().StringVarP(&appointmentID, "appointment", "a", "", "Appointment ID")
@@ -30,6 +34,8 @@ func init() {
 	genSteeringQueryCmd.Flags().StringVarP(&appointmentID, "appointment", "a", "", "Appointment ID")
 	genSteeringQueryCmd.Flags().BoolVar(&saveFlag, "save", false, "Save the steering query to the database")
 	genSteeringQueryCmd.Flags().BoolVar(&allUsers, "all", false, "Generate steering queries for all users")
+
+	genStatementCmd.Flags().StringVarP(&userID, "user", "u", "", "User ID")
 }
 
 var generateCmd = &cobra.Command{
@@ -227,5 +233,54 @@ var genSteeringQueryCmd = &cobra.Command{
 			internal.SetUserSteeringQuery(ctx, fs, userID, *q)
 			fmt.Println("Steering query saved to database")
 		}
+	},
+}
+
+var genStatementCmd = &cobra.Command{
+	Use:   "statement --user <userID>",
+	Short: "Generate a user statement for the latest completed appointment.",
+	Long:  `Generate a user statement for the latest completed appointment for a user using the transcript and LLM.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		if userID == "" {
+			log.Fatalf("--user flag is required")
+		}
+		ctx := context.Background()
+		fs, err := internal.NewFirestoreClient(ctx)
+		if err != nil {
+			log.Fatalf("failed to create firestore client: %v", err)
+		}
+		defer fs.Close()
+
+		user, found, err := internal.GetUser(ctx, fs, userID)
+		if err != nil {
+			log.Fatalf("Error getting user: %v", err)
+		}
+		if !found {
+			log.Fatalf("User not found: %s", userID)
+		}
+
+		appointment, found, err := internal.GetLatestCompletedAppointment(ctx, fs, userID)
+		if err != nil {
+			log.Fatalf("Error getting latest completed appointment: %v", err)
+		}
+		if !found {
+			log.Fatalf("No completed appointment found for user: %s", userID)
+		}
+		if appointment.CallID == nil || *appointment.CallID == "" {
+			log.Fatalf("Appointment has no CallID")
+		}
+
+		ts, err := internal.GetAppointmentTranscript(ctx, fs, *appointment.CallID)
+		if err != nil {
+			log.Fatalf("Error getting appointment transcript: %v", err)
+		}
+
+		// Use a stub logger for CLI
+		stubLogger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+		err = transcript.GetUserStatement(ctx, user, ts, fs, stubLogger)
+		if err != nil {
+			log.Fatalf("Error generating user statement: %v", err)
+		}
+		fmt.Println("User statement generated and saved to user profile.")
 	},
 }
