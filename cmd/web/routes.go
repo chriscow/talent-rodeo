@@ -107,8 +107,8 @@ func (app *application) routes() http.Handler {
 			mux.HandleFunc("/admin", app.adminIndex, "GET")
 
 			// Add tasks routes
-			mux.HandleFunc("/admin/tasks", app.showTasksPage, "GET")
-			mux.HandleFunc("/admin/tasks/partial", app.getTasksPartial, "GET")
+			mux.HandleFunc("/admin/search-tasks", app.showSearchTasksPage, "GET", "POST")
+			mux.HandleFunc("/admin/search-tasks/partial", app.getSearchTasksPartial, "GET")
 
 			mux.HandleFunc("/admin/voice", app.adminVoice, "GET", "POST")
 

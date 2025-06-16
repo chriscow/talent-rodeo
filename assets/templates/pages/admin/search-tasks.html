@@ -1,0 +1,25 @@
+{{define "title"}}Task Management{{end}}
+
+{{define "page:main"}}
+<main class="container">
+    <hgroup>
+        <h1>Search Task Management</h1>
+        <p>Monitor and manage outstanding search tasks.</p>
+    </hgroup>
+
+    {{if .Error}}
+    <article class="error" style="background-color: var(--pico-form-element-invalid-active-border-color); color: var(--pico-color-white);">
+        <strong>Error:</strong> {{.Error}}
+    </article>
+    {{end}}
+    {{if .Success}}
+    <article class="success" style="background-color: var(--pico-form-element-valid-background-color); color: var(--pico-color-white);">
+        <strong>Success:</strong> {{.Success}}
+    </article>
+    {{end}}
+
+    <div id="task-list" hx-get="/admin/tasks/partial" hx-trigger="every 5s" hx-swap="innerHTML">
+        {{template "partials/tasks-list.html" .}}
+    </div>
+</main>
+{{end}}
