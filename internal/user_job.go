@@ -209,6 +209,7 @@ func GetUserJobsSorted(ctx context.Context, fs *FirestoreClient, userID string, 
 
 	// Add ordering after filters
 	baseQuery = baseQuery.OrderBy("Rating", firestore.Desc)
+	baseQuery = baseQuery.OrderBy("CreatedAt", firestore.Desc)
 
 	// Apply paging if a page token is provided
 	var query firestore.Query
