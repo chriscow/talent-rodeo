@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -571,6 +575,131 @@ func (app *application) adminSubscriptions(w http.ResponseWriter, r *http.Reques
 	}
 
 	if err := response.Page(w, http.StatusOK, data, "pages/admin/subscriptions.html"); err != nil {
+		app.serverError(w, r, err)
+	}
+}
+
+// --- Admin Upload Resume for User ---
+func (app *application) adminUploadResume(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	data := app.newTemplateData(r)
+
+	// Fetch all users for the dropdown
+	users, err := internal.ListUsers(ctx, app.fs, 100, 0)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+	data["Users"] = users
+
+	if r.Method == http.MethodGet {
+		if err := response.Page(w, http.StatusOK, data, "pages/admin/upload-resume.html"); err != nil {
+			app.serverError(w, r, err)
+		}
+		return
+	}
+
+	// POST: handle upload
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		data["Error"] = "File too large. Maximum size is 10MB."
+		response.Page(w, http.StatusUnprocessableEntity, data, "pages/admin/upload-resume.html")
+		return
+	}
+
+	selectedUserID := r.FormValue("user_id")
+	phone := r.FormValue("phone")
+	data["SelectedUserID"] = selectedUserID
+	data["Phone"] = phone
+
+	if selectedUserID == "" {
+		data["Error"] = "Please select a user."
+		response.Page(w, http.StatusUnprocessableEntity, data, "pages/admin/upload-resume.html")
+		return
+	}
+	selectedUser, found, err := internal.GetUser(ctx, app.fs, selectedUserID)
+	if err != nil || !found {
+		data["Error"] = "User not found."
+		response.Page(w, http.StatusUnprocessableEntity, data, "pages/admin/upload-resume.html")
+		return
+	}
+
+	file, header, err := r.FormFile("resume")
+	if err != nil {
+		data["Error"] = "Please select a file."
+		response.Page(w, http.StatusUnprocessableEntity, data, "pages/admin/upload-resume.html")
+		return
+	}
+	defer file.Close()
+
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	if ext != ".pdf" && ext != ".docx" && ext != ".txt" {
+		data["Error"] = "Invalid file type. Please upload a DOCX, PDF, or TXT file."
+		response.Page(w, http.StatusUnprocessableEntity, data, "pages/admin/upload-resume.html")
+		return
+	}
+
+	if phone != "" {
+		phone = strings.TrimSpace(phone)
+		if !strings.HasPrefix(phone, "+1") && !strings.HasPrefix(phone, "1") {
+			phone = "+1" + phone
+		}
+		phoneRegex := regexp.MustCompile(`^\+1\d{10}$`)
+		if !phoneRegex.MatchString(phone) {
+			data["Error"] = "Invalid phone number. Please use the format +1XXXXXXXXXX."
+			response.Page(w, http.StatusUnprocessableEntity, data, "pages/admin/upload-resume.html")
+			return
+		}
+	}
+
+	tempFile, err := os.CreateTemp("", "resume-*"+ext)
+	if err != nil {
+		data["Error"] = "Failed to process file. Please try again."
+		response.Page(w, http.StatusUnprocessableEntity, data, "pages/admin/upload-resume.html")
+		return
+	}
+	defer os.Remove(tempFile.Name())
+
+	_, err = io.Copy(tempFile, file)
+	if err != nil {
+		data["Error"] = "Failed to process file. Please try again."
+		response.Page(w, http.StatusUnprocessableEntity, data, "pages/admin/upload-resume.html")
+		return
+	}
+
+	resumeText, err := app.extractResumeText(tempFile, header.Filename)
+	if err != nil {
+		data["Error"] = fmt.Sprintf("Failed to extract text from resume: %v", err)
+		response.Page(w, http.StatusUnprocessableEntity, data, "pages/admin/upload-resume.html")
+		return
+	}
+
+	resume := internal.Resume{
+		RawText: resumeText,
+	}
+	if err := internal.CreateResume(ctx, app.fs, *selectedUser, &resume); err != nil {
+		data["Error"] = "Failed to save resume. Please try again."
+		response.Page(w, http.StatusUnprocessableEntity, data, "pages/admin/upload-resume.html")
+		return
+	}
+
+	if phone != "" {
+		selectedUser.Phone = &phone
+		if err := internal.UpdateUser(ctx, app.fs, selectedUser.ID, map[string]any{
+			"Phone": phone,
+		}); err != nil {
+			data["Error"] = "Failed to update user phone."
+			response.Page(w, http.StatusUnprocessableEntity, data, "pages/admin/upload-resume.html")
+			return
+		}
+	}
+
+	// Start resume processing in background, but do not show waiting screen
+	go func() {
+		_ = internal.AnnotateResume(context.Background(), app.fs, app.logger, selectedUser, &resume)
+	}()
+
+	data["Success"] = "Resume uploaded and processing started for user."
+	if err := response.Page(w, http.StatusOK, data, "pages/admin/upload-resume.html"); err != nil {
 		app.serverError(w, r, err)
 	}
 }
