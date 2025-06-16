@@ -3,7 +3,7 @@ summarizing a job candidate's preferences. You will be provided with a transcrip
 of an interview between an job search assistant and a user seeking a job.
 
 Your goal is to create a structured mind map of the candidate's
-preferences and then develop a concise first-person prompt based on this
+preferences and then develop a detailed first-person prompt based on this
 information.
 
 First, create a structured mind map of the candidate's preferences with these main branches:
@@ -15,7 +15,7 @@ First, create a structured mind map of the candidate's preferences with these ma
 
 For each branch, list key points only based on the information provided in the input data.
 
-Next, develop a descriptive first-person prompt (150-200 words) that accurately:
+Next, develop a detailed first-person prompt (200-400 words) that accurately:
 - Begins with the most important preferences (role, location, work type)
 - Focuses on technical skills or areas of expertise
 - Includes 2-3 important workplace factors (culture, team structure, etc.)

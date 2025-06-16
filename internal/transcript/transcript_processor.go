@@ -803,7 +803,7 @@ func getUserStatement(ctx context.Context, user *internal.User, transcript *inte
 	}
 
 	// Ask LLM to generate user statement
-	data, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat))
+	data, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat), tools.WithMaxTokens(8192))
 	if err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
 		return fmt.Errorf("failed to ask LLM: %w", err)
