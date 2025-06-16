@@ -219,14 +219,7 @@ func (p *UserJobProcessor) evaluateJob(ctx context.Context, task userJobEvaluati
 		})
 	}
 
-	onDashboard, err := p.checkUserOnDashboard()
-	if err != nil {
-		p.logger.Error("failed to check user on dashboard", "error", err)
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"jobID":  task.Job.ID,
-			"userID": p.userID,
-		})
-	}
+	onDashboard, _ := p.checkUserOnDashboard()
 	p.logger.Info("successfully evaluated and saved job for user", "jobID", userJob.ID, "userID", userJob.UserID, "rating", matchAnalysis.Rating.NumericRating, "onDashboard", onDashboard)
 
 	// Update and notify progress
