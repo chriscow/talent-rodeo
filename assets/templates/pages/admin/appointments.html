@@ -1,0 +1,97 @@
+{{define "title"}}Appointment Management{{end}}
+
+{{define "page:main"}}
+<main class="container">
+    <hgroup>
+        <h1>Appointment Management</h1>
+        <p>View user appointments, transcripts, and update status.</p>
+    </hgroup>
+
+    {{if .Error}}
+    <article class="error" style="background-color: var(--pico-form-element-invalid-active-border-color); color: var(--pico-color-white);">
+        <strong>Error:</strong> {{.Error}}
+    </article>
+    {{end}}
+    {{if .Success}}
+    <article class="success" style="background-color: var(--pico-form-element-valid-background-color); color: var(--pico-color-white);">
+        <strong>Success:</strong> {{.Success}}
+    </article>
+    {{end}}
+
+    <!-- Selection Dropdowns -->
+    <div class="grid">
+        <!-- User Dropdown -->
+        <section>
+            <label for="user-select">Select User</label>
+            <select id="user-select" name="user_id" onchange="if (this.value) window.location.href='/admin/appointments?user_id=' + this.value;">
+                <option value="">-- Select a User --</option>
+                {{range .Users}}
+                <option value="{{.ID}}" {{if eq .ID $.SelectedUserID}}selected{{end}}>
+                    {{.Name}} ({{.Email}})
+                </option>
+                {{end}}
+            </select>
+        </section>
+
+        <!-- Appointment Dropdown -->
+        <section>
+            <label for="appointment-select">Select Appointment</label>
+            <select id="appointment-select" name="appointment_id" onchange="if (this.value) window.location.href='/admin/appointments?user_id={{$.SelectedUserID}}&appointment_id=' + this.value;" {{if not .SelectedUserID}}disabled{{end}}>
+                <option value="">-- Select an Appointment --</option>
+                {{range .Appointments}}
+                <option value="{{.ID}}" {{if eq .ID $.SelectedAppointmentID}}selected{{end}}>
+                    {{.Name}} - {{.ScheduledTime.Format "Jan 2, 2006 3:04 PM"}}
+                </option>
+                {{end}}
+            </select>
+        </section>
+    </div>
+
+    {{if .SelectedAppointment}}
+    <hr>
+    <!-- Appointment Details Form -->
+    <form method="POST" action="/admin/appointments">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <input type="hidden" name="user_id" value="{{.SelectedUserID}}">
+        <input type="hidden" name="appointment_id" value="{{.SelectedAppointment.ID}}">
+
+        <hgroup>
+            <h2>Appointment: {{.SelectedAppointment.Name}}</h2>
+            <p>ID: <code>{{.SelectedAppointment.ID}}</code> | Call ID: <code>{{if .SelectedAppointment.CallID}}{{.SelectedAppointment.CallID}}{{else}}N/A{{end}}</code></p>
+        </hgroup>
+        
+        <div class="grid">
+            <label for="status">
+                Status
+                <select id="status" name="status">
+                    {{range .AppointmentStatuses}}
+                    <option value="{{.}}" {{if eq . $.SelectedAppointment.Status}}selected{{end}}>{{.}}</option>
+                    {{end}}
+                </select>
+            </label>
+            <label for="scheduled-time">
+                Scheduled Time
+                <input type="text" id="scheduled-time" value="{{.SelectedAppointment.ScheduledTime.Format "2006-01-02 15:04:05"}}" readonly>
+            </label>
+        </div>
+
+        <button type="submit">Update Status</button>
+    </form>
+    
+    <!-- Transcript Display -->
+    {{if .Transcript}}
+    <section>
+        <h3>Transcript</h3>
+        <textarea readonly style="height: 400px; white-space: pre-wrap;">{{.Transcript}}</textarea>
+    </section>
+    {{else if .SelectedAppointment.CallID}}
+    <section>
+        <h3>Transcript</h3>
+        <p>Transcript is being fetched or is not available.</p>
+    </section>
+    {{end}}
+
+    {{end}}
+
+</main>
+{{end}} 

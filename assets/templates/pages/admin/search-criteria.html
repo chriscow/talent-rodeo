@@ -34,7 +34,7 @@
     <form method="POST" action="/admin/search-criteria">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 
-        {{if .SelectedCriteria}}
+        {{if and .SelectedCriteria (not .IsDuplicate)}}
         <input type="hidden" name="id" value="{{.SelectedCriteria.ID}}">
         {{end}}
 
@@ -83,9 +83,10 @@
         <hr>
 
         <footer>
-            {{if .SelectedCriteria}}
+            {{if and .SelectedCriteria (not .IsDuplicate)}}
                 <div class="grid">
                     <button type="submit" name="action" value="update">Update Criteria</button>
+                    <a href="/admin/search-criteria?duplicate_id={{.SelectedCriteria.ID}}" role="button" class="secondary">Duplicate</a>
                     <a href="/admin/search-criteria?id=new" role="button" class="secondary">Clear and Create New</a>
                 </div>
                 <hr>

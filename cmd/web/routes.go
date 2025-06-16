@@ -127,6 +127,9 @@ func (app *application) routes() http.Handler {
 			// Add search criteria management page
 			mux.HandleFunc("/admin/search-criteria", app.adminSearchCriteria, "GET", "POST")
 
+			// Add appointment management page
+			mux.HandleFunc("/admin/appointments", app.adminAppointments, "GET", "POST")
+
 		})
 	})
 
