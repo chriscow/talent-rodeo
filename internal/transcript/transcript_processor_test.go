@@ -233,7 +233,7 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 			ID: "test-criteria-user-2",
 			SteeringQuery: &internal.SteeringQuery{
 				Queries:         []string{"software engineer python"},
-				WorkType:        internal.WorkTypeRemote,
+				WorkTypes:       []internal.WorkType{internal.WorkTypeRemote},
 				ExperienceLevel: internal.ExperienceLevelEntryLevel,
 			},
 			// WorkPreferences is nil
@@ -261,7 +261,7 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 			ID: "test-criteria-user-3",
 			SteeringQuery: &internal.SteeringQuery{
 				Queries:         []string{"software engineer python"},
-				WorkType:        internal.WorkTypeRemote,
+				WorkTypes:       []internal.WorkType{internal.WorkTypeRemote},
 				ExperienceLevel: internal.ExperienceLevelEntryLevel,
 				MoveToward:      "I want remote software engineering positions using Python",
 				MoveAway:        "I want to avoid on-site positions and non-Python roles",
@@ -293,7 +293,7 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 			ID: "test-criteria-user-4",
 			SteeringQuery: &internal.SteeringQuery{
 				Queries:         []string{"software engineer python"},
-				WorkType:        internal.WorkTypeRemote,
+				WorkTypes:       []internal.WorkType{internal.WorkTypeRemote},
 				ExperienceLevel: internal.ExperienceLevelEntryLevel,
 				MoveToward:      "I want remote software engineering positions using Python",
 				MoveAway:        "I want to avoid on-site positions and non-Python roles",
@@ -346,7 +346,7 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 			ID: "test-criteria-user-multi-1",
 			SteeringQuery: &internal.SteeringQuery{
 				Queries:         []string{query1, query2},
-				WorkType:        internal.WorkTypeRemote,
+				WorkTypes:       []internal.WorkType{internal.WorkTypeRemote},
 				ExperienceLevel: internal.ExperienceLevelEntryLevel,
 				MoveToward:      "I want remote software engineering and backend development positions",
 				MoveAway:        "I want to avoid on-site positions and frontend roles",
@@ -399,7 +399,7 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 			ID: "test-criteria-user-multi-2",
 			SteeringQuery: &internal.SteeringQuery{
 				Queries:         []string{existingQuery},
-				WorkType:        internal.WorkTypeRemote,
+				WorkTypes:       []internal.WorkType{internal.WorkTypeRemote},
 				ExperienceLevel: internal.ExperienceLevelEntryLevel,
 				MoveToward:      "I want remote frontend development positions using React",
 				MoveAway:        "I want to avoid backend roles and non-React frameworks",
@@ -417,7 +417,7 @@ func TestGetOrCreateSearchCriteria(t *testing.T) {
 			ID: "test-criteria-user-multi-2",
 			SteeringQuery: &internal.SteeringQuery{
 				Queries:         []string{existingQuery, newQuery},
-				WorkType:        internal.WorkTypeRemote,
+				WorkTypes:       []internal.WorkType{internal.WorkTypeRemote},
 				ExperienceLevel: internal.ExperienceLevelEntryLevel,
 				MoveToward:      "I want remote frontend and fullstack development positions",
 				MoveAway:        "I want to avoid backend-only roles and non-JS frameworks",

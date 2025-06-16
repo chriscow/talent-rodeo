@@ -46,7 +46,7 @@ type SteeringQuery struct {
 
 	// This parameter will help you filter out the jobs based on their working model.
 	// Possible Values - at_work, remote,  & hybrid.
-	WorkType WorkType `description:"The work type to filter results by" enum:"at_work, remote, hybrid"`
+	WorkTypes []WorkType `description:"The work types to filter results by in order of preference" enum:"at_work, remote, hybrid"`
 
 	// MoveToward is a concept as a complete sentence to move results toward
 	MoveToward string `description:"The concept to steer the search results toward, expressed as a first person complete sentence and is required."`
@@ -86,8 +86,8 @@ func (sq SteeringQuery) Validate() error {
 		return fmt.Errorf("experience level cannot be empty")
 	}
 
-	if sq.WorkType == "" {
-		return fmt.Errorf("work type cannot be empty")
+	if len(sq.WorkTypes) == 0 {
+		return fmt.Errorf("work types cannot be empty")
 	}
 
 	if sq.MoveToward == "" {
@@ -136,6 +136,10 @@ func NewSteeringQuery(queries []string, model PineconeEmbedModel, opts ...Steeri
 
 	for _, opt := range opts {
 		opt(sq)
+	}
+
+	if err := sq.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid steering query: %w", err)
 	}
 
 	return sq, nil

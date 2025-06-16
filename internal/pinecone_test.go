@@ -65,7 +65,7 @@ func TestGetSteeringVector(t *testing.T) {
 			sq := &SteeringQuery{
 				Queries:         []string{tt.query},
 				ExperienceLevel: tt.experienceLevel,
-				WorkType:        tt.workType,
+				WorkTypes:       []WorkType{tt.workType},
 				MoveToward:      tt.moveToward,
 				MoveAway:        tt.moveAway,
 				ForceAway:       tt.forceAway,

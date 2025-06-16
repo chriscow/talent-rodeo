@@ -22,8 +22,9 @@ Your task is to perform a work preferences analysis based on the transcript. Fol
    - If a specific location is clearly preferred: use the matched U.S. metropolitan area
    - If the location is not in the list: "United States"
    - If no clear preference is stated: "Remote"
+   - More than one location may be listed
 
-4. Determine the final WorkType value:
+4. Determine the final WorkTypes value. Select one or more in order of preference:
    - "at_work" (fully on-site)
    - "hybrid" (mix of remote and on-site)
    - "remote" (fully remote)
@@ -39,8 +40,8 @@ Present your analysis in the following format:
 </comprehensive_table>
 
 <final_determinations>
-WorkLocation: [Insert final WorkLocation value]
-WorkType: [Insert final WorkType value]
+WorkLocation(s): [Insert final WorkLocation value]
+WorkType(s): [Insert final WorkTypes value]
 </final_determinations>
 
 <reasoning>
