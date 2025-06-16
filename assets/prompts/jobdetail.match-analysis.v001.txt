@@ -42,11 +42,26 @@ Then, follow these steps to complete your analysis:
    <rating> 
       <numeric_rating>
    When presenting this job to the user, we will include your rating of 1 to 5 where the values have the following meaning:
-     1 - The job is a complete mismatch in every way. The job clearly will be unacceptable to the user.
-     2 - The job may have some but very little alignment. The user would likely not be interested in this job except in extreme cases.
-     3 - The job has moderate alignment with the user's preferences. There are some positives but also significant drawbacks or mismatches that would make the user hesitant or there are significant qualifications or requirements about the job that are unknown about the user and require many follow up questions.
-     4 - The job is a good match with strong alignment to the user's preferences. There may be minor concerns or areas that don't perfectly align, but overall it would likely interest the user, especially if we have answers to the follow up questions below.
-     5 - The job is an excellent match that aligns very well with the user's preferences across all major criteria. The user would very likely be interested in pursuing this opportunity. This job has only cursory or no follow up questions to get alignment.
+     1 - The job is a complete mismatch in every way. The job clearly will be 
+         unacceptable to the user.
+
+     2 - The job may have some but very little alignment. The user would likely 
+         not be interested in this job except in extreme cases.
+
+     3 - The job has moderate alignment with the user's preferences and experience level. 
+         There are some positives but there are significant qualifications or requirements 
+         about the job that are unknown about the user or significant drawbacks or 
+         mismatches that would make the user hesitant and require many follow up questions.
+
+     4 - The job is a good match with strong alignment to the user's preferences 
+         and experience level. There may be minor concerns or areas that don't perfectly 
+         align, but overall it would likely interest the user, especially if we 
+         have answers to the follow up questions below.
+
+     5 - The job is an excellent match that aligns very well with the user's preferences 
+         across all major criteria. The user would very likely be interested in pursuing 
+         this opportunity. This job has only cursory or no follow up questions to get alignment.
+
       </numeric_rating>
       <rating_explaination>
          One or two brief sentences written to the user on why this rating (e.g. "This job has some technical alignment but misses key preferences around remote work, AI focus, and company size, making it unlikely to interest you."
