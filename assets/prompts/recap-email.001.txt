@@ -30,6 +30,10 @@ Here's an example of how your response should be structured:
 
 [Body of the email]
 
+NOTE: The initial job search takes several minutes and happens in several phases. Your dashboard will refresh automatically when the search is complete. 
+
+If you don't see your results after several minutes, please refresh your dashboard.
+
 Best regards,
 Shirely
 AI Job Search Assistant - Talent Rodeo
