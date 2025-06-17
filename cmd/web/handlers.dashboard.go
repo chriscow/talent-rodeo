@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"os"
 	"sort"
-	"strconv"
 	"strings"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
@@ -229,12 +228,25 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 	pageToken := r.URL.Query().Get("page")
 	pageSize := 5 // Fixed page size
 
-	// Parse current page for pagination
+	// Decode the page token to get the actual job ID for pagination
+	var decodedPageToken string
+	if pageToken != "" {
+		var err error
+		decodedPageToken, err = internal.DecodePageToken(pageToken)
+		if err != nil {
+			app.logger.Warn("Invalid page token", "token", pageToken, "error", err)
+			// Reset to first page if token is invalid
+			pageToken = ""
+			decodedPageToken = ""
+		}
+	}
+
+	// Parse current page for pagination (this logic may need adjustment based on your pagination implementation)
 	currentPage := 1
 	if pageToken != "" {
-		if parsedPage, err := strconv.Atoi(pageToken); err == nil && parsedPage > 0 {
-			currentPage = parsedPage
-		}
+		// For now, we'll keep the page number logic but you may want to adjust this
+		// based on how your GetUserJobsSorted function actually uses the page token
+		currentPage++ // Increment since we have a valid token
 	}
 
 	jobs := map[string]JobWithDetails{}
@@ -242,7 +254,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 	var statusJobCount int64 = 0
 
 	start := time.Now()
-	userJobs, nextPage, err := internal.GetUserJobsSorted(r.Context(), app.fs, user.ID, internal.JobStatus(status), pageSize, pageToken)
+	userJobs, nextPage, err := internal.GetUserJobsSorted(r.Context(), app.fs, user.ID, internal.JobStatus(status), pageSize, decodedPageToken)
 	if err != nil {
 		wrappedErr := fmt.Errorf("showDashboard: failed to get sorted user jobs: %w", err)
 		app.logger.Error("showDashboard: failed to get sorted user jobs", "error", err)
@@ -342,7 +354,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 	totalPages := (int(statusJobCount) + pageSize - 1) / pageSize // Ceiling division
 
 	if nextPage != "" {
-		nextPageToken = nextPage
+		nextPageToken = internal.EncodePageToken(nextPage)
 	}
 
 	// Add data to template
