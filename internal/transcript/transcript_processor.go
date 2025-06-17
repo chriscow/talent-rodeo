@@ -231,7 +231,36 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 		return
 	}
 
-	for _, searchCriteria := range searchCriteriaList {
+	for i, searchCriteria := range searchCriteriaList {
+
+		which := "first"
+		count := "search"
+		switch i {
+		case 0:
+			which = "first"
+		case 1:
+			which = "second"
+		case 2:
+			which = "third"
+		case 3:
+			which = "fourth"
+		case 4:
+			which = "last"
+		default:
+			which = "first"
+		}
+		switch len(searchCriteriaList) {
+		case 2:
+			count = "of two searches"
+		case 3:
+			count = "of three searches"
+		case 4:
+			count = "of four searches"
+		case 5:
+			count = "of five searches"
+		default:
+			count = "search"
+		}
 		//
 		// Subscribe the user to the search criteria
 		//
@@ -264,7 +293,7 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 				internal.ProcessAppointmentFailed(ctx, fs, user, appointment, fmt.Errorf("queue is nil"))
 				return
 			}
-			internal.SendPusherProgress(psh, user.ID, "server-progress", "Starting your first search (this takes a few minutes)", 0, 100)
+			internal.SendPusherProgress(psh, user.ID, "server-progress", fmt.Sprintf("Starting your %s %s (phase 1 of 2,this takes a few minutes)", which, count), 0, 100)
 			if dispatch == nil {
 				logger.Error("dispatch is nil", "userID", user.ID, "appointmentID", appointment.ID)
 				internal.SentryReportError(ctx, fmt.Errorf("dispatch is nil"), sentry.LevelError, map[string]string{
@@ -368,6 +397,10 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 
 		internal.SendPusherMessage(psh, user.ID, "Refreshing your results", nil)
 		internal.SendPusherRedirect(psh, user.ID, "/dashboard")
+
+		// give time for the user to see the redirect
+		time.Sleep(5 * time.Second)
+		internal.SendPusherMessage(psh, user.ID, "Refreshing your results (phase 2 of 2, this takes a few minutes)", nil)
 
 		logger.Debug("refreshing user jobs", "name", user.Name, "userID", user.ID, "criteria-id", searchCriteria.Criteria.ID)
 		if err := subscription.RefreshUserJobs(ctx, fs, psh, logger, *user, searchCriteria.Criteria); err != nil {
