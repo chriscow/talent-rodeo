@@ -78,6 +78,8 @@ type UserJob struct {
 	// SearchHash string
 	CreatedAt time.Time
 	UpdatedAt time.Time
+
+	FiveStarNudgeSentAt *time.Time
 }
 
 type JobMatchAnalysis struct {
@@ -577,4 +579,69 @@ func DeleteAllUserJobsByPrefix(ctx context.Context, fs *FirestoreClient, prefix 
 	}
 
 	return deleted, nil
+}
+
+func GetNewUserJobsWithRatingOrBetter(ctx context.Context, fs *FirestoreClient, userID string, rating, daysSince int) ([]UserJob, error) {
+	var jobs []UserJob
+	if fs == nil {
+		return nil, fmt.Errorf("firestore client is nil")
+	}
+	if userID == "" {
+		return nil, fmt.Errorf("user ID is required")
+	}
+
+	cutoffDate := time.Now().AddDate(0, 0, -daysSince)
+	query := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).
+		Where("Status", "==", string(JobStatusNew)).
+		Where("Rating", ">=", rating).
+		Where("CreatedAt", ">=", cutoffDate).
+		OrderBy("Rating", firestore.Desc).
+		OrderBy("CreatedAt", firestore.Desc)
+
+	iter := query.Documents(ctx)
+
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to iterate user jobs: %w", err)
+		}
+
+		var job UserJob
+		if err := doc.DataTo(&job); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal user job: %w", err)
+		}
+		jobs = append(jobs, job)
+	}
+
+	return jobs, nil
+}
+
+func SetUserJobFiveStarNudgeSentAtTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, userID, jobID string, sentAt time.Time) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
+	if userID == "" {
+		return fmt.Errorf("user ID is required")
+	}
+	if jobID == "" {
+		return fmt.Errorf("job ID is required")
+	}
+	if tx == nil {
+		return fmt.Errorf("transaction is nil")
+	}
+
+	docRef := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).Doc(jobID)
+	updates := []firestore.Update{
+		{Path: "FiveStarNudgeSentAt", Value: sentAt},
+		{Path: "UpdatedAt", Value: time.Now()},
+	}
+
+	if err := tx.Update(docRef, updates); err != nil {
+		return fmt.Errorf("failed to update user job FiveStarNudgeSentAt: %w", err)
+	}
+
+	return nil
 }

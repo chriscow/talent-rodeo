@@ -17,6 +17,7 @@ import (
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/auth"
 	"talent-rodeo/internal/feedback"
+	"talent-rodeo/internal/nudge"
 	"talent-rodeo/internal/search"
 	"talent-rodeo/internal/search/providers/scrapingdog"
 	"talent-rodeo/internal/smtp"
@@ -145,6 +146,7 @@ type application struct {
 	searchProvider        *scrapingdog.Provider
 	searchScheduler       *search.Scheduler
 	subscriptionProcessor *subscription.Processor
+	nudgeProcessor        *nudge.Processor
 }
 
 func run(logger *slog.Logger) error {
@@ -392,17 +394,17 @@ func run(logger *slog.Logger) error {
 		}
 	}()
 
-	if err := app.startServices(ctx); err != nil {
-		return fmt.Errorf("failed to start services: %w", err)
-	}
-
-	smtpCfg := transcript.SMTPConfig{
+	smtpCfg := smtp.Config{
 		Host:     app.config.smtp.host,
 		Port:     app.config.smtp.port,
 		Username: app.config.smtp.username,
 		Password: app.config.smtp.password,
 		From:     app.config.smtp.from,
 	}
+	if err := app.startServices(ctx, &smtpCfg); err != nil {
+		return fmt.Errorf("failed to start services: %w", err)
+	}
+
 	if err := transcript.RecoverProcessingAppointments(sentry.CurrentHub(), FirestoreClient, pusherClient, logger, app.jobDispatch, app.searchProvider, &smtpCfg); err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"error_type": "transcript_recovery",
@@ -578,31 +580,36 @@ func setupSessionManager(cfg config, FirestoreClient *internal.FirestoreClient, 
 	return sessionManager, nil
 }
 
-func (app *application) startServices(ctx context.Context) error {
+func (app *application) startServices(ctx context.Context, smtpCfg *smtp.Config) error {
 
-	app.feedbackProcessor = feedback.NewProcessor(app.fs, app.logger)
-	if err := app.feedbackProcessor.Start(ctx); err != nil {
-		return fmt.Errorf("failed to start feedback processor: %w", err)
-	}
+	// app.feedbackProcessor = feedback.NewProcessor(app.fs, app.logger)
+	// if err := app.feedbackProcessor.Start(ctx); err != nil {
+	// 	return fmt.Errorf("failed to start feedback processor: %w", err)
+	// }
 
-	app.subscriptionProcessor = subscription.NewProcessor(app.fs, app.pusher, app.logger)
+	// app.subscriptionProcessor = subscription.NewProcessor(app.fs, app.pusher, app.logger)
 
-	app.jobDispatch = internal.NewJobEventDispatch()
-	app.searchResultProcessor = internal.NewSearchResultProcessor(app.fs, app.logger, app.pusher, app.jobDispatch)
-	app.jobDispatch.Register("search-result-processor", app.searchResultProcessor)
-	app.searchResultProcessor.Start()
+	// app.jobDispatch = internal.NewJobEventDispatch()
+	// app.searchResultProcessor = internal.NewSearchResultProcessor(app.fs, app.logger, app.pusher, app.jobDispatch)
+	// app.jobDispatch.Register("search-result-processor", app.searchResultProcessor)
+	// app.searchResultProcessor.Start()
 
-	app.searchProvider = scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), app.logger, scrapingdog.WithJobEventHandler(app.jobDispatch))
-	app.searchScheduler = search.NewScheduler(app.fs, app.logger, app.searchProvider, app.mailer, app.config.notifications.email)
+	// app.searchProvider = scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), app.logger, scrapingdog.WithJobEventHandler(app.jobDispatch))
+	// app.searchScheduler = search.NewScheduler(app.fs, app.logger, app.searchProvider, app.mailer, app.config.notifications.email)
 
-	if err := app.subscriptionProcessor.Start(ctx); err != nil {
-		return fmt.Errorf("failed to start subscription processor: %w", err)
-	}
-	if err := app.searchProvider.Start(ctx); err != nil {
-		return fmt.Errorf("failed to start search provider: %w", err)
-	}
-	if err := app.searchScheduler.Start(ctx); err != nil {
-		return fmt.Errorf("failed to start search scheduler: %w", err)
+	// if err := app.subscriptionProcessor.Start(ctx); err != nil {
+	// 	return fmt.Errorf("failed to start subscription processor: %w", err)
+	// }
+	// if err := app.searchProvider.Start(ctx); err != nil {
+	// 	return fmt.Errorf("failed to start search provider: %w", err)
+	// }
+	// if err := app.searchScheduler.Start(ctx); err != nil {
+	// 	return fmt.Errorf("failed to start search scheduler: %w", err)
+	// }
+
+	app.nudgeProcessor = nudge.NewProcessorWithDefaults(app.fs, smtpCfg, app.logger)
+	if err := app.nudgeProcessor.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start nudge processor: %w", err)
 	}
 
 	return nil

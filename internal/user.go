@@ -52,6 +52,14 @@ type User struct {
 	LocationPreference *string
 	Statement          *string // first person statement of work preferences
 
+	FollowupQuestionsSentAt *time.Time // When the last set of follow up questions were sent to the user
+
+	// Nudge Email Tracking
+	LastNudgeEmailSent   *time.Time
+	LastNudgeEmailType   *string
+	NudgeEmailsSentCount int
+	NudgeTypeCount       map[string]int // Tracks the number of nudges sent per type
+
 	Tier            UserTier
 	CompletedAt     *time.Time
 	SubscriptionEnd *time.Time
@@ -487,4 +495,16 @@ func SaveUser(ctx context.Context, fs *FirestoreClient, user *User) error {
 	}
 	fs.SetUserCache(user.ID, user)
 	return nil
+}
+
+func UpdateUserSubscriptionEndAtTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, user *User, endAt time.Time) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
+
+	user.SubscriptionEnd = &endAt
+
+	return tx.Update(fs.Collection(usersCollection).Doc(user.ID), []firestore.Update{
+		{Path: "SubscriptionEnd", Value: endAt},
+	})
 }

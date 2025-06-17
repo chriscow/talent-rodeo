@@ -20,14 +20,6 @@ import (
 	"github.com/samber/lo"
 )
 
-type SMTPConfig struct {
-	Host     string
-	Port     int
-	Username string
-	Password string
-	From     string
-}
-
 // ProcessCompletedCall updates the appointment after a successful call with the transcript summary.
 // It is called as a background task after the transcript is fully processed.
 //
@@ -43,7 +35,7 @@ type SMTPConfig struct {
 //   - Save the search criteria to the user
 //
 // Saving a new search criteria triggers a new search.
-func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pusher.Client, queue internal.SearchQueue, logger *slog.Logger, dispatch *internal.JobEventDispatch, user *internal.User, appointment *internal.Appointment, smtpCfg *SMTPConfig) {
+func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pusher.Client, queue internal.SearchQueue, logger *slog.Logger, dispatch *internal.JobEventDispatch, user *internal.User, appointment *internal.Appointment, smtpCfg *smtp.Config) {
 	ctx := context.Background()
 	sentry.SetHubOnContext(ctx, hub)
 
@@ -233,6 +225,23 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 
 	SendRecapEmail(ctx, fs, user, appointment, transcript, smtpCfg, logger)
 
+	//
+	// We set the user status to call completed so they will be redirected to the dashboard on the next refresh.
+	//
+	logger.Debug("marking appointment as completed", "name", user.Name, "userID", user.ID, "appointmentID", appointment.ID)
+	if err := internal.ProcessAppointmentComplete(ctx, fs, user, appointment); err != nil {
+		logger.Error("failed to mark appointment as completed", "error", err, "userID", user.ID, "appointmentID", appointment.ID)
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"userID":         user.ID,
+			"appointment_id": appointment.ID,
+			"user_email":     user.Email,
+			"call_id":        *appointment.CallID,
+			"step":           "mark_appointment_completed",
+		})
+		internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
+		return
+	}
+
 	for i, searchCriteria := range searchCriteriaList {
 
 		which := "first"
@@ -380,23 +389,6 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 			}
 		}
 
-		//
-		// We set the user status to call completed so they will be redirected to the dashboard on the next refresh.
-		//
-		logger.Debug("marking appointment as completed", "name", user.Name, "userID", user.ID, "appointmentID", appointment.ID)
-		if err := internal.ProcessAppointmentComplete(ctx, fs, user, appointment); err != nil {
-			logger.Error("failed to mark appointment as completed", "error", err, "userID", user.ID, "appointmentID", appointment.ID)
-			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-				"userID":         user.ID,
-				"appointment_id": appointment.ID,
-				"user_email":     user.Email,
-				"call_id":        *appointment.CallID,
-				"step":           "mark_appointment_completed",
-			})
-			internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
-			return
-		}
-
 		internal.SendPusherMessage(psh, user.ID, "Refreshing your results", nil)
 		internal.SendPusherRedirect(psh, user.ID, "/dashboard")
 
@@ -419,7 +411,7 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 	logger.Debug(internal.Green("✅ appointment processing completed"), "name", user.Name, "userID", user.ID, "appointmentID", appointment.ID)
 }
 
-func SendRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user *internal.User, appointment *internal.Appointment, transcript *internal.Transcript, cfg *SMTPConfig, logger *slog.Logger) error {
+func SendRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user *internal.User, appointment *internal.Appointment, transcript *internal.Transcript, cfg *smtp.Config, logger *slog.Logger) error {
 	if cfg == nil {
 		logger.Debug("skipping recap email - no SMTP config", "userID", user.ID, "appointmentID", appointment.ID)
 		return nil
@@ -457,7 +449,7 @@ func SendRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user *int
 	return nil
 }
 
-func GenerateRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user *internal.User, transcript *internal.Transcript, cfg SMTPConfig, logger *slog.Logger) error {
+func GenerateRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user *internal.User, transcript *internal.Transcript, cfg smtp.Config, logger *slog.Logger) error {
 	mailer, err := smtp.NewMailer(cfg.Host, cfg.Port, cfg.Username, cfg.Password, cfg.From)
 	if err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
@@ -505,10 +497,11 @@ func GenerateRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user 
 		return fmt.Errorf("SendRecapEmail: extractEmailData: %w", err)
 	}
 
-	err = mailer.Send(user.Email, bodyData, "recap-email.html")
+	err = mailer.SendFromTemplate(user.Email, bodyData, "recap-email.html")
 	if err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"error_type": "smtp_mailer_send",
+			"component":  "transcript_processor_send_recap",
 		})
 		return fmt.Errorf("SendRecapEmail: mailer.Send: %w", err)
 	}
@@ -560,7 +553,7 @@ func extractEmailData(_ context.Context, data string) (map[string]any, error) {
 }
 
 // RecoverProcessingAppointments finds and reprocesses any appointments that were interrupted during processing
-func RecoverProcessingAppointments(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pusher.Client, logger *slog.Logger, dispatch *internal.JobEventDispatch, queue internal.SearchQueue, smtpCfg *SMTPConfig) error {
+func RecoverProcessingAppointments(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pusher.Client, logger *slog.Logger, dispatch *internal.JobEventDispatch, queue internal.SearchQueue, smtpCfg *smtp.Config) error {
 	ctx := context.Background()
 
 	logger = logger.With("pkg", "transcript.RecoverProcessingAppointments")

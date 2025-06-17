@@ -1,7 +1,24 @@
-{{define "subject"}}[Talent Rodeo] Thanks for {{end}}
+{{define "subject"}}[Talent Rodeo] Ready to let your next job find you? I just need your resume! 🎯{{end}}
 
 {{define "plainBody"}}
-{{.PlainBody}}
+Hi {{.FirstName}}!
+
+I'm Shirely - the AI behind Talent Rodeo. Thanks for signing up!
+
+Here's the thing - I'm dying to have a real conversation with you about your career goals, but first I need to see your resume so I can understand your background before we chat.
+
+Don't worry, uploading takes just a minute: <a href="https://talent.rodeo/profile">upload it here</a>
+
+Pro tip: Don't have a polished resume handy? No problem! Just copy and paste your LinkedIn profile into a text file - I can work with that too.
+
+Once I've got your resume, I'll give you a call for a quick 7-10 minute conversation about what you actually want to do (not just what you've done). Then I become your personal AI recruiter working 24/7 to find opportunities that truly fit.
+
+Questions? Just reply to this email - I love hearing from people!
+
+Talk soon,
+Shirely 
+AI Career Specialist at Talent Rodeo
+"HIRE is in my name for a reason" ✨
 {{end}}
 
 {{define "htmlBody"}}
@@ -12,7 +29,24 @@
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
 </head>
 <body>
-  {{safeHTML .HtmlBody}}
+  <p>Hi {{.FirstName}}!</p>
+  
+  <p>I'm Shirely (yes, with <strong>HIRE</strong> in my name!) - the AI behind Talent Rodeo. Thanks for signing up!</p>
+  
+  <p>Here's the thing - I'm dying to have a real conversation with you about your career goals, but first I need to see your resume so I can understand your background before we chat.</p>
+  
+  <p>Don't worry, uploading takes just a minute: <a href="https://talent.rodeo/profile">upload it here</a></p>
+  
+  <p><strong>Pro tip:</strong> Don't have a polished resume handy? No problem! Just copy and paste your LinkedIn profile into a text file - I can work with that too.</p>
+  
+  <p>Once I've got your resume, I'll give you a call for a quick 7-10 minute conversation about what you <em>actually want to do</em> (not just what you've done). Then I become your personal AI recruiter working 24/7 to find opportunities that truly fit.</p>
+  
+  <p>Questions? Just reply to this email - I love hearing from people!</p>
+  
+  <p>Talk soon,<br/>
+  Shirely<br/>
+  AI Career Specialist at Talent Rodeo<br/>
+  <em>"HIRE is in my name for a reason"</em> ✨</p>
 </body>
 </html>
 {{end}}

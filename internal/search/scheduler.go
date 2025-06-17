@@ -22,6 +22,7 @@ const (
 type Mailer interface {
 	// func (m *Mailer) Send(recipient string, data any, patterns ...string) error {
 	Send(recipient string, data any, patterns ...string) error
+	SendFromTemplate(recipient string, data any, template string) error
 }
 
 type SchedulerSettings struct {
@@ -309,10 +310,8 @@ func (s *Scheduler) notifyAdmin(_ context.Context, user *internal.User, err erro
 		"Timestamp": time.Now().Format(time.RFC3339),
 	}
 
-	if err := s.mailer.Send(s.recipient, data, "search-error.html"); err != nil {
-		s.logger.Error("failed to send admin notification",
-			"error", err,
-			"user_id", user.ID)
+	if err := s.mailer.SendFromTemplate(s.recipient, data, "search-error.html"); err != nil {
+		s.logger.Error("failed to send error email", "error", err)
 	}
 }
 

@@ -3,11 +3,18 @@ package internal
 import (
 	"context"
 	"fmt"
+	"io"
+	"log/slog"
+	"sync"
 	"testing"
 	"time"
 
 	"google.golang.org/api/iterator"
 )
+
+func CreateTestLogger(w io.Writer) *slog.Logger {
+	return slog.New(slog.NewTextHandler(w, nil))
+}
 
 // CreateTestUser creates a test user with default values.
 func CreateTestUser(t *testing.T, client *FirestoreClient, name, email, phone string, isSuperUser bool) *User {
@@ -348,4 +355,35 @@ func StringPtr(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+// CreateTestUserDoc creates a user document in Firestore for testing purposes.
+func CreateTestUserDoc(ctx context.Context, fs *FirestoreClient, user *User) error {
+	// Add user to a list for cleanup
+	addTestUserForCleanup(user.ID)
+	_, err := fs.Collection("users").Doc(user.ID).Set(ctx, user)
+	return err
+}
+
+var testUserIDs []string
+var testUserMu sync.Mutex
+
+func addTestUserForCleanup(userID string) {
+	testUserMu.Lock()
+	defer testUserMu.Unlock()
+	testUserIDs = append(testUserIDs, userID)
+}
+
+// CleanupTestUsers removes all users created during a test run.
+func CleanupTestUsers(ctx context.Context, fs *FirestoreClient) {
+	testUserMu.Lock()
+	defer testUserMu.Unlock()
+	if fs == nil {
+		return
+	}
+	for _, userID := range testUserIDs {
+		_, _ = fs.Collection("users").Doc(userID).Delete(ctx)
+	}
+	// Reset the slice
+	testUserIDs = []string{}
 }

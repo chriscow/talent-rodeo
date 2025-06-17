@@ -10,6 +10,7 @@ import (
 	"sync"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/search/providers/scrapingdog"
+	"talent-rodeo/internal/smtp"
 	"talent-rodeo/internal/transcript"
 	"time"
 
@@ -295,7 +296,7 @@ var reprocessCmd = &cobra.Command{
 			return fmt.Errorf("user ID is required")
 		}
 
-		var cfg *transcript.SMTPConfig
+		var cfg *smtp.Config
 		if sendRecap {
 			portStr := os.Getenv("SMTP_PORT")
 			if portStr == "" {
@@ -318,7 +319,7 @@ var reprocessCmd = &cobra.Command{
 			if os.Getenv("SMTP_FROM") == "" {
 				return fmt.Errorf("SMTP_FROM environment variable is required")
 			}
-			cfg = &transcript.SMTPConfig{
+			cfg = &smtp.Config{
 				Host:     os.Getenv("SMTP_HOST"),
 				Port:     port,
 				Username: os.Getenv("SMTP_USERNAME"),
@@ -465,7 +466,7 @@ var sendRecapCmd = &cobra.Command{
 			return fmt.Errorf("invalid SMTP_PORT environment variable: %w", err)
 		}
 
-		cfg := transcript.SMTPConfig{
+		cfg := smtp.Config{
 			Host:     host,
 			Port:     port,
 			Username: os.Getenv("SMTP_USERNAME"),

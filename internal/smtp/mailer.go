@@ -15,6 +15,14 @@ import (
 
 const defaultTimeout = 10 * time.Second
 
+type Config struct {
+	Host     string
+	Port     int
+	Username string
+	Password string
+	From     string
+}
+
 type Mailer struct {
 	client mail.Client
 	from   string
@@ -34,20 +42,36 @@ func NewMailer(host string, port int, username, password, from string) (*Mailer,
 	return mailer, nil
 }
 
-func (m *Mailer) Send(recipient string, data any, patterns ...string) error {
+func (m *Mailer) Send(recipient, subject, plainBody, htmlBody string) error {
+	msg := mail.NewMsg()
+	if err := msg.To(recipient); err != nil {
+		return err
+	}
+	if err := msg.From(m.from); err != nil {
+		return err
+	}
+
+	msg.Subject(subject)
+	msg.SetBodyString(mail.TypeTextPlain, plainBody)
+	if htmlBody != "" {
+		msg.AddAlternativeString(mail.TypeTextHTML, htmlBody)
+	}
+
+	for i := 1; i <= 3; i++ {
+		err := m.client.DialAndSend(msg)
+		if nil == err {
+			return nil
+		}
+		if i != 3 {
+			time.Sleep(2 * time.Second)
+		}
+	}
+	return nil
+}
+
+func (m *Mailer) SendFromTemplate(recipient string, data any, patterns ...string) error {
 	for i := range patterns {
 		patterns[i] = "emails/" + patterns[i]
-	}
-	msg := mail.NewMsg()
-
-	err := msg.To(recipient)
-	if err != nil {
-		return err
-	}
-
-	err = msg.From(m.from)
-	if err != nil {
-		return err
 	}
 
 	ts, err := textTemplate.New("").Funcs(funcs.TemplateFuncs).ParseFS(assets.EmbeddedFiles, patterns...)
@@ -55,48 +79,30 @@ func (m *Mailer) Send(recipient string, data any, patterns ...string) error {
 		return err
 	}
 
-	subject := new(bytes.Buffer)
-	err = ts.ExecuteTemplate(subject, "subject", data)
+	subjectBuf := new(bytes.Buffer)
+	err = ts.ExecuteTemplate(subjectBuf, "subject", data)
 	if err != nil {
 		return err
 	}
 
-	msg.Subject(subject.String())
-
-	plainBody := new(bytes.Buffer)
-	err = ts.ExecuteTemplate(plainBody, "plainBody", data)
+	plainBodyBuf := new(bytes.Buffer)
+	err = ts.ExecuteTemplate(plainBodyBuf, "plainBody", data)
 	if err != nil {
 		return err
 	}
 
-	msg.SetBodyString(mail.TypeTextPlain, plainBody.String())
-
+	var htmlBodyBuf bytes.Buffer
 	if ts.Lookup("htmlBody") != nil {
-		ts, err := htmlTemplate.New("").Funcs(funcs.TemplateFuncs).ParseFS(assets.EmbeddedFiles, patterns...)
+		// We must re-parse for html/template to handle HTML correctly.
+		htmlTS, err := htmlTemplate.New("").Funcs(funcs.TemplateFuncs).ParseFS(assets.EmbeddedFiles, patterns...)
 		if err != nil {
 			return err
 		}
-
-		htmlBody := new(bytes.Buffer)
-		err = ts.ExecuteTemplate(htmlBody, "htmlBody", data)
+		err = htmlTS.ExecuteTemplate(&htmlBodyBuf, "htmlBody", data)
 		if err != nil {
 			return err
 		}
-
-		msg.AddAlternativeString(mail.TypeTextHTML, htmlBody.String())
 	}
 
-	for i := 1; i <= 3; i++ {
-		err = m.client.DialAndSend(msg)
-
-		if nil == err {
-			return nil
-		}
-
-		if i != 3 {
-			time.Sleep(2 * time.Second)
-		}
-	}
-
-	return err
+	return m.Send(recipient, subjectBuf.String(), plainBodyBuf.String(), htmlBodyBuf.String())
 }

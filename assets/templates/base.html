@@ -85,6 +85,8 @@
 
     feather.replace()  // feather icons
 
+//    {{if .User}}
+//        {{if .User.IsSuperUser}}
     // Keep server alive by sending a HEAD request every minute
     setInterval(function() {
         fetch('/', { method: 'HEAD' })
@@ -93,6 +95,8 @@
                 console.debug('Keep-alive ping failed:', error);
             });
     }, 300000); // 300,000 milliseconds = 5 minutes
+//        {{end}}
+//    {{end}}
 </script>
 <script src="/static/js/minimal-theme-switcher.js"></script>
 
