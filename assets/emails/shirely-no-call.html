@@ -1,7 +1,22 @@
-{{define "subject"}}[Talent Rodeo] No Call{{end}}
+{{define "subject"}}[Talent Rodeo] Ready for a quick chat?{{end}}
 
 {{define "plainBody"}}
-{{.PlainBody}}
+Hi {{.FirstName}}!  I'm Shirely from Talent Rodeo.
+
+I noticed you uploaded your resume {{.LastStateChange | approxTime}}, and I'm excited to chat with you about your career goals.  
+
+I know talking to an AI on the phone might sound a bit unusual, but trust me - I'm way more fun than your average recruiter! Our chat usually takes just 7-10 minutes, and unlike those endless forms other job sites make you fill out, I actually want to understand what energizes you, where you want your career to go, and what you're absolutely done with.
+
+You can start our call here whenever it's convenient for you - I'm available 24/7 (one of the perks of being an AI!).
+
+<a href="https://talent.rodeo/profile">Schedule a call here</a>
+
+Looking forward to getting to know the real you beyond your resume!
+
+Talk soon,
+Shirely 
+AI Career Specialist at Talent Rodeo
+"HIRE is in my name for a reason" ✨
 {{end}}
 
 {{define "htmlBody"}}
@@ -12,7 +27,20 @@
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
 </head>
 <body>
-  {{safeHTML .HtmlBody}}
+    <p>Hi {{.FirstName}}!</p>
+    <p>I'm Shirely from Talent Rodeo.</p>
+    <p>I noticed you uploaded your resume {{.LastStateChange | approxTime}}, and I'm excited to chat with you about your career goals.</p>
+    <p>I know talking to an AI on the phone might sound a bit unusual, but trust me - I'm way more fun than your average recruiter! Our chat usually takes just 7-10 minutes, and unlike those endless forms other job sites make you fill out, I actually want to understand what energizes you, where you want your career to go, and what you're absolutely done with.</p>
+    <p>You can start our call here whenever it's convenient for you - I'm available 24/7 (one of the perks of being an AI!).</p>
+    <p><a href="https://talent.rodeo/profile">Schedule a call here</a></p>
+    <p>Looking forward to getting to know the real you beyond your resume!</p>
+    <p>Talk soon,</p>
+    <p>Shirely<br/>AI Career Specialist at Talent Rodeo<br/>"HIRE is in my name for a reason" ✨</p>
+    <p>Best,<br/>
+        Shirley<br/>
+        Talent Rodeo<br/>
+        <a href="https://talent.rodeo">talent.rodeo</a>
+    </p>
 </body>
 </html>
 {{end}}

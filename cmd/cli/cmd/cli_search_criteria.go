@@ -14,14 +14,17 @@ import (
 )
 
 var (
-	criteriaQueryFlag      string
-	criteriaGeoIDFlag      string
-	criteriaMaxPagesFlag   int
-	criteriaWorkTypeFlag   string
-	criteriaExperienceFlag string
-	criteriaListingAgeFlag string
-	criteriaAllFlag        bool
-	criteriaDeleteAllFlag  bool
+	criteriaQueryFlag         string
+	criteriaGeoIDFlag         string
+	criteriaMaxPagesFlag      int
+	criteriaWorkTypeFlag      string
+	criteriaExperienceFlag    string
+	criteriaListingAgeFlag    string
+	criteriaAllFlag           bool
+	criteriaDeleteAllFlag     bool
+	criteriaResetAllFlag      bool
+	criteriaResetAgeFlag      string
+	criteriaResetMaxPagesFlag int
 )
 
 func init() {
@@ -75,8 +78,20 @@ func init() {
 	}
 	deleteCmd.Flags().BoolVar(&criteriaDeleteAllFlag, "all", false, "Delete all search criteria")
 
+	// 'reset' subcommand
+	resetCmd := &cobra.Command{
+		Use:   "reset [id]",
+		Short: "Reset ListingAge and MaxPages for a search criteria or all criteria",
+		Long:  "Reset ListingAge and MaxPages for a search criteria by its ID, or for all criteria with --all flag.",
+		Args:  cobra.MaximumNArgs(1),
+		RunE:  runResetCriteria,
+	}
+	resetCmd.Flags().BoolVar(&criteriaResetAllFlag, "all", false, "Reset all search criteria")
+	resetCmd.Flags().StringVar(&criteriaResetAgeFlag, "age", "day", "Listing age: day, week, or month (default: day)")
+	resetCmd.Flags().IntVar(&criteriaResetMaxPagesFlag, "max-pages", 3, "Maximum number of pages to search (default: 3)")
+
 	// Add subcommands to criteria command
-	criteriaCmd.AddCommand(listCmd, needsSearchCmd, createCmd, deleteCmd)
+	criteriaCmd.AddCommand(listCmd, needsSearchCmd, createCmd, deleteCmd, resetCmd)
 
 	// Add criteria command to search command
 	RootCmd.AddCommand(criteriaCmd)
@@ -215,6 +230,67 @@ func runDeleteCriteria(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Search criteria with ID %s deleted successfully\n", criteriaID)
+	return nil
+}
+
+func runResetCriteria(cmd *cobra.Command, args []string) error {
+	ctx := context.Background()
+
+	fs, err := internal.NewFirestoreClient(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create Firestore client: %w", err)
+	}
+	defer fs.Close()
+
+	listingAge := internal.ListingAge(criteriaResetAgeFlag)
+	switch listingAge {
+	case internal.ListingAgeDay, internal.ListingAgeWeek, internal.ListingAgeMonth:
+		// valid
+	default:
+		return fmt.Errorf("invalid age: %s. Must be one of: day, week, month", criteriaResetAgeFlag)
+	}
+
+	if criteriaResetAllFlag {
+		criteriaList, err := internal.ListSearchCriteria(ctx, fs)
+		if err != nil {
+			return fmt.Errorf("failed to list search criteria: %w", err)
+		}
+		if len(criteriaList) == 0 {
+			fmt.Println("No search criteria to reset.")
+			return nil
+		}
+		bar := pb.StartNew(len(criteriaList))
+		defer bar.Finish()
+		for _, c := range criteriaList {
+			c.ListingAge = listingAge
+			c.MaxPages = criteriaResetMaxPagesFlag
+			err := internal.SetSearchCriteria(ctx, fs, &c)
+			if err != nil {
+				return fmt.Errorf("failed to reset search criteria with ID %s: %w", c.ID, err)
+			}
+			bar.Increment()
+		}
+		fmt.Printf("All (%d) search criteria reset successfully\n", len(criteriaList))
+		return nil
+	}
+
+	if len(args) < 1 {
+		return fmt.Errorf("criteria ID is required unless --all is set")
+	}
+	criteriaID := args[0]
+	criteria, found, err := internal.GetSearchCriteria(ctx, fs, criteriaID)
+	if err != nil {
+		return fmt.Errorf("failed to get search criteria with ID %s: %w", criteriaID, err)
+	}
+	if !found {
+		return fmt.Errorf("search criteria with ID %s not found", criteriaID)
+	}
+	criteria.ListingAge = listingAge
+	criteria.MaxPages = criteriaResetMaxPagesFlag
+	if err := internal.SetSearchCriteria(ctx, fs, criteria); err != nil {
+		return fmt.Errorf("failed to reset search criteria with ID %s: %w", criteriaID, err)
+	}
+	fmt.Printf("Search criteria with ID %s reset successfully\n", criteriaID)
 	return nil
 }
 

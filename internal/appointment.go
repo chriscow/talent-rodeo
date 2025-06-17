@@ -333,6 +333,10 @@ func ProcessAppointmentComplete(ctx context.Context, fs *FirestoreClient, user *
 			return fmt.Errorf("failed to update user state: %w", err)
 		}
 
+		if err := UpdateUserSubscriptionEndAtTx(ctx, fs, tx, user, *appointment.CompletedAt); err != nil {
+			return fmt.Errorf("failed to update user subscription end at: %w", err)
+		}
+
 		return nil
 	})
 }

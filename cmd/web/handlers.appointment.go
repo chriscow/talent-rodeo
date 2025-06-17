@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"talent-rodeo/internal"
+	"talent-rodeo/internal/smtp"
 	"talent-rodeo/internal/transcript"
 	"time"
 
@@ -97,7 +98,7 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 	// This actually just starts a goroutine to process the appointment and
 	// doesn't return an error but we check anyway in case that changes
 	// in the future.
-	cfg := transcript.SMTPConfig{
+	cfg := smtp.Config{
 		Host:     app.config.smtp.host,
 		Port:     app.config.smtp.port,
 		Username: app.config.smtp.username,

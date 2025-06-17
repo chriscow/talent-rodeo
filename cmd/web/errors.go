@@ -37,10 +37,10 @@ func (app *application) reportServerError(r *http.Request, err error) {
 		data["RequestURL"] = url
 		data["Trace"] = trace
 
-		err := app.mailer.Send(app.config.notifications.email, data, "error-notification.html")
+		err := app.mailer.SendFromTemplate(app.config.notifications.email, data, "error-notification.html")
 		if err != nil {
 			trace = string(debug.Stack())
-			app.logger.Error(err.Error(), requestAttrs, "trace", trace)
+			app.logger.Error("failed to send error notification email", "error", err)
 		}
 	}
 }

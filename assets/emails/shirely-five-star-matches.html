@@ -1,7 +1,36 @@
-{{define "subject"}}[Talent Rodeo] 5-Star Matches!{{end}}
+{{define "subject"}}🎯 [Talent Rodeo] I found your perfect ★★★★★ matches!{{end}}
 
 {{define "plainBody"}}
-{{.PlainBody}}
+Hi {{.FirstName}}!
+
+Shirely here, and I'm practically buzzing with excitement! 🤖✨
+
+Remember our conversation about your career goals? Well, I've been working around the clock (perks of being an AI - no sleep required!), and I found some absolutely stellar matches for you.
+
+Here are your top picks:
+
+{{range $index, $match := .Matches}}{{if lt $index 3}}
+--- JOB {{add $index 1}} ---
+{{$match.Title}}
+
+What it's about: {{$match.Summary}}
+
+Why it's perfect for you: {{$match.Analysis}}
+
+{{end}}{{end}}
+
+{{if gt (len .Matches) 3}}PLUS: I found {{sub (len .Matches) 3}} more ★★★★★ 5-Star opportunities waiting for you at https://talent.rodeo/dashboard - I didn't want to overwhelm your inbox, but trust me, {{if eq (sub (len .Matches) 3) 1}}it's{{else}}they're{{end}} worth checking out!{{end}}
+
+These aren't just keyword matches - these are opportunities I handpicked based on our conversation about what energizes you and where you want your career to go.
+
+Ready to take a look? Head over to your dashboard: https://talent.rodeo/dashboard
+
+Questions? Just reply - I love hearing your thoughts on my picks!
+
+Here to help you get hired,
+Shirely 
+"HIRE isn't just in my name - it's my mission" 🎯
+Talent Rodeo AI
 {{end}}
 
 {{define "htmlBody"}}
@@ -10,9 +39,61 @@
   <head>
     <meta name="viewport" content="width=device-width" />
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <style>
+      .job-match {
+        background-color: #f8f9fa;
+        border-left: 4px solid #28a745;
+        padding: 15px;
+        margin: 15px 0;
+        border-radius: 5px;
+      }
+      .job-title {
+        font-weight: bold;
+        color: #2c3e50;
+        font-size: 18px;
+        margin-bottom: 8px;
+      }
+      .job-summary {
+        color: #555;
+        margin-bottom: 10px;
+        line-height: 1.4;
+      }
+      .match-analysis {
+        color: #27ae60;
+        font-style: italic;
+        font-weight: 500;
+      }
+    </style>
   </head>
   <body>
-    {{safeHTML .HtmlBody}}
+    <p>Hi {{.FirstName}}!</p>
+    
+    <p>Shirely here, and I'm practically buzzing with excitement! 🤖✨</p>
+    
+    <p>Remember our conversation about your career goals? Well, I've been working around the clock (perks of being an AI - no sleep required!), and I found some absolutely <strong>stellar</strong> matches for you.</p>
+    
+    <p><strong>Here are your top picks:</strong></p>
+    
+    {{range $index, $match := .Matches}}{{if lt $index 3}}
+    <div class="job-match">
+      <div class="job-title">{{$match.Title}}</div>
+      <div class="job-summary"><strong>What it's about:</strong> {{$match.Summary}}</div>
+      <div class="match-analysis"><strong>Why it's perfect for you:</strong> {{$match.Analysis}}</div>
+    </div>
+    {{end}}{{end}}
+    
+    {{if gt (len .Matches) 3}}<p><strong>PLUS:</strong> I found {{sub (len .Matches) 3}} more ★★★★★ 5-Star opportunities waiting for you at <a href="https://talent.rodeo/dashboard">your dashboard</a> - I didn't want to overwhelm your inbox, but trust me, {{if eq (sub (len .Matches) 3) 1}}it's{{else}}they're{{end}} worth checking out!</p>{{end}}
+    
+    <p>These aren't just keyword matches - these are opportunities I <em>handpicked</em> based on our conversation about what energizes you and where you want your career to go.</p>
+    
+    <p><strong>Ready to take a look?</strong> <a href="https://talent.rodeo/dashboard">Head over to your dashboard</a></p>
+    
+    <p>Questions? Just reply - I love hearing your thoughts on my picks!</p>
+    
+    <p>Here to help you get hired,<br/>
+    Shirely<br/>
+    <em>"HIRE isn't just in my name - it's my mission"</em> 🎯<br/>
+    Talent Rodeo AI</p>
   </body>
 </html>
 {{end}}
