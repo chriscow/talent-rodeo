@@ -231,6 +231,8 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 		return
 	}
 
+	SendRecapEmail(ctx, fs, user, appointment, transcript, smtpCfg, logger)
+
 	for i, searchCriteria := range searchCriteriaList {
 
 		which := "first"
@@ -412,8 +414,6 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 			})
 		}
 	}
-
-	SendRecapEmail(ctx, fs, user, appointment, transcript, smtpCfg, logger)
 
 	logger.Debug(internal.Blue("⏱️ appointment processing took"), "name", user.Name, "duration", time.Since(start).String())
 	logger.Debug(internal.Green("✅ appointment processing completed"), "name", user.Name, "userID", user.ID, "appointmentID", appointment.ID)
