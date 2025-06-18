@@ -329,14 +329,15 @@ var reprocessCmd = &cobra.Command{
 		defer fs.Close()
 
 		// Initialize logger with debug level
-		os.MkdirAll(".logs", 0755)
-		tmpFile, err := os.OpenFile(".logs/appt-reprocess.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-		if err != nil {
-			return fmt.Errorf("failed to create temp log file: %w", err)
-		}
-		defer tmpFile.Close()
+		// os.MkdirAll(".logs", 0755)
+		// tmpFile, err := os.OpenFile(".logs/appt-reprocess.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		// if err != nil {
+		// 	return fmt.Errorf("failed to create temp log file: %w", err)
+		// }
+		// defer tmpFile.Close()
 
-		logger := slog.New(tint.NewHandler(tmpFile, &tint.Options{Level: slog.LevelDebug}))
+		// logger := slog.New(tint.NewHandler(tmpFile, &tint.Options{Level: slog.LevelDebug}))
+		logger := slog.New(tint.NewHandler(os.Stdout, &tint.Options{Level: slog.LevelDebug}))
 
 		// Initialize Sentry hub
 		hub := sentry.CurrentHub()
