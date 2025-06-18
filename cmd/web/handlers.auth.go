@@ -133,11 +133,39 @@ func (app *application) completeSocialAuth(w http.ResponseWriter, r *http.Reques
 // handleAuthError is a helper function that processes authentication errors.
 // It provides specific error messages for access denied cases.
 func (app *application) handleAuthError(w http.ResponseWriter, r *http.Request, err error) {
+	// If the user denied the request on the provider side, it's not a server error.
 	if strings.Contains(err.Error(), "denied") {
 		http.Error(w, "You must grant access to continue.", http.StatusUnauthorized)
 		return
 	}
 
+	// This error often means the user's session expired or got corrupted
+	// during the OAuth flow. We'll clear their session and send them back to
+	// the home page to try again.
+	if strings.Contains(err.Error(), "could not find a matching session for this request") {
+		app.logger.Warn("clearing stale oauth session and redirecting to home")
+
+		// We can't use sessionManager.Destroy() because that relies on the session
+		// token being present in the context, which it isn't in this error case.
+		// Instead, we'll manually delete the cookie.
+		cookie := &http.Cookie{
+			Name:     app.sessionManager.Cookie.Name,
+			Value:    "",
+			Path:     "/",
+			Expires:  time.Unix(0, 0),
+			MaxAge:   -1,
+			HttpOnly: true,
+			Secure:   app.sessionManager.Cookie.Secure,
+			SameSite: app.sessionManager.Cookie.SameSite,
+		}
+		http.SetCookie(w, cookie)
+
+		// Redirect to home to restart the flow
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
+	// For all other errors, return a generic 500.
 	app.serverError(w, r, err)
 }
 
