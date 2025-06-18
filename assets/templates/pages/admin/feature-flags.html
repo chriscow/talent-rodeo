@@ -21,6 +21,7 @@
                         Active hours: {{printf "%02d:00" .SearchScheduler.StartHour}} - {{printf "%02d:00" .SearchScheduler.EndHour}} UTC
                     {{end}}
                 </small></p>
+                <p><small>Interval: {{printf "%.0f" .SearchScheduler.Interval.Minutes}} minutes</small></p>
             </article>
             <article>
                 <header>Subscription Processor</header>
@@ -36,6 +37,7 @@
                         Active hours: {{printf "%02d:00" .SubscriptionProcessor.StartHour}} - {{printf "%02d:00" .SubscriptionProcessor.EndHour}} UTC
                     {{end}}
                 </small></p>
+                <p><small>Interval: {{printf "%.0f" .SubscriptionProcessor.Interval.Minutes}} minutes</small></p>
             </article>
             <article>
                 <header>ScrapingDog Workers</header>
@@ -59,6 +61,7 @@
                         Active hours: {{printf "%02d:00" .FeedbackProcessor.StartHour}} - {{printf "%02d:00" .FeedbackProcessor.EndHour}} UTC
                     {{end}}
                 </small></p>
+                <p><small>Interval: {{printf "%.0f" .FeedbackProcessor.Interval.Minutes}} minutes</small></p>
             </article>
         </div>
     </section>
@@ -78,6 +81,12 @@
                 <label>
                     <input type="checkbox" name="search-scheduler-paused" value="true" {{if .SearchScheduler.Paused}}checked{{end}}>
                     Pause Search Scheduler
+                </label>
+                
+                <label>
+                    Interval (Minutes)
+                    <input type="number" name="search-scheduler-interval-minutes" value="{{printf "%.0f" .SearchScheduler.Interval.Minutes}}" min="1" max="10080">
+                    <small>How often the scheduler runs (1-10080 minutes, 10080 = 1 week)</small>
                 </label>
                 
                 <div class="grid">
@@ -154,6 +163,12 @@
                 <label>
                     <input type="checkbox" name="subscription-processor-paused" value="true" {{if .SubscriptionProcessor.Paused}}checked{{end}}>
                     Pause Subscription Processor
+                </label>
+                
+                <label>
+                    Interval (Minutes)
+                    <input type="number" name="subscription-processor-interval-minutes" value="{{printf "%.0f" .SubscriptionProcessor.Interval.Minutes}}" min="1" max="10080">
+                    <small>How often the processor runs (1-10080 minutes, 10080 = 1 week)</small>
                 </label>
                 
                 <div class="grid">
@@ -240,6 +255,11 @@
                 <label>
                     <input type="checkbox" name="feedback-processor-paused" value="true" {{if .FeedbackProcessor.Paused}}checked{{end}}>
                     Pause Feedback Processor
+                </label>
+                <label>
+                    Interval (Minutes)
+                    <input type="number" name="feedback-processor-interval-minutes" value="{{printf "%.0f" .FeedbackProcessor.Interval.Minutes}}" min="1" max="10080">
+                    <small>How often the processor runs (1-10080 minutes, 10080 = 1 week)</small>
                 </label>
                 <div class="grid">
                     <label>

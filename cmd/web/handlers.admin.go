@@ -197,31 +197,40 @@ func (app *application) adminFeatureFlags(w http.ResponseWriter, r *http.Request
 
 			searchStartHour, _ := strconv.Atoi(r.PostForm.Get("search-scheduler-start-hour"))
 			searchEndHour, _ := strconv.Atoi(r.PostForm.Get("search-scheduler-end-hour"))
+			searchIntervalMinutes, _ := strconv.Atoi(r.PostForm.Get("search-scheduler-interval-minutes"))
 			subscriptionStartHour, _ := strconv.Atoi(r.PostForm.Get("subscription-processor-start-hour"))
 			subscriptionEndHour, _ := strconv.Atoi(r.PostForm.Get("subscription-processor-end-hour"))
+			subscriptionIntervalMinutes, _ := strconv.Atoi(r.PostForm.Get("subscription-processor-interval-minutes"))
 			feedbackStartHour, _ := strconv.Atoi(r.PostForm.Get("feedback-processor-start-hour"))
 			feedbackEndHour, _ := strconv.Atoi(r.PostForm.Get("feedback-processor-end-hour"))
+			feedbackIntervalMinutes, _ := strconv.Atoi(r.PostForm.Get("feedback-processor-interval-minutes"))
 
 			var errors []string
 
 			ss.Paused = newSearchPaused
 			ss.StartHour = searchStartHour
 			ss.EndHour = searchEndHour
+			if searchIntervalMinutes > 0 {
+				ss.Interval = time.Duration(searchIntervalMinutes) * time.Minute
+			}
 			if err := kv.Set("search-scheduler", ss, 0); err != nil {
 				app.logger.Error("failed to set search-scheduler settings", "error", err)
 				errors = append(errors, "Failed to update search-scheduler: "+err.Error())
 			} else {
-				app.logger.Info("updated search-scheduler settings", "paused", newSearchPaused, "start_hour", searchStartHour, "end_hour", searchEndHour)
+				app.logger.Info("updated search-scheduler settings", "paused", newSearchPaused, "start_hour", searchStartHour, "end_hour", searchEndHour, "interval_minutes", searchIntervalMinutes)
 			}
 
 			sp.Paused = newSubscriptionPaused
 			sp.StartHour = subscriptionStartHour
 			sp.EndHour = subscriptionEndHour
+			if subscriptionIntervalMinutes > 0 {
+				sp.Interval = time.Duration(subscriptionIntervalMinutes) * time.Minute
+			}
 			if err := kv.Set("subscription-processor", sp, 0); err != nil {
 				app.logger.Error("failed to set subscription-processor settings", "error", err)
 				errors = append(errors, "Failed to update subscription-processor: "+err.Error())
 			} else {
-				app.logger.Info("updated subscription-processor settings", "paused", newSubscriptionPaused, "start_hour", subscriptionStartHour, "end_hour", subscriptionEndHour)
+				app.logger.Info("updated subscription-processor settings", "paused", newSubscriptionPaused, "start_hour", subscriptionStartHour, "end_hour", subscriptionEndHour, "interval_minutes", subscriptionIntervalMinutes)
 			}
 
 			sd.Paused = newScrapingdogPaused
@@ -235,11 +244,14 @@ func (app *application) adminFeatureFlags(w http.ResponseWriter, r *http.Request
 			fp.Paused = newFeedbackPaused
 			fp.StartHour = feedbackStartHour
 			fp.EndHour = feedbackEndHour
+			if feedbackIntervalMinutes > 0 {
+				fp.Interval = time.Duration(feedbackIntervalMinutes) * time.Minute
+			}
 			if err := kv.Set("feedback-processor", fp, 0); err != nil {
 				app.logger.Error("failed to set feedback-processor flag", "error", err)
 				errors = append(errors, "Failed to update feedback-processor: "+err.Error())
 			} else {
-				app.logger.Info("updated feedback-processor flag", "paused", newFeedbackPaused, "start_hour", feedbackStartHour, "end_hour", feedbackEndHour)
+				app.logger.Info("updated feedback-processor flag", "paused", newFeedbackPaused, "start_hour", feedbackStartHour, "end_hour", feedbackEndHour, "interval_minutes", feedbackIntervalMinutes)
 			}
 
 			if len(errors) > 0 {
