@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cheggaaa/pb"
+	"github.com/chriscow/vapi-go"
 	"github.com/getsentry/sentry-go"
 	"github.com/google/uuid"
 	"github.com/lmittmann/tint"
@@ -36,6 +37,7 @@ func init() {
 	createApptCmd.MarkFlagRequired("user")
 
 	listApptsCmd.Flags().BoolVarP(&jsonOutput, "json", "j", false, "Output in JSON format")
+
 	latestApptCmd.Flags().BoolVarP(&completedAppt, "completed", "c", false, "Only show completed appointments")
 
 	reprocessCmd.Flags().StringVarP(&userID, "user", "u", "", "User ID to reprocess the appointment for")
@@ -125,6 +127,12 @@ Otherwise, all appointments are considered.`,
 		} else {
 			fmt.Println(appt.ID)
 		}
+
+		call, err := vapi.GetCall(ctx, *appt.CallID)
+		if err != nil {
+			return fmt.Errorf("failed to get call: %w", err)
+		}
+		fmt.Println(call)
 		return nil
 	},
 }

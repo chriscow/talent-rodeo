@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"talent-rodeo/internal/response"
 	"time"
 
+	"cloud.google.com/go/firestore"
 	"github.com/chriscow/vapi-go"
 
 	"github.com/getsentry/sentry-go"
@@ -223,6 +225,46 @@ func handleEndOfCallReport(r *http.Request, app *application, msg []byte) error 
 	report := envelope.EndOfCallReport
 	appointmentID := *report.Call.Name
 	customerID := report.Call.Customer.Name
+
+	if report.Analysis != nil && report.Analysis.SuccessEvaluation != nil {
+		app.logger.Info("success evaluation", "success_evaluation", report.Analysis.SuccessEvaluation)
+		// try to type assert the success evaluation to a bool
+		successEvaluation, ok := report.Analysis.SuccessEvaluation.(bool)
+		if !ok {
+			app.logger.Error("success evaluation is not a bool", "success_evaluation", report.Analysis.SuccessEvaluation)
+			return fmt.Errorf("success evaluation is not a bool: %v", report.Analysis.SuccessEvaluation)
+		}
+		if successEvaluation {
+			app.logger.Info("success evaluation is true", "success_evaluation", successEvaluation)
+		} else {
+			app.logger.Info("success evaluation is false", "success_evaluation", successEvaluation)
+			// if it is false, we need to mark the appointment as failed and set the user back to state 4 (resume uploaded)
+			user, found, err := internal.GetUser(r.Context(), app.fs, customerID)
+			if err != nil {
+				return fmt.Errorf("failed to get user: %w", err)
+			}
+			if !found {
+				return fmt.Errorf("user not found: %s", customerID)
+			}
+
+			appt, err := internal.GetAppointment(r.Context(), app.fs, customerID, appointmentID)
+			if err != nil {
+				return fmt.Errorf("failed to get appointment: %w", err)
+			}
+			err = app.fs.RunTransaction(r.Context(), func(ctx context.Context, tx *firestore.Transaction) error {
+				if err := internal.ProcessAppointmentFailed(ctx, app.fs, user, appt, fmt.Errorf("success evaluation is false")); err != nil {
+					return fmt.Errorf("failed to process appointment failed: %w", err)
+				}
+				if err := internal.UpdateUserStatusTx(ctx, app.fs, tx, user, internal.UserStatusResumeUploaded); err != nil {
+					return fmt.Errorf("failed to update user status: %w", err)
+				}
+				return nil
+			})
+			if err != nil {
+				return fmt.Errorf("failed to update user status: %w", err)
+			}
+		}
+	}
 
 	app.processCompletedAppointment(r, customerID, appointmentID, *envelope)
 
