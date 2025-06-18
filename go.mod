@@ -4,6 +4,8 @@ go 1.24.1
 
 toolchain go1.24.4
 
+// replace github.com/chriscow/vapi-go => ../vapi-go
+
 require (
 	cloud.google.com/go/firestore v1.18.0
 	firebase.google.com/go/v4 v4.15.2
@@ -13,7 +15,7 @@ require (
 	github.com/chriscow/minds/providers/gemini v0.0.5-0.20250303171538-dc7c074db869
 	github.com/chriscow/minds/providers/openai v0.0.5
 	github.com/chriscow/minds/tools v0.0.3-0.20250612003644-10b6847e6d80
-	github.com/chriscow/vapi-go v0.0.0-20250527195805-6e2047355010
+	github.com/chriscow/vapi-go v0.0.0-20250618122633-9788e27c3f6f
 	github.com/fatih/color v1.16.0
 	github.com/fumiama/go-docx v0.0.0-20241231153056-9f8f327c74a5
 	github.com/go-playground/form/v4 v4.2.1
@@ -69,7 +71,7 @@ require (
 	github.com/pinecone-io/go-pinecone/v3 v3.1.0
 	github.com/playwright-community/playwright-go v0.5101.0
 	github.com/samber/lo v1.50.0
-	github.com/sashabaranov/go-openai v1.40.1
+	github.com/sashabaranov/go-openai v1.40.2
 	github.com/stretchr/testify v1.10.0
 	google.golang.org/protobuf v1.36.6
 )
