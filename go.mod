@@ -9,7 +9,6 @@ toolchain go1.24.4
 require (
 	cloud.google.com/go/firestore v1.18.0
 	firebase.google.com/go/v4 v4.15.2
-	github.com/ThreeDotsLabs/watermill v1.4.4
 	github.com/alexedwards/flow v0.1.0
 	github.com/chriscow/minds v0.0.8-0.20250612003644-10b6847e6d80
 	github.com/chriscow/minds/providers/gemini v0.0.5-0.20250303171538-dc7c074db869
@@ -35,9 +34,7 @@ require (
 	github.com/nats-io/nats.go v1.42.0
 	github.com/pusher/pusher-http-go/v5 v5.1.1
 	github.com/spf13/cobra v1.9.1
-	github.com/tmaxmax/go-sse v0.10.0
 	github.com/tomasen/realip v0.0.0-20180522021738-f0c99a92ddce
-	github.com/twilio/twilio-go v1.23.11
 	github.com/wneessen/go-mail v0.5.2
 	golang.org/x/crypto v0.38.0
 	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67
@@ -50,16 +47,13 @@ require (
 
 require (
 	github.com/dlclark/regexp2 v1.11.4 // indirect
-	github.com/golang/mock v1.6.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
-	github.com/pkg/errors v0.9.1 // indirect
 	github.com/tiktoken-go/tokenizer v0.2.1 // indirect
 )
 
 require (
-	github.com/WqyJh/go-openai-realtime v0.5.0
 	github.com/alexedwards/scs/firestore v0.0.0-20250212122300-421ef1d8611c
 	github.com/alexedwards/scs/v2 v2.8.0
 	github.com/aws/aws-sdk-go v1.55.6
@@ -94,7 +88,6 @@ require (
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20250501225837-2ac532fd4443 // indirect
-	github.com/coder/websocket v1.8.12 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/deckarep/golang-set/v2 v2.8.0 // indirect
 	github.com/docker/docker v28.0.1+incompatible // indirect
@@ -124,7 +117,6 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
-	github.com/lithammer/shortuuid/v3 v3.0.7 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/minio/highwayhash v1.0.3 // indirect
@@ -132,7 +124,6 @@ require (
 	github.com/nats-io/nkeys v0.4.11 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/oapi-codegen/runtime v1.1.1 // indirect
-	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
@@ -150,7 +141,6 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.36.0 // indirect
 	go.opentelemetry.io/otel/trace v1.36.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
-	go.uber.org/automaxprocs v1.6.0 // indirect
 	golang.org/x/net v0.40.0 // indirect
 	golang.org/x/sync v0.14.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect

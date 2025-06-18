@@ -317,6 +317,15 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 		logger.Warn("no resume found for user, proceeding without it")
 	}
 
+	if user.Statement == nil || *user.Statement == "" {
+		err := fmt.Errorf("user statement is empty")
+		internal.SentryReportError(ctx, err, sentry.LevelWarning, map[string]string{
+			"userID": user.ID,
+		})
+		logger.Error("user statement is empty", "userID", user.ID, "name", user.Name)
+		return err
+	}
+
 	msgs := minds.Messages{
 		{Role: minds.RoleSystem, Content: string(sysPrompt)},
 		{Role: minds.RoleUser, Content: fmt.Sprintf("My name is %s.\n\n%s\n\nHere is my latest resume:\n%s\n\nI will send the job description next.", user.FirstName, *user.Statement, resume.RawText)},

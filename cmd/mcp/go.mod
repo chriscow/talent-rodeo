@@ -40,7 +40,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cheggaaa/pb v1.0.29 // indirect
 	github.com/chriscow/minds/tools v0.0.3 // indirect
-	github.com/chriscow/vapi-go v0.0.0-20250527195805-6e2047355010 // indirect
+	github.com/chriscow/vapi-go v0.0.0-20250618122633-9788e27c3f6f // indirect
 	github.com/cncf/xds/go v0.0.0-20250501225837-2ac532fd4443 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dgraph-io/ristretto/v2 v2.2.0 // indirect
@@ -71,7 +71,7 @@ require (
 	github.com/pusher/pusher-http-go/v5 v5.1.1 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/samber/lo v1.50.0 // indirect
-	github.com/sashabaranov/go-openai v1.40.1 // indirect
+	github.com/sashabaranov/go-openai v1.40.2 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.5.0 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect

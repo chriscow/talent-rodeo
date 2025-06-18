@@ -182,6 +182,23 @@ func (s *Scheduler) run(ctx context.Context) {
 			s.logger.Info("background processing stopped due to context cancellation")
 			return
 		case <-s.ticker.C:
+			s.RefreshSettings()
+
+			if s.settings.Paused {
+				s.disableSearchSchedulingLogOnce.Do(func() {
+					s.logger.Info(internal.BGYellow("search scheduler paused"))
+				})
+				continue
+			}
+
+			if !s.IsWithinAllowedHours() {
+				s.logger.Debug("search scheduler outside allowed hours",
+					"start_hour", s.settings.StartHour,
+					"end_hour", s.settings.EndHour,
+					"current_time_utc", time.Now().UTC().Format("15:04"))
+				continue
+			}
+
 			s.wg.Add(1) // used for graceful shutdown if Close is called
 			s.StartCriteriaSearch(ctx)
 			s.wg.Done()
@@ -219,23 +236,6 @@ func (s *Scheduler) IsWithinAllowedHours() bool {
 
 // StartCriteriaSearch finds criteria that need searches performed
 func (s *Scheduler) StartCriteriaSearch(ctx context.Context) {
-	s.RefreshSettings()
-
-	if s.settings.Paused {
-		s.disableSearchSchedulingLogOnce.Do(func() {
-			s.logger.Info(internal.BGYellow("search scheduler paused"))
-		})
-		return
-	}
-
-	if !s.IsWithinAllowedHours() {
-		s.logger.Debug("search scheduler outside allowed hours",
-			"start_hour", s.settings.StartHour,
-			"end_hour", s.settings.EndHour,
-			"current_time_utc", time.Now().UTC().Format("15:04"))
-		return
-	}
-
 	items, err := internal.GetSearchCriteriaNeedsSearch(ctx, s.fs)
 	if err != nil {
 		s.logger.Error("error getting search criteria", "error", err)
