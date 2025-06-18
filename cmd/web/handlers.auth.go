@@ -11,6 +11,7 @@ import (
 	"io"
 
 	"github.com/alexedwards/flow"
+	"github.com/getsentry/sentry-go"
 	"github.com/google/uuid"
 	"github.com/markbates/goth/gothic"
 	"github.com/pusher/pusher-http-go/v5"
@@ -144,6 +145,16 @@ func (app *application) handleAuthError(w http.ResponseWriter, r *http.Request, 
 	// the home page to try again.
 	if strings.Contains(err.Error(), "could not find a matching session for this request") {
 		app.logger.Warn("clearing stale oauth session and redirecting to home")
+
+		internal.SentryCaptureEvent(r.Context(), &sentry.Event{
+			Level:   sentry.LevelWarning,
+			Message: "OAuth session expired or corrupted",
+			Extra: map[string]any{
+				"error":   err.Error(),
+				"user":    contextGetAuthenticatedUser(r),
+				"session": app.sessionManager.Get(r.Context(), "UserID"),
+			},
+		})
 
 		// We can't use sessionManager.Destroy() because that relies on the session
 		// token being present in the context, which it isn't in this error case.
