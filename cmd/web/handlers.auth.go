@@ -140,6 +140,12 @@ func (app *application) handleAuthError(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
+	userID := ""
+	user := contextGetAuthenticatedUser(r)
+	if user != nil {
+		userID = user.ID
+	}
+
 	// This error often means the user's session expired or got corrupted
 	// during the OAuth flow. We'll clear their session and send them back to
 	// the home page to try again.
@@ -150,9 +156,9 @@ func (app *application) handleAuthError(w http.ResponseWriter, r *http.Request, 
 			Level:   sentry.LevelWarning,
 			Message: "OAuth session expired or corrupted",
 			Extra: map[string]any{
-				"error":   err.Error(),
-				"user":    contextGetAuthenticatedUser(r),
-				"session": app.sessionManager.Get(r.Context(), "UserID"),
+				"error":  err.Error(),
+				"userID": userID,
+				"ip":     r.RemoteAddr,
 			},
 		})
 
@@ -175,6 +181,12 @@ func (app *application) handleAuthError(w http.ResponseWriter, r *http.Request, 
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
+
+	internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+		"error":  err.Error(),
+		"ip":     r.RemoteAddr,
+		"userID": userID,
+	})
 
 	// For all other errors, return a generic 500.
 	app.serverError(w, r, err)
