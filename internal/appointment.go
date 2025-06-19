@@ -351,7 +351,6 @@ func ProcessAppointmentFailed(ctx context.Context, fs *FirestoreClient, user *Us
 		// Get references to both documents we need to update/delete
 		appointmentRef := fs.Collection(usersCollection).Doc(appointment.UserID).Collection(appointmentsCollection).Doc(appointment.ID)
 		processingRef := fs.Collection(processingAppointmentsCollection).Doc(appointment.ID)
-		userRef := fs.Collection(usersCollection).Doc(user.ID)
 
 		// Within the transaction, update the appointment and delete the processing reference
 		if err := tx.Set(appointmentRef, appointment); err != nil {
@@ -362,10 +361,8 @@ func ProcessAppointmentFailed(ctx context.Context, fs *FirestoreClient, user *Us
 			return fmt.Errorf("failed to delete processing reference in transaction: %w", err)
 		}
 
-		err := err.Error()
-		user.State.Error = &err
-		if err := tx.Set(userRef, user); err != nil {
-			return fmt.Errorf("failed to update user state with error: %w", err)
+		if err := UpdateUserStatusTx(ctx, fs, tx, user, UserStatusResumeUploaded); err != nil {
+			return fmt.Errorf("failed to update user status to resume uploaded: %w", err)
 		}
 
 		return nil

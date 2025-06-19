@@ -109,17 +109,8 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 		}
 		app.logger.Info("call failed", "name", user.Name, "userID", user.ID, "endReason", endReason, "successEvaluation", successEval)
 
-		err = app.fs.RunTransaction(r.Context(), func(ctx context.Context, tx *firestore.Transaction) error {
-			if err := internal.ProcessAppointmentFailed(ctx, app.fs, user, appt, fmt.Errorf("call failed based on endReason or success evaluation")); err != nil {
-				return fmt.Errorf("failed to process appointment failed: %w", err)
-			}
-			if err := internal.UpdateUserStatusTx(ctx, app.fs, tx, user, internal.UserStatusResumeUploaded); err != nil {
-				return fmt.Errorf("failed to update user status: %w", err)
-			}
-			return nil
-		})
-		if err != nil {
-			return fmt.Errorf("failed to update user status: %w", err)
+		if err := internal.ProcessAppointmentFailed(r.Context(), app.fs, user, appt, fmt.Errorf("call failed based on endReason or success evaluation")); err != nil {
+			return fmt.Errorf("failed to process appointment failed: %w", err)
 		}
 	} else {
 		var successEval any
