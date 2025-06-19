@@ -142,7 +142,7 @@ func (p *UserJobProcessor) evaluateJob(ctx context.Context, task userJobEvaluati
 		}
 	}()
 
-	p.logger.Debug("evaluating job for user", "jobID", task.Job.ID, "userID", p.userID)
+	p.logger.Debug("evaluating job for user", "name", task.User.Name, "jobID", task.Job.ID, "userID", p.userID)
 
 	resp := openai.ChatCompletionResponse{}
 	analysis, err := tools.Ask(ctx, task.Prompt, tools.WithMessages(task.Messages),
@@ -220,7 +220,7 @@ func (p *UserJobProcessor) evaluateJob(ctx context.Context, task userJobEvaluati
 	}
 
 	onDashboard, _ := p.checkUserOnDashboard()
-	p.logger.Info("successfully evaluated and saved job for user", "jobID", userJob.ID, "userID", userJob.UserID, "rating", matchAnalysis.Rating.NumericRating, "onDashboard", onDashboard)
+	p.logger.Info("successfully evaluated and saved job for user", "name", task.User.Name, "jobID", userJob.ID, "userID", userJob.UserID, "rating", matchAnalysis.Rating.NumericRating, "onDashboard", onDashboard)
 
 	// Update and notify progress
 	processed := p.processedJobs.Add(1)
@@ -231,7 +231,7 @@ func (p *UserJobProcessor) evaluateJob(ctx context.Context, task userJobEvaluati
 
 	// Check for completion
 	if processed == int32(p.totalJobs) {
-		p.logger.Info("finished processing all jobs for user", "userID", p.userID)
+		p.logger.Info("finished processing all jobs for user", "name", task.User.Name, "userID", p.userID)
 		// if p.onDashboard {
 		internal.SendPusherRedirect(p.psh, p.userID, "/dashboard")
 		// }
@@ -295,12 +295,12 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 	}
 
 	if len(jobIDs) == 0 {
-		logger.Info("no new jobs found for user/criteria", "userID", user.ID, "criteriaID", criteria.ID)
+		logger.Info("no new jobs found for user/criteria", "name", user.Name, "userID", user.ID, "criteriaID", criteria.ID)
 		internal.SendPusherRedirect(psh, user.ID, "/dashboard")
 		return nil // No new jobs to process
 	}
 
-	logger = logger.With("userID", user.ID, "criteriaID", criteria.ID)
+	logger = logger.With("name", user.Name, "userID", user.ID, "criteriaID", criteria.ID)
 	logger.Info(internal.HiBGCyan("RefreshUserJobs started"), "jobCount", len(jobIDs))
 
 	// 2. Prepare LLM conversation
@@ -320,9 +320,10 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 	if user.Statement == nil || *user.Statement == "" {
 		err := fmt.Errorf("user statement is empty")
 		internal.SentryReportError(ctx, err, sentry.LevelWarning, map[string]string{
+			"name":   user.Name,
 			"userID": user.ID,
 		})
-		logger.Error("user statement is empty", "userID", user.ID, "name", user.Name)
+		logger.Error("user statement is empty", "name", user.Name, "userID", user.ID)
 		return err
 	}
 
@@ -390,7 +391,7 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 		processor.queue <- task
 	}
 
-	logger.Info("queued jobs for evaluation", "count", len(jobs))
+	logger.Info("queued jobs for evaluation", "name", user.Name, "userID", user.ID, "count", len(jobs))
 
 	// Signal that no more jobs will be added to the queue.
 	// Workers will finish processing remaining jobs and then exit.
