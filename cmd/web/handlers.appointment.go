@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -10,7 +9,6 @@ import (
 	"talent-rodeo/internal/transcript"
 	"time"
 
-	"cloud.google.com/go/firestore"
 	"github.com/chriscow/vapi-go"
 
 	"github.com/getsentry/sentry-go"
