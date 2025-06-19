@@ -108,20 +108,7 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 			successEval = report.Analysis.SuccessEvaluation
 		}
 		app.logger.Info("call failed", "name", user.Name, "userID", user.ID, "endReason", endReason, "successEvaluation", successEval)
-		
-		// Mark the appointment as failed and set the user back to state 4 (resume uploaded)
-		user, found, err := internal.GetUser(r.Context(), app.fs, user.ID)
-		if err != nil {
-			return fmt.Errorf("failed to get user: %w", err)
-		}
-		if !found {
-			return fmt.Errorf("user not found: %s", user.ID)
-		}
 
-		appt, err := internal.GetAppointment(r.Context(), app.fs, user.ID, appointmentID)
-		if err != nil {
-			return fmt.Errorf("failed to get appointment: %w", err)
-		}
 		err = app.fs.RunTransaction(r.Context(), func(ctx context.Context, tx *firestore.Transaction) error {
 			if err := internal.ProcessAppointmentFailed(ctx, app.fs, user, appt, fmt.Errorf("call failed based on endReason or success evaluation")); err != nil {
 				return fmt.Errorf("failed to process appointment failed: %w", err)
