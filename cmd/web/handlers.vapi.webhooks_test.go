@@ -145,3 +145,81 @@ func TestValidateEndOfCallReport(t *testing.T) {
 		}
 	}
 }
+
+// TestEvaluateCallSuccess tests the extracted evaluateCallSuccess function
+func TestEvaluateCallSuccess(t *testing.T) {
+	tests := []struct {
+		name                       string
+		successEvaluation          any
+		expectShouldProcessFailure bool
+		expectError                bool
+	}{
+		{
+			name:                       "bool true - success",
+			successEvaluation:          true,
+			expectShouldProcessFailure: false,
+			expectError:                false,
+		},
+		{
+			name:                       "bool false - failure",
+			successEvaluation:          false,
+			expectShouldProcessFailure: true,
+			expectError:                false,
+		},
+		{
+			name:                       "string with 'was successful' - success",
+			successEvaluation:          "The call was successful and the candidate was interested",
+			expectShouldProcessFailure: false,
+			expectError:                false,
+		},
+		{
+			name:                       "string without 'was successful' - should fail",
+			successEvaluation:          "The call failed to connect properly",
+			expectShouldProcessFailure: true,
+			expectError:                false,
+		},
+		{
+			name:                       "integer value - should fail",
+			successEvaluation:          42,
+			expectShouldProcessFailure: true,
+			expectError:                false,
+		},
+		{
+			name:                       "nil value - should fail",
+			successEvaluation:          nil,
+			expectShouldProcessFailure: true,
+			expectError:                false,
+		},
+	}
+
+	// Create a mock application with logger
+	app := &application{
+		logger: slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		})),
+		fs: nil,
+		wg: sync.WaitGroup{},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			shouldProcessFailure, err := app.evaluateCallSuccess(tt.successEvaluation)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got none")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+			}
+
+			if shouldProcessFailure != tt.expectShouldProcessFailure {
+				t.Errorf("Expected shouldProcessFailure=%v, got %v", tt.expectShouldProcessFailure, shouldProcessFailure)
+			}
+		})
+	}
+}
+
+
