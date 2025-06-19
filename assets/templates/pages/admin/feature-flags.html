@@ -63,6 +63,23 @@
                 </small></p>
                 <p><small>Interval: {{printf "%.0f" .FeedbackProcessor.Interval.Minutes}} minutes</small></p>
             </article>
+            <article>
+                <header>Nudge Processor</header>
+                <p>
+                    Status: <mark class="{{if .NudgeProcessor.Paused}}error{{else}}success{{end}}">
+                        {{if .NudgeProcessor.Paused}}Paused{{else}}Active{{end}}
+                    </mark>
+                </p>
+                <p><small>
+                    {{if and (eq .NudgeProcessor.StartHour 0) (eq .NudgeProcessor.EndHour 0)}}
+                        Running 24/7
+                    {{else}}
+                        Active hours: {{printf "%02d:00" .NudgeProcessor.StartHour}} - {{printf "%02d:00" .NudgeProcessor.EndHour}} UTC
+                    {{end}}
+                </small></p>
+                <p><small>Interval: {{printf "%.0f" .NudgeProcessor.Interval.Minutes}} minutes</small></p>
+                <p><small>Dry Run: {{.NudgeProcessor.DryRun}} | Test Mode: {{.NudgeProcessor.TestModeEnabled}}</small></p>
+            </article>
         </div>
     </section>
     
@@ -282,6 +299,98 @@
                     </label>
                 </div>
                 <small><em>Note: Set both start and end hour to 00:00 to run 24/7. Time window can cross midnight (e.g., 17:00-00:00).</em></small>
+            </article>
+
+            <article>
+                <header>
+                    <h3>Nudge Processor</h3>
+                    <p>Controls the automated user nudge email system</p>
+                </header>
+
+                <div class="grid">
+                    <label>
+                        <input type="checkbox" name="nudge-processor-paused" value="true" {{if .NudgeProcessor.Paused}}checked{{end}}>
+                        Pause Nudge Processor
+                    </label>
+                    <label>
+                        <input type="checkbox" name="nudge-processor-dry-run" value="true" {{if .NudgeProcessor.DryRun}}checked{{end}}>
+                        Dry Run (Log only, no sending)
+                    </label>
+                    <label>
+                        <input type="checkbox" name="nudge-processor-test-mode" value="true" {{if .NudgeProcessor.TestModeEnabled}}checked{{end}}>
+                        Test Mode (Restricted sending)
+                    </label>
+                </div>
+
+                <fieldset>
+                    <legend>Limit Nudges for Recently Active Users</legend>
+                    <div class="grid">
+                        <label><input type="checkbox" name="nudge-limit-activity-no-resume" value="true" {{if .NudgeProcessor.LimitOnRecentActivityPerType.NoResume}}checked{{end}}>No Resume</label>
+                        <label><input type="checkbox" name="nudge-limit-activity-no-call" value="true" {{if .NudgeProcessor.LimitOnRecentActivityPerType.NoCall}}checked{{end}}>No Call</label>
+                        <label><input type="checkbox" name="nudge-limit-activity-five-star" value="true" {{if .NudgeProcessor.LimitOnRecentActivityPerType.FiveStarMatches}}checked{{end}}>Five Star</label>
+                        <label><input type="checkbox" name="nudge-limit-activity-follow-up" value="true" {{if .NudgeProcessor.LimitOnRecentActivityPerType.FollowUp}}checked{{end}}>Follow Up</label>
+                    </div>
+                </fieldset>
+
+                <label>
+                    Max Emails Per Run
+                    <input type="number" name="nudge-processor-max-emails" value="{{.NudgeProcessor.MaxEmailsPerRun}}" min="0">
+                </label>
+
+                <label>
+                    Weekly Rate Limit (Days)
+                    <input type="number" name="nudge-weekly-rate-limit-days" value="{{printf "%.0f" (div .NudgeProcessor.WeeklyRateLimit.Hours 24)}}" min="0">
+                    <small>Minimum days between any two nudges to the same user. 0 to disable.</small>
+                </label>
+
+                <div class="grid">
+                    <label>
+                        No Resume Delay (Days)
+                        <input type="number" name="nudge-processor-no-resume-days" value="{{.NudgeProcessor.NoResumeDelayDays}}" min="0">
+                    </label>
+                    <label>
+                        No Call Delay (Days)
+                        <input type="number" name="nudge-processor-no-call-days" value="{{.NudgeProcessor.NoCallDelayDays}}" min="0">
+                    </label>
+                    <label>
+                        Match Alert Delay (Days)
+                        <input type="number" name="nudge-processor-match-alert-days" value="{{.NudgeProcessor.MatchAlertDelayDays}}" min="0">
+                    </label>
+                </div>
+
+                <fieldset>
+                    <legend>Max Nudges Per Type</legend>
+                    <div class="grid">
+                        <label>No Resume<input type="number" name="nudge-max-no-resume" value="{{.NudgeProcessor.MaxNudgesPerType.NoResume}}" min="0"></label>
+                        <label>No Call<input type="number" name="nudge-max-no-call" value="{{.NudgeProcessor.MaxNudgesPerType.NoCall}}" min="0"></label>
+                        <label>Five Star<input type="number" name="nudge-max-five-star" value="{{.NudgeProcessor.MaxNudgesPerType.FiveStarMatches}}" min="0"></label>
+                        <label>Follow Up<input type="number" name="nudge-max-follow-up" value="{{.NudgeProcessor.MaxNudgesPerType.FollowUp}}" min="0"></label>
+                    </div>
+                </fieldset>
+
+                <label>
+                    Interval (Minutes)
+                    <input type="number" name="nudge-processor-interval-minutes" value="{{printf "%.0f" .NudgeProcessor.Interval.Minutes}}" min="1" max="10080">
+                </label>
+                
+                <div class="grid">
+                    <label>
+                        Start Hour (UTC)
+                        <select name="nudge-processor-start-hour">
+                            {{range $h := (seq 0 23)}}
+                            <option value="{{$h}}" {{if eq $.NudgeProcessor.StartHour $h}}selected{{end}}>{{printf "%02d:00" $h}}</option>
+                            {{end}}
+                        </select>
+                    </label>
+                    <label>
+                        End Hour (UTC)
+                        <select name="nudge-processor-end-hour">
+                            {{range $h := (seq 0 23)}}
+                            <option value="{{$h}}" {{if eq $.NudgeProcessor.EndHour $h}}selected{{end}}>{{printf "%02d:00" $h}}</option>
+                            {{end}}
+                        </select>
+                    </label>
+                </div>
             </article>
         </fieldset>
         

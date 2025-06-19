@@ -60,6 +60,12 @@ var TemplateFuncs = template.FuncMap{
 	"add": func(a, b int) int {
 		return a + b
 	},
+	"div": func(a, b float64) float64 {
+		if b == 0 {
+			return 0
+		}
+		return a / b
+	},
 	"rrfPercentage": rrfPercentage,
 	"rrfStars":      rrfStars,
 	"ratingStars":   ratingStars,

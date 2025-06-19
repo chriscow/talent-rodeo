@@ -55,6 +55,9 @@ type NudgeProcessorSettings struct {
 	// WeeklyRateLimit is the minimum duration between nudges to the same user (e.g., 7*24*time.Hour for weekly).
 	WeeklyRateLimit time.Duration
 
+	// LimitOnRecentActivityPerType, if true for a given nudge type, prevents sending that nudge to a user who has recently accessed the application.
+	LimitOnRecentActivityPerType LimitOnRecentActivitySettings
+
 	// --- Safety controls for testing and safe rollout ---
 
 	// DryRun, if true, logs what would be sent but does not actually send any emails.
@@ -110,11 +113,17 @@ var DefaultNudgeSettings = NudgeProcessorSettings{
 	Paused:              false,
 	StartHour:           0, // 24/7 operation
 	EndHour:             0,
-	MaxEmailsPerRun:     10,
+	MaxEmailsPerRun:     3, // to start for soft launch
 	NoResumeDelayDays:   2,
 	NoCallDelayDays:     3,
 	MatchAlertDelayDays: 2,
 	WeeklyRateLimit:     7 * 24 * time.Hour,
+	LimitOnRecentActivityPerType: LimitOnRecentActivitySettings{
+		NoResume:        false,
+		NoCall:          false,
+		FiveStarMatches: false,
+		FollowUp:        false,
+	},
 
 	MaxNudgesPerType: MaxNudgesPerType{
 		NoResume:        2, // Allow up to 2 reminders for a resume
@@ -123,10 +132,9 @@ var DefaultNudgeSettings = NudgeProcessorSettings{
 		FollowUp:        1, // 1 follow-up
 	},
 
-	// Safe defaults for testing
 	DryRun:             false,
 	TestModeEnabled:    true, // only send to test emails
-	AllowedTestEmails:  []string{"madcow@gmail.com"},
+	AllowedTestEmails:  []string{"madcow@gmail.com", "mindemann@gmail.com", "wolfgangmeyers@gmail.com", "neal.s.modi@gmail.com"},
 	RequireTestDomain:  false,
 	TestDomains:        []string{"test.talentrodeo.com", "example.org"},
 	MaxTestEmailsTotal: 10,
@@ -144,6 +152,12 @@ var TestSafeNudgeSettings = NudgeProcessorSettings{
 	NoCallDelayDays:     0,         // Immediate for testing
 	MatchAlertDelayDays: 0,         // Immediate for testing
 	WeeklyRateLimit:     time.Hour, // Short for testing
+	LimitOnRecentActivityPerType: LimitOnRecentActivitySettings{
+		NoResume:        true,
+		NoCall:          true,
+		FiveStarMatches: true,
+		FollowUp:        true,
+	},
 
 	MaxNudgesPerType: MaxNudgesPerType{
 		NoResume:        1,
@@ -202,6 +216,14 @@ type MaxNudgesPerType struct {
 	NoCall          int
 	FiveStarMatches int
 	FollowUp        int
+}
+
+// LimitOnRecentActivitySettings defines whether to limit nudges based on recent activity for each nudge type.
+type LimitOnRecentActivitySettings struct {
+	NoResume        bool
+	NoCall          bool
+	FiveStarMatches bool
+	FollowUp        bool
 }
 
 // Interfaces for dependency injection and testing
