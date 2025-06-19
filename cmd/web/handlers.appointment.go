@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/smtp"
 	"talent-rodeo/internal/transcript"
 	"time"
 
+	"cloud.google.com/go/firestore"
 	"github.com/chriscow/vapi-go"
 
 	"github.com/getsentry/sentry-go"
@@ -18,7 +21,7 @@ import (
 // internal.reportToSentry(r.Context(), err, sentry.LevelWarning, tags) // Less critical errors
 // internal.reportToSentry(r.Context(), err, sentry.LevelFatal, tags)   // Application-crashing errors
 
-func (app *application) processCompletedAppointment(r *http.Request, userID, appointmentID string, env vapi.EndOfCallReportEnvelope) error {
+func (app *application) processCompletedAppointment(r *http.Request, userID, appointmentID string, report vapi.EndOfCallReport) error {
 	app.logger.Debug("processCompletedAppointment: received end of call report", "userID", userID, "appointmentID", appointmentID)
 
 	ipaddr := r.Header.Get("X-Forwarded-For")
@@ -42,8 +45,6 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 
 		return wrappedErr
 	}
-
-	report := env.EndOfCallReport
 
 	// Update the appointment with the call result and report
 	appt.CallID = report.Call.ID
@@ -95,6 +96,52 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 
 	hub := sentry.GetHubFromContext(r.Context())
 
+	// Always evaluate call success based on endReason and analysis (if present)
+	shouldProcessFailure, err := app.evaluateCallSuccess(&report, endReason)
+	if err != nil {
+		return fmt.Errorf("failed to evaluate call success: %w", err)
+	}
+
+	if shouldProcessFailure {
+		var successEval any
+		if report.Analysis != nil {
+			successEval = report.Analysis.SuccessEvaluation
+		}
+		app.logger.Info("call failed", "name", user.Name, "userID", user.ID, "endReason", endReason, "successEvaluation", successEval)
+		
+		// Mark the appointment as failed and set the user back to state 4 (resume uploaded)
+		user, found, err := internal.GetUser(r.Context(), app.fs, user.ID)
+		if err != nil {
+			return fmt.Errorf("failed to get user: %w", err)
+		}
+		if !found {
+			return fmt.Errorf("user not found: %s", user.ID)
+		}
+
+		appt, err := internal.GetAppointment(r.Context(), app.fs, user.ID, appointmentID)
+		if err != nil {
+			return fmt.Errorf("failed to get appointment: %w", err)
+		}
+		err = app.fs.RunTransaction(r.Context(), func(ctx context.Context, tx *firestore.Transaction) error {
+			if err := internal.ProcessAppointmentFailed(ctx, app.fs, user, appt, fmt.Errorf("call failed based on endReason or success evaluation")); err != nil {
+				return fmt.Errorf("failed to process appointment failed: %w", err)
+			}
+			if err := internal.UpdateUserStatusTx(ctx, app.fs, tx, user, internal.UserStatusResumeUploaded); err != nil {
+				return fmt.Errorf("failed to update user status: %w", err)
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("failed to update user status: %w", err)
+		}
+	} else {
+		var successEval any
+		if report.Analysis != nil {
+			successEval = report.Analysis.SuccessEvaluation
+		}
+		app.logger.Info("call was successful", "name", user.Name, "userID", user.ID, "endReason", endReason, "successEvaluation", successEval)
+	}
+
 	// This actually just starts a goroutine to process the appointment and
 	// doesn't return an error but we check anyway in case that changes
 	// in the future.
@@ -108,4 +155,86 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 
 	go transcript.ProcessCompletedCall(hub, app.fs, app.pusher, app.searchProvider, app.logger, app.jobDispatch, user, appt, &cfg)
 	return nil
+}
+
+// evaluateCallSuccess processes both the Analysis object and endReason from VAPI webhook
+// to determine whether the call should be treated as a failure requiring ProcessAppointmentFailed.
+//
+// This function always checks endReason first as the primary indicator of call success.
+// Only specific endReason values are considered successful, everything else is a failure.
+//
+// If endReason indicates success, then we check the Analysis.SuccessEvaluation if present:
+// - bool: true = success, false = failure
+// - string: "true", "false", or must contain "was successful" to be considered success
+//
+// This function handles nil Analysis objects and missing SuccessEvaluation fields gracefully.
+// It avoids webhook retries by treating any invalid/unparseable values as failures and logs them for debugging.
+//
+// Returns:
+// - shouldProcessFailure: true if the call failed and ProcessAppointmentFailed should be called
+// - error: only returned for unexpected system errors, not for invalid values
+func (app *application) evaluateCallSuccess(report *vapi.EndOfCallReport, endReason string) (shouldProcessFailure bool, err error) {
+	if report == nil {
+		return false, fmt.Errorf("end of call report is nil")
+	}
+
+	var successEvaluation any
+	if report.Analysis != nil {
+		successEvaluation = report.Analysis.SuccessEvaluation
+	}
+
+	app.logger.Info("evaluating call success",
+		"success_evaluation", successEvaluation,
+		"end_reason", endReason,
+		"has_analysis", report.Analysis != nil)
+
+	// First check endReason - only specific values indicate success
+	switch endReason {
+	case "assistant-ended-call", "customer-ended-call", "exceeded-max-duration":
+		// These are considered successful call completions
+		app.logger.Info("call completed successfully based on end reason", "end_reason", endReason)
+	default:
+		// All other endReason values (voicemail, errors, failures, etc.) are failures
+		app.logger.Info("call failed based on end reason", "end_reason", endReason)
+		return true, nil // failure, process failure
+	}
+
+	// If endReason indicates success, check successEvaluation if present
+	if report.Analysis == nil || report.Analysis.SuccessEvaluation == nil {
+		app.logger.Info("no analysis or success evaluation provided, using end reason result")
+		return false, nil // success based on endReason
+	}
+
+	// Check if it's a bool (original API format)
+	if boolVal, ok := successEvaluation.(bool); ok {
+		// bool false = failure, bool true = success
+		return !boolVal, nil
+	}
+
+	// Check if it's a string (new API format)
+	if strVal, ok := successEvaluation.(string); ok {
+		// Handle explicit "true"/"false" strings
+		if strVal == "true" {
+			return false, nil // success, don't process failure
+		}
+		if strVal == "false" {
+			app.logger.Info("success evaluation is string 'false'", "success_evaluation", strVal)
+			return true, nil // failure, process failure
+		}
+
+		// Handle descriptive strings - must contain "was successful" to be considered success
+		if strings.Contains(strVal, "was successful") {
+			return false, nil // success, don't process failure
+		}
+
+		// String doesn't contain success indicator - treat as failure
+		app.logger.Info("success evaluation string doesn't indicate success",
+			"success_evaluation", strVal)
+		return true, nil // failure, process failure
+	}
+
+	// Neither bool nor string - treat as failure to avoid webhook retries
+	app.logger.Error("success evaluation is neither bool nor string",
+		"success_evaluation", successEvaluation)
+	return true, nil // failure, process failure
 }

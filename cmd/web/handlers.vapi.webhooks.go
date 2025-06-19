@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,12 +9,10 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"strings"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
 	"time"
 
-	"cloud.google.com/go/firestore"
 	"github.com/chriscow/vapi-go"
 
 	"github.com/getsentry/sentry-go"
@@ -227,45 +224,7 @@ func handleEndOfCallReport(r *http.Request, app *application, msg []byte) error 
 	appointmentID := *report.Call.Name
 	customerID := report.Call.Customer.Name
 
-	if report.Analysis != nil && report.Analysis.SuccessEvaluation != nil {
-		shouldProcessFailure, err := app.evaluateCallSuccess(report.Analysis.SuccessEvaluation)
-		if err != nil {
-			return fmt.Errorf("failed to evaluate call success: %w", err)
-		}
-
-		if shouldProcessFailure {
-			app.logger.Info("call failed", "success_evaluation", report.Analysis.SuccessEvaluation)
-			// Mark the appointment as failed and set the user back to state 4 (resume uploaded)
-			user, found, err := internal.GetUser(r.Context(), app.fs, customerID)
-			if err != nil {
-				return fmt.Errorf("failed to get user: %w", err)
-			}
-			if !found {
-				return fmt.Errorf("user not found: %s", customerID)
-			}
-
-			appt, err := internal.GetAppointment(r.Context(), app.fs, customerID, appointmentID)
-			if err != nil {
-				return fmt.Errorf("failed to get appointment: %w", err)
-			}
-			err = app.fs.RunTransaction(r.Context(), func(ctx context.Context, tx *firestore.Transaction) error {
-				if err := internal.ProcessAppointmentFailed(ctx, app.fs, user, appt, fmt.Errorf("success evaluation failed")); err != nil {
-					return fmt.Errorf("failed to process appointment failed: %w", err)
-				}
-				if err := internal.UpdateUserStatusTx(ctx, app.fs, tx, user, internal.UserStatusResumeUploaded); err != nil {
-					return fmt.Errorf("failed to update user status: %w", err)
-				}
-				return nil
-			})
-			if err != nil {
-				return fmt.Errorf("failed to update user status: %w", err)
-			}
-		} else {
-			app.logger.Info("call was successful", "success_evaluation", report.Analysis.SuccessEvaluation)
-		}
-	}
-
-	app.processCompletedAppointment(r, customerID, appointmentID, *envelope)
+	app.processCompletedAppointment(r, customerID, appointmentID, report)
 
 	app.logger.Debug("processed end-of-call report", "appointmentID", appointmentID, "customerID", customerID)
 
@@ -335,45 +294,4 @@ func validateEndOfCallReport(r *http.Request, webhookMsg []byte) (*vapi.EndOfCal
 	}
 
 	return &env, nil
-}
-
-// evaluateCallSuccess processes the SuccessEvaluation field from VAPI webhook analysis
-// and determines whether the call should be treated as a failure requiring ProcessAppointmentFailed.
-// 
-// The VAPI API changed their schema where SuccessEvaluation can now be either:
-// - bool: true = success, false = failure
-// - string: must contain "was successful" to be considered success
-//
-// This function handles the type checking and string parsing logic to avoid webhook retries
-// on malformed data. Instead of returning errors that would cause webhook retries, it treats
-// any invalid/unparseable values as failures and logs them for debugging.
-//
-// Returns:
-// - shouldProcessFailure: true if the call failed and ProcessAppointmentFailed should be called
-// - error: only returned for unexpected system errors, not for invalid SuccessEvaluation values
-func (app *application) evaluateCallSuccess(successEvaluation any) (shouldProcessFailure bool, err error) {
-	app.logger.Info("success evaluation", "success_evaluation", successEvaluation)
-
-	// Check if it's a bool (original API format)
-	if boolVal, ok := successEvaluation.(bool); ok {
-		// bool false = failure, bool true = success
-		return !boolVal, nil
-	}
-
-	// Check if it's a string (new API format)
-	if strVal, ok := successEvaluation.(string); ok {
-		// String must contain "was successful" to be considered success
-		if strings.Contains(strVal, "was successful") {
-			return false, nil // success, don't process failure
-		}
-		// String doesn't contain success indicator - treat as failure
-		app.logger.Error("success evaluation string doesn't contain expected text",
-			"success_evaluation", strVal)
-		return true, nil // failure, process failure
-	}
-
-	// Neither bool nor string - treat as failure to avoid webhook retries
-	app.logger.Error("success evaluation is neither bool nor string",
-		"success_evaluation", successEvaluation)
-	return true, nil // failure, process failure
 }
