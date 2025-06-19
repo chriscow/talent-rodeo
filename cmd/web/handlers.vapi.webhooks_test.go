@@ -146,47 +146,129 @@ func TestValidateEndOfCallReport(t *testing.T) {
 	}
 }
 
-// TestEvaluateCallSuccess tests the extracted evaluateCallSuccess function
+// TestEvaluateCallSuccess tests the evaluateCallSuccess function
 func TestEvaluateCallSuccess(t *testing.T) {
 	tests := []struct {
 		name                       string
-		successEvaluation          any
+		report                     *vapi.EndOfCallReport
+		endReason                  string
 		expectShouldProcessFailure bool
 		expectError                bool
 	}{
 		{
-			name:                       "bool true - success",
-			successEvaluation:          true,
+			name: "bool true with successful endReason - success",
+			report: &vapi.EndOfCallReport{
+				Analysis: &vapi.Analysis{
+					SuccessEvaluation: true,
+				},
+			},
+			endReason:                  "customer-ended-call",
 			expectShouldProcessFailure: false,
 			expectError:                false,
 		},
 		{
-			name:                       "bool false - failure",
-			successEvaluation:          false,
+			name: "bool false with successful endReason - failure",
+			report: &vapi.EndOfCallReport{
+				Analysis: &vapi.Analysis{
+					SuccessEvaluation: false,
+				},
+			},
+			endReason:                  "customer-ended-call",
 			expectShouldProcessFailure: true,
 			expectError:                false,
 		},
 		{
-			name:                       "string with 'was successful' - success",
-			successEvaluation:          "The call was successful and the candidate was interested",
+			name: "successful endReason with string 'was successful' - success",
+			report: &vapi.EndOfCallReport{
+				Analysis: &vapi.Analysis{
+					SuccessEvaluation: "The call was successful and the candidate was interested",
+				},
+			},
+			endReason:                  "assistant-ended-call",
 			expectShouldProcessFailure: false,
 			expectError:                false,
 		},
 		{
-			name:                       "string without 'was successful' - should fail",
-			successEvaluation:          "The call failed to connect properly",
+			name: "successful endReason with string without 'was successful' - failure",
+			report: &vapi.EndOfCallReport{
+				Analysis: &vapi.Analysis{
+					SuccessEvaluation: "The call failed to connect properly",
+				},
+			},
+			endReason:                  "customer-ended-call",
 			expectShouldProcessFailure: true,
 			expectError:                false,
 		},
 		{
-			name:                       "integer value - should fail",
-			successEvaluation:          42,
+			name: "successful endReason with string 'false' - failure",
+			report: &vapi.EndOfCallReport{
+				Analysis: &vapi.Analysis{
+					SuccessEvaluation: "false",
+				},
+			},
+			endReason:                  "customer-ended-call",
 			expectShouldProcessFailure: true,
 			expectError:                false,
 		},
 		{
-			name:                       "nil value - should fail",
-			successEvaluation:          nil,
+			name: "successful endReason with string 'true' - success",
+			report: &vapi.EndOfCallReport{
+				Analysis: &vapi.Analysis{
+					SuccessEvaluation: "true",
+				},
+			},
+			endReason:                  "assistant-ended-call",
+			expectShouldProcessFailure: false,
+			expectError:                false,
+		},
+		{
+			name: "voicemail endReason - always failure regardless of successEvaluation",
+			report: &vapi.EndOfCallReport{
+				Analysis: &vapi.Analysis{
+					SuccessEvaluation: true,
+				},
+			},
+			endReason:                  "voicemail",
+			expectShouldProcessFailure: true,
+			expectError:                false,
+		},
+		{
+			name: "error endReason - always failure regardless of successEvaluation",
+			report: &vapi.EndOfCallReport{
+				Analysis: &vapi.Analysis{
+					SuccessEvaluation: "The call was successful",
+				},
+			},
+			endReason:                  "call.start.error-vapifault-get-org",
+			expectShouldProcessFailure: true,
+			expectError:                false,
+		},
+		{
+			name: "successful endReason with integer value - failure",
+			report: &vapi.EndOfCallReport{
+				Analysis: &vapi.Analysis{
+					SuccessEvaluation: 42,
+				},
+			},
+			endReason:                  "customer-ended-call",
+			expectShouldProcessFailure: true,
+			expectError:                false,
+		},
+		{
+			name: "successful endReason with nil analysis - success",
+			report: &vapi.EndOfCallReport{
+				Analysis: nil,
+			},
+			endReason:                  "exceeded-max-duration",
+			expectShouldProcessFailure: false,
+			expectError:                false,
+		},
+		{
+			name: "voicemail endReason with no analysis - failure",
+			report: &vapi.EndOfCallReport{
+				Analysis: nil,
+			},
+			endReason:                  "voicemail",
 			expectShouldProcessFailure: true,
 			expectError:                false,
 		},
@@ -203,7 +285,7 @@ func TestEvaluateCallSuccess(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			shouldProcessFailure, err := app.evaluateCallSuccess(tt.successEvaluation)
+			shouldProcessFailure, err := app.evaluateCallSuccess(tt.report, tt.endReason)
 
 			if tt.expectError {
 				if err == nil {
@@ -220,6 +302,61 @@ func TestEvaluateCallSuccess(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestSpecificEndOfCallReportRegression tests the specific end-of-call report that was causing 500 errors
+func TestSpecificEndOfCallReportRegression(t *testing.T) {
+	// Test the specific file that was causing issues
+	filePath := "../../testdata/webhooks/end-of-call-report_d61bb2a0-260f-454e-9b5d-93a51c848b2a.json"
+	
+	// Read the problematic file
+	webhookData, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("Failed to read regression test file %s: %v", filePath, err)
+	}
+
+	// Parse the JSON to extract the successEvaluation
+	var envelope vapi.EndOfCallReportEnvelope
+	err = json.Unmarshal(webhookData, &envelope)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal regression test JSON: %v", err)
+	}
+
+	// Verify the successEvaluation is the problematic "false" string
+	if envelope.EndOfCallReport.Analysis == nil {
+		t.Fatal("Analysis field is nil")
+	}
+	
+	successEval := envelope.EndOfCallReport.Analysis.SuccessEvaluation
+	if successEval != "false" {
+		t.Fatalf("Expected successEvaluation to be 'false', got %v", successEval)
+	}
+
+	// Get the endReason from the report
+	endReason := envelope.EndOfCallReport.EndedReason
+	t.Logf("EndedReason from report: %s", endReason)
+
+	// Test the evaluateCallSuccess function with the full report
+	app := &application{
+		logger: slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		})),
+		fs: nil,
+		wg: sync.WaitGroup{},
+	}
+
+	shouldProcessFailure, err := app.evaluateCallSuccess(&envelope.EndOfCallReport, endReason)
+	if err != nil {
+		t.Fatalf("evaluateCallSuccess returned error: %v", err)
+	}
+
+	// Both the string "false" and endReason "voicemail" should be treated as a failure
+	if !shouldProcessFailure {
+		t.Error("Expected shouldProcessFailure=true for this regression case, got false")
+	}
+
+	t.Logf("Successfully handled regression case: successEvaluation='%v', endReason='%s' -> shouldProcessFailure=%v", 
+		successEval, endReason, shouldProcessFailure)
 }
 
 
