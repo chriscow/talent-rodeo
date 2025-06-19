@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -338,66 +339,35 @@ func extractDOCX(file *os.File) (string, error) {
 		}
 	}
 
-	println(sb.String())
-
 	return sb.String(), nil
 }
 
 func extractPDF(file *os.File) (string, error) {
-	cmd := exec.Command("pdftotext", "-layout", file.Name(), "-")
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("extractPDF: failed to extract text: %w", err)
+	if _, err := exec.LookPath("pdftotext"); err != nil {
+		return "", fmt.Errorf("pdftotext not installed: %w", err)
 	}
-	return string(out), nil
-	/*
-		// Get file info for size
-		fileinfo, err := file.Stat()
-		if err != nil {
-			return "", fmt.Errorf("extractPDF: failed to get file info: %w", err)
-		}
 
-		// Create a reader for the PDF
-		reader, err := pdf.NewReader(file, fileinfo.Size())
-		if err != nil {
-			return "", fmt.Errorf("extractPDF: failed to create PDF reader: %w", err)
-		}
+	// Get the file path and clean it
+	pdfPath := filepath.Clean(file.Name())
 
-		r, err := reader.GetPlainText()
-		if err != nil {
-			return "", fmt.Errorf("extractPDF: failed to get plain text: %w", err)
-		}
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-		// r is a io.Reader.  Get the text from it.
-		text, err := io.ReadAll(r)
-		if err != nil {
-			return "", fmt.Errorf("extractPDF: failed to read plain text: %w", err)
-		}
+	// Execute pdftotext command
+	cmd := exec.CommandContext(ctx, "pdftotext", "-layout", pdfPath, "-")
 
-		return string(text), nil
-	*/
+	var out, errBuf bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &errBuf
 
-	/*
-		var sb strings.Builder
-		numPages := reader.NumPage()
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("pdftotext failed: %v: %s", err, errBuf.String())
+	}
 
-		// Extract text from each page
-		for pageNum := 1; pageNum <= numPages; pageNum++ {
-			page := reader.Page(pageNum)
-			if page.V.IsNull() {
-				continue // Skip empty pages
-			}
-
-			text, err := page.GetPlainText(nil)
-			if err != nil {
-				return "", fmt.Errorf("extractPDF: failed to extract text from page %d: %w", pageNum, err)
-			}
-			sb.WriteString(text)
-		}
-
-		return sb.String(), nil
-	*/
+	return out.String(), nil
 }
+
 
 func extractTXT(file *os.File) (string, error) {
 	// Reset file pointer to beginning
