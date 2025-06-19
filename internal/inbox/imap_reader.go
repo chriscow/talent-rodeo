@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"talent-rodeo/internal"
 )
 
 // IMAPReader implements InboxReader for IMAP protocol
@@ -27,7 +28,7 @@ func NewIMAPReader(config InboxConfig, logger *slog.Logger) (*IMAPReader, error)
 }
 
 // GetUnreadEmails retrieves unread emails via IMAP
-func (i *IMAPReader) GetUnreadEmails(ctx context.Context, maxResults int) ([]*Email, error) {
+func (i *IMAPReader) GetUnreadEmails(ctx context.Context, maxResults int) ([]*internal.Email, error) {
 	// TODO: Implement IMAP email retrieval
 	// This would use a library like github.com/emersion/go-imap
 	return nil, fmt.Errorf("IMAP reader not yet implemented")

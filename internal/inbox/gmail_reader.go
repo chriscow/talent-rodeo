@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"talent-rodeo/internal"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -30,8 +31,17 @@ func NewGmailReader(config InboxConfig, logger *slog.Logger) (*GmailReader, erro
 	}
 	logger = logger.With("pkg", "inbox.GmailReader")
 
+	decodedCredentials := []byte{}
+	if credentials := os.Getenv("GMAIL_READER_CREDENTIALS"); credentials != "" {
+		var err error
+		decodedCredentials, err = base64.StdEncoding.DecodeString(credentials)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode GMAIL_READER_CREDENTIALS: %w", err)
+		}
+	}
+
 	// Configure OAuth2
-	oauthConfig, err := google.ConfigFromJSON(config.CredentialsJSON, gmail.GmailReadonlyScope, gmail.GmailModifyScope)
+	oauthConfig, err := google.ConfigFromJSON(decodedCredentials, gmail.GmailReadonlyScope, gmail.GmailModifyScope)
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse client secret file to config: %w", err)
 	}
@@ -53,7 +63,7 @@ func NewGmailReader(config InboxConfig, logger *slog.Logger) (*GmailReader, erro
 }
 
 // GetUnreadEmails retrieves unread emails from Gmail
-func (g *GmailReader) GetUnreadEmails(ctx context.Context, maxResults int) ([]*Email, error) {
+func (g *GmailReader) GetUnreadEmails(ctx context.Context, maxResults int) ([]*internal.Email, error) {
 	g.logger.Debug("fetching unread emails", "max_results", maxResults)
 
 	// Search for unread emails
@@ -70,10 +80,10 @@ func (g *GmailReader) GetUnreadEmails(ctx context.Context, maxResults int) ([]*E
 
 	if len(resp.Messages) == 0 {
 		g.logger.Debug("no unread emails found")
-		return []*Email{}, nil
+		return []*internal.Email{}, nil
 	}
 
-	emails := make([]*Email, 0, len(resp.Messages))
+	emails := make([]*internal.Email, 0, len(resp.Messages))
 	for _, msg := range resp.Messages {
 		email, err := g.convertMessage(ctx, msg.Id)
 		if err != nil {
@@ -110,13 +120,13 @@ func (g *GmailReader) Close() error {
 }
 
 // convertMessage converts a Gmail message to our Email struct
-func (g *GmailReader) convertMessage(ctx context.Context, messageID string) (*Email, error) {
+func (g *GmailReader) convertMessage(ctx context.Context, messageID string) (*internal.Email, error) {
 	msg, err := g.service.Users.Messages.Get("me", messageID).Do()
 	if err != nil {
 		return nil, fmt.Errorf("unable to retrieve message: %w", err)
 	}
 
-	email := &Email{
+	email := &internal.Email{
 		ID:       msg.Id,
 		ThreadID: msg.ThreadId,
 		Labels:   msg.LabelIds,
@@ -126,7 +136,7 @@ func (g *GmailReader) convertMessage(ctx context.Context, messageID string) (*Em
 	// Parse headers
 	for _, header := range msg.Payload.Headers {
 		email.Headers[header.Name] = header.Value
-		
+
 		switch strings.ToLower(header.Name) {
 		case "from":
 			email.From = header.Value
@@ -193,11 +203,11 @@ func (g *GmailReader) extractBody(payload *gmail.MessagePart) (text, html string
 }
 
 // extractAttachments extracts attachments from Gmail message payload
-func (g *GmailReader) extractAttachments(payload *gmail.MessagePart) []Attachment {
-	var attachments []Attachment
+func (g *GmailReader) extractAttachments(payload *gmail.MessagePart) []internal.Attachment {
+	var attachments []internal.Attachment
 
 	if payload.Filename != "" && payload.Body != nil && payload.Body.AttachmentId != "" {
-		attachment := Attachment{
+		attachment := internal.Attachment{
 			ID:       payload.Body.AttachmentId,
 			Filename: payload.Filename,
 			MimeType: payload.MimeType,
@@ -256,7 +266,7 @@ func tokenFromFile(file string) (*oauth2.Token, error) {
 		return nil, err
 	}
 	defer f.Close()
-	
+
 	token := &oauth2.Token{}
 	err = json.NewDecoder(f).Decode(token)
 	return token, err
@@ -269,6 +279,6 @@ func saveToken(path string, token *oauth2.Token) error {
 		return fmt.Errorf("unable to cache oauth token: %w", err)
 	}
 	defer f.Close()
-	
+
 	return json.NewEncoder(f).Encode(token)
 }

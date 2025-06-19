@@ -4,27 +4,63 @@ import (
 	"context"
 	"fmt"
 	"sync"
-
-	"talent-rodeo/internal/inbox"
+	"time"
 )
+
+// EmailHandler defines the interface for processing emails
+type EmailHandler interface {
+	HandleEmail(ctx context.Context, email *Email) error
+}
+
+// Email represents an email message from the inbox
+type Email struct {
+	ID          string            `json:"id"`
+	ThreadID    string            `json:"thread_id"`
+	From        string            `json:"from"`
+	To          []string          `json:"to"`
+	Subject     string            `json:"subject"`
+	Body        string            `json:"body"`
+	HTML        string            `json:"html"`
+	Date        time.Time         `json:"date"`
+	Labels      []string          `json:"labels"`
+	IsRead      bool              `json:"is_read"`
+	Headers     map[string]string `json:"headers"`
+	Attachments []Attachment      `json:"attachments"`
+}
+
+// Attachment represents an email attachment
+type Attachment struct {
+	ID       string `json:"id"`
+	Filename string `json:"filename"`
+	MimeType string `json:"mime_type"`
+	Size     int64  `json:"size"`
+	Data     []byte `json:"data,omitempty"`
+}
+
+// EmailHandlerFunc is a function type that implements EmailHandler
+type EmailHandlerFunc func(ctx context.Context, email *Email) error
+
+func (f EmailHandlerFunc) HandleEmail(ctx context.Context, email *Email) error {
+	return f(ctx, email)
+}
 
 // InboxDispatch implements EmailHandler and dispatches emails to multiple registered handlers
 type InboxDispatch struct {
 	mu       sync.RWMutex
-	handlers map[string]inbox.EmailHandler
+	handlers map[string]EmailHandler
 }
 
 // NewInboxDispatch creates a new InboxDispatch instance
 func NewInboxDispatch() *InboxDispatch {
 	return &InboxDispatch{
-		handlers: make(map[string]inbox.EmailHandler),
+		handlers: make(map[string]EmailHandler),
 	}
 }
 
 // Register adds a new handler with the given ID.
 // If a handler with the same ID already exists, it will be replaced.
 // Returns an error if the id is empty or the handler is nil.
-func (id *InboxDispatch) Register(handlerID string, handler inbox.EmailHandler) error {
+func (id *InboxDispatch) Register(handlerID string, handler EmailHandler) error {
 	if handlerID == "" {
 		return fmt.Errorf("handler ID cannot be empty")
 	}
@@ -58,9 +94,9 @@ func (id *InboxDispatch) GetHandlerCount() int {
 }
 
 // HandleEmail implements inbox.EmailHandler and dispatches the email to all registered handlers
-func (id *InboxDispatch) HandleEmail(ctx context.Context, email *inbox.Email) error {
+func (id *InboxDispatch) HandleEmail(ctx context.Context, email *Email) error {
 	id.mu.RLock()
-	handlers := make([]inbox.EmailHandler, 0, len(id.handlers))
+	handlers := make([]EmailHandler, 0, len(id.handlers))
 	for _, handler := range id.handlers {
 		handlers = append(handlers, handler)
 	}

@@ -17,6 +17,7 @@ import (
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/auth"
 	"talent-rodeo/internal/feedback"
+	"talent-rodeo/internal/inbox"
 	"talent-rodeo/internal/nudge"
 	"talent-rodeo/internal/search"
 	"talent-rodeo/internal/search/providers/scrapingdog"
@@ -171,6 +172,7 @@ type application struct {
 	searchScheduler       *search.Scheduler
 	subscriptionProcessor *subscription.Processor
 	nudgeProcessor        *nudge.Processor
+	inboxProcessor        *inbox.Processor
 	stripeClient          *client.API
 }
 
@@ -558,6 +560,8 @@ func checkEnv(logger *slog.Logger, envFile string) error {
 
 		"FIREBASE_PROJECT_ID", "FIREBASE_CREDENTIALS",
 
+		"GMAIL_READER_CREDENTIALS",
+
 		"GOOGLE_AUTH_CLIENT_ID", "GOOGLE_AUTH_CLIENT_SECRET",
 
 		"JOB_ID_ENCRYPTION_KEY",
@@ -700,6 +704,22 @@ func (app *application) startServices(ctx context.Context, smtpCfg *smtp.Config)
 			"action": "startServices: failed to start nudge processor",
 		})
 		return fmt.Errorf("failed to start nudge processor: %w", err)
+	}
+
+	gmail, err := inbox.NewGmailReader(inbox.InboxConfig{
+		CredentialsJSON: []byte(os.Getenv("GMAIL_CREDENTIALS")),
+		TokenPath:       "token.json",
+	}, app.logger)
+	if err != nil {
+		return fmt.Errorf("failed to create gmail reader: %w", err)
+	}
+
+	dispatch := internal.NewInboxDispatch()
+	dispatch.Register("feedback", app.feedbackProcessor)
+
+	app.inboxProcessor = inbox.NewProcessor(gmail, dispatch, app.logger)
+	if err := app.inboxProcessor.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start inbox processor: %w", err)
 	}
 
 	return nil
