@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -17,7 +18,6 @@ import (
 	"github.com/alexedwards/flow"
 	"github.com/fumiama/go-docx"
 	"github.com/getsentry/sentry-go"
-	"github.com/ledongthuc/pdf"
 )
 
 type resumeUploadForm struct {
@@ -344,36 +344,59 @@ func extractDOCX(file *os.File) (string, error) {
 }
 
 func extractPDF(file *os.File) (string, error) {
-	// Get file info for size
-	fileinfo, err := file.Stat()
+	cmd := exec.Command("pdftotext", "-layout", file.Name(), "-")
+	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("extractPDF: failed to get file info: %w", err)
+		return "", fmt.Errorf("extractPDF: failed to extract text: %w", err)
 	}
-
-	// Create a reader for the PDF
-	reader, err := pdf.NewReader(file, fileinfo.Size())
-	if err != nil {
-		return "", fmt.Errorf("extractPDF: failed to create PDF reader: %w", err)
-	}
-
-	var sb strings.Builder
-	numPages := reader.NumPage()
-
-	// Extract text from each page
-	for pageNum := 1; pageNum <= numPages; pageNum++ {
-		page := reader.Page(pageNum)
-		if page.V.IsNull() {
-			continue // Skip empty pages
-		}
-
-		text, err := page.GetPlainText(nil)
+	return string(out), nil
+	/*
+		// Get file info for size
+		fileinfo, err := file.Stat()
 		if err != nil {
-			return "", fmt.Errorf("extractPDF: failed to extract text from page %d: %w", pageNum, err)
+			return "", fmt.Errorf("extractPDF: failed to get file info: %w", err)
 		}
-		sb.WriteString(text)
-	}
 
-	return sb.String(), nil
+		// Create a reader for the PDF
+		reader, err := pdf.NewReader(file, fileinfo.Size())
+		if err != nil {
+			return "", fmt.Errorf("extractPDF: failed to create PDF reader: %w", err)
+		}
+
+		r, err := reader.GetPlainText()
+		if err != nil {
+			return "", fmt.Errorf("extractPDF: failed to get plain text: %w", err)
+		}
+
+		// r is a io.Reader.  Get the text from it.
+		text, err := io.ReadAll(r)
+		if err != nil {
+			return "", fmt.Errorf("extractPDF: failed to read plain text: %w", err)
+		}
+
+		return string(text), nil
+	*/
+
+	/*
+		var sb strings.Builder
+		numPages := reader.NumPage()
+
+		// Extract text from each page
+		for pageNum := 1; pageNum <= numPages; pageNum++ {
+			page := reader.Page(pageNum)
+			if page.V.IsNull() {
+				continue // Skip empty pages
+			}
+
+			text, err := page.GetPlainText(nil)
+			if err != nil {
+				return "", fmt.Errorf("extractPDF: failed to extract text from page %d: %w", pageNum, err)
+			}
+			sb.WriteString(text)
+		}
+
+		return sb.String(), nil
+	*/
 }
 
 func extractTXT(file *os.File) (string, error) {
