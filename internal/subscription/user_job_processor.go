@@ -142,14 +142,16 @@ func (p *UserJobProcessor) evaluateJob(ctx context.Context, task userJobEvaluati
 		}
 	}()
 
-	p.logger.Debug("evaluating job for user", "name", task.User.Name, "jobID", task.Job.ID, "userID", p.userID)
+	logger := p.logger.With("name", task.User.Name, "userID", p.userID, "jobID", task.Job.ID)
+
+	logger.Debug("evaluating job for user")
 
 	resp := openai.ChatCompletionResponse{}
 	analysis, err := tools.Ask(ctx, task.Prompt, tools.WithMessages(task.Messages),
 		tools.WithModel(task.AnalysisModel), tools.WithMaxTokens(8192),
 		tools.WantCompletionResponse(&resp))
 	if err != nil {
-		p.logger.Error("failed to analyze job description", "error", err)
+		logger.Error("failed to analyze job description", "error", err)
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"jobID":  task.Job.ID,
 			"userID": p.userID,
@@ -160,7 +162,7 @@ func (p *UserJobProcessor) evaluateJob(ctx context.Context, task userJobEvaluati
 	matchAnalysis, err := tools.StructuredAsk[internal.JobMatchAnalysis](ctx, "Please extract this analysis into structured JSON data:\n"+analysis,
 		tools.WithModel(tools.GPT41Mini), tools.WithMaxTokens(8192))
 	if err != nil {
-		p.logger.Error("failed to extract job match analysis", "error", err)
+		logger.Error("failed to extract job match analysis", "error", err)
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"jobID":  task.Job.ID,
 			"userID": p.userID,
@@ -190,7 +192,7 @@ func (p *UserJobProcessor) evaluateJob(ctx context.Context, task userJobEvaluati
 	}
 
 	if _, err := internal.CreateUserJob(ctx, p.fs, userJob.UserID, userJob.ID); err != nil {
-		p.logger.Error("failed to create user job", "error", err)
+		logger.Error("failed to create user job", "error", err)
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"jobID":  task.Job.ID,
 			"userID": p.userID,
@@ -212,7 +214,7 @@ func (p *UserJobProcessor) evaluateJob(ctx context.Context, task userJobEvaluati
 		return nil
 	})
 	if err != nil {
-		p.logger.Error("failed to update user job", "error", err)
+		logger.Error("failed to update user job", "error", err)
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"jobID":  task.Job.ID,
 			"userID": p.userID,
@@ -220,7 +222,7 @@ func (p *UserJobProcessor) evaluateJob(ctx context.Context, task userJobEvaluati
 	}
 
 	onDashboard, _ := p.checkUserOnDashboard()
-	p.logger.Info("successfully evaluated and saved job for user", "name", task.User.Name, "jobID", userJob.ID, "userID", userJob.UserID, "rating", matchAnalysis.Rating.NumericRating, "onDashboard", onDashboard)
+	logger.Info("successfully evaluated and saved job for user", "rating", matchAnalysis.Rating.NumericRating, "onDashboard", onDashboard)
 
 	// Update and notify progress
 	processed := p.processedJobs.Add(1)
@@ -231,7 +233,7 @@ func (p *UserJobProcessor) evaluateJob(ctx context.Context, task userJobEvaluati
 
 	// Check for completion
 	if processed == int32(p.totalJobs) {
-		p.logger.Info("finished processing all jobs for user", "name", task.User.Name, "userID", p.userID)
+		logger.Info("finished processing all jobs for user")
 		// if p.onDashboard {
 		internal.SendPusherRedirect(p.psh, p.userID, "/dashboard")
 		// }
