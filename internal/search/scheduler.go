@@ -8,6 +8,7 @@ import (
 	"sync"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/cloudflare"
+	"talent-rodeo/internal/smtp"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -17,13 +18,6 @@ const (
 	defaultSearchTickInterval = 5 * time.Minute
 	SchedulerSettingsKey      = "search-scheduler"
 )
-
-// Mailer interface for sending notifications
-type Mailer interface {
-	// func (m *Mailer) Send(recipient string, data any, patterns ...string) error {
-	Send(recipient string, data any, patterns ...string) error
-	SendFromTemplate(recipient string, data any, template string) error
-}
 
 type SchedulerSettings struct {
 	Paused    bool
@@ -43,7 +37,7 @@ var DefaultSchedulerSettings = SchedulerSettings{
 type Scheduler struct {
 	fs        *internal.FirestoreClient
 	logger    *slog.Logger
-	mailer    Mailer
+	mailer    smtp.Mailer
 	recipient string
 	ticker    *time.Ticker
 	wg        sync.WaitGroup
@@ -58,7 +52,7 @@ type Scheduler struct {
 }
 
 // NewScheduler creates a new search service
-func NewScheduler(fs *internal.FirestoreClient, logger *slog.Logger, queue internal.SearchQueue, mailer Mailer, recipient string) *Scheduler {
+func NewScheduler(fs *internal.FirestoreClient, logger *slog.Logger, queue internal.SearchQueue, mailer smtp.Mailer, recipient string) *Scheduler {
 
 	logger = logger.With("pkg", "search.Scheduler")
 

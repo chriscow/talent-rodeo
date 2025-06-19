@@ -23,18 +23,24 @@ type Config struct {
 	From     string
 }
 
-type Mailer struct {
+// Mailer interface for sending notifications
+type Mailer interface {
+	Send(recipient, subject, plainBody, htmlBody string) error
+	SendFromTemplate(recipient string, data any, patterns ...string) error
+}
+
+type MailSender struct {
 	client mail.Client
 	from   string
 }
 
-func NewMailer(host string, port int, username, password, from string) (*Mailer, error) {
+func NewMailSender(host string, port int, username, password, from string) (*MailSender, error) {
 	client, err := mail.NewClient(host, mail.WithTimeout(defaultTimeout), mail.WithSMTPAuth(mail.SMTPAuthLogin), mail.WithPort(port), mail.WithUsername(username), mail.WithPassword(password))
 	if err != nil {
 		return nil, err
 	}
 
-	mailer := &Mailer{
+	mailer := &MailSender{
 		client: *client,
 		from:   from,
 	}
@@ -42,7 +48,7 @@ func NewMailer(host string, port int, username, password, from string) (*Mailer,
 	return mailer, nil
 }
 
-func (m *Mailer) Send(recipient, subject, plainBody, htmlBody string) error {
+func (m *MailSender) Send(recipient, subject, plainBody, htmlBody string) error {
 	msg := mail.NewMsg()
 	if err := msg.To(recipient); err != nil {
 		return err
@@ -69,7 +75,7 @@ func (m *Mailer) Send(recipient, subject, plainBody, htmlBody string) error {
 	return nil
 }
 
-func (m *Mailer) SendFromTemplate(recipient string, data any, patterns ...string) error {
+func (m *MailSender) SendFromTemplate(recipient string, data any, patterns ...string) error {
 	for i := range patterns {
 		patterns[i] = "emails/" + patterns[i]
 	}
