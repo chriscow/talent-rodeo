@@ -450,7 +450,7 @@ func SendRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user *int
 }
 
 func GenerateRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user *internal.User, transcript *internal.Transcript, cfg smtp.Config, logger *slog.Logger) error {
-	mailer, err := smtp.NewMailer(cfg.Host, cfg.Port, cfg.Username, cfg.Password, cfg.From)
+	mailer, err := smtp.NewMailSender(cfg.Host, cfg.Port, cfg.Username, cfg.Password, cfg.From)
 	if err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"error_type": "smtp_mailer_new",

@@ -26,7 +26,7 @@ func NewSMTPEmailSender(smtpConfig *smtp.Config, logger *slog.Logger) *SMTPEmail
 
 // SendEmail sends an email using SMTP
 func (s *SMTPEmailSender) SendEmail(ctx context.Context, recipient string, email *GeneratedEmail, nudgeType NudgeType) error {
-	mailer, err := smtp.NewMailer(
+	mailer, err := smtp.NewMailSender(
 		s.smtpConfig.Host,
 		s.smtpConfig.Port,
 		s.smtpConfig.Username,

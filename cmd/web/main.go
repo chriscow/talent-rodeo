@@ -137,7 +137,7 @@ type application struct {
 	processor             *tasks.Processor
 	wg                    sync.WaitGroup
 	natsShutdown          chan struct{}
-	mailer                *smtp.Mailer
+	mailer                smtp.Mailer
 	pusher                *pusher.Client
 	jobDispatch           *internal.JobEventDispatch
 	feedbackProcessor     *feedback.Processor
@@ -277,7 +277,7 @@ func run(logger *slog.Logger) error {
 		}()
 	*/
 
-	mailer, err := smtp.NewMailer(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.from)
+	mailer, err := smtp.NewMailSender(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.from)
 	if err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"error_type": "smtp_mailer_new",
@@ -582,30 +582,30 @@ func setupSessionManager(cfg config, FirestoreClient *internal.FirestoreClient, 
 
 func (app *application) startServices(ctx context.Context, smtpCfg *smtp.Config) error {
 
-	// app.feedbackProcessor = feedback.NewProcessor(app.fs, app.logger)
-	// if err := app.feedbackProcessor.Start(ctx); err != nil {
-	// 	return fmt.Errorf("failed to start feedback processor: %w", err)
-	// }
+	app.feedbackProcessor = feedback.NewProcessor(app.fs, app.logger)
+	if err := app.feedbackProcessor.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start feedback processor: %w", err)
+	}
 
-	// app.subscriptionProcessor = subscription.NewProcessor(app.fs, app.pusher, app.logger)
+	app.subscriptionProcessor = subscription.NewProcessor(app.fs, app.pusher, app.logger)
 
-	// app.jobDispatch = internal.NewJobEventDispatch()
-	// app.searchResultProcessor = internal.NewSearchResultProcessor(app.fs, app.logger, app.pusher, app.jobDispatch)
-	// app.jobDispatch.Register("search-result-processor", app.searchResultProcessor)
-	// app.searchResultProcessor.Start()
+	app.jobDispatch = internal.NewJobEventDispatch()
+	app.searchResultProcessor = internal.NewSearchResultProcessor(app.fs, app.logger, app.pusher, app.jobDispatch)
+	app.jobDispatch.Register("search-result-processor", app.searchResultProcessor)
+	app.searchResultProcessor.Start()
 
-	// app.searchProvider = scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), app.logger, scrapingdog.WithJobEventHandler(app.jobDispatch))
-	// app.searchScheduler = search.NewScheduler(app.fs, app.logger, app.searchProvider, app.mailer, app.config.notifications.email)
+	app.searchProvider = scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), app.logger, scrapingdog.WithJobEventHandler(app.jobDispatch))
+	app.searchScheduler = search.NewScheduler(app.fs, app.logger, app.searchProvider, app.mailer, app.config.notifications.email)
 
-	// if err := app.subscriptionProcessor.Start(ctx); err != nil {
-	// 	return fmt.Errorf("failed to start subscription processor: %w", err)
-	// }
-	// if err := app.searchProvider.Start(ctx); err != nil {
-	// 	return fmt.Errorf("failed to start search provider: %w", err)
-	// }
-	// if err := app.searchScheduler.Start(ctx); err != nil {
-	// 	return fmt.Errorf("failed to start search scheduler: %w", err)
-	// }
+	if err := app.subscriptionProcessor.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start subscription processor: %w", err)
+	}
+	if err := app.searchProvider.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start search provider: %w", err)
+	}
+	if err := app.searchScheduler.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start search scheduler: %w", err)
+	}
 
 	app.nudgeProcessor = nudge.NewProcessorWithDefaults(app.fs, smtpCfg, app.logger)
 	if err := app.nudgeProcessor.Start(ctx); err != nil {
