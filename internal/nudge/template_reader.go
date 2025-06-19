@@ -15,7 +15,7 @@ func NewAssetTemplateReader() *AssetTemplateReader {
 
 // ReadTemplate reads a template file for the given nudge type
 func (r *AssetTemplateReader) ReadTemplate(nudgeType NudgeType) ([]byte, error) {
-	promptPath := getPromptPath(nudgeType)
+	promptPath := nudgeType.PromptTemplatePath()
 	if promptPath == "" {
 		return nil, fmt.Errorf("no template path for nudge type: %s", nudgeType)
 	}
@@ -26,18 +26,4 @@ func (r *AssetTemplateReader) ReadTemplate(nudgeType NudgeType) ([]byte, error) 
 	}
 
 	return template, nil
-}
-
-// getPromptPath returns the file path for the nudge type's prompt template
-func getPromptPath(nudgeType NudgeType) string {
-	switch nudgeType {
-	case NudgeTypeNoResume:
-		return "prompts/shirely-nudge-no-resume.txt"
-	case NudgeTypeNoCall:
-		return "prompts/shirely-nudge-no-call.txt"
-	case NudgeTypeFiveStarMatches:
-		return "prompts/shirely-nudge-five-star-matches.txt"
-	default:
-		return ""
-	}
 }
