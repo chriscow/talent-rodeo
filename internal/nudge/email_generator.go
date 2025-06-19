@@ -29,7 +29,7 @@ func NewEmailGenerator(templateReader TemplateReader, promptProcessor PromptProc
 // GenerateEmailContent generates a personalized nudge email using the injected dependencies.
 // It decides whether to use a static template or an LLM based on the nudge type.
 func (eg *EmailGenerator) GenerateEmailContent(ctx context.Context, user *internal.User, nudgeType NudgeType, emailData *NudgeEmailData) (*GeneratedEmail, error) {
-	if templateName := nudgeType.TemplateFilename(); templateName != "" {
+	if templateName := nudgeType.EmailTemplatePath(); templateName != "" {
 		return eg.generateFromTemplate(ctx, nudgeType, emailData)
 	}
 	return eg.generateFromLLM(ctx, user, nudgeType, emailData)
@@ -69,18 +69,17 @@ func (eg *EmailGenerator) generateFromLLM(ctx context.Context, user *internal.Us
 }
 
 func (eg *EmailGenerator) generateFromTemplate(ctx context.Context, nudgeType NudgeType, emailData *NudgeEmailData) (*GeneratedEmail, error) {
-	templateName := nudgeType.TemplateFilename()
-	path := filepath.Join("assets/emails", templateName)
+	templatePath := nudgeType.EmailTemplatePath()
 
-	t, err := template.New(filepath.Base(path)).Funcs(funcs.TemplateFuncs).ParseFiles(path)
+	t, err := template.New(filepath.Base(templatePath)).Funcs(funcs.TemplateFuncs).ParseFiles(templatePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse template %s: %w", path, err)
+		return nil, fmt.Errorf("failed to parse template %s: %w", templatePath, err)
 	}
 
 	var subject, plainBody, htmlBody bytes.Buffer
 
 	if t.Lookup("subject") == nil {
-		return nil, fmt.Errorf("template %s is missing {{define \"subject\"}}", path)
+		return nil, fmt.Errorf("template %s is missing {{define \"subject\"}}", templatePath)
 	}
 	if err := t.ExecuteTemplate(&subject, "subject", emailData); err != nil {
 		return nil, fmt.Errorf("failed to execute subject template: %w", err)

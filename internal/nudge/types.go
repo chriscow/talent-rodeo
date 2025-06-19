@@ -298,16 +298,34 @@ func (nt NudgeType) PromptTemplateFilename() string {
 	}
 }
 
-// TemplateFilename returns the filename for the Go template.
+// EmailTemplatePath returns the path to an embedded email template.
 // If it returns an empty string, it implies an LLM should be used.
-func (nt NudgeType) TemplateFilename() string {
+func (nt NudgeType) EmailTemplatePath() string {
 	switch nt {
 	case NudgeTypeNoResume:
-		return "shirely-no-resume.html"
+		return "emails/shirely-no-resume.html"
 	case NudgeTypeNoCall:
-		return "shirely-no-call.html"
+		return "emails/shirely-no-call.html"
 	case NudgeTypeFiveStarMatches:
-		return "shirely-five-star-matches.html"
+		return "emails/shirely-five-star-matches.html"
+	case NudgeTypeFollowUp:
+		return "emails/shirely-follow-up-questions.html"
+	default:
+		return ""
+	}
+}
+
+// getPromptPath returns the file path for the nudge type's prompt template
+func (nt NudgeType) PromptTemplatePath() string {
+	switch nt {
+	case NudgeTypeNoResume:
+		return "prompts/shirely-nudge-no-resume.txt"
+	case NudgeTypeNoCall:
+		return "prompts/shirely-nudge-no-call.txt"
+	case NudgeTypeFiveStarMatches:
+		return "prompts/shirely-nudge-five-star-matches.txt"
+	case NudgeTypeFollowUp:
+		return "prompts/shirely-follow-up-questions.txt"
 	default:
 		return ""
 	}
