@@ -20,8 +20,11 @@ func TestGmailReaderIntegration(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
+	// Set up token file from environment if available
+	tokenPath := setupTokenFromEnv(t)
+	
 	config := InboxConfig{
-		TokenPath: "test_token.json",
+		TokenPath: tokenPath,
 	}
 
 	t.Run("CreateGmailReader", func(t *testing.T) {
@@ -136,7 +139,7 @@ func TestGmailReaderCredentialsDecode(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	config := InboxConfig{
-		TokenPath: "test_token.json",
+		TokenPath: ".secrets/gmail_token.json",
 	}
 
 	// This should fail at OAuth config creation since we have fake credentials
@@ -164,7 +167,7 @@ func TestGmailReaderMissingCredentials(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	config := InboxConfig{
-		TokenPath: "test_token.json",
+		TokenPath: "test_missing_creds_token.json",
 	}
 
 	_, err := NewGmailReader(config, logger)
@@ -191,7 +194,7 @@ func TestGmailReaderInvalidBase64(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	config := InboxConfig{
-		TokenPath: "test_token.json",
+		TokenPath: "test_invalid_base64_token.json",
 	}
 
 	_, err := NewGmailReader(config, logger)
@@ -217,7 +220,7 @@ func BenchmarkGmailReaderCreation(b *testing.B) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	config := InboxConfig{
-		TokenPath: "bench_token.json",
+		TokenPath: findGmailTokenForBench(),
 	}
 
 	b.ResetTimer()
@@ -231,4 +234,84 @@ func BenchmarkGmailReaderCreation(b *testing.B) {
 
 	// Clean up
 	os.Remove("bench_token.json")
+}
+
+// findGmailToken looks for Gmail token in common locations
+func findGmailToken(t *testing.T) string {
+	t.Helper()
+	
+	// List of possible token locations
+	tokenPaths := []string{
+		".secrets/gmail_token.json",                    // In .secrets directory
+		"../../.secrets/gmail_token.json",              // From internal/inbox to project root
+		"../../../.secrets/gmail_token.json",           // In case test runs from deeper directory
+		"gmail_token.json",                             // Current directory
+		"../../gmail_token.json",                       // Project root from internal/inbox
+	}
+	
+	for _, path := range tokenPaths {
+		if _, err := os.Stat(path); err == nil {
+			t.Logf("Found Gmail token at: %s", path)
+			return path
+		}
+	}
+	
+	// If no token found, skip test with helpful message
+	t.Skip("Gmail token not found. Run 'go run cmd/cli/cli_main.go gmail setup' to create token in .secrets/gmail_token.json")
+	return ""
+}
+
+// findGmailTokenForBench looks for Gmail token for benchmarks (similar to findGmailToken but for benchmarks)
+func findGmailTokenForBench() string {
+	// List of possible token locations
+	tokenPaths := []string{
+		".secrets/gmail_token.json",                    // In .secrets directory
+		"../../.secrets/gmail_token.json",              // From internal/inbox to project root
+		"../../../.secrets/gmail_token.json",           // In case test runs from deeper directory
+		"gmail_token.json",                             // Current directory
+		"../../gmail_token.json",                       // Project root from internal/inbox
+	}
+	
+	for _, path := range tokenPaths {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	
+	// Return a default path if none found (benchmark will handle the error)
+	return ".secrets/gmail_token.json"
+}
+
+// setupTokenFromEnv creates a token file from GMAIL_TOKEN_BASE64 environment variable
+func setupTokenFromEnv(t *testing.T) string {
+	t.Helper()
+	
+	tokenPath := "test_gmail_token.json"
+	
+	// Check if we have GMAIL_TOKEN_BASE64 in environment
+	if tokenBase64 := os.Getenv("GMAIL_TOKEN_BASE64"); tokenBase64 != "" {
+		// Decode and write token file
+		tokenData, err := base64.StdEncoding.DecodeString(tokenBase64)
+		if err != nil {
+			t.Fatalf("Failed to decode GMAIL_TOKEN_BASE64: %v", err)
+		}
+		
+		err = os.WriteFile(tokenPath, tokenData, 0600)
+		if err != nil {
+			t.Fatalf("Failed to write token file: %v", err)
+		}
+		
+		t.Logf("Created token file from GMAIL_TOKEN_BASE64 environment variable")
+		
+		// Clean up token file after test
+		t.Cleanup(func() {
+			os.Remove(tokenPath)
+		})
+		
+		return tokenPath
+	}
+	
+	// If no GMAIL_TOKEN_BASE64, this will trigger OAuth flow
+	t.Logf("No GMAIL_TOKEN_BASE64 found, will attempt OAuth flow")
+	return tokenPath
 }

@@ -45,6 +45,9 @@ func NewGmailReader(config InboxConfig, logger *slog.Logger) (*GmailReader, erro
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse client secret file to config: %w", err)
 	}
+	
+	// Use out-of-band flow instead of localhost redirect
+	oauthConfig.RedirectURL = "urn:ietf:wg:oauth:2.0:oob"
 
 	client, err := getGmailClient(oauthConfig, config.TokenPath, logger)
 	if err != nil {
@@ -241,11 +244,16 @@ func getGmailClient(config *oauth2.Config, tokenPath string, logger *slog.Logger
 	return config.Client(context.Background(), token), nil
 }
 
-// getTokenFromWeb requests a token from the web
+// getTokenFromWeb requests a token from the web using out-of-band flow
 func getTokenFromWeb(config *oauth2.Config, logger *slog.Logger) (*oauth2.Token, error) {
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
-	logger.Info("Go to the following link in your browser then type the authorization code:")
+	logger.Info("=== Gmail OAuth Authorization Required ===")
+	logger.Info("1. Go to the following link in your browser:")
 	logger.Info(authURL)
+	logger.Info("2. Sign in and authorize the application")
+	logger.Info("3. Copy the authorization code displayed on the page")
+	logger.Info("4. Paste it below and press Enter")
+	fmt.Print("Enter authorization code: ")
 
 	var authCode string
 	if _, err := fmt.Scan(&authCode); err != nil {

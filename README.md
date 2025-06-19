@@ -1106,6 +1106,201 @@ Create a modern, responsive landing page for a fictional SaaS company. The landi
 - A final call-to-action section to encourage sign-ups.
 - A footer with important links and social media icons.
 
+# Gmail Integration Setup
+
+The application includes Gmail integration for reading unread emails through the Gmail API. This feature is optional and the application will run without it if not configured.
+
+## Understanding Gmail Integration Components
+
+There are **two different types of credentials** needed for Gmail integration:
+
+### 1. `GMAIL_READER_CREDENTIALS` (Application Credentials)
+- **What it is**: Base64-encoded JSON containing your app's OAuth2 credentials from Google Cloud Console
+- **Contains**: `client_id`, `client_secret`, `auth_uri`, `token_uri`, etc.
+- **Purpose**: Identifies your application to Google's OAuth2 system
+- **When needed**: Always required for Gmail integration
+- **Example content**: Your Google Cloud OAuth2 client configuration
+
+### 2. Gmail Token (User Authorization)
+- **What it is**: JSON containing access tokens (`access_token`, `refresh_token`, `expiry`)
+- **Purpose**: Proves a user has authorized your app to access their Gmail
+- **Storage**: Can be stored as a file (`gmail_token.json`) or environment variable (`GMAIL_TOKEN_BASE64`)
+- **When needed**: Created during OAuth setup process
+
+## Setup Process
+
+### Step 1: Create Google Cloud Credentials
+
+1. **Go to Google Cloud Console**: https://console.cloud.google.com/
+2. **Create/select a project**
+3. **Enable Gmail API**: APIs & Services → Library → Search "Gmail API" → Enable
+4. **Create OAuth2 credentials**:
+   - APIs & Services → Credentials → Create Credentials → OAuth 2.0 Client IDs
+   - Application type: Desktop application
+   - Name it (e.g., "Gmail Reader")
+5. **Download JSON**: Click download button next to your OAuth client
+6. **Encode credentials**: `cat credentials.json | base64` and save this value
+
+### Step 2: Set Up Gmail Authorization (Choose One Method)
+
+#### Method A: Local Setup + Fly.io Deployment (Recommended)
+
+**Local Gmail Setup:**
+```bash
+# Set your app credentials
+export GMAIL_READER_CREDENTIALS="your_base64_encoded_app_credentials"
+
+# Run CLI setup to authorize Gmail access
+go run cmd/cli/cli_main.go gmail setup --token production_gmail_token.json
+
+# This will:
+# 1. Open browser for OAuth authorization
+# 2. Save token to production_gmail_token.json
+# 3. Test Gmail connection
+```
+
+**Deploy to Fly.io:**
+```bash
+# Set app credentials on Fly.io
+fly secrets set GMAIL_READER_CREDENTIALS="your_base64_encoded_app_credentials"
+
+# Upload the authorization token
+cat production_gmail_token.json | base64 | fly secrets set GMAIL_TOKEN_BASE64=-
+
+# Deploy your application
+fly deploy
+
+# Verify Gmail integration works
+curl https://your-app.fly.dev/health/gmail
+```
+
+#### Method B: Server-Side Setup
+
+**Setup on Fly.io directly:**
+```bash
+# Set app credentials
+fly secrets set GMAIL_READER_CREDENTIALS="your_base64_encoded_app_credentials"
+
+# Deploy application
+fly deploy
+
+# Run setup on server (one-time)
+fly ssh console
+./talent-rodeo --gmail-setup
+
+# Restart application
+fly restart
+```
+
+### Step 3: Verify Integration
+
+**Health Check Endpoints:**
+- `/health` - Overall application health including Gmail status
+- `/health/detailed` - Detailed service health check
+- `/health/gmail` - Gmail-specific health check
+
+**Expected Health Check Responses:**
+
+Gmail configured and working:
+```json
+{
+  "service": "gmail",
+  "status": "healthy",
+  "message": "Gmail connection successful",
+  "timestamp": "2025-06-19T12:00:00Z"
+}
+```
+
+Gmail not configured:
+```json
+{
+  "service": "gmail", 
+  "status": "not_configured",
+  "message": "GMAIL_READER_CREDENTIALS not set",
+  "timestamp": "2025-06-19T12:00:00Z"
+}
+```
+
+Gmail configured but not authorized:
+```json
+{
+  "service": "gmail",
+  "status": "not_authorized", 
+  "message": "Gmail OAuth not authorized - run gmail setup",
+  "timestamp": "2025-06-19T12:00:00Z"
+}
+```
+
+## Using Gmail Features
+
+### CLI Commands
+
+**Test Gmail connection:**
+```bash
+go run cmd/cli/cli_main.go gmail test --max 5
+```
+
+**List unread emails (JSON output):**
+```bash
+go run cmd/cli/cli_main.go gmail list --json --max 10
+```
+
+**Re-run setup if needed:**
+```bash
+go run cmd/cli/cli_main.go gmail setup --token custom_token_path.json
+```
+
+### Server Startup Behavior
+
+The application handles Gmail integration gracefully:
+
+1. **If `GMAIL_READER_CREDENTIALS` is not set**: Gmail features are disabled, application starts normally
+2. **If credentials are set but no token exists**: Gmail features are disabled, helpful log messages explain how to set up
+3. **If both credentials and token are available**: Gmail integration starts automatically
+4. **If Gmail setup fails**: Application continues to run, Gmail features are simply unavailable
+
+### Environment Variables Summary
+
+| Variable | Required | Purpose | Example |
+|----------|----------|---------|---------|
+| `GMAIL_READER_CREDENTIALS` | Optional | App credentials (base64) | `eyJjbGllbnRfaWQi...` |
+| `GMAIL_TOKEN_BASE64` | Optional | User token (base64) | `eyJhY2Nlc3NfdG9rZW4i...` |
+| `GMAIL_TOKEN_PATH` | Optional | Custom token file path | `/app/custom_token.json` |
+
+**Note**: Only `GMAIL_READER_CREDENTIALS` is required. `GMAIL_TOKEN_BASE64` is optional and used for deployment convenience.
+
+## Troubleshooting
+
+**"Gmail credentials not configured"**
+- Set `GMAIL_READER_CREDENTIALS` environment variable
+- Ensure the value is properly base64 encoded
+
+**"Gmail token not found"** 
+- Run `go run cmd/cli/cli_main.go gmail setup` to create token
+- Or set `GMAIL_TOKEN_BASE64` for deployed applications
+
+**"invalid_grant" OAuth error**
+- Authorization code expired - get a fresh one
+- Ensure your OAuth client is configured for "Desktop application"
+
+**"Gmail connection failed"**
+- Check network connectivity 
+- Verify Gmail API is enabled in Google Cloud Console
+- Ensure OAuth client has correct redirect URI (`urn:ietf:wg:oauth:2.0:oob`)
+
+## Development vs Production
+
+**Development:**
+- Use `go run cmd/cli/cli_main.go gmail setup` for interactive setup
+- Token saved to local file (default: `gmail_token.json`)
+- Test with `go run cmd/cli/cli_main.go gmail test`
+
+**Production:**
+- Set `GMAIL_READER_CREDENTIALS` as environment variable/secret
+- Set `GMAIL_TOKEN_BASE64` as environment variable/secret
+- Application creates token file from environment on startup
+- Monitor via `/health/gmail` endpoint
+
 # Claude Code
 
 ## MCP Servers
