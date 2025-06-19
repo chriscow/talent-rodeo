@@ -15,6 +15,7 @@ import (
 	"talent-rodeo/internal/cloudflare"
 	"talent-rodeo/internal/feedback"
 	"talent-rodeo/internal/funcs"
+	"talent-rodeo/internal/nudge"
 	"talent-rodeo/internal/response"
 	"talent-rodeo/internal/search"
 	"talent-rodeo/internal/search/providers/scrapingdog"
@@ -147,6 +148,7 @@ func (app *application) adminFeatureFlags(w http.ResponseWriter, r *http.Request
 	var sp subscription.ProcessorSettings = subscription.DefaultSettings
 	var sd scrapingdog.WorkerSettings
 	var fp feedback.ProcessorSettings = feedback.DefaultSettings
+	var np nudge.NudgeProcessorSettings = nudge.DefaultNudgeSettings
 
 	// Read search-scheduler flag
 	if err := kv.Get("search-scheduler", &ss); err != nil {
@@ -180,10 +182,19 @@ func (app *application) adminFeatureFlags(w http.ResponseWriter, r *http.Request
 		fp = feedback.DefaultSettings
 	}
 
+	// Read nudge processor flag
+	if err := kv.Get(nudge.NudgeProcessorKey, &np); err != nil {
+		if err != cloudflare.ErrNotFound {
+			app.logger.Error("failed to get nudge-processor flag", "error", err)
+		}
+		np = nudge.DefaultNudgeSettings
+	}
+
 	data["SearchScheduler"] = ss
 	data["SubscriptionProcessor"] = sp
 	data["ScrapingdogWorkers"] = sd
 	data["FeedbackProcessor"] = fp
+	data["NudgeProcessor"] = np
 
 	if r.Method == http.MethodPost {
 		if err := r.ParseForm(); err != nil {
@@ -194,6 +205,25 @@ func (app *application) adminFeatureFlags(w http.ResponseWriter, r *http.Request
 			newSubscriptionPaused := r.PostForm.Get("subscription-processor-paused") == "true"
 			newScrapingdogPaused := r.PostForm.Get("scrapingdog-paused") == "true"
 			newFeedbackPaused := r.PostForm.Get("feedback-processor-paused") == "true"
+			newNudgePaused := r.PostForm.Get("nudge-processor-paused") == "true"
+			newNudgeDryRun := r.PostForm.Get("nudge-processor-dry-run") == "true"
+			newNudgeTestMode := r.PostForm.Get("nudge-processor-test-mode") == "true"
+			newNudgeStartHour, _ := strconv.Atoi(r.PostForm.Get("nudge-processor-start-hour"))
+			newNudgeEndHour, _ := strconv.Atoi(r.PostForm.Get("nudge-processor-end-hour"))
+			newNudgeIntervalMinutes, _ := strconv.Atoi(r.PostForm.Get("nudge-processor-interval-minutes"))
+			newNudgeMaxEmails, _ := strconv.Atoi(r.PostForm.Get("nudge-processor-max-emails"))
+			newNudgeNoResumeDays, _ := strconv.Atoi(r.PostForm.Get("nudge-processor-no-resume-days"))
+			newNudgeNoCallDays, _ := strconv.Atoi(r.PostForm.Get("nudge-processor-no-call-days"))
+			newNudgeMatchAlertDays, _ := strconv.Atoi(r.PostForm.Get("nudge-processor-match-alert-days"))
+			newNudgeMaxNoResume, _ := strconv.Atoi(r.PostForm.Get("nudge-max-no-resume"))
+			newNudgeMaxNoCall, _ := strconv.Atoi(r.PostForm.Get("nudge-max-no-call"))
+			newNudgeMaxFiveStar, _ := strconv.Atoi(r.PostForm.Get("nudge-max-five-star"))
+			newNudgeMaxFollowUp, _ := strconv.Atoi(r.PostForm.Get("nudge-max-follow-up"))
+			newNudgeWeeklyRateLimitDays, _ := strconv.Atoi(r.PostForm.Get("nudge-weekly-rate-limit-days"))
+			limitActivityNoResume := r.PostForm.Get("nudge-limit-activity-no-resume") == "true"
+			limitActivityNoCall := r.PostForm.Get("nudge-limit-activity-no-call") == "true"
+			limitActivityFiveStar := r.PostForm.Get("nudge-limit-activity-five-star") == "true"
+			limitActivityFollowUp := r.PostForm.Get("nudge-limit-activity-follow-up") == "true"
 
 			searchStartHour, _ := strconv.Atoi(r.PostForm.Get("search-scheduler-start-hour"))
 			searchEndHour, _ := strconv.Atoi(r.PostForm.Get("search-scheduler-end-hour"))
@@ -254,6 +284,39 @@ func (app *application) adminFeatureFlags(w http.ResponseWriter, r *http.Request
 				app.logger.Info("updated feedback-processor flag", "paused", newFeedbackPaused, "start_hour", feedbackStartHour, "end_hour", feedbackEndHour, "interval_minutes", feedbackIntervalMinutes)
 			}
 
+			np.Paused = newNudgePaused
+			np.DryRun = newNudgeDryRun
+			np.TestModeEnabled = newNudgeTestMode
+			np.StartHour = newNudgeStartHour
+			np.EndHour = newNudgeEndHour
+			if newNudgeIntervalMinutes > 0 {
+				np.Interval = time.Duration(newNudgeIntervalMinutes) * time.Minute
+			}
+			np.MaxEmailsPerRun = newNudgeMaxEmails
+			np.NoResumeDelayDays = newNudgeNoResumeDays
+			np.NoCallDelayDays = newNudgeNoCallDays
+			np.MatchAlertDelayDays = newNudgeMatchAlertDays
+			np.MaxNudgesPerType.NoResume = newNudgeMaxNoResume
+			np.MaxNudgesPerType.NoCall = newNudgeMaxNoCall
+			np.MaxNudgesPerType.FiveStarMatches = newNudgeMaxFiveStar
+			np.MaxNudgesPerType.FollowUp = newNudgeMaxFollowUp
+			if newNudgeWeeklyRateLimitDays > 0 {
+				np.WeeklyRateLimit = time.Duration(newNudgeWeeklyRateLimitDays) * 24 * time.Hour
+			}
+			np.LimitOnRecentActivityPerType = nudge.LimitOnRecentActivitySettings{
+				NoResume:        limitActivityNoResume,
+				NoCall:          limitActivityNoCall,
+				FiveStarMatches: limitActivityFiveStar,
+				FollowUp:        limitActivityFollowUp,
+			}
+
+			if err := kv.Set(nudge.NudgeProcessorKey, np, 0); err != nil {
+				app.logger.Error("failed to set nudge-processor settings", "error", err)
+				errors = append(errors, "Failed to update nudge-processor: "+err.Error())
+			} else {
+				app.logger.Info("updated nudge-processor settings")
+			}
+
 			if len(errors) > 0 {
 				data["Error"] = strings.Join(errors, "; ")
 			} else {
@@ -262,6 +325,7 @@ func (app *application) adminFeatureFlags(w http.ResponseWriter, r *http.Request
 				data["SubscriptionProcessor"] = sp
 				data["ScrapingdogWorkers"] = sd
 				data["FeedbackProcessor"] = fp
+				data["NudgeProcessor"] = np
 			}
 		}
 	}

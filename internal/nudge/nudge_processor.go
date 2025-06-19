@@ -134,9 +134,9 @@ func (p *Processor) RefreshSettings() error {
 		// If not found, use current settings as default
 
 		p.logger.Warn(internal.BGYellow("Not saving nudge processor settings to KV"))
-		// if err := p.kv.Set(NudgeProcessorKey, p.settings, 0); err != nil {
-		// 	return fmt.Errorf("failed to set default nudge processor settings: %w", err)
-		// }
+		if err := p.kv.Set(NudgeProcessorKey, p.settings, 0); err != nil {
+			return fmt.Errorf("failed to set default nudge processor settings: %w", err)
+		}
 		return nil
 	}
 
@@ -610,7 +610,7 @@ func GetNudgeEligibleUsers(ctx context.Context, logger *slog.Logger, fs *interna
 		}
 
 		if !statusMatches {
-			logger.Debug(internal.Black("user not eligible for nudge"), "user_id", user.ID, "nudge_type", nudgeType, "reason", "incorrect_status", "user_status", user.State.Status)
+			logger.Debug(internal.Black("user not eligible for nudge"), "name", user.Name, "user_id", user.ID, "nudge_type", nudgeType, "reason", "incorrect_status", "user_status", user.State.Status)
 			continue
 		}
 
@@ -628,17 +628,12 @@ func GetNudgeEligibleUsers(ctx context.Context, logger *slog.Logger, fs *interna
 
 		eligible, reason := isUserEligibleForNudge(user, nudgeType, cutoffTime, settings)
 		if !eligible {
-			logger.Debug(internal.Black("user not eligible for nudge"), "user_id", user.ID, "nudge_type", nudgeType, "reason", reason)
+			logger.Debug(internal.Black("user not eligible for nudge"), "name", user.Name, "user_id", user.ID, "nudge_type", nudgeType, "reason", reason)
 			continue
 		}
 
-		logger.Info(internal.Cyan("user IS eligible for nudge"), "user_id", user.ID, "email", user.Email, "nudge_type", nudgeType)
+		logger.Info(internal.Cyan("user IS eligible for nudge"), "name", user.Name, "user_id", user.ID, "email", user.Email, "nudge_type", nudgeType)
 		eligibleUsers = append(eligibleUsers, user)
-
-		if settings.MaxEmailsPerRun > 0 && len(eligibleUsers) >= settings.MaxEmailsPerRun {
-			logger.Info("stopping user eligibility check; max emails per run reached", "limit", settings.MaxEmailsPerRun)
-			break
-		}
 	}
 
 	return eligibleUsers, nil
@@ -658,11 +653,25 @@ func isUserEligibleForNudge(user *internal.User, nudgeType NudgeType, cutoffTime
 		}
 	}
 
-	// Check for recent user activity (e.g., logging in)
-	if !user.LastAccessedAt.IsZero() && user.LastAccessedAt.After(cutoffTime) {
-		return false, fmt.Sprintf("recent activity (last accessed %s is after cutoff %s)",
-			user.LastAccessedAt.Format(time.RFC3339),
-			cutoffTime.Format(time.RFC3339))
+	// Check for recent user activity based on per-type setting
+	var limitOnActivity bool
+	switch nudgeType {
+	case NudgeTypeNoResume:
+		limitOnActivity = settings.LimitOnRecentActivityPerType.NoResume
+	case NudgeTypeNoCall:
+		limitOnActivity = settings.LimitOnRecentActivityPerType.NoCall
+	case NudgeTypeFiveStarMatches:
+		limitOnActivity = settings.LimitOnRecentActivityPerType.FiveStarMatches
+	case NudgeTypeFollowUp:
+		limitOnActivity = settings.LimitOnRecentActivityPerType.FollowUp
+	}
+
+	if limitOnActivity {
+		if !user.LastAccessedAt.IsZero() && user.LastAccessedAt.After(cutoffTime) {
+			return false, fmt.Sprintf("recent activity (last accessed %s is after cutoff %s)",
+				user.LastAccessedAt.Format(time.RFC3339),
+				cutoffTime.Format(time.RFC3339))
+		}
 	}
 
 	// Check type-specific nudge limits
