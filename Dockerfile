@@ -10,7 +10,7 @@ RUN go build -v -o /talent-rodeo ./cmd/web
 
 
 FROM debian:bookworm
-RUN apt-get update -y && apt-get install -y ca-certificates
+RUN apt-get update -y && apt-get install -y ca-certificates poppler-utils
 COPY --from=builder /talent-rodeo /usr/local/bin/
 
 CMD ["/usr/local/bin/talent-rodeo"]
