@@ -124,8 +124,9 @@ type config struct {
 		clientID     string
 		clientSecret string
 	}
-	testing bool   // Flag to indicate if the application is running in test mode
-	envFile string // override which env file to load, e.g. ".env.prod" or ".env.dev"
+	testing   bool   // Flag to indicate if the application is running in test mode
+	envFile   string // override which env file to load, e.g. ".env.prod" or ".env.dev"
+	nudgeOnly bool   // Flag to indicate if only the nudge processor should be started
 }
 
 type application struct {
@@ -180,6 +181,7 @@ func run(logger *slog.Logger) error {
 	flag.StringVar(&cfg.linkedin.clientID, "linkedin-client-id", "", "LinkedIn client ID")
 	flag.StringVar(&cfg.linkedin.clientSecret, "linkedin-client-secret", "", "LinkedIn client secret")
 	flag.BoolVar(&cfg.testing, "testing", false, "enable testing mode")
+	flag.BoolVar(&cfg.nudgeOnly, "nudge-only", false, "only start the nudge processor, skip other services")
 	showVersion := flag.Bool("version", false, "display version and exit")
 
 	// Parse flags ONCE
@@ -586,29 +588,31 @@ func setupSessionManager(cfg config, FirestoreClient *internal.FirestoreClient, 
 
 func (app *application) startServices(ctx context.Context, smtpCfg *smtp.Config) error {
 
-	app.feedbackProcessor = feedback.NewProcessor(app.fs, app.logger)
-	if err := app.feedbackProcessor.Start(ctx); err != nil {
-		return fmt.Errorf("failed to start feedback processor: %w", err)
-	}
+	if !app.config.nudgeOnly {
+		app.feedbackProcessor = feedback.NewProcessor(app.fs, app.logger)
+		if err := app.feedbackProcessor.Start(ctx); err != nil {
+			return fmt.Errorf("failed to start feedback processor: %w", err)
+		}
 
-	app.subscriptionProcessor = subscription.NewProcessor(app.fs, app.pusher, app.logger)
+		app.subscriptionProcessor = subscription.NewProcessor(app.fs, app.pusher, app.logger)
 
-	app.jobDispatch = internal.NewJobEventDispatch()
-	app.searchResultProcessor = internal.NewSearchResultProcessor(app.fs, app.logger, app.pusher, app.jobDispatch)
-	app.jobDispatch.Register("search-result-processor", app.searchResultProcessor)
-	app.searchResultProcessor.Start()
+		app.jobDispatch = internal.NewJobEventDispatch()
+		app.searchResultProcessor = internal.NewSearchResultProcessor(app.fs, app.logger, app.pusher, app.jobDispatch)
+		app.jobDispatch.Register("search-result-processor", app.searchResultProcessor)
+		app.searchResultProcessor.Start()
 
-	app.searchProvider = scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), app.logger, scrapingdog.WithJobEventHandler(app.jobDispatch))
-	app.searchScheduler = search.NewScheduler(app.fs, app.logger, app.searchProvider, app.mailer, app.config.notifications.email)
+		app.searchProvider = scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), app.logger, scrapingdog.WithJobEventHandler(app.jobDispatch))
+		app.searchScheduler = search.NewScheduler(app.fs, app.logger, app.searchProvider, app.mailer, app.config.notifications.email)
 
-	if err := app.subscriptionProcessor.Start(ctx); err != nil {
-		return fmt.Errorf("failed to start subscription processor: %w", err)
-	}
-	if err := app.searchProvider.Start(ctx); err != nil {
-		return fmt.Errorf("failed to start search provider: %w", err)
-	}
-	if err := app.searchScheduler.Start(ctx); err != nil {
-		return fmt.Errorf("failed to start search scheduler: %w", err)
+		if err := app.subscriptionProcessor.Start(ctx); err != nil {
+			return fmt.Errorf("failed to start subscription processor: %w", err)
+		}
+		if err := app.searchProvider.Start(ctx); err != nil {
+			return fmt.Errorf("failed to start search provider: %w", err)
+		}
+		if err := app.searchScheduler.Start(ctx); err != nil {
+			return fmt.Errorf("failed to start search scheduler: %w", err)
+		}
 	}
 
 	app.nudgeProcessor = nudge.NewProcessorWithDefaults(app.fs, smtpCfg, app.logger)
