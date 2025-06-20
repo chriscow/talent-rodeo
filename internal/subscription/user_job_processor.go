@@ -363,6 +363,8 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 
 		if criteria.WorkType == internal.WorkTypeRemote {
 			workType = "<work_type>remote</work_type>"
+			location = fmt.Sprintf("<work_location>%s</work_location>", job.Location)
+			processor.logger.Debug("criteria.WorkType is remote", "jobID", job.ID, "location", job.Location)
 		} else {
 			workType = "<work_type>on-site</work_type>"
 			if criteria.WorkType == internal.WorkTypeHybrid {
