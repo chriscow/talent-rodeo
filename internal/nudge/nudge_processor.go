@@ -69,12 +69,22 @@ func (p *Processor) Start(ctx context.Context) error {
 
 	// Initialize Cloudflare KV client for feature flags
 	if err := p.initCloudflareKV(); err != nil {
+		// Report init error to Sentry
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"operation": "init_cloudflare_kv",
+			"component": "nudge_processor",
+		})
 		p.logger.Error("failed to initialize Cloudflare KV client", "error", err)
 		// Continue without feature flags
 	}
 
 	// Refresh settings from feature flags
 	if err := p.RefreshSettings(); err != nil {
+		// Report refresh error to Sentry
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"operation": "refresh_settings",
+			"component": "nudge_processor",
+		})
 		p.logger.Error("failed to refresh nudge processor settings", "error", err)
 		// Continue with current settings
 	}
@@ -483,6 +493,11 @@ func (ps *ProcessingStats) AddTypeStats(nudgeType NudgeType, stats *TypeStats) {
 func (p *Processor) GetStats(ctx context.Context) (map[string]interface{}, error) {
 	nudgeStats, err := GetNudgeStats(ctx, p.fs)
 	if err != nil {
+		// Report GetStats error to Sentry
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"operation": "get_nudge_stats",
+			"component": "nudge_processor",
+		})
 		return nil, fmt.Errorf("failed to get nudge stats: %w", err)
 	}
 
