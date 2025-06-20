@@ -13,8 +13,15 @@ const (
 	NudgeTypeNoResume        NudgeType = "no_resume"
 	NudgeTypeNoCall          NudgeType = "no_call"
 	NudgeTypeFiveStarMatches NudgeType = "five_star_matches"
-	NudgeTypeFollowUp        NudgeType = "follow_up"
+	// NudgeTypeFollowUp        NudgeType = "follow_up" // not implemented yet
 )
+
+var AllNudgeTypes = []NudgeType{
+	NudgeTypeNoResume,
+	NudgeTypeNoCall,
+	NudgeTypeFiveStarMatches,
+	// NudgeTypeFollowUp,  // not implemented yet
+}
 
 // NudgeProcessorSettings configures the nudge processor behavior
 // Each field controls a specific aspect of nudge email processing, safety, or rollout.
@@ -113,7 +120,7 @@ var DefaultNudgeSettings = NudgeProcessorSettings{
 	Paused:              false,
 	StartHour:           0, // 24/7 operation
 	EndHour:             0,
-	MaxEmailsPerRun:     3, // to start for soft launch
+	MaxEmailsPerRun:     50,
 	NoResumeDelayDays:   2,
 	NoCallDelayDays:     3,
 	MatchAlertDelayDays: 2,
@@ -259,7 +266,7 @@ func (nt NudgeType) String() string {
 // IsValid checks if the nudge type is valid
 func (nt NudgeType) IsValid() bool {
 	switch nt {
-	case NudgeTypeNoResume, NudgeTypeNoCall, NudgeTypeFiveStarMatches, NudgeTypeFollowUp:
+	case NudgeTypeNoResume, NudgeTypeNoCall, NudgeTypeFiveStarMatches: //, NudgeTypeFollowUp:
 		return true
 	default:
 		return false
@@ -275,8 +282,8 @@ func (nt NudgeType) Priority() int {
 		return 2
 	case NudgeTypeFiveStarMatches:
 		return 3
-	case NudgeTypeFollowUp:
-		return 4
+	// case NudgeTypeFollowUp:
+	// 	return 4
 	default:
 		return 999
 	}
@@ -291,8 +298,8 @@ func (nt NudgeType) PromptTemplateFilename() string {
 		return "shirely-nudge-no-call.txt"
 	case NudgeTypeFiveStarMatches:
 		return "shirely-nudge-five-star-matches.txt"
-	case NudgeTypeFollowUp:
-		return "shirely-follow-up-questions.txt"
+	// case NudgeTypeFollowUp:
+	// 	return "shirely-follow-up-questions.txt"
 	default:
 		return ""
 	}
@@ -308,8 +315,8 @@ func (nt NudgeType) EmailTemplatePath() string {
 		return "emails/shirely-no-call.html"
 	case NudgeTypeFiveStarMatches:
 		return "emails/shirely-five-star-matches.html"
-	case NudgeTypeFollowUp:
-		return "emails/shirely-follow-up-questions.html"
+	// case NudgeTypeFollowUp:
+	// 	return "emails/shirely-follow-up-questions.html"
 	default:
 		return ""
 	}
@@ -324,8 +331,8 @@ func (nt NudgeType) PromptTemplatePath() string {
 		return "prompts/shirely-nudge-no-call.txt"
 	case NudgeTypeFiveStarMatches:
 		return "prompts/shirely-nudge-five-star-matches.txt"
-	case NudgeTypeFollowUp:
-		return "prompts/shirely-follow-up-questions.txt"
+	// case NudgeTypeFollowUp:
+	// 	return "prompts/shirely-follow-up-questions.txt"
 	default:
 		return ""
 	}

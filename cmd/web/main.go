@@ -185,6 +185,10 @@ func run(logger *slog.Logger) error {
 	// Parse flags ONCE
 	flag.Parse()
 
+	if err := nudge.LoadAndCacheTemplates(); err != nil {
+		return fmt.Errorf("failed to load nudge templates: %w", err)
+	}
+
 	// Load environment file
 	if err := checkEnv(logger, cfg.envFile); err != nil {
 		return fmt.Errorf("error checking environment: %w", err)

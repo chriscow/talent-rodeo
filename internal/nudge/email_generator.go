@@ -4,12 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"html/template"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"talent-rodeo/internal"
-	"talent-rodeo/internal/funcs"
 )
 
 // EmailGenerator handles generation of nudge emails using dependency injection
@@ -69,13 +66,12 @@ func (eg *EmailGenerator) generateFromLLM(ctx context.Context, user *internal.Us
 }
 
 func (eg *EmailGenerator) generateFromTemplate(ctx context.Context, nudgeType NudgeType, emailData *NudgeEmailData) (*GeneratedEmail, error) {
-	templatePath := nudgeType.EmailTemplatePath()
-
-	t, err := template.New(filepath.Base(templatePath)).Funcs(funcs.TemplateFuncs).ParseFiles(templatePath)
+	t, err := GetTemplate(nudgeType)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse template %s: %w", templatePath, err)
+		return nil, fmt.Errorf("failed to get template from cache: %w", err)
 	}
 
+	templatePath := nudgeType.EmailTemplatePath()
 	var subject, plainBody, htmlBody bytes.Buffer
 
 	if t.Lookup("subject") == nil {

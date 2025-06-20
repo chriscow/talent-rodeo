@@ -662,8 +662,8 @@ func isUserEligibleForNudge(user *internal.User, nudgeType NudgeType, cutoffTime
 		limitOnActivity = settings.LimitOnRecentActivityPerType.NoCall
 	case NudgeTypeFiveStarMatches:
 		limitOnActivity = settings.LimitOnRecentActivityPerType.FiveStarMatches
-	case NudgeTypeFollowUp:
-		limitOnActivity = settings.LimitOnRecentActivityPerType.FollowUp
+		// case NudgeTypeFollowUp:
+		// 	limitOnActivity = settings.LimitOnRecentActivityPerType.FollowUp
 	}
 
 	if limitOnActivity {
@@ -684,8 +684,8 @@ func isUserEligibleForNudge(user *internal.User, nudgeType NudgeType, cutoffTime
 			maxAllowed = settings.MaxNudgesPerType.NoCall
 		case NudgeTypeFiveStarMatches:
 			maxAllowed = settings.MaxNudgesPerType.FiveStarMatches
-		case NudgeTypeFollowUp:
-			maxAllowed = settings.MaxNudgesPerType.FollowUp
+			// case NudgeTypeFollowUp:
+			// 	maxAllowed = settings.MaxNudgesPerType.FollowUp
 		}
 
 		currentCount := user.NudgeTypeCount[string(nudgeType)]

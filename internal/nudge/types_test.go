@@ -29,11 +29,11 @@ func TestNudgeType_EmailTemplatePath(t *testing.T) {
 			nudgeType: NudgeTypeFiveStarMatches,
 			want:      "emails/shirely-five-star-matches.html",
 		},
-		{
-			name:      "FollowUp returns correct path",
-			nudgeType: NudgeTypeFollowUp,
-			want:      "emails/shirely-follow-up-questions.html",
-		},
+		// {
+		// 	name:      "FollowUp returns correct path",
+		// 	nudgeType: NudgeTypeFollowUp,
+		// 	want:      "emails/shirely-follow-up-questions.html",
+		// },
 		{
 			name:      "Invalid type returns empty string",
 			nudgeType: "invalid",
@@ -99,11 +99,11 @@ func TestGetPromptPath(t *testing.T) {
 			nudgeType: NudgeTypeFiveStarMatches,
 			want:      "prompts/shirely-nudge-five-star-matches.txt",
 		},
-		{
-			name:      "FollowUp returns correct path",
-			nudgeType: NudgeTypeFollowUp,
-			want:      "prompts/shirely-follow-up-questions.txt",
-		},
+		// {
+		// 	name:      "FollowUp returns correct path",
+		// 	nudgeType: NudgeTypeFollowUp,
+		// 	want:      "prompts/shirely-follow-up-questions.txt",
+		// },
 		{
 			name:      "Invalid type returns empty string",
 			nudgeType: "invalid",
