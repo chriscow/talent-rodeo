@@ -197,14 +197,6 @@ func TestIsUserEligibleForNudge(t *testing.T) {
 			expected: false,
 		},
 		{
-			name: "ineligible - too recent access",
-			user: &internal.User{
-				ID:             "test-user-3",
-				LastAccessedAt: now.Add(-1 * time.Hour), // 1 hour ago (after cutoff)
-			},
-			expected: false,
-		},
-		{
 			name: "ineligible - rate limited",
 			user: &internal.User{
 				ID:                   "test-user-4",

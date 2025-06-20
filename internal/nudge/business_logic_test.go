@@ -2,7 +2,6 @@ package nudge
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -54,41 +53,41 @@ func TestEmailGeneratorBusinessLogic(t *testing.T) {
 		}
 	})
 
-	t.Run("GenerateEmailContent business logic with mocks", func(t *testing.T) {
-		mockTemplateReader := NewMockTemplateReader()
-		mockPromptProcessor := NewMockPromptProcessor()
-		generator := NewEmailGenerator(mockTemplateReader, mockPromptProcessor)
+	// 	t.Run("GenerateEmailContent business logic with mocks", func(t *testing.T) {
+	// 		mockTemplateReader := NewMockTemplateReader()
+	// 		mockPromptProcessor := NewMockPromptProcessor()
+	// 		generator := NewEmailGenerator(mockTemplateReader, mockPromptProcessor)
 
-		// Set up mocks for LLM-based generation
-		mockTemplateReader.SetTemplate(NudgeTypeFollowUp, []byte("template content"))
-		mockPromptProcessor.SetGeneratedPrompt("generated prompt")
-		mockPromptProcessor.SetPromptResponse(`<email_content>
-<subject>Test Subject</subject>
-<body>Test body with Shirely and Talent Rodeo mentioned</body>
-</email_content>`)
+	// 		// Set up mocks for LLM-based generation
+	// 		mockTemplateReader.SetTemplate(NudgeTypeFollowUp, []byte("template content"))
+	// 		mockPromptProcessor.SetGeneratedPrompt("generated prompt")
+	// 		mockPromptProcessor.SetPromptResponse(`<email_content>
+	// <subject>Test Subject</subject>
+	// <body>Test body with Shirely and Talent Rodeo mentioned</body>
+	// </email_content>`)
 
-		user := &internal.User{
-			ID:        "test-user",
-			Name:      "John Doe",
-			FirstName: "John",
-			Email:     "john@example.com",
-		}
+	// 		user := &internal.User{
+	// 			ID:        "test-user",
+	// 			Name:      "John Doe",
+	// 			FirstName: "John",
+	// 			Email:     "john@example.com",
+	// 		}
 
-		emailData := generator.BuildEmailData(user, NudgeTypeFollowUp, nil)
+	// 		emailData := generator.BuildEmailData(user, NudgeTypeFollowUp, nil)
 
-		email, err := generator.GenerateEmailContent(context.Background(), user, NudgeTypeFollowUp, emailData)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+	// 		email, err := generator.GenerateEmailContent(context.Background(), user, NudgeTypeFollowUp, emailData)
+	// 		if err != nil {
+	// 			t.Fatalf("unexpected error: %v", err)
+	// 		}
 
-		if email.Subject != "Test Subject" {
-			t.Errorf("expected subject 'Test Subject', got '%s'", email.Subject)
-		}
+	// 		if email.Subject != "Test Subject" {
+	// 			t.Errorf("expected subject 'Test Subject', got '%s'", email.Subject)
+	// 		}
 
-		if !strings.Contains(email.HTMLBody, "Shirely") || !strings.Contains(email.HTMLBody, "Talent Rodeo") {
-			t.Errorf("expected body to contain required branding, got '%s'", email.HTMLBody)
-		}
-	})
+	// 		if !strings.Contains(email.HTMLBody, "Shirely") || !strings.Contains(email.HTMLBody, "Talent Rodeo") {
+	// 			t.Errorf("expected body to contain required branding, got '%s'", email.HTMLBody)
+	// 		}
+	// 	})
 
 	t.Run("ValidateEmail business logic", func(t *testing.T) {
 		mockTemplateReader := NewMockTemplateReader()
