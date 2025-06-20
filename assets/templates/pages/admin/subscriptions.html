@@ -20,6 +20,8 @@
         <header>
             <h2>Manage Subscriptions for {{.SelectedUser.Name}}</h2>
         </header>
+        <p><strong>User ID:</strong> {{.SelectedUser.ID}}</p>
+        <p><strong>Last Accessed At:</strong> {{if .SelectedUser.LastAccessedAt.IsZero}}N/A{{else}}{{.SelectedUser.LastAccessedAt.Format "2006-01-02 15:04:05"}}{{end}}</p>
         {{if .SubscriptionError}}
         <article class="error">{{.SubscriptionError}}</article>
         {{end}}
@@ -83,4 +85,4 @@
     </section>
     {{end}}
 </main>
-{{end}} 
+{{end}}
