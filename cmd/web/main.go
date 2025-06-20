@@ -664,6 +664,72 @@ func setupSessionManager(cfg config, FirestoreClient *internal.FirestoreClient, 
 	return sessionManager, nil
 }
 
+// getGmailTokenPath returns the Gmail token path from env or default
+func getGmailTokenPath() string {
+	if path := os.Getenv("GMAIL_TOKEN_PATH"); path != "" {
+		return path
+	}
+	return "gmail_token.json"
+}
+
+// setupGmailTokenFromSecret creates token file from environment variable if it doesn't exist
+func setupGmailTokenFromSecret(tokenPath string, logger *slog.Logger) error {
+	// If token file already exists, don't overwrite
+	if _, err := os.Stat(tokenPath); err == nil {
+		return nil
+	}
+
+	// Check for base64 encoded token in environment
+	tokenBase64 := os.Getenv("GMAIL_TOKEN_BASE64")
+	if tokenBase64 == "" {
+		return nil // No secret available, that's ok
+	}
+
+	// Decode and write token file
+	tokenData, err := base64.StdEncoding.DecodeString(tokenBase64)
+	if err != nil {
+		return fmt.Errorf("failed to decode GMAIL_TOKEN_BASE64: %w", err)
+	}
+
+	err = os.WriteFile(tokenPath, tokenData, 0600)
+	if err != nil {
+		return fmt.Errorf("failed to write token file: %w", err)
+	}
+
+	logger.Info("created token file from environment secret", "path", tokenPath)
+	return nil
+}
+
+// runGmailSetup handles the Gmail OAuth setup process
+func runGmailSetup(logger *slog.Logger) error {
+	fmt.Println("=== Gmail OAuth Setup ===")
+
+	if os.Getenv("GMAIL_READER_CREDENTIALS") == "" {
+		return fmt.Errorf("GMAIL_READER_CREDENTIALS environment variable is required")
+	}
+
+	tokenPath := getGmailTokenPath()
+	fmt.Printf("Token will be saved to: %s\n", tokenPath)
+	fmt.Println()
+
+	config := inbox.InboxConfig{
+		TokenPath: tokenPath,
+	}
+
+	reader, err := inbox.NewGmailReader(config, logger)
+	if err != nil {
+		return fmt.Errorf("failed to create Gmail reader: %w", err)
+	}
+	defer reader.Close()
+
+	fmt.Println("✅ Gmail OAuth setup complete!")
+	fmt.Printf("Token saved to: %s\n", tokenPath)
+	fmt.Println()
+	fmt.Println("You can now deploy your application with Gmail access.")
+
+	return nil
+}
+
 func (app *application) startServices(ctx context.Context, smtpCfg *smtp.Config) error {
 
 	if !app.config.nudgeOnly {
@@ -752,72 +818,6 @@ func (app *application) startServices(ctx context.Context, smtpCfg *smtp.Config)
 		app.logger.Info("Gmail credentials not configured - Gmail features will be unavailable",
 			"help", "Set GMAIL_READER_CREDENTIALS environment variable to enable Gmail integration")
 	}
-
-	return nil
-}
-
-// getGmailTokenPath returns the Gmail token path from env or default
-func getGmailTokenPath() string {
-	if path := os.Getenv("GMAIL_TOKEN_PATH"); path != "" {
-		return path
-	}
-	return "gmail_token.json"
-}
-
-// setupGmailTokenFromSecret creates token file from environment variable if it doesn't exist
-func setupGmailTokenFromSecret(tokenPath string, logger *slog.Logger) error {
-	// If token file already exists, don't overwrite
-	if _, err := os.Stat(tokenPath); err == nil {
-		return nil
-	}
-
-	// Check for base64 encoded token in environment
-	tokenBase64 := os.Getenv("GMAIL_TOKEN_BASE64")
-	if tokenBase64 == "" {
-		return nil // No secret available, that's ok
-	}
-
-	// Decode and write token file
-	tokenData, err := base64.StdEncoding.DecodeString(tokenBase64)
-	if err != nil {
-		return fmt.Errorf("failed to decode GMAIL_TOKEN_BASE64: %w", err)
-	}
-
-	err = os.WriteFile(tokenPath, tokenData, 0600)
-	if err != nil {
-		return fmt.Errorf("failed to write token file: %w", err)
-	}
-
-	logger.Info("created token file from environment secret", "path", tokenPath)
-	return nil
-}
-
-// runGmailSetup handles the Gmail OAuth setup process
-func runGmailSetup(logger *slog.Logger) error {
-	fmt.Println("=== Gmail OAuth Setup ===")
-
-	if os.Getenv("GMAIL_READER_CREDENTIALS") == "" {
-		return fmt.Errorf("GMAIL_READER_CREDENTIALS environment variable is required")
-	}
-
-	tokenPath := getGmailTokenPath()
-	fmt.Printf("Token will be saved to: %s\n", tokenPath)
-	fmt.Println()
-
-	config := inbox.InboxConfig{
-		TokenPath: tokenPath,
-	}
-
-	reader, err := inbox.NewGmailReader(config, logger)
-	if err != nil {
-		return fmt.Errorf("failed to create Gmail reader: %w", err)
-	}
-	defer reader.Close()
-
-	fmt.Println("✅ Gmail OAuth setup complete!")
-	fmt.Printf("Token saved to: %s\n", tokenPath)
-	fmt.Println()
-	fmt.Println("You can now deploy your application with Gmail access.")
 
 	return nil
 }
