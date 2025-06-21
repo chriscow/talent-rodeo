@@ -22,16 +22,14 @@ func CreateTestUser(t *testing.T, client *FirestoreClient, name, email, phone st
 
 	now := time.Now()
 	user := &User{
-		ID:          fmt.Sprintf("test-user-%d", now.UnixNano()),
-		CreatedAt:   now,
-		Email:       email,
-		Name:        name,
-		IsSuperUser: isSuperUser,
-		Phone:       &phone,
-		State: UserState{
-			Status:  UserStatusPendingResumeUpload,
-			Started: now,
-		},
+		ID:              fmt.Sprintf("test-user-%d", now.UnixNano()),
+		CreatedAt:       now,
+		Email:           email,
+		Name:            name,
+		IsSuperUser:     isSuperUser,
+		Phone:           &phone,
+		Status:          UserStatusPendingResumeUpload,
+		StatusUpdatedAt: now,
 	}
 
 	if err := CreateUser(context.Background(), client, user); err != nil {

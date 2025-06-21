@@ -26,22 +26,24 @@ const (
 	UserStatusJobSearchComplete                     // 12
 )
 
-type UserState struct {
-	Status  UserStatus
-	Started time.Time
-	Error   *string
-}
+// type UserState struct {
+// 	// Status  UserStatus
+// 	// Started time.Time
+// 	// Error   *string // Pointer to allow nil value for no error
+// }
 
 func UpdateUserStatus(ctx context.Context, fs *FirestoreClient, user *User, status UserStatus) error {
 	if fs == nil {
 		return fmt.Errorf("firestore client is nil")
 	}
-	user.State.Status = status
-	user.State.Started = time.Now()
-	user.State.Error = nil // Clear any previous errors
+	user.Status = status
+	user.StatusUpdatedAt = time.Now()
+	user.Error = nil // Clear any previous errors
 
 	return UpdateUser(ctx, fs, user.ID, map[string]any{
-		"State": user.State,
+		"Status":          status,
+		"StatusUpdatedAt": user.StatusUpdatedAt,
+		"Error":           nil,
 	})
 }
 
@@ -49,12 +51,14 @@ func UpdateUserStatusTx(ctx context.Context, fs *FirestoreClient, tx *firestore.
 	if fs == nil {
 		return fmt.Errorf("firestore client is nil")
 	}
-	user.State.Status = status
-	user.State.Started = time.Now()
-	user.State.Error = nil // Clear any previous errors
+	user.Status = status
+	user.StatusUpdatedAt = time.Now()
+	user.Error = nil // Clear any previous errors
 
 	return UpdateUserTx(ctx, fs, tx, user.ID, map[string]any{
-		"State": user.State,
+		"Status":          status,
+		"StatusUpdatedAt": user.StatusUpdatedAt,
+		"Error":           nil,
 	})
 }
 
@@ -63,13 +67,15 @@ func UpdateUserStateWithError(ctx context.Context, fs *FirestoreClient, user *Us
 	if fs == nil {
 		return fmt.Errorf("firestore client is nil")
 	}
-	user.State.Status = UserStatusError
-	user.State.Started = time.Now()
+	user.Status = UserStatusError
+	user.StatusUpdatedAt = time.Now()
 	errorCopy := errorMsg // Make a copy to ensure it stays in memory
-	user.State.Error = &errorCopy
+	user.Error = &errorCopy
 
 	return UpdateUser(ctx, fs, user.ID, map[string]any{
-		"State": user.State,
+		"Status":          UserStatusError,
+		"Error":           errorCopy,
+		"StatusUpdatedAt": user.StatusUpdatedAt,
 	})
 }
 

@@ -95,21 +95,19 @@ func (app *application) completeSocialAuth(w http.ResponseWriter, r *http.Reques
 		app.logger.Info("User not found, creating new user", "email", gothUser.Email)
 
 		u = &internal.User{
-			ID:          uuid.New().String(),
-			Email:       gothUser.Email,
-			Provider:    gothUser.Provider,
-			Name:        gothUser.Name,
-			FirstName:   gothUser.FirstName,
-			LastName:    gothUser.LastName,
-			NickName:    gothUser.NickName,
-			Description: gothUser.Description,
-			UserID:      gothUser.UserID,
-			AvatarURL:   gothUser.AvatarURL,
-			Location:    gothUser.Location,
-			State: internal.UserState{
-				Status:  internal.UserStatusPendingResumeUpload,
-				Started: time.Now(),
-			},
+			ID:              uuid.New().String(),
+			Email:           gothUser.Email,
+			Provider:        gothUser.Provider,
+			Name:            gothUser.Name,
+			FirstName:       gothUser.FirstName,
+			LastName:        gothUser.LastName,
+			NickName:        gothUser.NickName,
+			Description:     gothUser.Description,
+			UserID:          gothUser.UserID,
+			AvatarURL:       gothUser.AvatarURL,
+			Location:        gothUser.Location,
+			Status:          internal.UserStatusPendingResumeUpload,
+			StatusUpdatedAt: time.Now(),
 		}
 
 		if err := internal.CreateUser(r.Context(), app.fs, u); err != nil {
@@ -124,7 +122,7 @@ func (app *application) completeSocialAuth(w http.ResponseWriter, r *http.Reques
 
 	// If onboarding is not complete, redirect to profile
 	redirectPath := "/"
-	if u.State.Status < internal.UserStatusCallScheduled {
+	if u.Status < internal.UserStatusCallScheduled {
 		redirectPath = "/profile"
 	}
 

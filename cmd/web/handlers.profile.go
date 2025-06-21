@@ -23,15 +23,15 @@ import (
 func (app *application) showProfilePage(w http.ResponseWriter, r *http.Request) {
 	user := contextGetAuthenticatedUser(r)
 
-	app.logger.Debug("showProfilePage", "name", user.Name, "userID", user.ID, "status", user.State.Status)
+	app.logger.Debug("showProfilePage", "name", user.Name, "userID", user.ID, "status", user.Status)
 
-	if user.State.Status >= internal.UserStatusCallScheduled {
+	if user.Status >= internal.UserStatusCallScheduled {
 		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
 		return
 	}
 
 	// Show appropriate view based on onboarding state
-	switch user.State.Status {
+	switch user.Status {
 	case internal.UserStatusPendingResumeUpload:
 		app.showUploadPage(w, r)
 	case internal.UserStatusProcessingResume:
@@ -51,8 +51,8 @@ func (app *application) showProfilePage(w http.ResponseWriter, r *http.Request) 
 		// Get error message before resetting state
 		data := app.newTemplateData(r)
 		errorMsg := ""
-		if user.State.Error != nil {
-			errorMsg = *user.State.Error
+		if user.Error != nil {
+			errorMsg = *user.Error
 		}
 
 		// Reset state to pending resume upload
@@ -60,7 +60,7 @@ func (app *application) showProfilePage(w http.ResponseWriter, r *http.Request) 
 			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
 				"action":      "update_user_status",
 				"userID":      user.ID,
-				"from_status": user.State.Status.String(),
+				"from_status": user.Status.String(),
 				"to_status":   internal.UserStatusPendingResumeUpload.String(),
 			})
 			app.serverError(w, r, fmt.Errorf("failed to reset user state: %w", err))
@@ -78,13 +78,13 @@ func (app *application) showProfilePage(w http.ResponseWriter, r *http.Request) 
 			app.serverError(w, r, fmt.Errorf("failed to render resume upload page: %w", err))
 		}
 	default:
-		app.logger.Warn("unknown onboarding step", "step", user.State.Status)
+		app.logger.Warn("unknown onboarding step", "step", user.Status)
 		// Reset to initial state for unknown states
 		if err := internal.UpdateUserStatus(r.Context(), app.fs, user, internal.UserStatusPendingResumeUpload); err != nil {
 			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
 				"action":      "reset_user_status",
 				"userID":      user.ID,
-				"from_status": user.State.Status.String(),
+				"from_status": user.Status.String(),
 				"to_status":   internal.UserStatusPendingResumeUpload.String(),
 			})
 			app.serverError(w, r, fmt.Errorf("failed to reset user state: %w", err))

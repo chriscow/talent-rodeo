@@ -52,19 +52,15 @@ func TestShowDashboard(t *testing.T) {
 			name: "unscheduled user redirects to profile",
 			setupContext: func(ctx context.Context) context.Context {
 				user := &internal.User{
-					ID: "test-user",
-					State: internal.UserState{
-						Status: 0, // UserStatusNew
-					},
+					ID:     "test-user",
+					Status: internal.UserStatusUnknown,
 				}
 				return context.WithValue(ctx, contextKey("user"), user)
 			},
 			setupUser: func() *internal.User {
 				return &internal.User{
-					ID: "test-user",
-					State: internal.UserState{
-						Status: 0, // UserStatusNew
-					},
+					ID:     "test-user",
+					Status: internal.UserStatusUnknown,
 				}
 			},
 			wantStatus:   http.StatusSeeOther,
@@ -74,19 +70,15 @@ func TestShowDashboard(t *testing.T) {
 			name: "call scheduled user with no jobs shows appointment",
 			setupContext: func(ctx context.Context) context.Context {
 				user := &internal.User{
-					ID: "test-user",
-					State: internal.UserState{
-						Status: internal.UserStatusCallScheduled,
-					},
+					ID:     "test-user",
+					Status: internal.UserStatusCallScheduled,
 				}
 				return context.WithValue(ctx, contextKey("user"), user)
 			},
 			setupUser: func() *internal.User {
 				return &internal.User{
-					ID: "test-user",
-					State: internal.UserState{
-						Status: internal.UserStatusCallScheduled,
-					},
+					ID:     "test-user",
+					Status: internal.UserStatusCallScheduled,
 				}
 			},
 			setupJobs: func() []*internal.UserJob {
@@ -105,19 +97,15 @@ func TestShowDashboard(t *testing.T) {
 			name: "user with jobs shows job categories",
 			setupContext: func(ctx context.Context) context.Context {
 				user := &internal.User{
-					ID: "test-user",
-					State: internal.UserState{
-						Status: internal.UserStatusCallScheduled,
-					},
+					ID:     "test-user",
+					Status: internal.UserStatusCallScheduled,
 				}
 				return context.WithValue(ctx, contextKey("user"), user)
 			},
 			setupUser: func() *internal.User {
 				return &internal.User{
-					ID: "test-user",
-					State: internal.UserState{
-						Status: internal.UserStatusCallScheduled,
-					},
+					ID:     "test-user",
+					Status: internal.UserStatusCallScheduled,
 				}
 			},
 			setupJobs: func() []*internal.UserJob {

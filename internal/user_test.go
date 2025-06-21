@@ -130,18 +130,16 @@ func TestUserStates(t *testing.T) {
 	// Test creating user with invalid state
 	t.Run("CreateUserWithInvalidState", func(t *testing.T) {
 		invalidUser := &User{
-			Name:  "Invalid State User",
-			Email: "invalid@example.com",
-			State: UserState{
-				Status: UserStatusUnknown,
-			},
+			Name:   "Invalid State User",
+			Email:  "invalid@example.com",
+			Status: UserStatusUnknown,
 		}
 		err := CreateUser(ctx, client, invalidUser)
 		if err == nil {
 			t.Error("CreateUser() with UserStatusUnknown should return error")
 		}
 
-		invalidUser.State.Status = UserStatusError
+		invalidUser.Status = UserStatusError
 		err = CreateUser(ctx, client, invalidUser)
 		if err == nil {
 			t.Error("CreateUser() with UserStatusError should return error")
@@ -154,8 +152,8 @@ func TestUserStates(t *testing.T) {
 		user := CreateTestUser(t, client, "State Test User", "state@example.com", "+14251234567", false)
 
 		// Initial state should be PendingResumeUpload
-		if user.State.Status != UserStatusPendingResumeUpload {
-			t.Errorf("Initial state = %v, want %v", user.State.Status, UserStatusPendingResumeUpload)
+		if user.Status != UserStatusPendingResumeUpload {
+			t.Errorf("Initial state = %v, want %v", user.Status, UserStatusPendingResumeUpload)
 		}
 
 		// Test state transition sequence
@@ -167,7 +165,7 @@ func TestUserStates(t *testing.T) {
 		}
 
 		for _, newStatus := range states {
-			prevStarted := user.State.Started
+			prevStarted := user.StatusUpdatedAt
 			time.Sleep(time.Millisecond) // Ensure time difference
 
 			err := UpdateUserStatus(ctx, client, user, newStatus)
@@ -182,16 +180,16 @@ func TestUserStates(t *testing.T) {
 			}
 
 			// Verify state
-			if updated.State.Status != newStatus {
-				t.Errorf("State = %v, want %v", updated.State.Status, newStatus)
+			if updated.Status != newStatus {
+				t.Errorf("State = %v, want %v", updated.Status, newStatus)
 			}
-			if updated.State.Started.IsZero() {
-				t.Error("State.Started should not be zero")
+			if updated.StatusUpdatedAt.IsZero() {
+				t.Error("State.StatusUpdatedAt should not be zero")
 			}
-			if updated.State.Started.Before(prevStarted) || updated.State.Started.Equal(prevStarted) {
-				t.Error("State.Started should be after previous state's start time")
+			if updated.StatusUpdatedAt.Before(prevStarted) || updated.StatusUpdatedAt.Equal(prevStarted) {
+				t.Error("State.StatusUpdatedAt should be after previous state's start time")
 			}
-			if updated.State.Error != nil {
+			if updated.Error != nil {
 				t.Error("State.Error should be nil during normal transition")
 			}
 
@@ -238,36 +236,24 @@ func TestUpdateUserStateWithError(t *testing.T) {
 	defer client.Close()
 
 	tests := []struct {
-		name     string
-		errorMsg string
-		want     *UserState
+		name       string
+		errorMsg   string
+		wantStatus UserStatus
 	}{
 		{
-			name:     "basic error message",
-			errorMsg: "Invalid resume format",
-			want: &UserState{
-				Status:  UserStatusError,
-				Error:   stringPtr("Invalid resume format"),
-				Started: time.Now(),
-			},
+			name:       "basic error message",
+			errorMsg:   "Invalid resume format",
+			wantStatus: UserStatusError,
 		},
 		{
-			name:     "empty error message",
-			errorMsg: "",
-			want: &UserState{
-				Status:  UserStatusError,
-				Error:   stringPtr(""),
-				Started: time.Now(),
-			},
+			name:       "empty error message",
+			errorMsg:   "",
+			wantStatus: UserStatusError,
 		},
 		{
-			name:     "long error message",
-			errorMsg: "This is a very long error message that contains detailed information about what went wrong with the resume validation process",
-			want: &UserState{
-				Status:  UserStatusError,
-				Error:   stringPtr("This is a very long error message that contains detailed information about what went wrong with the resume validation process"),
-				Started: time.Now(),
-			},
+			name:       "long error message",
+			errorMsg:   "This is a very long error message that contains detailed information about what went wrong with the resume validation process",
+			wantStatus: UserStatusError,
 		},
 	}
 
@@ -292,14 +278,14 @@ func TestUpdateUserStateWithError(t *testing.T) {
 			}
 
 			// Check state
-			if updated.State.Status != UserStatusError {
-				t.Errorf("Status = %v, want %v", updated.State.Status, UserStatusError)
+			if updated.Status != UserStatusError {
+				t.Errorf("Status = %v, want %v", updated.Status, UserStatusError)
 			}
-			if updated.State.Error == nil || *updated.State.Error != tt.errorMsg {
-				t.Errorf("Error = %v, want %v", updated.State.Error, tt.errorMsg)
+			if updated.Error == nil || *updated.Error != tt.errorMsg {
+				t.Errorf("Error = %v, want %v", updated.Error, tt.errorMsg)
 			}
-			if updated.State.Started.IsZero() {
-				t.Error("Started should not be zero")
+			if updated.StatusUpdatedAt.IsZero() {
+				t.Error("StatusUpdatedAt should not be zero")
 			}
 		})
 	}

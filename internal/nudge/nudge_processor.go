@@ -616,15 +616,15 @@ func GetNudgeEligibleUsers(ctx context.Context, logger *slog.Logger, fs *interna
 		var statusMatches bool
 		switch nudgeType {
 		case NudgeTypeNoResume:
-			statusMatches = (user.State.Status == internal.UserStatusPendingResumeUpload)
+			statusMatches = (user.Status == internal.UserStatusPendingResumeUpload)
 		case NudgeTypeNoCall:
-			statusMatches = (user.State.Status == internal.UserStatusResumeUploaded)
+			statusMatches = (user.Status == internal.UserStatusResumeUploaded)
 		case NudgeTypeFiveStarMatches:
-			statusMatches = (user.State.Status >= internal.UserStatusCallCompleted)
+			statusMatches = (user.Status >= internal.UserStatusCallCompleted)
 		}
 
 		if !statusMatches {
-			logger.Debug(internal.Black("user not eligible for nudge"), "name", user.Name, "user_id", user.ID, "nudge_type", nudgeType, "reason", "incorrect_status", "user_status", user.State.Status)
+			logger.Debug(internal.Black("user not eligible for nudge"), "name", user.Name, "user_id", user.ID, "nudge_type", nudgeType, "reason", "incorrect_status", "user_status", user.Status)
 			continue
 		}
 

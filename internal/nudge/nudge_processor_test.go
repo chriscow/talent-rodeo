@@ -360,21 +360,21 @@ func TestGetNudgeEligibleUsers_FetchAllAndFilter(t *testing.T) {
 	now := time.Now()
 	users := []*internal.User{
 		// Should be eligible for NoResume
-		{ID: "no-resume-eligible", Email: "no-resume-eligible@test.com", State: internal.UserState{Status: internal.UserStatusPendingResumeUpload}, LastAccessedAt: now.Add(-5 * 24 * time.Hour)},
+		{ID: "no-resume-eligible", Email: "no-resume-eligible@test.com", Status: internal.UserStatusPendingResumeUpload, LastAccessedAt: now.Add(-5 * 24 * time.Hour)},
 		// Should NOT be eligible (wrong status)
-		{ID: "no-resume-wrong-status", Email: "no-resume-wrong-status@test.com", State: internal.UserState{Status: internal.UserStatusResumeUploaded}, LastAccessedAt: now.Add(-5 * 24 * time.Hour)},
+		{ID: "no-resume-wrong-status", Email: "no-resume-wrong-status@test.com", Status: internal.UserStatusResumeUploaded, LastAccessedAt: now.Add(-5 * 24 * time.Hour)},
 		// Should NOT be eligible (too recent access)
-		{ID: "no-resume-recent-access", Email: "no-resume-recent-access@test.com", State: internal.UserState{Status: internal.UserStatusPendingResumeUpload}, LastAccessedAt: now.Add(-1 * 24 * time.Hour)},
+		{ID: "no-resume-recent-access", Email: "no-resume-recent-access@test.com", Status: internal.UserStatusPendingResumeUpload, LastAccessedAt: now.Add(-1 * 24 * time.Hour)},
 		// Should NOT be eligible (max nudges reached)
-		{ID: "no-resume-max-nudges", Email: "no-resume-max-nudges@test.com", State: internal.UserState{Status: internal.UserStatusPendingResumeUpload}, LastAccessedAt: now.Add(-5 * 24 * time.Hour), NudgeEmailsSentCount: 3},
+		{ID: "no-resume-max-nudges", Email: "no-resume-max-nudges@test.com", Status: internal.UserStatusPendingResumeUpload, LastAccessedAt: now.Add(-5 * 24 * time.Hour), NudgeEmailsSentCount: 3},
 
 		// Should be eligible for NoCall
-		{ID: "no-call-eligible", Email: "no-call-eligible@test.com", State: internal.UserState{Status: internal.UserStatusResumeUploaded}, LastAccessedAt: now.Add(-5 * 24 * time.Hour)},
+		{ID: "no-call-eligible", Email: "no-call-eligible@test.com", Status: internal.UserStatusResumeUploaded, LastAccessedAt: now.Add(-5 * 24 * time.Hour)},
 		// Should NOT be eligible for NoCall (wrong status)
-		{ID: "no-call-wrong-status", Email: "no-call-wrong-status@test.com", State: internal.UserState{Status: internal.UserStatusCallCompleted}, LastAccessedAt: now.Add(-5 * 24 * time.Hour)},
+		{ID: "no-call-wrong-status", Email: "no-call-wrong-status@test.com", Status: internal.UserStatusCallCompleted, LastAccessedAt: now.Add(-5 * 24 * time.Hour)},
 
 		// Should be eligible for FiveStar (job check is separate)
-		{ID: "five-star-eligible", Email: "five-star-eligible@test.com", State: internal.UserState{Status: internal.UserStatusCallCompleted}, LastAccessedAt: now.Add(-5 * 24 * time.Hour)},
+		{ID: "five-star-eligible", Email: "five-star-eligible@test.com", Status: internal.UserStatusCallCompleted, LastAccessedAt: now.Add(-5 * 24 * time.Hour)},
 	}
 
 	for _, user := range users {
@@ -464,11 +464,11 @@ func TestProcessNudgeType_StatsAndErrorHandling(t *testing.T) {
 
 	// --- Test Data Setup ---
 	// This user will be processed successfully
-	u1 := &internal.User{ID: "success-user", State: internal.UserState{Status: internal.UserStatusPendingResumeUpload}}
+	u1 := &internal.User{ID: "success-user", Status: internal.UserStatusPendingResumeUpload}
 	// This user will cause an error during email generation
-	u2 := &internal.User{ID: "error-user", State: internal.UserState{Status: internal.UserStatusPendingResumeUpload}}
+	u2 := &internal.User{ID: "error-user", Status: internal.UserStatusPendingResumeUpload}
 	// This user will be skipped because they have no 5-star matches
-	u3 := &internal.User{ID: "skip-user", State: internal.UserState{Status: internal.UserStatusCallCompleted}}
+	u3 := &internal.User{ID: "skip-user", Status: internal.UserStatusCallCompleted}
 
 	for _, user := range []*internal.User{u1, u2, u3} {
 		if err := internal.CreateTestUserDoc(ctx, fs, user); err != nil {
@@ -681,10 +681,7 @@ func TestUpdateUserNudgeStats(t *testing.T) {
 		Email:          "test@example.com",
 		LastAccessedAt: now.Add(-3 * 24 * time.Hour),
 		NudgeTypeCount: make(map[string]int),
-		State: internal.UserState{
-			Status:  internal.UserStatusPendingResumeUpload,
-			Started: now,
-		},
+		Status:         internal.UserStatusPendingResumeUpload,
 	}
 
 	if err := internal.CreateUser(ctx, fs, user); err != nil {

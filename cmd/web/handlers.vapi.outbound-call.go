@@ -45,8 +45,8 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 			errStr := apptErr.Error()
 			appointment.Error = &errStr
 			appointment.Status = internal.AppointmentStatusFailed
-			user.State.Status = internal.UserStatusError
-			user.State.Error = &errStr
+			user.Status = internal.UserStatusError
+			user.Error = &errStr
 			app.fs.RunTransaction(r.Context(), func(ctx context.Context, tx *firestore.Transaction) error {
 				if err := internal.UpdateUserStatusTx(ctx, app.fs, tx, user, internal.UserStatusError); err != nil {
 					internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
@@ -187,11 +187,11 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if user.State.Status == internal.UserStatusError {
+	if user.Status == internal.UserStatusError {
 		apptErr = fmt.Errorf("user is in error state: %s", appointment.UserID)
 		userError := ""
-		if user.State.Error != nil {
-			userError = *user.State.Error
+		if user.Error != nil {
+			userError = *user.Error
 		}
 		internal.SentryReportError(r.Context(), apptErr, sentry.LevelError, map[string]string{
 			"action":     "user_is_in_error_state",
@@ -206,7 +206,7 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if user.State.Status < internal.UserStatusCallScheduled {
+	if user.Status < internal.UserStatusCallScheduled {
 		apptErr = fmt.Errorf("user is not ready for a call: %s", appointment.UserID)
 		internal.SentryReportError(r.Context(), apptErr, sentry.LevelError, map[string]string{
 			"action":  "user_is_not_ready_for_a_call",
@@ -314,7 +314,7 @@ func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request)
 			return fmt.Errorf("failed to update appointment: %w", err)
 		}
 
-		user.State.Status = internal.UserStatusCallStarted
+		user.Status = internal.UserStatusCallStarted
 		if err := internal.UpdateUserStatusTx(ctx, app.fs, tx, user, internal.UserStatusCallStarted); err != nil {
 			return fmt.Errorf("failed to update user: %w", err)
 		}

@@ -517,10 +517,10 @@ func TestAppointment(t *testing.T) {
 		if !found {
 			t.Fatal("GetUser() got found = false, want true")
 		}
-		if updatedUser.State.Error == nil {
+		if updatedUser.Error == nil {
 			t.Error("ProcessAppointmentFailed() didn't set user error state")
-		} else if *updatedUser.State.Error != testError.Error() {
-			t.Errorf("ProcessAppointmentFailed() user error = %v, want %v", *updatedUser.State.Error, testError.Error())
+		} else if *updatedUser.Error != testError.Error() {
+			t.Errorf("ProcessAppointmentFailed() user error = %v, want %v", *updatedUser.Error, testError.Error())
 		}
 	})
 

@@ -21,7 +21,7 @@
             {{range .Users}}
                 {{$count := index $.UserSubscriptionCounts .ID}}
                 <option value="{{.ID}}" {{if eq $.SelectedUserID .ID}}selected{{end}}>
-                    {{.Name}} ({{.Email}}) - ({{if $count}}{{$count}}{{else}}0{{end}} subs) - {{.State.Status.String}}
+                    {{.Name}} ({{.Email}}) - ({{if $count}}{{$count}}{{else}}0{{end}} subs) - {{.Status.String}}
                 </option>
             {{end}}
         </select>

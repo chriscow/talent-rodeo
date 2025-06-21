@@ -201,7 +201,7 @@ func dashboardValidateUserStatus(r *http.Request) (*internal.User, error) {
 	}
 
 	internal.SentrySetScope(r.Context(), map[string]any{
-		"user_status": user.State.Status.String(),
+		"user_status": user.Status.String(),
 	})
 	return user, nil
 }
@@ -215,12 +215,12 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if user.State.Status < internal.UserStatusCallCompleted {
+	if user.Status < internal.UserStatusCallCompleted {
 		app.showWaitingForCall(w, r, user)
 		return
 	}
 
-	app.logger.Debug("showDashboard", "name", user.Name, "userID", user.ID, "status", user.State.Status.String())
+	app.logger.Debug("showDashboard", "name", user.Name, "userID", user.ID, "status", user.Status.String())
 
 	status, isValid := internal.ParseJobStatus(r.URL.Query().Get("status"))
 	if !isValid {
@@ -367,7 +367,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Add data to template
-	data["CurrentStatus"] = user.State.Status.Description()
+	data["CurrentStatus"] = user.Status.Description()
 	data["CurrentTime"] = time.Now()
 
 	// Convert jobs map to slice for template consumption

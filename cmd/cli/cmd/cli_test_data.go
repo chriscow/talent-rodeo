@@ -43,14 +43,11 @@ var testDataCmd = &cobra.Command{
 
 			// Create user
 			user := &internal.User{
-				ID:    userID,
-				Name:  fmt.Sprintf("Test User %d", i+1),
-				Email: fmt.Sprintf("test-user-%d@example.com", i+1),
-				Phone: nil,
-				State: internal.UserState{
-					Status:  internal.UserStatusJobSearchComplete,
-					Started: time.Now(),
-				},
+				ID:     userID,
+				Name:   fmt.Sprintf("Test User %d", i+1),
+				Email:  fmt.Sprintf("test-user-%d@example.com", i+1),
+				Phone:  nil,
+				Status: internal.UserStatusJobSearchComplete,
 			}
 
 			if err := internal.CreateUser(ctx, fs, user); err != nil {

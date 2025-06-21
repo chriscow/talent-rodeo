@@ -42,13 +42,13 @@ func (app *application) showSchedulePage(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Check if user is in error state - redirect to resume upload
-	if user.State.Status == internal.UserStatusError {
+	if user.Status == internal.UserStatusError {
 		app.logger.Info("User in error state, redirecting to resume upload", "name", user.Name, "user_id", user.ID)
 
 		// Get error message if available
 		errorMsg := "There was a problem with your resume. Please upload a new one."
-		if user.State.Error != nil {
-			errorMsg = *user.State.Error
+		if user.Error != nil {
+			errorMsg = *user.Error
 		}
 
 		// Add flash message
@@ -231,7 +231,7 @@ func (app *application) createAppointment(w http.ResponseWriter, r *http.Request
 		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
 			"action":      "update_user_status",
 			"userID":      user.ID,
-			"from_status": user.State.Status.String(),
+			"from_status": user.Status.String(),
 			"to_status":   internal.UserStatusCallScheduled.String(),
 		})
 		http.Error(w, fmt.Sprintf("Failed to update onboarding state: %v", err), http.StatusInternalServerError)
@@ -292,7 +292,7 @@ func (app *application) rescheduleAppointment(w http.ResponseWriter, r *http.Req
 		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
 			"action":      "update_user_status_reschedule",
 			"userID":      user.ID,
-			"from_status": user.State.Status.String(),
+			"from_status": user.Status.String(),
 			"to_status":   internal.UserStatusResumeUploaded.String(),
 		})
 		http.Error(w, fmt.Sprintf("Failed to update onboarding state: %v", err), http.StatusInternalServerError)
