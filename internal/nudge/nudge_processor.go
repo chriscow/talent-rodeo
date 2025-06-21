@@ -143,7 +143,6 @@ func (p *Processor) RefreshSettings() error {
 		}
 		// If not found, use current settings as default
 
-		p.logger.Warn(internal.BGYellow("Not saving nudge processor settings to KV"))
 		if err := p.kv.Set(NudgeProcessorKey, p.settings, 0); err != nil {
 			return fmt.Errorf("failed to set default nudge processor settings: %w", err)
 		}

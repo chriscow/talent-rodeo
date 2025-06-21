@@ -539,21 +539,38 @@ func rrfStars(score float64) string {
 	}
 }
 
-func ratingStars(rating int) string {
+func ratingStars(rating int) template.HTML {
+	var stars string
 	switch rating {
 	case 5:
-		return "★★★★★"
+		stars = "★★★★★"
 	case 4:
-		return "★★★★☆"
+		stars = "★★★★☆"
 	case 3:
-		return "★★★☆☆"
+		stars = "★★★☆☆"
 	case 2:
-		return "★★☆☆☆"
+		stars = "★★☆☆☆"
 	case 1:
-		return "★☆☆☆☆"
+		stars = "★☆☆☆☆"
 	default:
-		return "☆☆☆☆☆"
+		stars = "☆☆☆☆☆"
 	}
+
+	var className string
+	switch rating {
+	case 3:
+		className = "rating-3"
+	case 4:
+		className = "rating-4"
+	case 5:
+		className = "rating-5"
+	}
+
+	if className != "" {
+		return template.HTML(fmt.Sprintf(`<span class="%s">%s</span>`, className, stars))
+	}
+
+	return template.HTML(stars)
 }
 
 // seq generates a sequence of integers from start to end (inclusive)

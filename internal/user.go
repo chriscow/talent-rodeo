@@ -508,3 +508,19 @@ func UpdateUserSubscriptionEndAtTx(ctx context.Context, fs *FirestoreClient, tx 
 		{Path: "SubscriptionEnd", Value: endAt},
 	})
 }
+
+func UpdateUserTierTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, user *User, tier UserTier) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
+
+	if tier == UserTierUnknown {
+		return fmt.Errorf("invalid user tier: %s", tier)
+	}
+
+	user.Tier = tier
+
+	return tx.Update(fs.Collection(usersCollection).Doc(user.ID), []firestore.Update{
+		{Path: "Tier", Value: tier},
+	})
+}
