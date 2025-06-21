@@ -18,22 +18,14 @@ import (
 
 // JobWithDetails combines UserJob with the job details, and can also handle ScoredJobDetail
 type JobWithDetails struct {
-	UserJob     *internal.UserJob
-	JobDetail   *internal.JobDetail
+	UserJob     internal.UserJob
+	JobDetail   internal.JobDetail
 	EncryptedID string
 }
 
 // CreatedAt returns when the job was added to the user's list
 func (j *JobWithDetails) CreatedAt() time.Time {
-	if j.UserJob != nil {
-		return j.UserJob.CreatedAt
-	}
-
-	// For semantic-only jobs, use the job's posted date or current time
-	if !j.JobDetail.PostedDate.IsZero() {
-		return j.JobDetail.PostedDate
-	}
-	return time.Now()
+	return j.UserJob.CreatedAt
 }
 
 // Title returns the job title for display
@@ -285,7 +277,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 
 	for _, job := range userJobs {
 		jobs[job.JobRef.ID] = JobWithDetails{
-			UserJob: job,
+			UserJob: *job,
 		}
 	}
 
@@ -307,7 +299,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 		// Merge job details into the jobs map
 		for _, detail := range jobDetails {
 			if job, exists := jobs[detail.ID]; exists {
-				job.JobDetail = &detail
+				job.JobDetail = detail
 				encryptedID, err := utils.EncryptString(detail.ID)
 				if err != nil {
 					app.logger.Error("showDashboard: failed to encrypt job id", "error", err, "job_id", detail.ID)
@@ -377,10 +369,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 	// Resort jobsSlice by UserJob.Rating descending
 	sort.Slice(jobsSlice, func(i, j int) bool {
-		if jobsSlice[i].UserJob != nil && jobsSlice[j].UserJob != nil {
-			return jobsSlice[i].UserJob.Rating > jobsSlice[j].UserJob.Rating
-		}
-		return false
+		return jobsSlice[i].UserJob.Rating > jobsSlice[j].UserJob.Rating
 	})
 	data["HasJobs"] = len(jobs) > 0 || statusJobCount > 0
 	data["Jobs"] = jobsSlice
