@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	userJobProcessorConcurrency = 5 // Number of concurrent workers
+	userJobProcessorConcurrency = 15 // Number of concurrent workers
 )
 
 type UserJobProcessor struct {
