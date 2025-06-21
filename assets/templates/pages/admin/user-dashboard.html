@@ -20,7 +20,7 @@
                     <option value="">-- Select a User --</option>
                     {{range .Users}}
                         <option value="{{.ID}}" {{if eq $.SelectedUserID .ID}}selected{{end}}>
-                            {{.Name}} ({{.Email}}) - {{.State.Status.String}}
+                            {{.Name}} ({{.Email}}) - {{.Status.String}}
                         </option>
                     {{end}}
                 </select>
@@ -141,7 +141,7 @@
         <header>
             <h2>Dashboard for {{.SelectedUser.Name}} ({{.SelectedUser.Email}})</h2>
             <p>
-                <strong>Status:</strong> {{.SelectedUser.State.Status.String}} | 
+                <strong>Status:</strong> {{.SelectedUser.Status.String}} | 
                 <strong>Created:</strong> {{.SelectedUser.CreatedAt | humanDate}} |
                 <strong>Jobs for {{index .StatusDisplayNames .ActiveStatus}}:</strong> {{.TotalJobsForStatus}}
             </p>

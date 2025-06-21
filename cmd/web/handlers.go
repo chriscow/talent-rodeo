@@ -26,12 +26,12 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 		app.logger.Debug("Home: authenticated user",
 			"user_id", user.ID,
 			"name", user.Name,
-			"state", user.State.Status)
+			"status", user.Status)
 
-		state := user.State
+		state := user.Status
 
 		// Redirect to profile if onboarding is not complete
-		if state.Status < internal.UserStatusCallAnalysisStarted {
+		if state < internal.UserStatusCallAnalysisStarted {
 			app.logger.Debug("Home: redirecting incomplete onboarding to profile")
 			http.Redirect(w, r, "/profile", http.StatusSeeOther)
 			return

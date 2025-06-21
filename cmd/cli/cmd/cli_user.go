@@ -118,12 +118,10 @@ var createUserCmd = &cobra.Command{
 		phone, _ := cmd.Flags().GetString("phone")
 
 		user := &internal.User{
-			Name:  name,
-			Email: email,
-			Phone: &phone,
-			State: internal.UserState{
-				Status: internal.UserStatusCallCompleted,
-			},
+			Name:   name,
+			Email:  email,
+			Phone:  &phone,
+			Status: internal.UserStatusCallCompleted,
 		}
 
 		err = internal.CreateUser(ctx, fs, user)

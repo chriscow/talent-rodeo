@@ -34,10 +34,10 @@ func (app *application) resetOnboardingState(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	user.State.Status = internal.UserStatusPendingResumeUpload
+	user.Status = internal.UserStatusPendingResumeUpload
 
 	if err := internal.UpdateUser(context.Background(), app.fs, user.ID, map[string]any{
-		"State":  user.State,
+		"Status": user.Status,
 		"Search": firestore.Delete,
 	}); err != nil {
 		app.serverError(w, r, fmt.Errorf("resetOnboardingState: failed to update onboarding: %w", err))

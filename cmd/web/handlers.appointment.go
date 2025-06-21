@@ -83,7 +83,7 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 		return fmt.Errorf("user not found: %s", userID)
 	}
 
-	user.State.Status = internal.UserStatusCallCompleted
+	user.Status = internal.UserStatusCallCompleted
 
 	if shouldLog {
 		app.logger.Info("appointment status updated",

@@ -44,9 +44,7 @@ func TestAuthFlow(t *testing.T) {
 			ID:        "1",
 			Email:     "test@example.com",
 			CreatedAt: now,
-			State: internal.UserState{
-				Status: internal.UserStatusPendingResumeUpload,
-			},
+			Status:    internal.UserStatusPendingResumeUpload,
 		}
 		req := ts.authenticatedRequest(t, "POST", "/logout", user, nil)
 

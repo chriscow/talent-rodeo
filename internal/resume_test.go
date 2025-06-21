@@ -109,11 +109,11 @@ func TestValidResume(t *testing.T) {
 		t.Fatal("User not found")
 	}
 
-	if updated.State.Status != UserStatusResumeUploaded {
-		t.Errorf("User.State.Status = %v, want %v", updated.State.Status, UserStatusResumeUploaded)
+	if updated.Status != UserStatusResumeUploaded {
+		t.Errorf("User.Status = %v, want %v", updated.Status, UserStatusResumeUploaded)
 	}
-	if updated.State.Error != nil {
-		t.Errorf("User.State.Error = %v, want nil", *updated.State.Error)
+	if updated.Error != nil {
+		t.Errorf("User.Error = %v, want nil", *updated.Error)
 	}
 }
 
@@ -189,19 +189,19 @@ func TestNotAResumeEasy(t *testing.T) {
 	}
 
 	wantErrorMsg := "Uploaded document is not a valid resume"
-	if updated.State.Status != UserStatusError {
-		t.Errorf("User.State.Status = %v, want %v", updated.State.Status, UserStatusError)
+	if updated.Status != UserStatusError {
+		t.Errorf("User.Status = %v, want %v", updated.Status, UserStatusError)
 	}
-	if updated.State.Error == nil {
-		t.Errorf("User.State.Error is nil, want %v", wantErrorMsg)
+	if updated.Error == nil {
+		t.Errorf("User.Error is nil, want %v", wantErrorMsg)
 	}
 
-	if updated.State.Error == nil || *updated.State.Error != wantErrorMsg {
+	if updated.Error == nil || *updated.Error != wantErrorMsg {
 		errValue := "<nil>"
-		if updated.State.Error != nil {
-			errValue = *updated.State.Error
+		if updated.Error != nil {
+			errValue = *updated.Error
 		}
-		t.Errorf("User.State.Error = %v, want %v", errValue, wantErrorMsg)
+		t.Errorf("User.Error = %v, want %v", errValue, wantErrorMsg)
 	}
 }
 
@@ -273,15 +273,15 @@ func TestNotAResumeMedium(t *testing.T) {
 	}
 
 	wantErrorMsg := "The document you uploaded doesn't appear to be a valid resume. Please upload a proper resume document."
-	if updated.State.Status != UserStatusError {
-		t.Errorf("User.State.Status = %v, want %v", updated.State.Status, UserStatusError)
+	if updated.Status != UserStatusError {
+		t.Errorf("User.Status = %v, want %v", updated.Status, UserStatusError)
 	}
-	if updated.State.Error == nil || *updated.State.Error != wantErrorMsg {
+	if updated.Error == nil || *updated.Error != wantErrorMsg {
 		errValue := "<nil>"
-		if updated.State.Error != nil {
-			errValue = *updated.State.Error
+		if updated.Error != nil {
+			errValue = *updated.Error
 		}
-		t.Errorf("User.State.Error = %v, want %v", errValue, wantErrorMsg)
+		t.Errorf("User.Error = %v, want %v", errValue, wantErrorMsg)
 	}
 }
 
@@ -353,14 +353,14 @@ func TestJailbreakAttempt(t *testing.T) {
 	}
 
 	wantErrorMsg := "The document you uploaded doesn't appear to be a valid resume. Please upload a proper resume document."
-	if updated.State.Status != UserStatusError {
-		t.Errorf("User.State.Status = %v, want %v", updated.State.Status, UserStatusError)
+	if updated.Status != UserStatusError {
+		t.Errorf("User.Status = %v, want %v", updated.Status, UserStatusError)
 	}
-	if updated.State.Error == nil || *updated.State.Error != wantErrorMsg {
+	if updated.Error == nil || *updated.Error != wantErrorMsg {
 		errValue := "<nil>"
-		if updated.State.Error != nil {
-			errValue = *updated.State.Error
+		if updated.Error != nil {
+			errValue = *updated.Error
 		}
-		t.Errorf("User.State.Error = %v, want %v", errValue, wantErrorMsg)
+		t.Errorf("User.Error = %v, want %v", errValue, wantErrorMsg)
 	}
 }

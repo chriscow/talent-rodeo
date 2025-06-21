@@ -115,7 +115,7 @@ func (eg *EmailGenerator) BuildEmailData(user *internal.User, nudgeType NudgeTyp
 		LastName:        user.LastName,
 		FullName:        user.Name,
 		LastAccessed:    user.LastAccessedAt,
-		LastStateChange: user.State.Started,
+		LastStateChange: user.StatusUpdatedAt,
 	}
 
 	if nudgeType == NudgeTypeFiveStarMatches {

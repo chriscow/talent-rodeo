@@ -254,17 +254,16 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userState := internal.UserState{
-		Status:  internal.UserStatusProcessingResume,
-		Started: time.Now(),
-	}
+	user.Status = internal.UserStatusProcessingResume
+	user.StatusUpdatedAt = time.Now()
 
 	user.Phone = &form.Phone
 
 	// Save the phone number and update state
 	if err := internal.UpdateUser(context.Background(), app.fs, user.ID, map[string]any{
-		"Phone": form.Phone,
-		"State": userState,
+		"Phone":           form.Phone,
+		"Status":          user.Status,
+		"StatusUpdatedAt": user.StatusUpdatedAt,
 	}); err != nil {
 		app.serverError(w, r, fmt.Errorf("failed to update user: %w", err))
 		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
@@ -367,7 +366,6 @@ func extractPDF(file *os.File) (string, error) {
 
 	return out.String(), nil
 }
-
 
 func extractTXT(file *os.File) (string, error) {
 	// Reset file pointer to beginning

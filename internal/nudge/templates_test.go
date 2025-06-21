@@ -16,16 +16,14 @@ func TestAllTemplatesCanExecute(t *testing.T) {
 	}
 
 	mockUser := &internal.User{
-		ID:        "test-user-id",
-		FirstName: "John",
-		LastName:  "Doe",
-		Name:      "John Doe",
-		Email:     "john.doe@example.com",
-		State: internal.UserState{
-			Status:  internal.UserStatusCallScheduled,
-			Started: time.Now().Add(-5 * 24 * time.Hour),
-		},
-		LastAccessedAt: time.Now().Add(-2 * 24 * time.Hour),
+		ID:              "test-user-id",
+		FirstName:       "John",
+		LastName:        "Doe",
+		Name:            "John Doe",
+		Email:           "john.doe@example.com",
+		Status:          internal.UserStatusCallScheduled,
+		StatusUpdatedAt: time.Now().Add(-5 * 24 * time.Hour),
+		LastAccessedAt:  time.Now().Add(-2 * 24 * time.Hour),
 	}
 
 	mockMatches := []FiveStarMatchData{
@@ -61,7 +59,7 @@ func TestAllTemplatesCanExecute(t *testing.T) {
 				LastName:        mockUser.LastName,
 				FullName:        mockUser.Name,
 				LastAccessed:    mockUser.LastAccessedAt,
-				LastStateChange: mockUser.State.Started,
+				LastStateChange: mockUser.StatusUpdatedAt,
 				Matches:         mockMatches,
 			}
 

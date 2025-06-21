@@ -78,7 +78,7 @@ func (app *application) loadTestUser() (*internal.User, error) {
 	app.logger.Info("loaded test user for testing mode",
 		"user_id", user.ID,
 		"email", user.Email,
-		"status", user.State.Status)
+		"status", user.Status)
 
 	return user, nil
 }

@@ -92,12 +92,9 @@ func CreateTestUser(t *testing.T, fs *internal.FirestoreClient, name string, isA
 		Name:        name,
 		IsSuperUser: isAdmin,
 		Phone:       &phone,
-		State: internal.UserState{
-			Status:  internal.UserStatusPendingResumeUpload,
-			Started: now,
-		},
-		CreatedAt: now,
-		UpdatedAt: now,
+		Status:      internal.UserStatusPendingResumeUpload,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 
 	if err := internal.CreateUser(context.Background(), fs, user); err != nil {

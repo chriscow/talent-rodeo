@@ -46,7 +46,11 @@ type User struct {
 
 	Phone *string
 
-	State UserState
+	Error *string // Error message if any
+
+	// State           UserState
+	Status          UserStatus
+	StatusUpdatedAt time.Time // When the user status was last updated
 
 	SteeringQuery      *SteeringQuery
 	LocationPreference *string
@@ -88,8 +92,8 @@ func CreateUser(ctx context.Context, fs *FirestoreClient, u *User) error {
 		u.ID = uuid.New().String()
 	}
 
-	if u.State.Status == UserStatusError || u.State.Status == UserStatusUnknown {
-		return fmt.Errorf("user state is invalid: %s", u.State.Status.String())
+	if u.Status == UserStatusError || u.Status == UserStatusUnknown {
+		return fmt.Errorf("user state is invalid: %s", u.Status.String())
 	}
 
 	u.CreatedAt = time.Now()
@@ -99,10 +103,8 @@ func CreateUser(ctx context.Context, fs *FirestoreClient, u *User) error {
 		u.Tier = UserTierFree
 	}
 
-	u.State = UserState{
-		Status:  UserStatusPendingResumeUpload,
-		Started: u.CreatedAt,
-	}
+	u.Status = UserStatusPendingResumeUpload
+	u.StatusUpdatedAt = u.CreatedAt
 
 	_, err := fs.Collection(usersCollection).Doc(u.ID).Create(ctx, u)
 	if err != nil {
