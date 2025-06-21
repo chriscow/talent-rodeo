@@ -504,22 +504,47 @@ func (app *application) adminSubscriptions(w http.ResponseWriter, r *http.Reques
 	ctx := r.Context()
 	data := app.newTemplateData(r)
 
-	// Fetch all users for the dropdown
-	users, err := internal.ListUsers(ctx, app.fs, 100, 0)
+	// Fetch all users for stats and dropdown
+	allUsers, err := internal.ListUsers(ctx, app.fs, 10000, 0) // Using a high limit to approximate all users
 	if err != nil {
-		app.serverError(w, r, err)
+		app.serverError(w, r, fmt.Errorf("failed to list users for stats: %w", err))
 		return
 	}
-	data["Users"] = users
+	data["Users"] = allUsers // for the dropdown
+
+	allCriteria, err := internal.ListSearchCriteria(ctx, app.fs)
+	if err != nil {
+		app.serverError(w, r, fmt.Errorf("failed to list search criteria for stats: %w", err))
+		return
+	}
+
+	subscribedUserIDs := make(map[string]struct{})
+	for _, criteria := range allCriteria {
+		subscribers, err := internal.GetCriteriaSubscribers(ctx, app.fs, criteria.ID)
+		if err != nil {
+			// Log error but continue, so the page can still render
+			app.logger.Error("failed to get criteria subscribers for stats", "criteria_id", criteria.ID, "error", err)
+			continue
+		}
+		for _, s := range subscribers {
+			subscribedUserIDs[s.UserID] = struct{}{}
+		}
+	}
+
+	data["UsersWithSubscriptions"] = len(subscribedUserIDs)
+	data["UsersWithoutSubscriptions"] = len(allUsers) - len(subscribedUserIDs)
 
 	selectedUserID := r.FormValue("user_id")
 	if selectedUserID != "" {
-		selectedUser, found, err := internal.GetUser(ctx, app.fs, selectedUserID)
-		if err != nil {
-			app.serverError(w, r, fmt.Errorf("failed to get user: %w", err))
-			return
+		var selectedUser *internal.User
+		for _, u := range allUsers {
+			if u.ID == selectedUserID {
+				selectedUser = u
+				break
+			}
 		}
-		if !found {
+
+		if selectedUser == nil {
 			data["Error"] = "User not found"
 			if err := response.Page(w, http.StatusOK, data, "pages/admin/subscriptions.html"); err != nil {
 				app.serverError(w, r, err)
@@ -572,7 +597,7 @@ func (app *application) adminSubscriptions(w http.ResponseWriter, r *http.Reques
 
 		// Fetch subscriptions and all criteria
 		userSubscriptions, _ := internal.GetSubscriptionsForUser(ctx, app.fs, selectedUserID)
-		allCriteria, _ := internal.ListSearchCriteria(ctx, app.fs)
+		// We already have allCriteria
 
 		// Build set of subscribed criteria IDs
 		subscribedIDs := make(map[string]struct{})
