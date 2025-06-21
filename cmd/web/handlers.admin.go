@@ -441,7 +441,7 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 
 	for _, job := range userJobs {
 		jobs[job.JobRef.ID] = JobWithDetails{
-			UserJob: job,
+			UserJob: *job,
 		}
 	}
 
@@ -460,7 +460,7 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 		}
 		for _, detail := range jobDetails {
 			if job, exists := jobs[detail.ID]; exists {
-				job.JobDetail = &detail
+				job.JobDetail = detail
 				jobs[detail.ID] = job
 			}
 		}
@@ -480,10 +480,7 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 	}
 	// Resort jobsSlice by UserJob.Rating descending
 	sort.Slice(jobsSlice, func(i, j int) bool {
-		if jobsSlice[i].UserJob != nil && jobsSlice[j].UserJob != nil {
-			return jobsSlice[i].UserJob.Rating > jobsSlice[j].UserJob.Rating
-		}
-		return false
+		return jobsSlice[i].UserJob.Rating > jobsSlice[j].UserJob.Rating
 	})
 	data["HasJobs"] = len(jobs) > 0 || statusJobCount > 0
 	data["Jobs"] = jobsSlice
