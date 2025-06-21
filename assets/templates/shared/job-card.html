@@ -1,5 +1,5 @@
 {{define "job-card"}}
-<article class="job-card" x-data="jobFeedback()" data-job-id="{{.JobDetail.ID}}">
+<article class="job-card" x-data="jobFeedback()" data-job-id="{{.EncryptedID}}">
 
     <button class="job-close-btn" @click="dismissJob($el)" title="Dismiss this job" aria-label="Dismiss job" type="button" data-tooltip="Archive job">
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">

@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"talent-rodeo/internal"
+	"talent-rodeo/internal/utils"
 	"time"
 )
 
@@ -42,7 +43,13 @@ func (app *application) handleJobFeedback(w http.ResponseWriter, r *http.Request
 	}
 
 	// Extract form parameters
-	jobID := r.FormValue("job_id")
+	encryptedJobID := r.FormValue("job_id")
+	jobID, err := utils.DecryptString(encryptedJobID)
+	if err != nil {
+		app.logger.Error("Failed to decrypt job ID", "error", err)
+		app.clientError(w, r, http.StatusBadRequest)
+		return
+	}
 	itemID := r.FormValue("item_id")
 	itemText := r.FormValue("item_text")
 	feedbackType := r.FormValue("feedback_type")
@@ -271,12 +278,23 @@ func (app *application) handleJobDismiss(w http.ResponseWriter, r *http.Request)
 		app.clientError(w, r, http.StatusUnauthorized)
 		return
 	}
+
 	if err := r.ParseForm(); err != nil {
+		app.logger.Error("Failed to parse dismiss form", "error", err)
 		app.clientError(w, r, http.StatusBadRequest)
 		return
 	}
-	jobID := r.FormValue("job_id")
+
+	encryptedJobID := r.FormValue("job_id")
+	jobID, err := utils.DecryptString(encryptedJobID)
+	if err != nil {
+		app.logger.Error("Failed to decrypt job ID", "error", err)
+		app.clientError(w, r, http.StatusBadRequest)
+		return
+	}
+
 	if jobID == "" {
+		app.logger.Error("Missing required dismiss parameters", "job_id", jobID)
 		app.clientError(w, r, http.StatusBadRequest)
 		return
 	}
@@ -316,13 +334,23 @@ func (app *application) handleJobTitleAction(w http.ResponseWriter, r *http.Requ
 		app.clientError(w, r, http.StatusUnauthorized)
 		return
 	}
+
 	if err := r.ParseForm(); err != nil {
+		app.logger.Error("Failed to parse job title action form", "error", err)
 		app.clientError(w, r, http.StatusBadRequest)
 		return
 	}
-	jobID := r.FormValue("job_id")
-	action := r.FormValue("action") // 'like', 'dislike', or 'unset'
-	typeVal := r.FormValue("type")  // for unset
+
+	encryptedJobID := r.FormValue("job_id")
+	jobID, err := utils.DecryptString(encryptedJobID)
+	if err != nil {
+		app.logger.Error("Failed to decrypt job ID", "error", err)
+		app.clientError(w, r, http.StatusBadRequest)
+		return
+	}
+	action := r.FormValue("action")
+	feedbackType := r.FormValue("type") // used for 'unset' action
+
 	if jobID == "" || action == "" {
 		app.clientError(w, r, http.StatusBadRequest)
 		return
@@ -340,9 +368,9 @@ func (app *application) handleJobTitleAction(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		var expectedStatus internal.JobStatus
-		if typeVal == "like" {
+		if feedbackType == "like" {
 			expectedStatus = internal.JobStatusSaved
-		} else if typeVal == "dislike" {
+		} else if feedbackType == "dislike" {
 			expectedStatus = internal.JobStatusArchived
 		}
 		if exists && existingUserJob.Status == expectedStatus {
