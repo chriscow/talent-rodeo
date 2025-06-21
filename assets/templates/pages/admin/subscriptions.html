@@ -3,6 +3,16 @@
 {{define "page:main"}}
 <main class="container">
     <h1>Subscription Management</h1>
+    <div style="display: flex; gap: 2rem; margin-bottom: 2rem;">
+        <article>
+            <h4>Users with Subscriptions</h4>
+            <p><strong>{{.UsersWithSubscriptions}}</strong></p>
+        </article>
+        <article>
+            <h4>Users without Subscriptions</h4>
+            <p><strong>{{.UsersWithoutSubscriptions}}</strong></p>
+        </article>
+    </div>
     <form method="POST" autocomplete="off" style="margin-bottom: 2rem;">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <label for="user_id"><strong>Select User</strong></label>
