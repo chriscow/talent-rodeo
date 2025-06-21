@@ -519,6 +519,7 @@ func (app *application) adminSubscriptions(w http.ResponseWriter, r *http.Reques
 	}
 
 	subscribedUserIDs := make(map[string]struct{})
+	userSubscriptionCounts := make(map[string]int)
 	for _, criteria := range allCriteria {
 		subscribers, err := internal.GetCriteriaSubscribers(ctx, app.fs, criteria.ID)
 		if err != nil {
@@ -528,9 +529,11 @@ func (app *application) adminSubscriptions(w http.ResponseWriter, r *http.Reques
 		}
 		for _, s := range subscribers {
 			subscribedUserIDs[s.UserID] = struct{}{}
+			userSubscriptionCounts[s.UserID]++
 		}
 	}
 
+	data["UserSubscriptionCounts"] = userSubscriptionCounts
 	data["UsersWithSubscriptions"] = len(subscribedUserIDs)
 	data["UsersWithoutSubscriptions"] = len(allUsers) - len(subscribedUserIDs)
 
