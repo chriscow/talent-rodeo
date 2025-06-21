@@ -353,13 +353,13 @@ func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, listing JobLis
 		return
 	}
 
-	_, err = UpsertJobDetailEmbeddings(ctx, jobSearch.Criteria, []JobDetail{jobDetail})
-	if err != nil {
-		s.logger.Error("failed to upsert job detail embeddings", "error", err, "jobID", jobDetail.ID, "criteriaID", jobSearch.Criteria.ID, "userID", userIDStr)
-		SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"jobID": jobDetail.ID,
-		})
-	}
+	// _, err = UpsertJobDetailEmbeddings(ctx, jobSearch.Criteria, []JobDetail{jobDetail})
+	// if err != nil {
+	// 	s.logger.Error("failed to upsert job detail embeddings", "error", err, "jobID", jobDetail.ID, "criteriaID", jobSearch.Criteria.ID, "userID", userIDStr)
+	// 	SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+	// 		"jobID": jobDetail.ID,
+	// 	})
+	// }
 
 	// Always queue the job for extraction.
 	// Progress tracking will be handled by the worker if a progress tracker is found.

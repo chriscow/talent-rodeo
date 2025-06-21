@@ -476,7 +476,7 @@ var upsertJobDetailsCmd = &cobra.Command{
 				continue
 			}
 
-			internal.UpsertJobDetailEmbeddings(ctx, crit, jobs)
+			// internal.UpsertJobDetailEmbeddings(ctx, crit, jobs)
 			bar.Add(1)
 		}
 
