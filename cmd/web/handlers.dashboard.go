@@ -8,6 +8,7 @@ import (
 	"strings"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
+	"talent-rodeo/internal/utils"
 	"time"
 	"unsafe"
 
@@ -17,8 +18,9 @@ import (
 
 // JobWithDetails combines UserJob with the job details, and can also handle ScoredJobDetail
 type JobWithDetails struct {
-	UserJob   *internal.UserJob
-	JobDetail *internal.JobDetail
+	UserJob     *internal.UserJob
+	JobDetail   *internal.JobDetail
+	EncryptedID string
 }
 
 // CreatedAt returns when the job was added to the user's list
@@ -306,6 +308,13 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 		for _, detail := range jobDetails {
 			if job, exists := jobs[detail.ID]; exists {
 				job.JobDetail = &detail
+				encryptedID, err := utils.EncryptString(detail.ID)
+				if err != nil {
+					app.logger.Error("showDashboard: failed to encrypt job id", "error", err, "job_id", detail.ID)
+					// skip this job if we can't encrypt the ID
+					continue
+				}
+				job.EncryptedID = encryptedID
 				jobs[detail.ID] = job
 			} else {
 				app.logger.Warn("showDashboard: job detail found without corresponding user job", "job_id", detail.ID)
