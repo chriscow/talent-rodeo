@@ -130,6 +130,9 @@ func (app *application) routes() http.Handler {
 			// Add appointment management page
 			mux.HandleFunc("/admin/appointments", app.adminAppointments, "GET", "POST")
 
+			// Add users management page
+			mux.HandleFunc("/admin/users", app.adminUsers, "GET")
+
 		})
 	})
 

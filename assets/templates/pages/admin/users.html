@@ -1,0 +1,140 @@
+{{define "title"}}Users Management{{end}}
+
+{{define "page:main"}}
+<main class="container">
+    <h1>Users Management</h1>
+    <p>All users ordered by last access time (most recent first)</p>
+    
+    <div style="margin-bottom: 2rem;">
+        <article>
+            <h4>Total Users</h4>
+            <p><strong>{{.TotalUsers}}</strong></p>
+        </article>
+    </div>
+
+    {{if .Users}}
+    <div class="overflow-auto">
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Status</th>
+                    <th>Tier</th>
+                    <th>Last Accessed</th>
+                    <th>Created At</th>
+                    <th>Phone</th>
+                    <th>Super User</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Users}}
+                <tr>
+                    <td>
+                        <strong>{{.Name}}</strong>
+                        {{if .FirstName}}
+                            <br><small>{{.FirstName}} {{.LastName}}</small>
+                        {{end}}
+                    </td>
+                    <td>{{.Email}}</td>
+                    <td>
+                        <span class="status-{{.Status.String}}">{{.Status.String}}</span>
+                    </td>
+                    <td>
+                        {{if .Tier}}
+                            <span class="tier-{{.Tier}}">{{.Tier}}</span>
+                        {{else}}
+                            <span class="tier-unknown">unknown</span>
+                        {{end}}
+                    </td>
+                    <td>
+                        {{if .LastAccessedAt.IsZero}}
+                            <span style="color: #999;">Never</span>
+                        {{else}}
+                            <time datetime="{{.LastAccessedAt.Format "2006-01-02T15:04:05Z"}}">
+                                {{.LastAccessedAt.Format "Jan 2, 2006 3:04 PM"}}
+                            </time>
+                            <br><small style="color: #666;">{{.LastAccessedAt.Format "2006-01-02"}}</small>
+                        {{end}}
+                    </td>
+                    <td>
+                        <time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z"}}">
+                            {{.CreatedAt.Format "Jan 2, 2006"}}
+                        </time>
+                    </td>
+                    <td>
+                        {{if .Phone}}
+                            {{.Phone}}
+                        {{else}}
+                            <span style="color: #999;">-</span>
+                        {{end}}
+                    </td>
+                    <td>
+                        {{if .IsSuperUser}}
+                            <span style="color: #28a745;">✓</span>
+                        {{else}}
+                            <span style="color: #999;">-</span>
+                        {{end}}
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{else}}
+    <article>
+        <p>No users found.</p>
+    </article>
+    {{end}}
+
+    <style>
+        .status-initial { color: #6c757d; }
+        .status-resume_uploaded { color: #17a2b8; }
+        .status-phone_call_scheduled { color: #ffc107; }
+        .status-phone_call_completed { color: #fd7e14; }
+        .status-preferences_extracted { color: #20c997; }
+        .status-job_search_started { color: #007bff; }
+        .status-complete { color: #28a745; }
+        .status-error { color: #dc3545; }
+        
+        .tier-free { color: #6c757d; }
+        .tier-pro { color: #007bff; }
+        .tier-enterprise { color: #28a745; }
+        .tier-unknown { color: #999; }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+            vertical-align: top;
+        }
+        
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            border-bottom: 2px solid #dee2e6;
+        }
+        
+        tr:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .overflow-auto {
+            overflow-x: auto;
+        }
+        
+        time {
+            white-space: nowrap;
+        }
+        
+        small {
+            font-size: 0.875rem;
+        }
+    </style>
+</main>
+{{end}}
