@@ -277,7 +277,7 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 		return err
 	}
 
-	userJobs, err := internal.GetUserJobs(ctx, fs, user.ID)
+	userJobs, err := internal.ListUserJobs(ctx, fs, user.ID)
 	if err != nil {
 		return fmt.Errorf("failed to get user jobs: %w", err)
 	}

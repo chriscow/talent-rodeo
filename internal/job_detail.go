@@ -526,7 +526,7 @@ func getSemanticJobsFilter(ctx context.Context, fs *FirestoreClient, userID, cri
 	}
 
 	// Get all IDs for UserJobs for this user
-	userJobs, err := GetUserJobs(ctx, fs, userID)
+	userJobs, err := ListUserJobs(ctx, fs, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user jobs: %w", err)
 	}

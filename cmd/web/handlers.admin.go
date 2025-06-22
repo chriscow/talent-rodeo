@@ -407,6 +407,29 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 	data["SelectedUser"] = selectedUser
 	data["SelectedUserID"] = selectedUserID
 
+	// Get all user jobs and aggregate rating statistics
+	allUserJobs, err := internal.ListUserJobs(ctx, app.fs, selectedUserID)
+	if err != nil {
+		app.logger.Error("failed to list user jobs for rating stats", "user_id", selectedUserID, "error", err)
+		// Continue with empty stats rather than failing the whole page
+		allUserJobs = []internal.UserJob{}
+	}
+
+	// Aggregate rating counts (0-5)
+	ratingCounts := make(map[int]int)
+	for rating := 0; rating <= 5; rating++ {
+		ratingCounts[rating] = 0
+	}
+	
+	for _, job := range allUserJobs {
+		if job.Rating >= 0 && job.Rating <= 5 {
+			ratingCounts[job.Rating]++
+		}
+	}
+	
+	data["RatingCounts"] = ratingCounts
+	data["TotalJobs"] = len(allUserJobs)
+
 	// Pagination
 	pageToken := r.PostForm.Get("page")
 	pageSize := 10
