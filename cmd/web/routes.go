@@ -58,6 +58,11 @@ func (app *application) routes() http.Handler {
 
 		mux.Group(func(mux *flow.Mux) {
 			mux.Use(app.requireAuthenticatedUser)
+
+			// Onboarding routes
+			mux.HandleFunc("/onboarding", app.showOnboardingFlow, "GET")
+			mux.HandleFunc("/onboarding/complete", app.completeOnboarding, "GET")
+
 			// Main profile route - displays different templates based on user's onboarding state:
 			// - StepInitial: profile-resume-upload.html
 			// - StepResumeUploaded: profile-schedule-phone-call.html

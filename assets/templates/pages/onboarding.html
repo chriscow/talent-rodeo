@@ -1,0 +1,208 @@
+{{template "base" .}}
+
+{{define "title"}}Welcome to Talent Rodeo{{end}}
+
+{{define "page:styles"}}
+<link rel="stylesheet" href="/static/css/onboarding.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+{{end}}
+
+{{define "page:main"}}
+<main class="onboarding-container">
+    <!-- Background with subtle animation -->
+    <div class="onboarding-background">
+        <div class="bg-pattern"></div>
+    </div>
+    
+    <!-- Trigger button (hidden, used for initial modal open) -->
+    <button id="start-onboarding" data-target="onboarding-modal-1" style="display: none;">Start Onboarding</button>
+    
+    <!-- Onboarding Modal 1: Pain Point -->
+    <dialog id="onboarding-modal-1" class="onboarding-modal" aria-labelledby="modal-1-title" aria-describedby="modal-1-desc">
+        <article>
+            <div class="progress-indicator">
+                <div class="progress-bar" data-progress="25" role="progressbar" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100" aria-label="Onboarding progress"></div>
+                <span class="step-counter">1 of 4</span>
+            </div>
+            
+            <div class="modal-body">
+                <div class="hero-section">
+                    <h1 id="modal-1-title" class="hero-text">Tired of irrelevant job matches?</h1>
+                    <p id="modal-1-desc" class="description-text">
+                        Most job boards match you based on keywords from your past experience. 
+                        But what if you're ready to grow beyond where you've been?
+                    </p>
+                    <div class="illustration">
+                        <div class="problem-illustration">
+                            <div class="old-way">
+                                <span class="icon">📄</span>
+                                <p>Traditional matching</p>
+                                <small>Based on past keywords</small>
+                            </div>
+                            <div class="arrow">→</div>
+                            <div class="new-way">
+                                <span class="icon">🎯</span>
+                                <p>Smart matching</p>
+                                <small>Based on your goals</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <footer class="modal-footer">
+                <button type="button" class="secondary" onclick="skipOnboarding()" aria-label="Skip onboarding and go to main application">Skip</button>
+                <button type="button" onclick="nextOnboardingStep(2)" aria-label="Continue to next step">Continue</button>
+            </footer>
+        </article>
+    </dialog>
+
+    <!-- Onboarding Modal 2: Differentiation -->
+    <dialog id="onboarding-modal-2" class="onboarding-modal">
+        <article>
+            <div class="progress-indicator">
+                <div class="progress-bar" data-progress="50" role="progressbar" aria-valuenow="50" aria-valuemin="0" aria-valuemax="100" aria-label="Onboarding progress"></div>
+                <span class="step-counter">2 of 4</span>
+            </div>
+            
+            <div class="modal-body">
+                <div class="hero-section">
+                    <h1 class="hero-text">Match your future career goals</h1>
+                    <p class="description-text">
+                        Talent Rodeo doesn't just look at where you've been—we focus on where you want to go. 
+                        Our AI understands your aspirations and matches you with opportunities that align with your growth path.
+                    </p>
+                    <div class="illustration">
+                        <div class="feature-grid">
+                            <div class="feature-card">
+                                <span class="icon">🎯</span>
+                                <h3>Goal-Oriented</h3>
+                                <p>Matches based on your career aspirations</p>
+                            </div>
+                            <div class="feature-card">
+                                <span class="icon">🚀</span>
+                                <h3>Growth-Focused</h3>
+                                <p>Opportunities that help you advance</p>
+                            </div>
+                            <div class="feature-card">
+                                <span class="icon">🧠</span>
+                                <h3>AI-Powered</h3>
+                                <p>Smart matching beyond simple keywords</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <footer class="modal-footer">
+                <button type="button" class="secondary" onclick="previousOnboardingStep(1)">Back</button>
+                <button type="button" onclick="nextOnboardingStep(3)">Continue</button>
+            </footer>
+        </article>
+    </dialog>
+
+    <!-- Onboarding Modal 3: Personalization -->
+    <dialog id="onboarding-modal-3" class="onboarding-modal">
+        <article>
+            <div class="progress-indicator">
+                <div class="progress-bar" data-progress="75" role="progressbar" aria-valuenow="75" aria-valuemin="0" aria-valuemax="100" aria-label="Onboarding progress"></div>
+                <span class="step-counter">3 of 4</span>
+            </div>
+            
+            <div class="modal-body">
+                <div class="hero-section">
+                    <h1 class="hero-text">Tailored to your unique profile</h1>
+                    <p class="description-text">
+                        We analyze your skills, experience, and aspirations to create a personalized job search experience. 
+                        Every opportunity we suggest is carefully selected for your unique career journey.
+                    </p>
+                    <div class="illustration">
+                        <div class="personalization-flow">
+                            <div class="flow-step">
+                                <span class="step-number">1</span>
+                                <div class="step-content">
+                                    <h4>Upload Resume</h4>
+                                    <p>We analyze your experience and skills</p>
+                                </div>
+                            </div>
+                            <div class="flow-arrow">↓</div>
+                            <div class="flow-step">
+                                <span class="step-number">2</span>
+                                <div class="step-content">
+                                    <h4>Understand Goals</h4>
+                                    <p>Learn about your career aspirations</p>
+                                </div>
+                            </div>
+                            <div class="flow-arrow">↓</div>
+                            <div class="flow-step">
+                                <span class="step-number">3</span>
+                                <div class="step-content">
+                                    <h4>Perfect Matches</h4>
+                                    <p>Receive opportunities that fit your future</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <footer class="modal-footer">
+                <button type="button" class="secondary" onclick="previousOnboardingStep(2)">Back</button>
+                <button type="button" onclick="nextOnboardingStep(4)">Continue</button>
+            </footer>
+        </article>
+    </dialog>
+
+    <!-- Onboarding Modal 4: Call to Action -->
+    <dialog id="onboarding-modal-4" class="onboarding-modal">
+        <article>
+            <div class="progress-indicator">
+                <div class="progress-bar" data-progress="100" role="progressbar" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100" aria-label="Onboarding progress"></div>
+                <span class="step-counter">4 of 4</span>
+            </div>
+            
+            <div class="modal-body">
+                <div class="hero-section">
+                    <h1 class="hero-text">Ready to find your perfect match?</h1>
+                    <p class="description-text">
+                        Upload your resume and start your tailored journey today. 
+                        In just a few minutes, you'll be receiving job opportunities that truly align with your career goals.
+                    </p>
+                    <div class="illustration">
+                        <div class="cta-section">
+                            <div class="benefit-list">
+                                <div class="benefit-item">
+                                    <span class="check-icon">✓</span>
+                                    <span>Personalized job matches</span>
+                                </div>
+                                <div class="benefit-item">
+                                    <span class="check-icon">✓</span>
+                                    <span>AI-powered career insights</span>
+                                </div>
+                                <div class="benefit-item">
+                                    <span class="check-icon">✓</span>
+                                    <span>Growth-focused opportunities</span>
+                                </div>
+                                <div class="benefit-item">
+                                    <span class="check-icon">✓</span>
+                                    <span>No irrelevant spam</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <footer class="modal-footer">
+                <button type="button" class="secondary" onclick="previousOnboardingStep(3)">Back</button>
+                <button type="button" class="cta-button" onclick="completeOnboarding()">
+                    <span class="button-text">Upload Resume & Get Started</span>
+                    <span class="button-icon">🚀</span>
+                </button>
+            </footer>
+        </article>
+    </dialog>
+</main>
+
+<script src="/static/js/onboarding.js"></script>
+{{end}}
