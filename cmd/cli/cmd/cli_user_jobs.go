@@ -58,7 +58,7 @@ var userJobsUpdateCmd = &cobra.Command{
 		unchanged := 0
 		skipped := 0
 		for _, user := range users {
-			jobs, err := internal.GetUserJobs(ctx, fs, user.ID)
+			jobs, err := internal.ListUserJobs(ctx, fs, user.ID)
 			if err != nil {
 				fmt.Printf("Failed to get jobs for user %s: %v\n", user.ID, err)
 				skipped++
@@ -113,7 +113,7 @@ var userJobsFollowupCmd = &cobra.Command{
 		}
 		defer fs.Close()
 
-		jobs, err := internal.GetUserJobs(ctx, fs, userID)
+		jobs, err := internal.ListUserJobs(ctx, fs, userID)
 		if err != nil {
 			return fmt.Errorf("failed to get user jobs: %w", err)
 		}

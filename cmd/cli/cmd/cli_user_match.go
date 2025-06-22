@@ -93,7 +93,7 @@ var matchUserCmd = &cobra.Command{
 			}
 
 			// Get existing user jobs to exclude them
-			userJobs, err := internal.GetUserJobs(ctx, fs, user.ID)
+			userJobs, err := internal.ListUserJobs(ctx, fs, user.ID)
 			if err != nil {
 				return fmt.Errorf("failed to get user jobs for user %s: %w", user.ID, err)
 			}

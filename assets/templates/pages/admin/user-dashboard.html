@@ -48,89 +48,39 @@
         </div>
         
         {{if .SelectedUser}}
-        <!-- Steering Query Parameters -->
-        <details>
-            <summary><strong>Steering Query Parameters</strong></summary>
-            <p><em>Adjust these parameters to experiment with different search configurations for this user.</em></p>
-            <div class="grid">
-                <div>
-                    <label for="steering_query">Main Query</label>
-                    <input type="text" name="steering_query" id="steering_query" 
-                           value="{{with .SteeringQuery}}{{join .Queries ", "}}{{end}}" 
-                           placeholder="e.g., Go Developer">
+        <!-- Job Rating Statistics -->
+        <article>
+            <header>
+                <h4>Job Rating Distribution</h4>
+                <p>Total Jobs: <strong>{{.TotalJobs}}</strong></p>
+            </header>
+            <div class="rating-stats">
+                <div class="rating-stat">
+                    <span class="rating-label">0 Stars:</span>
+                    <span class="rating-count">{{index .RatingCounts 0}}</span>
                 </div>
-                <div>
-                    <label for="rerank_query">Rerank Query</label>
-                    <input type="text" name="rerank_query" id="rerank_query" 
-                           value="{{with .SteeringQuery}}{{.RerankQuery}}{{end}}" 
-                           placeholder="Complete sentence for reranking">
+                <div class="rating-stat">
+                    <span class="rating-label">1 Star:</span>
+                    <span class="rating-count">{{index .RatingCounts 1}}</span>
                 </div>
-            </div>
-            <div class="grid">
-                <div>
-                    <label for="move_away">Move Away</label>
-                    <textarea name="move_away" id="move_away" rows="2" placeholder="Concepts to move search results away from">{{with .SteeringQuery}}{{.MoveAway}}{{end}}</textarea>
+                <div class="rating-stat">
+                    <span class="rating-label">2 Stars:</span>
+                    <span class="rating-count">{{index .RatingCounts 2}}</span>
                 </div>
-                <div>
-                    <label for="force_away">Force Away</label>
-                    <input type="number" step="0.01" min="0" max="1" name="force_away" id="force_away" 
-                           value="{{with .SteeringQuery}}{{printf "%.2f" .ForceAway}}{{else}}0.80{{end}}">
+                <div class="rating-stat">
+                    <span class="rating-label">3 Stars:</span>
+                    <span class="rating-count">{{index .RatingCounts 3}}</span>
                 </div>
-            </div>
-        </details>
-        
-        <!-- Hybrid Search Parameters -->
-        <details>
-            <summary><strong>Hybrid Search Parameters</strong></summary>
-            <div class="grid">
-                <div>
-                    <label for="dense_weight">Dense Weight</label>
-                    <input type="number" step="0.01" min="0" max="1" name="dense_weight" id="dense_weight" 
-                           value="{{with .HybridParams}}{{printf "%.2f" .DenseWeight}}{{else}}0.50{{end}}">
+                <div class="rating-stat">
+                    <span class="rating-label">4 Stars:</span>
+                    <span class="rating-count">{{index .RatingCounts 4}}</span>
                 </div>
-                <div>
-                    <label for="sparse_weight">Sparse Weight</label>
-                    <input type="number" step="0.01" min="0" max="1" name="sparse_weight" id="sparse_weight" 
-                           value="{{with .HybridParams}}{{printf "%.2f" .SparseWeight}}{{else}}0.50{{end}}">
-                </div>
-                <div>
-                    <label for="score_fusion">Score Fusion Method</label>
-                    <select name="score_fusion" id="score_fusion">
-                        <option value="linear" {{if eq .HybridParams.ScoreFusion "linear"}}selected{{end}}>Linear</option>
-                        <option value="max" {{if eq .HybridParams.ScoreFusion "max"}}selected{{end}}>Maximum</option>
-                        <option value="min" {{if eq .HybridParams.ScoreFusion "min"}}selected{{end}}>Minimum</option>
-                        <option value="harmonic" {{if eq .HybridParams.ScoreFusion "harmonic"}}selected{{end}}>Harmonic Mean</option>
-                        <option value="reciprocal_rank_fusion" {{if eq .HybridParams.ScoreFusion "reciprocal_rank_fusion"}}selected{{end}}>Reciprocal Rank Fusion</option>
-                    </select>
-                </div>
-                <div>
-                    <label for="recency_weight">Recency Weight</label>
-                    <input type="number" step="0.01" min="0" max="1" name="recency_weight" id="recency_weight" 
-                           value="{{with .HybridParams}}{{printf "%.2f" .RecencyWeight}}{{else}}0.20{{end}}">
-                </div>
-                <div>
-                    <label for="recency_half_life">Recency Half-Life (days)</label>
-                    <input type="number" step="1" min="1" name="recency_half_life" id="recency_half_life" 
-                           value="{{with .HybridParams}}{{printf "%.0f" .RecencyHalfLife}}{{else}}30{{end}}">
-                </div>
-                <div>
-                    <label for="score_threshold">Score Threshold</label>
-                    <input type="number" step="0.01" min="0" max="1" name="score_threshold" id="score_threshold" 
-                           value="{{with .HybridParams}}{{printf "%.2f" .ScoreThreshold}}{{else}}0.00{{end}}">
-                </div>
-                <div>
-                    <label for="top_k">Top K Results</label>
-                    <input type="number" min="1" max="100" name="top_k" id="top_k" 
-                           value="{{if .TopK}}{{.TopK}}{{else}}10{{end}}">
-                </div>
-                <div>
-                    <div class="checkbox-container">
-                        <input type="checkbox" name="enable_reranking" id="enable_reranking" {{if .EnableReranking}}checked{{end}}>
-                        <label for="enable_reranking">Enable Reranking</label>
-                    </div>
+                <div class="rating-stat">
+                    <span class="rating-label">5 Stars:</span>
+                    <span class="rating-count">{{index .RatingCounts 5}}</span>
                 </div>
             </div>
-        </details>
+        </article>
         {{end}}
         
         <button type="submit">{{if .SelectedUser}}Update Dashboard{{else}}View User Dashboard{{end}}</button>
@@ -270,6 +220,39 @@
         60% {
             transform: translateY(-5px);
         }
+    }
+
+    /* Rating statistics styles */
+    .rating-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+    
+    .rating-stat {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem;
+        background-color: var(--card-sectionning-background-color);
+        border-radius: var(--border-radius);
+        border: 1px solid var(--card-border-color);
+    }
+    
+    .rating-label {
+        font-weight: 500;
+        color: var(--color);
+    }
+    
+    .rating-count {
+        font-weight: bold;
+        color: var(--primary);
+        background-color: var(--primary-focus);
+        padding: 0.25rem 0.5rem;
+        border-radius: calc(var(--border-radius) / 2);
+        min-width: 2rem;
+        text-align: center;
     }
 
     /* Pagination */

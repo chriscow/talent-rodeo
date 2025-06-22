@@ -173,11 +173,11 @@ func GetUserJob(ctx context.Context, fs *FirestoreClient, userID, jobID string) 
 	return &job, true, nil
 }
 
-// GetUserJobs retrieves all jobs for a user. Firebase counts as one read for
+// ListUserJobs retrieves all jobs for a user. Firebase counts as one read for
 // each query, it doesn't matter if your collection has 500 docs or 5000 doc. A
 // single query counts as one read, even if it had to go through 500 docs
 // searching for it in the cloud firestore.
-func GetUserJobs(ctx context.Context, fs *FirestoreClient, userID string) ([]UserJob, error) {
+func ListUserJobs(ctx context.Context, fs *FirestoreClient, userID string) ([]UserJob, error) {
 	if fs == nil {
 		return nil, fmt.Errorf("firestore client is nil")
 	}
