@@ -304,3 +304,33 @@ func MarkSubscriptionUpdated(ctx context.Context, fs *FirestoreClient, userID, c
 
 	return nil
 }
+
+// ListSubscriptions returns all subscription documents from the user_criteria collection
+// This is more efficient than querying per criteria when you need all subscription data
+func ListSubscriptions(ctx context.Context, fs *FirestoreClient) ([]SearchCriteriaSubscription, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("FirestoreClient is nil")
+	}
+
+	var subscriptions []SearchCriteriaSubscription
+	iter := fs.Collection(userCriteriaCollection).Documents(ctx)
+	defer iter.Stop()
+
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to iterate subscriptions: %w", err)
+		}
+
+		var subscription SearchCriteriaSubscription
+		if err := doc.DataTo(&subscription); err != nil {
+			return nil, fmt.Errorf("failed to parse subscription data for doc %s: %w", doc.Ref.ID, err)
+		}
+		subscriptions = append(subscriptions, subscription)
+	}
+
+	return subscriptions, nil
+}

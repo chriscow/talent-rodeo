@@ -501,34 +501,52 @@ func (app *application) adminSubscriptions(w http.ResponseWriter, r *http.Reques
 	ctx := r.Context()
 	data := app.newTemplateData(r)
 
+	startTime := time.Now()
+	app.logger.Info("adminSubscriptions: Starting request processing")
+
 	// Fetch all users for stats and dropdown
+	usersStart := time.Now()
 	allUsers, err := internal.ListUsers(ctx, app.fs, 10000, 0) // Using a high limit to approximate all users
 	if err != nil {
 		app.serverError(w, r, fmt.Errorf("failed to list users for stats: %w", err))
 		return
 	}
+	app.logger.Info("adminSubscriptions: Fetched all users", "count", len(allUsers), "duration", time.Since(usersStart))
 	data["Users"] = allUsers // for the dropdown
 
+	// Fetch all criteria
+	criteriaStart := time.Now()
 	allCriteria, err := internal.ListSearchCriteria(ctx, app.fs)
 	if err != nil {
 		app.serverError(w, r, fmt.Errorf("failed to list search criteria for stats: %w", err))
 		return
 	}
+	app.logger.Info("adminSubscriptions: Fetched all criteria", "count", len(allCriteria), "duration", time.Since(criteriaStart))
 
-	subscribedUserIDs := make(map[string]struct{})
-	userSubscriptionCounts := make(map[string]int)
-	for _, criteria := range allCriteria {
-		subscribers, err := internal.GetCriteriaSubscribers(ctx, app.fs, criteria.ID)
-		if err != nil {
-			// Log error but continue, so the page can still render
-			app.logger.Error("failed to get criteria subscribers for stats", "criteria_id", criteria.ID, "error", err)
-			continue
-		}
-		for _, s := range subscribers {
-			subscribedUserIDs[s.UserID] = struct{}{}
-			userSubscriptionCounts[s.UserID]++
-		}
+	// Build subscription counts using optimized single query approach
+	subscriptionCountStart := time.Now()
+
+	allSubscriptions, err := internal.ListSubscriptions(ctx, app.fs)
+	if err != nil {
+		app.serverError(w, r, fmt.Errorf("failed to get all subscriptions: %w", err))
+		return
 	}
+
+	app.logger.Info("adminSubscriptions: Fetched all subscriptions", "count", len(allSubscriptions), "duration", time.Since(subscriptionCountStart))
+
+	userSubscriptionCounts := make(map[string]int)
+	subscribedUserIDs := make(map[string]struct{})
+
+	for _, subscription := range allSubscriptions {
+		userSubscriptionCounts[subscription.UserID]++
+		subscribedUserIDs[subscription.UserID] = struct{}{}
+	}
+
+	subscriptionCountDuration := time.Since(subscriptionCountStart)
+	app.logger.Info("adminSubscriptions: Completed subscription count calculation (optimized)",
+		"total_subscriptions", len(allSubscriptions),
+		"unique_subscribed_users", len(subscribedUserIDs),
+		"duration", subscriptionCountDuration)
 
 	data["UserSubscriptionCounts"] = userSubscriptionCounts
 	data["UsersWithSubscriptions"] = len(subscribedUserIDs)
@@ -596,7 +614,12 @@ func (app *application) adminSubscriptions(w http.ResponseWriter, r *http.Reques
 		}
 
 		// Fetch subscriptions and all criteria
+		userSubscriptionsStart := time.Now()
 		userSubscriptions, _ := internal.GetSubscriptionsForUser(ctx, app.fs, selectedUserID)
+		app.logger.Info("adminSubscriptions: Fetched user subscriptions",
+			"user_id", selectedUserID,
+			"subscription_count", len(userSubscriptions),
+			"duration", time.Since(userSubscriptionsStart))
 		// We already have allCriteria
 
 		// Build set of subscribed criteria IDs
@@ -630,9 +653,13 @@ func (app *application) adminSubscriptions(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
+	renderStart := time.Now()
 	if err := response.Page(w, http.StatusOK, data, "pages/admin/subscriptions.html"); err != nil {
 		app.serverError(w, r, err)
 	}
+	app.logger.Info("adminSubscriptions: Completed request",
+		"total_duration", time.Since(startTime),
+		"render_duration", time.Since(renderStart))
 }
 
 // --- Admin Upload Resume for User ---
@@ -1044,6 +1071,31 @@ func (app *application) getSearchTasksPartial(w http.ResponseWriter, r *http.Req
 	data["Tasks"] = tasks
 
 	if err := response.Partial(w, http.StatusOK, data, "partials/search-task-list.html"); err != nil {
+		app.serverError(w, r, err)
+	}
+}
+
+// --- Admin Users Management ---
+func (app *application) adminUsers(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	data := app.newTemplateData(r)
+
+	// Fetch all users - using a high limit to get all users
+	users, err := internal.ListUsers(ctx, app.fs, 10000, 0)
+	if err != nil {
+		app.serverError(w, r, fmt.Errorf("failed to list users: %w", err))
+		return
+	}
+
+	// Sort users by LastAccessedAt, most recent first
+	sort.Slice(users, func(i, j int) bool {
+		return users[i].LastAccessedAt.After(users[j].LastAccessedAt)
+	})
+
+	data["Users"] = users
+	data["TotalUsers"] = len(users)
+
+	if err := response.Page(w, http.StatusOK, data, "pages/admin/users.html"); err != nil {
 		app.serverError(w, r, err)
 	}
 }
