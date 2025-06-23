@@ -31,7 +31,7 @@
                 </button>
             </div>
         </h3>
-        <p>{{.JobDetail.Company}} - <em>Posted {{.JobDetail.PostedDate | approxTime}}</em></p>
+        <p>{{.JobDetail.Company}} - <em>Posted {{.JobDetail.PostedDate | approxTime}}{{if .JobDetail.SalaryInfo}} (Salary: {{formatSalary .JobDetail.SalaryInfo.Min .JobDetail.SalaryInfo.Max .JobDetail.SalaryInfo.Currency .JobDetail.SalaryInfo.Period}}){{end}}</em></p>
     </hgroup>
     <section>
         <span>
