@@ -198,7 +198,7 @@ func dashboardValidateUserStatus(r *http.Request) (*internal.User, error) {
 	return user, nil
 }
 
-// showDashboard handles GET requests to /dashboard.
+// showDashboard handles GET and POST requests to /dashboard.
 func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 	data := app.newTemplateData(r)
 	user, err := dashboardValidateUserStatus(r)
@@ -214,12 +214,49 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 
 	app.logger.Debug("showDashboard", "name", user.Name, "userID", user.ID, "status", user.Status.String())
 
+	// Handle POST request (form submission for rating filter)
+	if r.Method == http.MethodPost {
+		if err := r.ParseForm(); err != nil {
+			app.logger.Error("showDashboard: failed to parse form", "error", err)
+			app.serverError(w, r, fmt.Errorf("failed to parse form: %w", err))
+			return
+		}
+
+		// Build redirect URL with form parameters
+		redirectURL := "/dashboard"
+		queryParams := []string{}
+
+		// Preserve status if provided
+		if status := r.PostForm.Get("status"); status != "" {
+			queryParams = append(queryParams, "status="+status)
+		}
+
+		// Add show_poor_ratings parameter
+		if r.PostForm.Get("show_poor_ratings") == "on" {
+			queryParams = append(queryParams, "show_poor_ratings=true")
+		}
+
+		// Preserve test mode if provided
+		if testMode := r.PostForm.Get("test_mode"); testMode != "" {
+			queryParams = append(queryParams, "test_mode="+testMode)
+		}
+
+		if len(queryParams) > 0 {
+			redirectURL += "?" + strings.Join(queryParams, "&")
+		}
+
+		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+		return
+	}
+
+	// Parse query parameters for GET request
 	status, isValid := internal.ParseJobStatus(r.URL.Query().Get("status"))
 	if !isValid {
 		status = internal.JobStatusNew
 	}
 
 	pageToken := r.URL.Query().Get("page")
+	showPoorRatings := r.URL.Query().Get("show_poor_ratings") == "true"
 	pageSize := 5 // Fixed page size
 
 	// Decode the page token to get the actual job ID for pagination
@@ -362,17 +399,31 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 	data["CurrentStatus"] = user.Status.Description()
 	data["CurrentTime"] = time.Now()
 
-	// Convert jobs map to slice for template consumption
+	// Convert jobs map to slice for template consumption and track filtering
 	jobsSlice := make([]JobWithDetails, 0, len(jobs))
+	hiddenJobsCount := 0
+
 	for _, job := range jobs {
+		// Only filter out 3-star jobs on the "New" jobs tab, and only when showPoorRatings is false
+		if status == internal.JobStatusNew && !showPoorRatings && job.UserJob.Rating == 3 {
+			hiddenJobsCount++
+			continue
+		}
 		jobsSlice = append(jobsSlice, job)
 	}
 	// Resort jobsSlice by UserJob.Rating descending
 	sort.Slice(jobsSlice, func(i, j int) bool {
 		return jobsSlice[i].UserJob.Rating > jobsSlice[j].UserJob.Rating
 	})
+
+	displayedJobsCount := len(jobsSlice)
+
 	data["HasJobs"] = len(jobs) > 0 || statusJobCount > 0
 	data["Jobs"] = jobsSlice
+	data["ShowPoorRatings"] = showPoorRatings
+	data["DisplayedJobsCount"] = displayedJobsCount
+	data["HiddenJobsCount"] = hiddenJobsCount
+	data["TotalJobsForStatus"] = statusJobCount
 
 	isPusherUserPresent, err := internal.IsPusherUserPresent(app.pusher, user.ID)
 	if err != nil {
@@ -386,7 +437,6 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 	data["HasNextPage"] = nextPageToken != ""
 	data["CurrentPage"] = currentPage
 	data["TotalPages"] = totalPages
-	data["TotalJobsForStatus"] = statusJobCount
 	data["PusherKey"] = os.Getenv("PUSHER_KEY")
 	data["PusherCluster"] = os.Getenv("PUSHER_CLUSTER")
 	data["JobStatuses"] = internal.GetJobStatuses()
