@@ -86,7 +86,7 @@ func (app *application) routes() http.Handler {
 
 			mux.HandleFunc("/account/delete", app.deleteAccount, "POST")
 
-			mux.HandleFunc("/dashboard", app.showDashboard, "GET")
+			mux.HandleFunc("/dashboard", app.showDashboard, "GET", "POST")
 
 			// Feedback routes
 			mux.HandleFunc("/feedback/job", app.handleJobFeedback, "POST")

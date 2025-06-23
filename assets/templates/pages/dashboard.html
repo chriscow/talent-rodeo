@@ -6,7 +6,7 @@
         <ul>
             {{range $index, $status := .JobStatuses}}
                 <li {{if eq $.ActiveStatus (lowercase $status)}}class="active"{{end}}>
-                    <a href="/dashboard?status={{lowercase $status}}{{if $.TestMode}}&test_mode={{$.TestMode}}{{end}}">
+                    <a href="/dashboard?status={{lowercase $status}}{{if and (eq (lowercase $status) "new") $.ShowPoorRatings}}&show_poor_ratings=true{{end}}{{if $.TestMode}}&test_mode={{$.TestMode}}{{end}}">
                         {{$status}} Jobs
                     </a>
                 </li>
@@ -46,22 +46,48 @@
 
     <!-- Job listings for selected status -->
     <section id="jobs-container">
-        <header>
-            <h2>{{.TotalJobsForStatus}} {{index .StatusDisplayNames .ActiveStatus}}</h2>
-        </header>
-        
+        <hgroup>
+            <h2>
+                {{.DisplayedJobsCount}} {{index .StatusDisplayNames .ActiveStatus}}
+            </h2>
+                {{if eq .ActiveStatus "new"}}
+                {{if and (not .ShowPoorRatings) (gt .HiddenJobsCount 0)}}
+                <p>
+                    {{.HiddenJobsCount}} ★★★☆☆ job{{if ne .HiddenJobsCount 1}}s{{end}} are hidden.
+                    &nbsp;&nbsp;Jobs with 2-stars or lower are automatically archived. 
+                </p>
+                {{end}}
+            {{end}}
+
+        </hgroup>
+        {{if eq .ActiveStatus "new"}}
+        <p>
+            <form method="post" action="/dashboard" style="display: inline;">
+            <fieldset class="grid">
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                <input type="hidden" name="status" value="{{.ActiveStatus}}">
+                {{if .TestMode}}<input type="hidden" name="test_mode" value="{{.TestMode}}">{{end}}
+                <label>
+                    <input type="checkbox" id="show-poor-ratings" name="show_poor_ratings" {{if .ShowPoorRatings}}checked{{end}} onchange="this.form.submit();"> 
+                    Show 3-star jobs
+                </label>
+            </fieldset>
+            </form>
+        </p>
+        {{end}}
+
         {{if .Jobs}}
             {{template "job-grid" .}}
             
             <!-- Pagination controls -->
             <nav class="pagination">
                 
-                    <a href="/dashboard?status={{.ActiveStatus}}{{if .TestMode}}&test_mode={{.TestMode}}{{end}}" role="button" class="outline" {{if eq .CurrentPageToken ""}}disabled{{end}}>
+                    <a href="/dashboard?status={{.ActiveStatus}}{{if and (eq .ActiveStatus "new") .ShowPoorRatings}}&show_poor_ratings=true{{end}}{{if .TestMode}}&test_mode={{.TestMode}}{{end}}" role="button" class="outline" {{if eq .CurrentPageToken ""}}disabled{{end}}>
                         First Page
                     </a>
                 
                 {{if .HasNextPage}}
-                    <a href="/dashboard?status={{.ActiveStatus}}&page={{.NextPageToken}}{{if .TestMode}}&test_mode={{.TestMode}}{{end}}" 
+                    <a href="/dashboard?status={{.ActiveStatus}}&page={{.NextPageToken}}{{if and (eq .ActiveStatus "new") .ShowPoorRatings}}&show_poor_ratings=true{{end}}{{if .TestMode}}&test_mode={{.TestMode}}{{end}}" 
                        role="button" class="outline">
                         Next Page
                     </a>
