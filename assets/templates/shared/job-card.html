@@ -93,7 +93,7 @@
 
     {{if .User.IsSuperUser}}
     <section class="job-admin-actions">
-        <button class="secondary outline" @click="openJobDetailsModal({{.Job.EncryptedID}})" data-tooltip="View Job Details">
+        <button class="secondary outline" data-target="job-details-modal-{{.Job.EncryptedID}}">
             <img class="light-theme-icon" src="/static/img/eye.24px.light-theme.svg" alt="View Details" width="24" height="24">
             <img class="dark-theme-icon" src="/static/img/eye.24px.dark-theme.svg" alt="View Details" width="24" height="24">
         </button>
@@ -104,4 +104,223 @@
         <small>Added {{.Job.JobDetail.CreatedAt | humanDate}} &nbsp; | &nbsp; {{ratingStars .Job.UserJob.Rating}}</small>
     </footer>
 </article>
+
+{{if .User.IsSuperUser}}
+<!-- Job Details Modal -->
+<dialog id="job-details-modal-{{.Job.EncryptedID}}">
+    <article>
+        <header>
+            <button aria-label="Close" rel="prev"></button>
+            <p><strong>Job Details</strong></p>
+        </header>
+        
+        <section>
+            <h4>Basic Information</h4>
+            <dl>
+                <dt>ID</dt>
+                <dd>{{.Job.JobDetail.ID}}</dd>
+                
+                <dt>Provider</dt>
+                <dd>{{.Job.JobDetail.Provider}}</dd>
+                
+                <dt>Provider Job ID</dt>
+                <dd>{{.Job.JobDetail.ProviderJobID}}</dd>
+                
+                <dt>Title</dt>
+                <dd>{{.Job.JobDetail.Title}}</dd>
+                
+                <dt>Company</dt>
+                <dd>{{.Job.JobDetail.Company}}</dd>
+                
+                {{if .Job.JobDetail.Location}}
+                <dt>Location</dt>
+                <dd>{{.Job.JobDetail.Location}}</dd>
+                {{end}}
+                
+                <dt>Posted Date</dt>
+                <dd>{{.Job.JobDetail.PostedDate | humanDate}}</dd>
+                
+                {{if .Job.JobDetail.URL}}
+                <dt>Job URL</dt>
+                <dd><a href="{{.Job.JobDetail.URL}}" target="_blank">{{.Job.JobDetail.URL}}</a></dd>
+                {{end}}
+                
+                {{if .Job.JobDetail.ApplyURL}}
+                <dt>Apply URL</dt>
+                <dd><a href="{{.Job.JobDetail.ApplyURL}}" target="_blank">{{.Job.JobDetail.ApplyURL}}</a></dd>
+                {{end}}
+            </dl>
+        </section>
+
+        {{if .Job.JobDetail.SalaryInfo}}
+        <section>
+            <h4>Salary Information</h4>
+            <dl>
+                <dt>Range</dt>
+                <dd>{{formatSalary .Job.JobDetail.SalaryInfo.Min .Job.JobDetail.SalaryInfo.Max .Job.JobDetail.SalaryInfo.Currency .Job.JobDetail.SalaryInfo.Period}}</dd>
+                
+                <dt>Currency</dt>
+                <dd>{{.Job.JobDetail.SalaryInfo.Currency}}</dd>
+                
+                <dt>Period</dt>
+                <dd>{{.Job.JobDetail.SalaryInfo.Period}}</dd>
+            </dl>
+        </section>
+        {{end}}
+
+        {{if or .Job.JobDetail.EmploymentType .Job.JobDetail.WorkplaceType .Job.JobDetail.Industry}}
+        <section>
+            <h4>Job Type & Industry</h4>
+            <dl>
+                {{if .Job.JobDetail.EmploymentType}}
+                <dt>Employment Type</dt>
+                <dd>{{.Job.JobDetail.EmploymentType}}</dd>
+                {{end}}
+                
+                {{if .Job.JobDetail.WorkplaceType}}
+                <dt>Workplace Type</dt>
+                <dd>{{.Job.JobDetail.WorkplaceType}}</dd>
+                {{end}}
+                
+                {{if .Job.JobDetail.Industry}}
+                <dt>Industry</dt>
+                <dd>{{.Job.JobDetail.Industry}}</dd>
+                {{end}}
+            </dl>
+        </section>
+        {{end}}
+
+        {{if or .Job.JobDetail.Status .Job.JobDetail.SeniorityLevel .Job.JobDetail.JobFunction}}
+        <section>
+            <h4>Additional Details</h4>
+            <dl>
+                {{if .Job.JobDetail.Status}}
+                <dt>Status</dt>
+                <dd>{{.Job.JobDetail.Status}}</dd>
+                {{end}}
+                
+                {{if .Job.JobDetail.SeniorityLevel}}
+                <dt>Seniority Level</dt>
+                <dd>{{.Job.JobDetail.SeniorityLevel}}</dd>
+                {{end}}
+                
+                {{if .Job.JobDetail.JobFunction}}
+                <dt>Job Function</dt>
+                <dd>{{.Job.JobDetail.JobFunction}}</dd>
+                {{end}}
+            </dl>
+        </section>
+        {{end}}
+
+        {{if .Job.JobDetail.CompanyInfo}}
+        <section>
+            <h4>Company Information</h4>
+            <dl>
+                {{if .Job.JobDetail.CompanyInfo.Name}}
+                <dt>Company Name</dt>
+                <dd>{{.Job.JobDetail.CompanyInfo.Name}}</dd>
+                {{end}}
+                
+                {{if .Job.JobDetail.CompanyInfo.Website}}
+                <dt>Website</dt>
+                <dd><a href="{{.Job.JobDetail.CompanyInfo.Website}}" target="_blank">{{.Job.JobDetail.CompanyInfo.Website}}</a></dd>
+                {{end}}
+                
+                {{if .Job.JobDetail.CompanyInfo.Industry}}
+                <dt>Industry</dt>
+                <dd>{{.Job.JobDetail.CompanyInfo.Industry}}</dd>
+                {{end}}
+                
+                {{if .Job.JobDetail.CompanyInfo.Size}}
+                <dt>Company Size</dt>
+                <dd>{{.Job.JobDetail.CompanyInfo.Size}}</dd>
+                {{end}}
+                
+                {{if .Job.JobDetail.CompanyInfo.Description}}
+                <dt>Description</dt>
+                <dd>{{.Job.JobDetail.CompanyInfo.Description}}</dd>
+                {{end}}
+            </dl>
+        </section>
+        {{end}}
+
+        {{if or .Job.JobDetail.Requirements .Job.JobDetail.Qualifications .Job.JobDetail.Benefits .Job.JobDetail.Skills}}
+        <section>
+            <h4>Lists & Arrays</h4>
+            
+            {{if .Job.JobDetail.Requirements}}
+            <details>
+                <summary>Requirements ({{len .Job.JobDetail.Requirements}})</summary>
+                <ul>
+                    {{range .Job.JobDetail.Requirements}}
+                    <li>{{.}}</li>
+                    {{end}}
+                </ul>
+            </details>
+            {{end}}
+            
+            {{if .Job.JobDetail.Qualifications}}
+            <details>
+                <summary>Qualifications ({{len .Job.JobDetail.Qualifications}})</summary>
+                <ul>
+                    {{range .Job.JobDetail.Qualifications}}
+                    <li>{{.}}</li>
+                    {{end}}
+                </ul>
+            </details>
+            {{end}}
+            
+            {{if .Job.JobDetail.Benefits}}
+            <details>
+                <summary>Benefits ({{len .Job.JobDetail.Benefits}})</summary>
+                <ul>
+                    {{range .Job.JobDetail.Benefits}}
+                    <li>{{.}}</li>
+                    {{end}}
+                </ul>
+            </details>
+            {{end}}
+            
+            {{if .Job.JobDetail.Skills}}
+            <details>
+                <summary>Skills ({{len .Job.JobDetail.Skills}})</summary>
+                <ul>
+                    {{range .Job.JobDetail.Skills}}
+                    <li>{{.}}</li>
+                    {{end}}
+                </ul>
+            </details>
+            {{end}}
+        </section>
+        {{end}}
+
+        <section>
+            <h4>Metadata</h4>
+            <dl>
+                <dt>Created At</dt>
+                <dd>{{.Job.JobDetail.CreatedAt | humanDate}}</dd>
+                
+                {{if .Job.JobDetail.UpdatedAt}}
+                <dt>Updated At</dt>
+                <dd>{{.Job.JobDetail.UpdatedAt | humanDate}}</dd>
+                {{end}}
+                
+                {{if .Job.JobDetail.SearchJobIDs}}
+                <dt>Search Job IDs</dt>
+                <dd>{{len .Job.JobDetail.SearchJobIDs}} references</dd>
+                {{end}}
+            </dl>
+        </section>
+
+        {{if .Job.JobDetail.Description}}
+        <section>
+            <h4>Full Description</h4>
+            <div style="max-height: 200px; overflow-y: auto; border: 1px solid var(--pico-border-color); padding: 1rem; border-radius: var(--pico-border-radius);">
+                <p>{{.Job.JobDetail.Description}}</p>
+            </div>
+        </section>
+        {{end}}
+    </article>
+</dialog>
+{{end}}
 {{end}}

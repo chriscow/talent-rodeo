@@ -114,6 +114,38 @@
     document.addEventListener('DOMContentLoaded', function() {
         console.log('Dashboard: Initializing...');
         
+        // Initialize modal buttons
+        const modalButtons = document.querySelectorAll('[data-target^="job-details-modal-"]');
+        modalButtons.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                const modal = document.getElementById(this.getAttribute('data-target'));
+                if (modal) {
+                    modal.setAttribute('open', true);
+                    document.documentElement.classList.add('modal-is-open', 'modal-is-opening');
+                    setTimeout(() => {
+                        document.documentElement.classList.remove('modal-is-opening');
+                    }, 400);
+                }
+            });
+        });
+
+        // Initialize modal close buttons
+        const modalCloseButtons = document.querySelectorAll('dialog [rel="prev"]');
+        modalCloseButtons.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                const modal = this.closest('dialog');
+                if (modal) {
+                    document.documentElement.classList.add('modal-is-closing');
+                    setTimeout(() => {
+                        document.documentElement.classList.remove('modal-is-closing', 'modal-is-open');
+                        modal.removeAttribute('open');
+                    }, 400);
+                }
+            });
+        });
+        
         // Format all search time elements in local timezone
         const searchTimeElements = document.querySelectorAll('.next-search-time');
         searchTimeElements.forEach(element => {
