@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strings"
 	"talent-rodeo/internal"
@@ -25,14 +26,14 @@ func NewEmailGenerator(templateReader TemplateReader, promptProcessor PromptProc
 
 // GenerateEmailContent generates a personalized nudge email using the injected dependencies.
 // It decides whether to use a static template or an LLM based on the nudge type.
-func (eg *EmailGenerator) GenerateEmailContent(ctx context.Context, user *internal.User, nudgeType NudgeType, emailData *NudgeEmailData) (*GeneratedEmail, error) {
+func (eg *EmailGenerator) GenerateEmailContent(ctx context.Context, fs *internal.FirestoreClient, logger *slog.Logger, user *internal.User, nudgeType NudgeType, emailData *NudgeEmailData) (*GeneratedEmail, error) {
 	if templateName := nudgeType.EmailTemplatePath(); templateName != "" {
 		return eg.generateFromTemplate(ctx, nudgeType, emailData)
 	}
-	return eg.generateFromLLM(ctx, user, nudgeType, emailData)
+	return eg.generateFromLLM(ctx, fs, logger, user, nudgeType, emailData)
 }
 
-func (eg *EmailGenerator) generateFromLLM(ctx context.Context, user *internal.User, nudgeType NudgeType, emailData *NudgeEmailData) (*GeneratedEmail, error) {
+func (eg *EmailGenerator) generateFromLLM(ctx context.Context, fs *internal.FirestoreClient, logger *slog.Logger, user *internal.User, nudgeType NudgeType, emailData *NudgeEmailData) (*GeneratedEmail, error) {
 	// Get the appropriate prompt template
 	promptTemplate, err := eg.templateReader.ReadTemplate(nudgeType)
 	if err != nil {
@@ -46,7 +47,7 @@ func (eg *EmailGenerator) generateFromLLM(ctx context.Context, user *internal.Us
 	}
 
 	// Call LLM to generate email content
-	response, err := eg.promptProcessor.ProcessPrompt(ctx, prompt)
+	response, err := eg.promptProcessor.ProcessPrompt(ctx, fs, logger, user.ID, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to process prompt: %w", err)
 	}

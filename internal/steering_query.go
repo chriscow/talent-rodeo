@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"talent-rodeo/assets"
 
 	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/tools"
+	"github.com/sashabaranov/go-openai"
 )
 
 const (
@@ -29,10 +31,10 @@ const (
 )
 
 // SteeringQuery encapsulates all parameters needed for semantic steering of
-// queries. Why not just include “not X” in the text? Because embedding models
-// don’t reliably capture negation. As you found, simply phrasing “other than
-// cats” or “except electrical” in the query still yields an embedding that is
-// close to those concepts (the model sees the word “cats” and increases
+// queries. Why not just include "not X" in the text? Because embedding models
+// don't reliably capture negation. As you found, simply phrasing "other than
+// cats" or "except electrical" in the query still yields an embedding that is
+// close to those concepts (the model sees the word "cats" and increases
 // similarity to cat-related content). Therefore, we need to explicitly
 // manipulate the vector to remove that semantic component, rather than relying
 // on the embedding model to understand a negation in text.
@@ -246,10 +248,12 @@ func GenerateSteeringQuery(ctx context.Context, resume Resume, transcript Transc
 
 	messages = append(messages, examples...)
 
+	resp := openai.ChatCompletionResponse{}
 	options := []tools.Option{
 		tools.WithModel(tools.DeepSeekChat),
 		tools.WithMaxTokens(8192),
 		tools.WithMessages(messages),
+		tools.WantCompletionResponse(&resp),
 	}
 
 	if len(opts) > 0 {
@@ -262,6 +266,10 @@ func GenerateSteeringQuery(ctx context.Context, resume Resume, transcript Transc
 	if err != nil {
 		return nil, fmt.Errorf("failed to ask LLM for steering query: %w", err)
 	}
+
+	// TODO: Record LLM cost for steering query generation - we don't have userID or fs here
+	// This function is called from various contexts, would need to thread these through
+	slog.Default().Debug("steering query generation LLM call", "promptTokens", resp.Usage.PromptTokens, "completionTokens", resp.Usage.CompletionTokens, "model", tools.DeepSeekChat)
 
 	sq, err := extractSteeringQuery(ctx, origResp)
 	if err != nil {
@@ -331,16 +339,24 @@ Extract the data below into a JSON structure:
 
 %s`
 
-		query, err = tools.StructuredAsk[SteeringQuery](ctx, fmt.Sprintf(prompt, err.Error(), string(jsonB), data), tools.WithModel(tools.GPT41Mini))
+		resp1 := openai.ChatCompletionResponse{}
+		query, err = tools.StructuredAsk[SteeringQuery](ctx, fmt.Sprintf(prompt, err.Error(), string(jsonB), data), tools.WithModel(tools.GPT41Mini), tools.WantCompletionResponse(&resp1))
 		if err != nil {
 			return nil, fmt.Errorf("LLM failed to parse steering query: %w", err)
 		}
 
+		// TODO: Record LLM cost for steering query parsing - we don't have userID or fs here
+		slog.Default().Debug("steering query parsing LLM call (first attempt)", "promptTokens", resp1.Usage.PromptTokens, "completionTokens", resp1.Usage.CompletionTokens, "model", tools.GPT41Mini)
+
 		if err := query.Validate(); err != nil {
-			query, err = tools.StructuredAsk[SteeringQuery](ctx, fmt.Sprintf(prompt, err.Error(), string(jsonB), data), tools.WithModel(tools.GPT41Mini))
+			resp2 := openai.ChatCompletionResponse{}
+			query, err = tools.StructuredAsk[SteeringQuery](ctx, fmt.Sprintf(prompt, err.Error(), string(jsonB), data), tools.WithModel(tools.GPT41Mini), tools.WantCompletionResponse(&resp2))
 			if err != nil {
 				return nil, fmt.Errorf("LLM failed to parse steering query: %w", err)
 			}
+
+			// TODO: Record LLM cost for steering query parsing - we don't have userID or fs here
+			slog.Default().Debug("steering query parsing LLM call (second attempt)", "promptTokens", resp2.Usage.PromptTokens, "completionTokens", resp2.Usage.CompletionTokens, "model", tools.GPT41Mini)
 		}
 	}
 

@@ -18,6 +18,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/pusher/pusher-http-go/v5"
 	"github.com/samber/lo"
+	"github.com/sashabaranov/go-openai"
 )
 
 // ProcessCompletedCall updates the appointment after a successful call with the transcript summary.
@@ -135,7 +136,7 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 	//
 	internal.SendPusherMessage(psh, user.ID, "Determining your work preferences (~10s)", nil)
 	logger.Debug("extracting GeoID from transcript", "name", user.Name, "userID", user.ID, "appointmentID", appointment.ID, "locations-count", len(locations))
-	if err := getWorkPreferences(ctx, fs, transcript, locations, user); err != nil {
+	if err := getWorkPreferences(ctx, fs, logger, transcript, locations, user); err != nil {
 		logger.Error("failed to get work preferences", "error", err, "userID", user.ID, "appointmentID", appointment.ID)
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"userID":         user.ID,
@@ -480,7 +481,8 @@ func GenerateRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user 
 		return fmt.Errorf("SendRecapEmail: tools.GeneratePrompt: %w", err)
 	}
 
-	resp, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat))
+	resp := openai.ChatCompletionResponse{}
+	llmResp, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat), tools.WantCompletionResponse(&resp))
 	if err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"error_type": "tools_ask",
@@ -488,12 +490,18 @@ func GenerateRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user 
 		return fmt.Errorf("SendRecapEmail: tools.Ask: %w", err)
 	}
 
-	bodyData, err := extractEmailData(ctx, resp)
+	// Record LLM cost for recap email generation
+	if err := internal.RecordLLMCost(ctx, fs, &user.ID, tools.DeepSeekChat, resp, "recap_email_generation", nil); err != nil {
+		// Log error but don't fail the operation
+		logger.Error("failed to record LLM cost for recap email generation", "error", err)
+	}
+
+	bodyData, err := extractEmailData(ctx, llmResp)
 	if err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"error_type": "extract_email_data",
 		})
-		logger.Error("failed to extract email data", "error", err, "userID", user.ID, "resp", resp)
+		logger.Error("failed to extract email data", "error", err, "userID", user.ID, "resp", llmResp)
 		return fmt.Errorf("SendRecapEmail: extractEmailData: %w", err)
 	}
 
@@ -678,7 +686,7 @@ func getOrCreateSearchCriteria(ctx context.Context, fs *internal.FirestoreClient
 
 	locPref := *user.LocationPreference
 
-	geoID, err := internal.ExtractGeoID(ctx, fs, locPref)
+	geoID, err := internal.ExtractGeoID(ctx, fs, &user.ID, locPref)
 	if err != nil {
 		return nil, fmt.Errorf("getOrCreateSearchCriteria: ExtractGeoID: %w", err)
 	}
@@ -744,7 +752,7 @@ func generateSteeringQuery(ctx context.Context, fs *internal.FirestoreClient, us
 	return nil
 }
 
-func extractWorkPreferences(_ context.Context, data string) (*string, error) {
+func extractWorkPreferences(ctx context.Context, data string) (*string, error) {
 	if strings.Contains(data, "<final_determinations>") {
 		start := strings.Index(data, "<final_determinations>")
 		if start == -1 {
@@ -761,7 +769,7 @@ func extractWorkPreferences(_ context.Context, data string) (*string, error) {
 
 	return &data, nil
 }
-func getWorkPreferences(ctx context.Context, fs *internal.FirestoreClient, transcript *internal.Transcript, locations []string, user *internal.User) error {
+func getWorkPreferences(ctx context.Context, fs *internal.FirestoreClient, logger *slog.Logger, transcript *internal.Transcript, locations []string, user *internal.User) error {
 	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/transcript.work-location.txt")
 	if err != nil {
 		return fmt.Errorf("getWorkPreferences: ReadFile: %w", err)
@@ -775,9 +783,17 @@ func getWorkPreferences(ctx context.Context, fs *internal.FirestoreClient, trans
 		return fmt.Errorf("getWorkPreferences: GeneratePrompt: %w", err)
 	}
 
-	data, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat))
+	resp := openai.ChatCompletionResponse{}
+	data, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat), tools.WantCompletionResponse(&resp))
 	if err != nil {
 		return fmt.Errorf("getWorkPreferences: Ask: %w", err)
+	}
+
+	// Record LLM cost for work preferences extraction
+	if err := internal.RecordLLMCost(ctx, fs, &user.ID, tools.DeepSeekChat, resp, "work_preferences_extraction", nil); err != nil {
+		// Log error but don't fail the operation
+		// Note: we don't have a logger here, so using default
+		logger.Error("failed to record LLM cost for work preferences extraction", "error", err)
 	}
 
 	prefs, err := extractWorkPreferences(ctx, data)
@@ -829,10 +845,17 @@ func GetUserStatement(ctx context.Context, user *internal.User, transcript *inte
 	}
 
 	// Ask LLM to generate user statement
-	statement, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat), tools.WithMaxTokens(8192))
+	resp := openai.ChatCompletionResponse{}
+	statement, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat), tools.WithMaxTokens(8192), tools.WantCompletionResponse(&resp))
 	if err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
 		return fmt.Errorf("failed to ask LLM: %w", err)
+	}
+
+	// Record LLM cost for user statement generation
+	if err := internal.RecordLLMCost(ctx, fs, &user.ID, tools.DeepSeekChat, resp, "user_statement_generation", nil); err != nil {
+		// Log error but don't fail the operation
+		logger.Error("failed to record LLM cost for user statement generation", "error", err)
 	}
 
 	user.Statement = &statement

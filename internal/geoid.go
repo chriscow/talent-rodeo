@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/chriscow/minds/tools"
+	"github.com/sashabaranov/go-openai"
 	"google.golang.org/api/iterator"
 )
 
@@ -110,7 +112,7 @@ func GetGeoIDKeys(ctx context.Context, fs *FirestoreClient) ([]string, error) {
 	return keys, nil
 }
 
-func ExtractGeoID(ctx context.Context, fs *FirestoreClient, data string) (string, error) {
+func ExtractGeoID(ctx context.Context, fs *FirestoreClient, userID *string, data string) (string, error) {
 	if fs == nil {
 		return "", fmt.Errorf("firestore client cannot be nil")
 	}
@@ -146,9 +148,16 @@ func ExtractGeoID(ctx context.Context, fs *FirestoreClient, data string) (string
 	Statement: %s
 	`
 
-	res, err := tools.StructuredAsk[locationID](ctx, fmt.Sprintf(prompt, string(geoidJSON), data), tools.WithModel(tools.GPT41Mini))
+	resp := openai.ChatCompletionResponse{}
+	res, err := tools.StructuredAsk[locationID](ctx, fmt.Sprintf(prompt, string(geoidJSON), data), tools.WithModel(tools.GPT41Mini), tools.WantCompletionResponse(&resp))
 	if err != nil {
 		return "", err
+	}
+
+	// Record LLM cost for geo ID extraction
+	if err := RecordLLMCost(ctx, fs, userID, string(tools.GPT41Mini), resp, "geo_id_extraction", nil); err != nil {
+		// Log error but don't fail the operation
+		slog.Default().Error("failed to record LLM cost for geo ID extraction", "error", err)
 	}
 
 	return res.ID, nil

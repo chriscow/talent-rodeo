@@ -231,7 +231,7 @@ func TestProviderWithRealFirestore(t *testing.T) {
 	// Test job details functionality
 	t.Run("GetJobDetails", func(t *testing.T) {
 		jobID := "test-job-1"
-		details, err := provider.GetJobDetails(ctx, jobID)
+		details, err := provider.GetJobDetails(ctx, nil, jobID)
 		require.NoError(t, err)
 		require.NotNil(t, details)
 
@@ -282,7 +282,7 @@ func TestProviderGetJobDetails(t *testing.T) {
 	t.Logf("Mock server URL: %s", mockServer.URL())
 
 	// Execute the test
-	details, err := provider.GetJobDetails(ctx, jobID)
+	details, err := provider.GetJobDetails(ctx, nil, jobID)
 	require.NoError(t, err)
 
 	// Verify details

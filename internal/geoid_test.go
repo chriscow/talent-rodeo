@@ -22,7 +22,7 @@ func TestExtractGeoID(t *testing.T) {
 		t.Fatalf("Failed to create geo ID: %v", err)
 	}
 
-	got, err := ExtractGeoID(ctx, client, "I'm looking for a job in San Francisco")
+	got, err := ExtractGeoID(ctx, client, nil, "I'm looking for a job in San Francisco")
 	if err != nil {
 		t.Fatalf("Failed to extract geo ID: %v", err)
 	}

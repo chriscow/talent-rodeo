@@ -117,7 +117,7 @@ func TestParseSalaryRange(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := parseSalaryRange(ctx, tc.salary)
+			result, err := parseSalaryRange(ctx, nil, nil, nil, tc.salary)
 
 			if tc.expectError {
 				assert.Error(t, err)
@@ -247,7 +247,7 @@ func TestConvertJobDetail(t *testing.T) {
 	}
 
 	// Convert job detail
-	result, err := convertJobDetail(jobDetail)
+	result, err := convertJobDetail(context.Background(), nil, nil, nil, jobDetail)
 	require.NoError(t, err)
 
 	// Verify basic fields

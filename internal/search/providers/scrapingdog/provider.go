@@ -61,6 +61,7 @@ type Provider struct {
 	eventHandler  internal.JobEventHandler
 	logger        *slog.Logger
 	apiKey        string
+	fs            *internal.FirestoreClient
 	kvClient      *cloudflare.KV
 }
 
@@ -255,7 +256,7 @@ func (p *Provider) SearchJobListings(ctx context.Context, criteria internal.Sear
 }
 
 // GetJobDetails retrieves detailed information for a job
-func (p *Provider) GetJobDetails(ctx context.Context, jobID string) (*internal.JobDetail, error) {
+func (p *Provider) GetJobDetails(ctx context.Context, userID *string, jobID string) (*internal.JobDetail, error) {
 	p.logger.Debug("fetching job details", "jobID", jobID)
 
 	// Check if we have cached results
@@ -275,8 +276,7 @@ func (p *Provider) GetJobDetails(ctx context.Context, jobID string) (*internal.J
 		return nil, fmt.Errorf("API job details fetch failed: %w", err)
 	}
 
-	// Convert to common format
-	details, err := convertJobDetail(jobDetail)
+	details, err := convertJobDetail(ctx, p.fs, p.logger, userID, jobDetail)
 	if err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"action": "NewProvider::GetJobDetails: failed to convert job details",

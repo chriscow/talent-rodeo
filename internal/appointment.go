@@ -366,8 +366,11 @@ func ProcessAppointmentFailed(ctx context.Context, fs *FirestoreClient, user *Us
 			return fmt.Errorf("failed to delete processing reference in transaction: %w", err)
 		}
 
-		if err := UpdateUserStatusTx(ctx, fs, tx, user, UserStatusResumeUploaded); err != nil {
-			return fmt.Errorf("failed to update user status to resume uploaded: %w", err)
+		// Update user state to error and set the error message
+		errorCopy := err.Error() // Make a copy to ensure it stays in memory
+
+		if err := UpdateUserStateWithErrorTx(ctx, fs, tx, user, errorCopy); err != nil {
+			return fmt.Errorf("failed to update user error state: %w", err)
 		}
 
 		return nil
@@ -375,7 +378,7 @@ func ProcessAppointmentFailed(ctx context.Context, fs *FirestoreClient, user *Us
 }
 
 // GenerateJobDescription generates an idealized, halucinated job description for an appointment transcript and resume
-func GenerateJobDescription(ctx context.Context, resume Resume, appointment Appointment) (string, error) {
+func GenerateJobDescription(ctx context.Context, fs *FirestoreClient, logger *slog.Logger, userID string, resume Resume, appointment Appointment) (string, error) {
 	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/transcript-060-job-description.txt")
 	if err != nil {
 		return "", fmt.Errorf("failed to read job description prompt: %w", err)
@@ -418,9 +421,16 @@ func GenerateJobDescription(ctx context.Context, resume Resume, appointment Appo
 	}
 
 	const maxTokens = 8192
-	desc, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat), tools.WithMaxTokens(maxTokens))
+	resp := openai.ChatCompletionResponse{}
+	desc, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat), tools.WithMaxTokens(maxTokens), tools.WantCompletionResponse(&resp))
 	if err != nil {
 		return "", fmt.Errorf("failed to generate job description: %w", err)
+	}
+
+	// Record LLM cost for job description generation
+	if err := RecordLLMCost(ctx, fs, &userID, tools.DeepSeekChat, resp, "job_description_generation", nil); err != nil {
+		// Log error but don't fail the operation
+		logger.Error("failed to record LLM cost for job description generation", "error", err)
 	}
 
 	// get the text between <ideal_job_description> and </ideal_job_description> tags

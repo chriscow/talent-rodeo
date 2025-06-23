@@ -364,7 +364,7 @@ func (p *Processor) sendNudgeWithTracking(ctx context.Context, user *internal.Us
 		emailData := p.emailGenerator.BuildEmailData(user, nudgeType, additionalData)
 
 		// Generate email content
-		generatedEmail, err := p.emailGenerator.GenerateEmailContent(ctx, user, nudgeType, emailData)
+		generatedEmail, err := p.emailGenerator.GenerateEmailContent(ctx, p.fs, p.logger, user, nudgeType, emailData)
 		if err != nil {
 			return fmt.Errorf("failed to generate email: %w", err)
 		}

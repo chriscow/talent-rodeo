@@ -50,7 +50,7 @@ import (
 // Forward declaration to avoid circular dependencies
 type SearchProvider interface {
 	SearchJobListings(ctx context.Context, criteria internal.SearchCriteria, page int) ([]internal.JobListing, error)
-	GetJobDetails(ctx context.Context, jobID string) (*internal.JobDetail, error)
+	GetJobDetails(ctx context.Context, userID *string, jobID string) (*internal.JobDetail, error)
 }
 
 // WorkerSettings holds the settings for the worker manager
@@ -397,7 +397,7 @@ func (wm *WorkerManager) handleJobDetailTask(ctx context.Context, wt WorkerTask)
 		return
 	}
 
-	jobDetail, err := wm.provider.GetJobDetails(ctx, task.JobListing.ProviderJobID)
+	jobDetail, err := wm.provider.GetJobDetails(ctx, wt.UserID, task.JobListing.ProviderJobID)
 	if err != nil {
 		logger.Error("failed to fetch job details", "jobID", task.JobListing.ProviderJobID, "error", err)
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{

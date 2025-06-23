@@ -182,7 +182,7 @@ func (s *SearchResultProcessor) processJobDetail(task ExtractionTask) (*Extracti
 	if task.JobDetail.ExtractedData == nil {
 		s.logger.Debug("extracting job detail data (async)", "jobID", task.JobDetail.ID)
 		start := time.Now()
-		err := ExtractJobDetailData(context.Background(), &task.JobDetail)
+		err := ExtractJobDetailData(context.Background(), s.fs, task.UserID, &task.JobDetail)
 		if err != nil {
 			return nil, fmt.Errorf("ExtractJobDetailData: %w", err)
 		}

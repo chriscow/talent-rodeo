@@ -3,6 +3,8 @@ package nudge
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"talent-rodeo/internal"
 )
 
 // MockTemplateReader implements TemplateReader for testing
@@ -72,7 +74,7 @@ func (m *MockPromptProcessor) GeneratePrompt(template []byte, data *NudgeEmailDa
 	return m.generatedPrompt, nil
 }
 
-func (m *MockPromptProcessor) ProcessPrompt(ctx context.Context, prompt string) (string, error) {
+func (m *MockPromptProcessor) ProcessPrompt(ctx context.Context, fs *internal.FirestoreClient, logger *slog.Logger, userID string, prompt string) (string, error) {
 	if m.processError != nil {
 		return "", m.processError
 	}

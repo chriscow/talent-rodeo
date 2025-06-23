@@ -14,6 +14,7 @@ import (
 	"cloud.google.com/go/firestore"
 	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/tools"
+	"github.com/sashabaranov/go-openai"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -196,12 +197,12 @@ func AnnotateResume(ctx context.Context, fs *FirestoreClient, logger *slog.Logge
 			return fmt.Errorf("test mode search analysis failed: %w", err)
 		}
 	} else {
-		analysis, err = getAnnotatedResume(ctx, *resume)
+		analysis, err = getAnnotatedResume(ctx, fs, logger, user.ID, *resume)
 		if err != nil {
 			return fmt.Errorf("failed to get resume analysis: %w", err)
 		}
 
-		searchAnalysis, err = getResumeSearchAnalysis(ctx, *resume)
+		searchAnalysis, err = getResumeSearchAnalysis(ctx, fs, logger, user.ID, *resume)
 		if err != nil {
 			return fmt.Errorf("failed to get resume search analysis: %w", err)
 		}
@@ -324,7 +325,7 @@ func DeleteResume(ctx context.Context, fs *FirestoreClient, userID string, resum
 	return nil
 }
 
-func getAnnotatedResume(ctx context.Context, resume Resume) (*annotatedResume, error) {
+func getAnnotatedResume(ctx context.Context, fs *FirestoreClient, logger *slog.Logger, userID string, resume Resume) (*annotatedResume, error) {
 	sysPrompt, err := assets.EmbeddedFiles.ReadFile(resumeAnalysisPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("convertResume: failed to read resume annotation prompt template: %w", err)
@@ -343,25 +344,39 @@ func getAnnotatedResume(ctx context.Context, resume Resume) (*annotatedResume, e
 		},
 	}
 
-	analysis, err := tools.Ask(ctx, resume.RawText, tools.WithMessages(msgs), tools.WithModel(tools.DeepSeekChat), tools.WithMaxTokens(4096))
+	resp := openai.ChatCompletionResponse{}
+	analysis, err := tools.Ask(ctx, resume.RawText, tools.WithMessages(msgs), tools.WithModel(tools.DeepSeekChat), tools.WithMaxTokens(4096), tools.WantCompletionResponse(&resp))
 	if err != nil {
 		return nil, fmt.Errorf("convertResume: failed to ask LLM: %w", err)
 	}
 
+	// Record LLM cost for resume analysis
+	if err := RecordLLMCost(ctx, fs, &userID, tools.DeepSeekChat, resp, "resume_analysis", nil); err != nil {
+		// Log error but don't fail the operation
+		logger.Error("failed to record LLM cost for resume analysis", "error", err)
+	}
+
 	extract, err := extractResumeAnalysis(analysis)
 	if err != nil {
-		return extractResumeAnalysisLLM(ctx, analysis)
+		return extractResumeAnalysisLLM(ctx, fs, logger, userID, analysis)
 	}
 
 	return extract, nil
 }
 
-func extractResumeAnalysisLLM(ctx context.Context, analysis string) (*annotatedResume, error) {
+func extractResumeAnalysisLLM(ctx context.Context, fs *FirestoreClient, logger *slog.Logger, userID string, analysis string) (*annotatedResume, error) {
 	prompt := "Extract the resume analysis from the following text: " + analysis
 
-	res, err := tools.StructuredAsk[annotatedResume](ctx, prompt, tools.WithModel(tools.GPT41Nano), tools.WithMaxTokens(4096))
+	resp := openai.ChatCompletionResponse{}
+	res, err := tools.StructuredAsk[annotatedResume](ctx, prompt, tools.WithModel(tools.GPT41Nano), tools.WithMaxTokens(4096), tools.WantCompletionResponse(&resp))
 	if err != nil {
 		return nil, fmt.Errorf("convertResume: failed to ask LLM: %w", err)
+	}
+
+	// Record LLM cost for resume analysis extraction
+	if err := RecordLLMCost(ctx, fs, &userID, tools.GPT41Nano, resp, "resume_analysis_extraction", nil); err != nil {
+		// Log error but don't fail the operation
+		logger.Error("failed to record LLM cost for resume analysis extraction", "error", err)
 	}
 
 	return &res, nil
@@ -440,7 +455,7 @@ func extractResumeAnalysis(analysis string) (*annotatedResume, error) {
 	return nil, fmt.Errorf("failed to extract resume analysis: <resume_analysis> tag not found")
 }
 
-func getResumeSearchAnalysis(ctx context.Context, resume Resume) (string, error) {
+func getResumeSearchAnalysis(ctx context.Context, fs *FirestoreClient, logger *slog.Logger, userID string, resume Resume) (string, error) {
 	tmpl, err := assets.EmbeddedFiles.ReadFile(resumeSearchAnalysisTemplate)
 	if err != nil {
 		return "", fmt.Errorf("convertResume: failed to read resume annotation prompt template: %w", err)
@@ -453,7 +468,18 @@ func getResumeSearchAnalysis(ctx context.Context, resume Resume) (string, error)
 		return "", fmt.Errorf("convertResume: failed to generate prompt: %w", err)
 	}
 
-	return tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat))
+	resp := openai.ChatCompletionResponse{}
+	result, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat), tools.WantCompletionResponse(&resp))
+	if err != nil {
+		return "", err
+	}
+
+	// Record LLM cost for resume search analysis
+	if err := RecordLLMCost(ctx, fs, &userID, tools.DeepSeekChat, resp, "resume_search_analysis", nil); err != nil {
+		// Log error but don't fail the operation
+		logger.Error("failed to record LLM cost for resume search analysis", "error", err)
+	}
+	return result, nil
 }
 
 // getResumeAnalysisTestMode simulates resume annotation in test mode

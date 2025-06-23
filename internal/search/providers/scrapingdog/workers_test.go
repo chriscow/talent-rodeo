@@ -22,7 +22,7 @@ type MockSearchProvider struct {
 	searchJobsError     error
 	getJobDetailsError  error
 	searchJobsFunc      func(ctx context.Context, criteria internal.SearchCriteria, page int) ([]internal.JobListing, error)
-	getJobDetailsFunc   func(ctx context.Context, jobID string) (*internal.JobDetail, error)
+	getJobDetailsFunc   func(ctx context.Context, userID *string, jobID string) (*internal.JobDetail, error)
 }
 
 func (m *MockSearchProvider) SearchJobListings(ctx context.Context, criteria internal.SearchCriteria, page int) ([]internal.JobListing, error) {
@@ -33,13 +33,15 @@ func (m *MockSearchProvider) SearchJobListings(ctx context.Context, criteria int
 	return m.mockJobs, m.searchJobsError
 }
 
-func (m *MockSearchProvider) GetJobDetails(ctx context.Context, jobID string) (*internal.JobDetail, error) {
+func (m *MockSearchProvider) GetJobDetails(ctx context.Context, userID *string, jobID string) (*internal.JobDetail, error) {
 	m.getJobDetailsCalled = true
 	if m.getJobDetailsFunc != nil {
-		return m.getJobDetailsFunc(ctx, jobID)
+		return m.getJobDetailsFunc(ctx, userID, jobID)
 	}
 	return m.mockJobDetail, m.getJobDetailsError
-} // MockEventHandler implements the JobEventHandler interface for testing
+}
+
+// MockEventHandler implements the JobEventHandler interface for testing
 type MockEventHandler struct {
 	onJobListingCalled                  bool
 	onNewJobCalled                      bool
@@ -220,7 +222,7 @@ func TestHandleSearchTask(t *testing.T) {
 
 	// Set up getJobDetailsFunc to track calls for each job
 	jobDetailsCalled := make(map[string]bool)
-	mockSearchProvider.getJobDetailsFunc = func(ctx context.Context, jobID string) (*internal.JobDetail, error) {
+	mockSearchProvider.getJobDetailsFunc = func(ctx context.Context, userID *string, jobID string) (*internal.JobDetail, error) {
 		jobDetailsCalled[jobID] = true
 		return &internal.JobDetail{ID: jobID, Title: "Details for " + jobID}, nil
 	}

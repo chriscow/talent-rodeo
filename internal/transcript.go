@@ -3,12 +3,14 @@ package internal
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"talent-rodeo/assets"
 
 	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/tools"
 	"github.com/chriscow/vapi-go"
+	"github.com/sashabaranov/go-openai"
 )
 
 // Transcript represents a conversation transcript
@@ -63,7 +65,7 @@ func NewTranscriptFromCallResult(callResult vapi.Call) *Transcript {
 	}
 }
 
-func (t *Transcript) Summarize(ctx context.Context) (string, error) {
+func (t *Transcript) Summarize(ctx context.Context, fs *FirestoreClient, logger *slog.Logger, userID string) (string, error) {
 	systemPrompt, err := assets.EmbeddedFiles.ReadFile("prompts/transcript-analysis.001.txt")
 	if err != nil {
 		return "", fmt.Errorf("failed to create template: %w", err)
@@ -76,7 +78,18 @@ func (t *Transcript) Summarize(ctx context.Context) (string, error) {
 		},
 	}
 
-	return tools.Ask(ctx, t.String(), tools.WithMessages(msgs), tools.WithModel(tools.DeepSeekChat))
+	resp := openai.ChatCompletionResponse{}
+	result, err := tools.Ask(ctx, t.String(), tools.WithMessages(msgs), tools.WithModel(tools.DeepSeekChat), tools.WantCompletionResponse(&resp))
+	if err != nil {
+		return "", err
+	}
+
+	// Record LLM cost for transcript summarization
+	if err := RecordLLMCost(ctx, fs, &userID, string(tools.DeepSeekChat), resp, "transcript_summarization", nil); err != nil {
+		logger.Error("failed to record LLM cost for transcript summarization", "error", err)
+	}
+
+	return result, nil
 }
 
 func (t *Transcript) String() string {
