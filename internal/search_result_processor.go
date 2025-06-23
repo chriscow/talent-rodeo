@@ -41,6 +41,12 @@ type SearchProgress struct {
 	lastProgressNotified int
 }
 
+type ErrJobDetailAlreadyExtracted struct{}
+
+func (e *ErrJobDetailAlreadyExtracted) Error() string {
+	return "job detail already extracted"
+}
+
 // JobProcessor is an interface that defines the methods for processing new job details
 // returned from a search. It is used to enqueue jobs for post processing, such as
 // normalizing and embedding the job details.
@@ -104,7 +110,7 @@ type JobEventHandler interface {
 // Start launches worker goroutines and periodic queue monitoring/requeueing.
 func (s *SearchResultProcessor) Start() {
 	// Start workers
-	for i := 0; i < MaxConcurrentJobDetailProcessing; i++ {
+	for range MaxConcurrentJobDetailProcessing {
 		s.workersWg.Add(1)
 		go s.worker()
 	}
@@ -349,6 +355,11 @@ func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, listing JobLis
 	s.logger.Debug("saving job detail and linking", "jobID", jobDetail.ID, "criteriaID", jobSearch.Criteria.ID, "userID", userIDStr)
 	err := s.saveAndLinkJobDetail(ctx, jobSearch, jobDetail)
 	if err != nil {
+		if _, ok := err.(*ErrJobDetailAlreadyExtracted); ok {
+			s.logger.Debug("job detail already extracted, skipping", "jobID", jobDetail.ID, "criteriaID", jobSearch.Criteria.ID, "userID", userIDStr)
+			return
+		}
+
 		s.logger.Error("failed to save job detail and link", "error", err, "jobID", jobDetail.ID, "criteriaID", jobSearch.Criteria.ID, "userID", userIDStr)
 		return
 	}
@@ -389,7 +400,7 @@ func (s *SearchResultProcessor) saveAndLinkJobDetail(ctx context.Context, jobSea
 	}
 	if found {
 		if detail.ExtractedData != nil {
-			return nil
+			return &ErrJobDetailAlreadyExtracted{}
 		}
 
 		jobDetail = *detail
