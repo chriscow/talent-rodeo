@@ -7,8 +7,22 @@
     
     <div style="margin-bottom: 2rem;">
         <article>
-            <h4>Total Users</h4>
-            <p><strong>{{.TotalUsers}}</strong></p>
+            <form method="GET" style="margin-bottom: 1rem;">
+                <label>
+                    <input type="checkbox" name="call_completed" value="true" 
+                           {{if .ShowCallCompletedOnly}}checked{{end}}
+                           onchange="this.form.submit()">
+                    Show only users with Call Completed status
+                </label>
+            </form>
+            
+            <h4>
+                {{if .ShowCallCompletedOnly}}
+                    Call Completed Users: {{.TotalUsers}} (of {{.TotalAllUsers}} total)
+                {{else}}
+                    Total Users: {{.TotalUsers}}
+                {{end}}
+            </h4>
         </article>
     </div>
 
@@ -17,8 +31,8 @@
         <table>
             <thead>
                 <tr>
+                    <th>User ID</th>
                     <th>Name</th>
-                    <th>Email</th>
                     <th>Status</th>
                     <th>Tier</th>
                     <th>Last Accessed</th>
@@ -31,12 +45,18 @@
                 {{range .Users}}
                 <tr>
                     <td>
-                        <strong>{{.Name}}</strong>
-                        {{if .FirstName}}
-                            <br><small>{{.FirstName}} {{.LastName}}</small>
-                        {{end}}
+                        <code >
+                            {{slice .ID 0 8}}
+                        </code>
                     </td>
-                    <td>{{.Email}}</td>
+                    <td>
+                        {{if and .FirstName .LastName}}
+                        <strong>{{.FirstName}} {{.LastName}}</strong>
+                        {{else}}
+                        <strong>{{.Name}}</strong>
+                        {{end}}
+                        <br><small style="color: var(--pico-color-muted);">{{.Email}}</small>
+                    </td>
                     <td>
                         <span class="status-{{.Status.String}}">{{.Status.String}}</span>
                     </td>
@@ -115,7 +135,7 @@
         }
         
         th {
-            background-color: #f8f9fa;
+            /* background-color: #f8f9fa; */
             font-weight: 600;
             border-bottom: 2px solid #dee2e6;
         }

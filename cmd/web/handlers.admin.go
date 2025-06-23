@@ -1103,11 +1103,27 @@ func (app *application) adminUsers(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	data := app.newTemplateData(r)
 
+	// Check if filtering by Call Completed status
+	showCallCompletedOnly := r.URL.Query().Get("call_completed") == "true"
+	data["ShowCallCompletedOnly"] = showCallCompletedOnly
+
 	// Fetch all users - using a high limit to get all users
-	users, err := internal.ListUsers(ctx, app.fs, 10000, 0)
+	allUsers, err := internal.ListUsers(ctx, app.fs, 10000, 0)
 	if err != nil {
 		app.serverError(w, r, fmt.Errorf("failed to list users: %w", err))
 		return
+	}
+
+	// Filter users if needed
+	var users []*internal.User
+	if showCallCompletedOnly {
+		for _, user := range allUsers {
+			if user.Status == internal.UserStatusCallCompleted {
+				users = append(users, user)
+			}
+		}
+	} else {
+		users = allUsers
 	}
 
 	// Sort users by LastAccessedAt, most recent first
@@ -1117,6 +1133,7 @@ func (app *application) adminUsers(w http.ResponseWriter, r *http.Request) {
 
 	data["Users"] = users
 	data["TotalUsers"] = len(users)
+	data["TotalAllUsers"] = len(allUsers)
 
 	if err := response.Page(w, http.StatusOK, data, "pages/admin/users.html"); err != nil {
 		app.serverError(w, r, err)
