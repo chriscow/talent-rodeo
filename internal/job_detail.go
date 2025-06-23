@@ -68,6 +68,10 @@ type JobDetail struct {
 
 	ExtractedData *JobDetailExtractedData
 
+	// De-duplication fields
+	DescriptionHash *string // SHA256 hash of the normalized job description.
+	CanonicalJobID  *string // If this job is a duplicate, this points to the canonical JobDetail ID.
+
 	CreatedAt    time.Time
 	UpdatedAt    *time.Time
 	SearchJobIDs []string

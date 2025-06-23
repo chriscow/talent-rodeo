@@ -2,13 +2,22 @@ package internal
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func newTestLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
 
 func newTestProcessor(t *testing.T) *SearchResultProcessor {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
@@ -253,4 +262,90 @@ func (m *MockEventDispatch) OnJobDetailExtractionComplete(task SearchTask, jobDe
 func (m *MockEventDispatch) OnAllExtractionsComplete(task SearchTask, totalJobs int, userID *string) {
 	m.allExtractionsCompleteCalled = true
 	println("[MOCK] OnAllExtractionsComplete called")
+}
+
+func TestSearchResultProcessor_OnJobDetail_DuplicateHandling(t *testing.T) {
+	ctx := context.Background()
+	fsClient, err := NewTestFirestoreClient(ctx)
+	require.NoError(t, err)
+	defer fsClient.Close()
+
+	// Use a mock event dispatch to check if extraction is completed
+	mockDispatch := &MockEventDispatch{}
+	srp := NewSearchResultProcessor(fsClient, newTestLogger(), nil, mockDispatch)
+	srp.Start()
+	defer srp.Stop()
+
+	// --- Test Data ---
+	searchTaskID := "search-" + uuid.NewString()
+	criteriaID := "criteria-" + uuid.NewString()
+	userID := "user-test-123"
+	searchTask := SearchTask{ID: searchTaskID, Criteria: SearchCriteria{ID: criteriaID}}
+	canonicalJobDesc := "This is a unique job description for a Go developer."
+
+	// === Test Case 1: New Unique Job ===
+	t.Run("NewUniqueJob", func(t *testing.T) {
+		job1 := JobDetail{
+			Provider:      "linkedin",
+			ProviderJobID: "11111",
+			ID:            "linkedin:11111",
+			Description:   canonicalJobDesc,
+		}
+
+		srp.OnJobDetail(searchTask, JobListing{}, job1, &userID)
+		// Allow worker to process
+		<-time.After(200 * time.Millisecond)
+
+		// Verify JobDetail was saved correctly and queued for extraction
+		savedJob, found, err := GetJobDetail(ctx, fsClient, job1.ID)
+		require.NoError(t, err)
+		require.True(t, found)
+		assert.NotNil(t, savedJob.DescriptionHash)
+		assert.Nil(t, savedJob.CanonicalJobID)
+
+		// Verify Fingerprint was created
+		fingerprintRef := fsClient.Collection(JobDetailFingerprintsCollection).Doc(*savedJob.DescriptionHash)
+		fpDoc, err := fingerprintRef.Get(ctx)
+		require.NoError(t, err)
+		var fp JobDetailFingerprint
+		err = fpDoc.DataTo(&fp)
+		require.NoError(t, err)
+		assert.Equal(t, savedJob.ID, fp.CanonicalJobID)
+	})
+
+	// === Test Case 2: Duplicate Job ===
+	t.Run("DuplicateJob", func(t *testing.T) {
+		job2 := JobDetail{
+			Provider:      "linkedin",
+			ProviderJobID: "22222",
+			ID:            "linkedin:22222",
+			Description:   canonicalJobDesc, // Same description
+		}
+		canonicalJobID := "linkedin:11111"
+
+		mockDispatch.jobDetailExtractionCompleteCalled = false // Reset mock
+		srp.OnJobDetail(searchTask, JobListing{}, job2, &userID)
+		<-time.After(200 * time.Millisecond)
+
+		// Verify duplicate was saved as a stub
+		savedJob, found, err := GetJobDetail(ctx, fsClient, job2.ID)
+		require.NoError(t, err)
+		require.True(t, found)
+		assert.NotNil(t, savedJob.CanonicalJobID)
+		assert.Equal(t, canonicalJobID, *savedJob.CanonicalJobID)
+
+		// Verify extraction was SKIPPED
+		assert.False(t, mockDispatch.jobDetailExtractionCompleteCalled, "Extraction should not be called for a duplicate job")
+
+		// Verify Fingerprint was updated
+		fingerprintRef := fsClient.Collection(JobDetailFingerprintsCollection).Doc(*savedJob.DescriptionHash)
+		fpDoc, err := fingerprintRef.Get(ctx)
+		require.NoError(t, err)
+		var fp JobDetailFingerprint
+		err = fpDoc.DataTo(&fp)
+		require.NoError(t, err)
+		assert.Len(t, fp.ProviderJobIDs, 2)
+		assert.Contains(t, fp.ProviderJobIDs, "11111")
+		assert.Contains(t, fp.ProviderJobIDs, "22222")
+	})
 }
