@@ -390,6 +390,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 	data["PusherKey"] = os.Getenv("PUSHER_KEY")
 	data["PusherCluster"] = os.Getenv("PUSHER_CLUSTER")
 	data["JobStatuses"] = internal.GetJobStatuses()
+	data["User"] = user
 
 	// Map for display names of job statuses
 	data["StatusDisplayNames"] = map[string]string{
