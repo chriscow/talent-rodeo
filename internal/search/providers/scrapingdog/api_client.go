@@ -95,7 +95,7 @@ func NewAPIClient(apiKey string, opts ...APIOption) *APIClient {
 }
 
 // SearchJobListings searches for jobs with the given criteria
-func (c *APIClient) SearchJobListings(ctx context.Context, query, location string, jobType internal.WorkType, expLevel internal.ExperienceLevel, page int, sortBy SortBy) ([]LinkedInJobListing, error) {
+func (c *APIClient) SearchJobListings(ctx context.Context, query, geoid string, jobType internal.WorkType, expLevel internal.ExperienceLevel, page int, sortBy SortBy) ([]LinkedInJobListing, error) {
 	// Acquire semaphore to limit concurrent API calls
 	select {
 	case c.apiSemaphore <- struct{}{}:
@@ -107,7 +107,7 @@ func (c *APIClient) SearchJobListings(ctx context.Context, query, location strin
 
 	c.logger.Info("searching for job listings",
 		"query", query,
-		"location", location,
+		"location", geoid,
 		"page", page)
 
 	// Build URL
@@ -120,7 +120,7 @@ func (c *APIClient) SearchJobListings(ctx context.Context, query, location strin
 	q := baseURL.Query()
 	q.Set("api_key", c.apiKey)
 	q.Set("field", query)
-	q.Set("geoid", location)
+	q.Set("geoid", geoid)
 	q.Set("sort_by", string(sortBy)) // day (last 24 hours), week (last 7 days), month (last 30 days)
 
 	q.Set("job_type", string(jobType))   // optional, can be empty
