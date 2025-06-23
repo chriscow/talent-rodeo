@@ -83,6 +83,10 @@ var TemplateFuncs = template.FuncMap{
 	// JSON functions
 	"json": marshalJSON,
 
+	// Currency functions
+	"formatCurrency": formatCurrency,
+	"formatSalary":   formatSalary,
+
 	// Dictionary functions
 	"dict": func(values ...any) (map[string]any, error) {
 		if len(values)%2 != 0 {
@@ -584,4 +588,81 @@ func seq(start, end int) []int {
 		result[i] = start + i
 	}
 	return result
+}
+
+// formatCurrency formats a number as currency with proper formatting and symbol
+func formatCurrency(amount float64, currency string) string {
+	// Get currency symbol
+	symbol := getCurrencySymbol(currency)
+
+	// Format the amount with commas
+	return fmt.Sprintf("%s%s", symbol, printer.Sprintf("%.0f", amount))
+}
+
+// formatSalary formats a salary range with proper currency formatting
+func formatSalary(min, max float64, currency, period string) string {
+	symbol := getCurrencySymbol(currency)
+
+	// Format period for display
+	periodDisplay := formatPeriod(period)
+
+	// Format min amount
+	minFormatted := fmt.Sprintf("%s%s", symbol, printer.Sprintf("%.0f", min))
+
+	// If min and max are the same, show just one value
+	if min == max {
+		return fmt.Sprintf("%s%s", minFormatted, periodDisplay)
+	}
+
+	// Format max amount and show range
+	maxFormatted := fmt.Sprintf("%s%s", symbol, printer.Sprintf("%.0f", max))
+	return fmt.Sprintf("%s - %s%s", minFormatted, maxFormatted, periodDisplay)
+}
+
+// getCurrencySymbol returns the appropriate symbol for a currency code
+func getCurrencySymbol(currency string) string {
+	switch strings.ToUpper(currency) {
+	case "USD", "US":
+		return "$"
+	case "EUR", "EU":
+		return "€"
+	case "GBP", "GB":
+		return "£"
+	case "JPY", "JP":
+		return "¥"
+	case "CAD", "CA":
+		return "C$"
+	case "AUD", "AU":
+		return "A$"
+	case "CHF", "CH":
+		return "₣"
+	case "CNY", "CN":
+		return "¥"
+	case "INR", "IN":
+		return "₹"
+	default:
+		// Fallback to currency code if no symbol found
+		return currency
+	}
+}
+
+// formatPeriod formats the salary period for display
+func formatPeriod(period string) string {
+	switch strings.ToLower(period) {
+	case "yearly", "year", "annual", "annually":
+		return " / year"
+	case "monthly", "month":
+		return " / month"
+	case "hourly", "hour":
+		return " / hour"
+	case "weekly", "week":
+		return " / week"
+	case "daily", "day":
+		return " / day"
+	default:
+		if period != "" {
+			return " / " + period
+		}
+		return ""
+	}
 }
