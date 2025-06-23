@@ -1,5 +1,5 @@
 {{define "job-card"}}
-<article class="job-card" x-data="jobFeedback()" data-job-id="{{.EncryptedID}}">
+<article class="job-card" x-data="jobFeedback()" data-job-id="{{.Job.EncryptedID}}">
 
     <button class="job-close-btn" @click="dismissJob($el)" title="Dismiss this job" aria-label="Dismiss job" type="button" data-tooltip="Archive job">
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -15,7 +15,7 @@
             data-item-id="job-title"
             @mouseenter="currentHover = 'job-title'" 
             @mouseleave="currentHover = null">
-            <span class="item-text">{{.JobDetail.Title}}</span>
+            <span class="item-text">{{.Job.JobDetail.Title}}</span>
             <div class="feedback-buttons job-title-buttons" role="group">
                 <button class="secondary outline" data-tooltip="Save Job"
                         :class="{ 'active-like': feedback['job-title'] === 'like' }"
@@ -31,24 +31,27 @@
                 </button>
             </div>
         </h3>
-        <p>{{.JobDetail.Company}} - <em>Posted {{.JobDetail.PostedDate | approxTime}}{{if .JobDetail.SalaryInfo}} (Salary: {{formatSalary .JobDetail.SalaryInfo.Min .JobDetail.SalaryInfo.Max .JobDetail.SalaryInfo.Currency .JobDetail.SalaryInfo.Period}}){{end}}</em></p>
+        <p>{{.Job.JobDetail.Company}} - <em>Posted {{.Job.JobDetail.PostedDate | approxTime}}{{if .Job.JobDetail.SalaryInfo}} (Salary: {{formatSalary .Job.JobDetail.SalaryInfo.Min .Job.JobDetail.SalaryInfo.Max .Job.JobDetail.SalaryInfo.Currency .Job.JobDetail.SalaryInfo.Period}}){{end}}</em></p>
+        {{if .User.IsSuperUser}}
+        <p class="job-id">Job ID: <span>{{.Job.JobDetail.ID}}</span></p>
+        {{end}}
     </hgroup>
     <section>
         <span>
-        {{if .JobDetail.URL}}
-        <a href="{{.JobDetail.URL}}" target="_blank">View Job</a>
+        {{if .Job.JobDetail.URL}}
+        <a href="{{.Job.JobDetail.URL}}" target="_blank">View Job</a>
         {{end}}
-        {{if .JobDetail.ApplyURL}}
-        &nbsp;&nbsp;<a href="{{.JobDetail.ApplyURL}}" target="_blank">Apply Now</a>
+        {{if .Job.JobDetail.ApplyURL}}
+        &nbsp;&nbsp;<a href="{{.Job.JobDetail.ApplyURL}}" target="_blank">Apply Now</a>
         {{end}}
         </span>
     </section>
 
-    {{if .JobDetail.ExtractedData}}
+    {{if .Job.JobDetail.ExtractedData}}
     <section>
-        <p>{{.JobDetail.ExtractedData.Summary}}</p>
-        {{if .UserJob.JobMatchAnalysis}}
-        <p style="color: var(--pico-muted-color)"><em>{{.UserJob.JobMatchAnalysis.Rating.RatingExplanation}}</em></p>
+        <p>{{.Job.JobDetail.ExtractedData.Summary}}</p>
+        {{if .Job.UserJob.JobMatchAnalysis}}
+        <p style="color: var(--pico-muted-color)"><em>{{.Job.UserJob.JobMatchAnalysis.Rating.RatingExplanation}}</em></p>
         {{end}}
     </section>
     {{end}}
@@ -57,7 +60,7 @@
 
     <section class="grid">
 
-    {{with .JobDetail.ExtractedData}}
+    {{with .Job.JobDetail.ExtractedData}}
     
         <div>
             <details name="job-section">
@@ -88,8 +91,17 @@
     {{end}}
     </section>
 
+    {{if .User.IsSuperUser}}
+    <section class="job-admin-actions">
+        <button class="secondary outline" @click="openJobDetailsModal({{.Job.EncryptedID}})" data-tooltip="View Job Details">
+            <img class="light-theme-icon" src="/static/img/eye.24px.light-theme.svg" alt="View Details" width="24" height="24">
+            <img class="dark-theme-icon" src="/static/img/eye.24px.dark-theme.svg" alt="View Details" width="24" height="24">
+        </button>
+    </section>
+    {{end}}
+
     <footer>
-        <small>Added {{.JobDetail.CreatedAt | humanDate}} &nbsp; | &nbsp; {{ratingStars .UserJob.Rating}}</small>
+        <small>Added {{.Job.JobDetail.CreatedAt | humanDate}} &nbsp; | &nbsp; {{ratingStars .Job.UserJob.Rating}}</small>
     </footer>
 </article>
 {{end}}

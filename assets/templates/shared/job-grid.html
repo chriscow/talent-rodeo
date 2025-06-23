@@ -1,7 +1,7 @@
 {{define "job-grid"}}
 <div class="jobs-grid">
     {{range .Jobs}}
-        {{template "job-card" .}}
+        {{template "job-card" (dict "Job" . "User" $.User)}}
     {{end}}
 </div>
 {{end}}
