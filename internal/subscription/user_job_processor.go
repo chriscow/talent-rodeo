@@ -358,6 +358,15 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 	}
 
 	for _, job := range jobs {
+		// If this job is a known duplicate, skip it. The user will be evaluated
+		// against the canonical version of this job if they haven't been already.
+		if job.CanonicalJobID != nil {
+			processor.logger.Debug("skipping duplicate job for user evaluation", "jobID", job.ID, "canonicalJobID", *job.CanonicalJobID)
+			// We must decrement the total job count so the progress bar completes correctly.
+			processor.totalJobs--
+			continue
+		}
+
 		workType := ""
 		location := ""
 
