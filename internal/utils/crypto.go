@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 func SHA256Hash(data []byte) (string, error) {
@@ -20,6 +21,38 @@ func SHA256Hash(data []byte) (string, error) {
 	}
 
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// NormalizeAndHash creates a SHA256 hash of a string after normalizing it.
+func NormalizeAndHash(input string) string {
+	if input == "" {
+		return ""
+	}
+	// Normalize by trimming whitespace, converting to lower case, and compacting multiple spaces.
+	normalized := strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(input))), " ")
+	hash := sha256.Sum256([]byte(normalized))
+	return hex.EncodeToString(hash[:])
+}
+
+// Encrypt encrypts the plaintext with the given key using AES-GCM.
+func Encrypt(plaintext, key []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, err
+	}
+
+	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
+	return ciphertext, nil
 }
 
 // EncryptString encrypts a string using AES-GCM and returns a base64 encoded string.

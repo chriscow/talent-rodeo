@@ -11,10 +11,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"talent-rodeo/internal/utils"
+
 	"cloud.google.com/go/firestore"
 	"github.com/getsentry/sentry-go"
 	"github.com/pinecone-io/go-pinecone/v3/pinecone"
 	"github.com/pusher/pusher-http-go/v5"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -353,44 +357,127 @@ func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, listing JobLis
 	ctx := context.Background()
 
 	s.logger.Debug("saving job detail and linking", "jobID", jobDetail.ID, "criteriaID", jobSearch.Criteria.ID, "userID", userIDStr)
-	err := s.saveAndLinkJobDetail(ctx, jobSearch, jobDetail)
+	isNewCanonicalJob, err := s.HandleDuplicateAndSave(ctx, jobSearch, &jobDetail)
 	if err != nil {
-		if _, ok := err.(*ErrJobDetailAlreadyExtracted); ok {
-			s.logger.Debug("job detail already extracted, skipping", "jobID", jobDetail.ID, "criteriaID", jobSearch.Criteria.ID, "userID", userIDStr)
-			return
-		}
-
 		s.logger.Error("failed to save job detail and link", "error", err, "jobID", jobDetail.ID, "criteriaID", jobSearch.Criteria.ID, "userID", userIDStr)
 		return
 	}
 
-	// _, err = UpsertJobDetailEmbeddings(ctx, jobSearch.Criteria, []JobDetail{jobDetail})
-	// if err != nil {
-	// 	s.logger.Error("failed to upsert job detail embeddings", "error", err, "jobID", jobDetail.ID, "criteriaID", jobSearch.Criteria.ID, "userID", userIDStr)
-	// 	SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-	// 		"jobID": jobDetail.ID,
-	// 	})
-	// }
+	// Only queue for extraction if it's a new, unique job.
+	if isNewCanonicalJob {
+		s.logger.Debug("job is new canonical, queueing for extraction", "jobID", jobDetail.ID)
+		task := ExtractionTask{
+			SearchTaskID: jobSearch.ID,
+			UserID:       userID,
+			JobDetail:    jobDetail,
+		}
 
-	// Always queue the job for extraction.
-	// Progress tracking will be handled by the worker if a progress tracker is found.
-	task := ExtractionTask{
-		SearchTaskID: jobSearch.ID,
-		UserID:       userID,
-		JobDetail:    jobDetail,
-	}
-
-	if s.tryQueueExtractionTask(task) {
-		s.logger.Debug("extraction task queued", "userID", userIDStr, "jobID", jobDetail.ID, "searchTaskID", jobSearch.ID)
-		// If there is a progress tracker, update the total jobs.
-		if val, ok := s.progressTrackers.Load(jobSearch.ID); ok {
-			progress := val.(*SearchProgress)
-			progress.TotalJobs.Add(1)
-			s.logger.Debug("progress tracker update: total jobs", "searchTaskID", jobSearch.ID, "totalJobs", progress.TotalJobs.Load(), "userID", userIDStr)
+		if s.tryQueueExtractionTask(task) {
+			s.logger.Debug("extraction task queued", "userID", userIDStr, "jobID", jobDetail.ID, "searchTaskID", jobSearch.ID)
+			// If there is a progress tracker, update the total jobs.
+			if val, ok := s.progressTrackers.Load(jobSearch.ID); ok {
+				progress := val.(*SearchProgress)
+				progress.TotalJobs.Add(1)
+				s.logger.Debug("progress tracker update: total jobs", "searchTaskID", jobSearch.ID, "totalJobs", progress.TotalJobs.Load(), "userID", userIDStr)
+			}
+		} else {
+			s.logger.Warn("job detail queue full, dropping job", "jobID", jobDetail.ID)
 		}
 	} else {
-		s.logger.Warn("job detail queue full, dropping job", "jobID", jobDetail.ID)
+		s.logger.Debug("job detail is a duplicate or already processed, skipping extraction", "jobID", jobDetail.ID)
 	}
+}
+
+// HandleDuplicateAndSave checks for duplicates via description hash and saves the job detail.
+// It uses a Firestore transaction to ensure atomicity.
+// It returns true if the job is a new, canonical job that should be queued for extraction.
+func (s *SearchResultProcessor) HandleDuplicateAndSave(ctx context.Context, jobSearch SearchTask, jobDetail *JobDetail) (bool, error) {
+	// First, check if we've already processed this specific provider job ID.
+	existingDetail, found, err := GetJobDetail(ctx, s.fs, jobDetail.ID)
+	if err != nil {
+		return false, fmt.Errorf("failed to get job detail: %w", err)
+	}
+	if found {
+		s.logger.Debug("job detail already exists in database", "jobID", jobDetail.ID)
+		// If it has been extracted or is a known duplicate, we're done.
+		if existingDetail.ExtractedData != nil || existingDetail.CanonicalJobID != nil {
+			return false, nil
+		}
+		// Otherwise, it's an existing job that needs processing; overwrite our in-memory one.
+		*jobDetail = *existingDetail
+	}
+
+	// Now, check for duplicates based on description hash.
+	descriptionHash := utils.NormalizeAndHash(jobDetail.Description)
+	if descriptionHash == "" {
+		// No description, so we can't check for duplicates. Treat as unique.
+		err := s.saveAndLinkJobDetail(ctx, jobSearch, *jobDetail)
+		return true, err // isNew=true, needs extraction.
+	}
+	jobDetail.DescriptionHash = &descriptionHash
+
+	var isNewCanonicalJob bool
+	err = s.fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		fingerprintRef := s.fs.Collection(JobDetailFingerprintsCollection).Doc(descriptionHash)
+		fingerprintDoc, err := tx.Get(fingerprintRef)
+		if err != nil && status.Code(err) != codes.NotFound {
+			return fmt.Errorf("failed to get fingerprint: %w", err)
+		}
+
+		if fingerprintDoc.Exists() {
+			// --- DUPLICATE FOUND ---
+			isNewCanonicalJob = false
+			var fingerprint JobDetailFingerprint
+			if err := fingerprintDoc.DataTo(&fingerprint); err != nil {
+				return fmt.Errorf("failed to unmarshal fingerprint: %w", err)
+			}
+
+			// Mark this job as a duplicate, pointing to the canonical version.
+			jobDetail.CanonicalJobID = &fingerprint.CanonicalJobID
+
+			// Save this new job as a "stub" so we don't fetch it again.
+			if err := SaveJobDetailTx(ctx, s.fs, tx, jobDetail); err != nil {
+				return fmt.Errorf("failed to save duplicate job detail stub: %w", err)
+			}
+
+			// Add the new provider ID to the fingerprint's list.
+			if err := tx.Update(fingerprintRef, []firestore.Update{
+				{Path: "ProviderJobIDs", Value: firestore.ArrayUnion(jobDetail.ProviderJobID)},
+				{Path: "UpdatedAt", Value: time.Now().UTC()},
+			}); err != nil {
+				return fmt.Errorf("failed to update fingerprint: %w", err)
+			}
+		} else {
+			// --- NEW UNIQUE JOB ---
+			isNewCanonicalJob = true
+			jobDetail.CanonicalJobID = nil // Ensure it's nil
+
+			// Save the full, canonical job detail.
+			if err := SaveJobDetailTx(ctx, s.fs, tx, jobDetail); err != nil {
+				return fmt.Errorf("failed to save canonical job detail: %w", err)
+			}
+
+			// Create the new fingerprint document.
+			newFingerprint := JobDetailFingerprint{
+				ID:             descriptionHash,
+				CanonicalJobID: jobDetail.ID,
+				ProviderJobIDs: []string{jobDetail.ProviderJobID},
+				CreatedAt:      time.Now().UTC(),
+				UpdatedAt:      time.Now().UTC(),
+			}
+			if err := tx.Set(fingerprintRef, newFingerprint); err != nil {
+				return fmt.Errorf("failed to create fingerprint: %w", err)
+			}
+		}
+
+		// Always link the job detail (whether canonical or stub) to the search that found it.
+		if err := LinkJobDetailToSearchTaskTx(ctx, s.fs, tx, jobSearch.ID, jobDetail.ID); err != nil {
+			return fmt.Errorf("failed to add job detail to search task: %w", err)
+		}
+		return LinkJobDetailToCriteriaTx(ctx, s.fs, tx, jobSearch.Criteria.ID, jobDetail.ID)
+	})
+
+	return isNewCanonicalJob, err
 }
 
 func (s *SearchResultProcessor) saveAndLinkJobDetail(ctx context.Context, jobSearch SearchTask, jobDetail JobDetail) error {
