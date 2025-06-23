@@ -420,13 +420,13 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 	for rating := 0; rating <= 5; rating++ {
 		ratingCounts[rating] = 0
 	}
-	
+
 	for _, job := range allUserJobs {
 		if job.Rating >= 0 && job.Rating <= 5 {
 			ratingCounts[job.Rating]++
 		}
 	}
-	
+
 	data["RatingCounts"] = ratingCounts
 	data["TotalJobs"] = len(allUserJobs)
 
