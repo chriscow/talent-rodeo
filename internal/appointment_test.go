@@ -526,12 +526,11 @@ func TestAppointment(t *testing.T) {
 
 	// Test GetAppointmentTranscript with nil CallID
 	t.Run("GetAppointmentTranscriptNilCallID", func(t *testing.T) {
-		appointment := CreateTestAppointment(t, client, user)
-		// appointment.CallID is nil by default
-
-		_, err := GetAppointmentTranscript(ctx, client, *appointment.CallID)
+		// Test the function with an empty callID to simulate what would happen
+		// when an appointment has no CallID set
+		_, err := GetAppointmentTranscript(ctx, client, "")
 		if err == nil {
-			t.Error("GetAppointmentTranscript() with nil CallID should return error")
+			t.Error("GetAppointmentTranscript() with empty CallID should return error")
 		}
 		if err.Error() != "appointment does not have a call ID" {
 			t.Errorf("GetAppointmentTranscript() error = %v, want 'appointment does not have a call ID'", err)

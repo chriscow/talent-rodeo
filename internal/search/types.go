@@ -48,7 +48,7 @@ type JobProvider interface {
 	Name() string
 	Validate(ctx context.Context) error
 	SearchJobListings(ctx context.Context, criteria internal.SearchCriteria) ([]internal.JobListing, error)
-	GetJobDetails(ctx context.Context, jobID string) (*internal.JobDetail, error)
+	GetJobDetails(ctx context.Context, userID *string, jobID string) (*internal.JobDetail, error)
 }
 
 type JobCache interface {

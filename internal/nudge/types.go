@@ -2,6 +2,7 @@ package nudge
 
 import (
 	"context"
+	"log/slog"
 	"talent-rodeo/internal"
 	"time"
 )
@@ -243,7 +244,7 @@ type TemplateReader interface {
 // PromptProcessor handles prompt generation and LLM interaction
 type PromptProcessor interface {
 	GeneratePrompt(template []byte, data *NudgeEmailData) (string, error)
-	ProcessPrompt(ctx context.Context, prompt string) (string, error)
+	ProcessPrompt(ctx context.Context, fs *internal.FirestoreClient, logger *slog.Logger, userID string, prompt string) (string, error)
 }
 
 // EmailSender handles actual email delivery (abstracts SMTP)
@@ -254,7 +255,7 @@ type EmailSender interface {
 // EmailContentGenerator handles the business logic of email generation
 type EmailContentGenerator interface {
 	BuildEmailData(user *internal.User, nudgeType NudgeType, additionalData map[string]any) *NudgeEmailData
-	GenerateEmailContent(ctx context.Context, user *internal.User, nudgeType NudgeType, emailData *NudgeEmailData) (*GeneratedEmail, error)
+	GenerateEmailContent(ctx context.Context, fs *internal.FirestoreClient, logger *slog.Logger, user *internal.User, nudgeType NudgeType, emailData *NudgeEmailData) (*GeneratedEmail, error)
 	ValidateEmail(email *GeneratedEmail) error
 }
 

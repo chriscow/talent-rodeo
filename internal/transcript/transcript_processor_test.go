@@ -747,8 +747,9 @@ func TestGetWorkPreferencesEdgeCases(t *testing.T) {
 		}
 
 		var locations []string // empty slice
+		logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
 
-		err := getWorkPreferences(ctx, client, transcript, locations, user)
+		err := getWorkPreferences(ctx, client, logger, transcript, locations, user)
 
 		// Should handle empty locations gracefully
 		if err != nil {
@@ -776,7 +777,8 @@ func TestGetWorkPreferencesEdgeCases(t *testing.T) {
 			},
 		}
 
-		err := getWorkPreferences(ctx, client, transcript, nil, user)
+		logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
+		err := getWorkPreferences(ctx, client, logger, transcript, nil, user)
 
 		// Should handle nil locations gracefully
 		if err != nil {
@@ -806,7 +808,8 @@ func TestGetWorkPreferencesEdgeCases(t *testing.T) {
 
 		locations := []string{"san-francisco-ca", "new-york-ny", "austin-tx"}
 
-		err := getWorkPreferences(ctx, client, transcript, locations, user)
+		logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
+		err := getWorkPreferences(ctx, client, logger, transcript, locations, user)
 
 		// Should handle transcript with no location mentions gracefully
 		if err != nil {

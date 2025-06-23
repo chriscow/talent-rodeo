@@ -79,6 +79,22 @@ func UpdateUserStateWithError(ctx context.Context, fs *FirestoreClient, user *Us
 	})
 }
 
+func UpdateUserStateWithErrorTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, user *User, errorMsg string) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
+	user.Status = UserStatusError
+	user.StatusUpdatedAt = time.Now()
+	errorCopy := errorMsg // Make a copy to ensure it stays in memory
+	user.Error = &errorCopy
+
+	return UpdateUserTx(ctx, fs, tx, user.ID, map[string]any{
+		"Status":          UserStatusError,
+		"Error":           errorCopy,
+		"StatusUpdatedAt": user.StatusUpdatedAt,
+	})
+}
+
 func (s UserStatus) String() string {
 	switch s {
 	case UserStatusError:

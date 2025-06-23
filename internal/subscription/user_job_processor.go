@@ -159,14 +159,25 @@ func (p *UserJobProcessor) evaluateJob(ctx context.Context, task userJobEvaluati
 		return
 	}
 
+	// Record LLM cost for job analysis
+	if err := internal.RecordLLMCost(ctx, p.fs, &task.User.ID, task.AnalysisModel, resp, "job_analysis", &task.Job.ID); err != nil {
+		logger.Error("failed to record LLM cost for job analysis", "error", err)
+	}
+
+	structuredResp := openai.ChatCompletionResponse{}
 	matchAnalysis, err := tools.StructuredAsk[internal.JobMatchAnalysis](ctx, "Please extract this analysis into structured JSON data:\n"+analysis,
-		tools.WithModel(tools.GPT41Mini), tools.WithMaxTokens(8192))
+		tools.WithModel(tools.GPT41Mini), tools.WithMaxTokens(8192), tools.WantCompletionResponse(&structuredResp))
 	if err != nil {
 		logger.Error("failed to extract job match analysis", "error", err)
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"jobID":  task.Job.ID,
 			"userID": p.userID,
 		})
+	} else {
+		// Record LLM cost for structured extraction
+		if err := internal.RecordLLMCost(ctx, p.fs, &task.User.ID, tools.GPT41Mini, structuredResp, "job_analysis_extraction", &task.Job.ID); err != nil {
+			logger.Error("failed to record LLM cost for job analysis extraction", "error", err)
+		}
 	}
 
 	matchAnalysis.RawAnalysis = analysis

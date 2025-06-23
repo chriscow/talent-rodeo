@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"sort"
 	"talent-rodeo/assets"
 	"talent-rodeo/internal/utils"
@@ -12,6 +13,7 @@ import (
 	"cloud.google.com/go/firestore"
 	"github.com/chriscow/minds/tools"
 	"github.com/samber/lo"
+	"github.com/sashabaranov/go-openai"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -167,10 +169,10 @@ func initJobDetail(_ context.Context, _ *FirestoreClient, job *JobDetail) {
 	}
 }
 
-func ExtractJobDetailData(ctx context.Context, job *JobDetail) error {
+func ExtractJobDetailData(ctx context.Context, fs *FirestoreClient, userID *string, job *JobDetail) error {
 	pb, err := assets.EmbeddedFiles.ReadFile("prompts/job-summary.001.txt")
 	if err != nil {
-		return fmt.Errorf("failed to read system prompt: %w", err)
+		return fmt.Errorf("failed to read job detail extract prompt: %w", err)
 	}
 
 	b, err := json.Marshal(job)
@@ -180,11 +182,19 @@ func ExtractJobDetailData(ctx context.Context, job *JobDetail) error {
 
 	prompt := string(pb) + "\n\n```json\n" + string(b) + "\n```\n\n"
 
+	resp := openai.ChatCompletionResponse{}
 	data, err := tools.StructuredAsk[JobDetailExtractedData](ctx, prompt,
 		tools.WithModel(tools.DeepSeekChat),
-		tools.WithMaxTokens(8192))
+		tools.WithMaxTokens(8192),
+		tools.WantCompletionResponse(&resp))
 	if err != nil {
 		return fmt.Errorf("failed to summarize job detail: %w", err)
+	}
+
+	// Record LLM cost for job data extraction
+	if err := RecordLLMCost(ctx, fs, userID, string(tools.DeepSeekChat),
+		resp, "job_data_extraction", &job.ID); err != nil {
+		slog.Default().Error("failed to record LLM cost", "error", err, "userID", userID, "jobID", job.ID)
 	}
 
 	job.ExtractedData = &data

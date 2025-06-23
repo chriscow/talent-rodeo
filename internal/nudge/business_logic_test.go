@@ -2,6 +2,7 @@ package nudge
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -159,7 +160,7 @@ func (m *MockEmailGenerator) BuildEmailData(user *internal.User, nudgeType Nudge
 	}
 }
 
-func (m *MockEmailGenerator) GenerateEmailContent(ctx context.Context, user *internal.User, nudgeType NudgeType, emailData *NudgeEmailData) (*GeneratedEmail, error) {
+func (m *MockEmailGenerator) GenerateEmailContent(ctx context.Context, fs *internal.FirestoreClient, logger *slog.Logger, user *internal.User, nudgeType NudgeType, emailData *NudgeEmailData) (*GeneratedEmail, error) {
 	if m.generateError != nil {
 		return nil, m.generateError
 	}

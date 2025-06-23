@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"talent-rodeo/internal/funcs"
 
 	"github.com/chriscow/minds/tools"
+	"github.com/sashabaranov/go-openai"
 )
 
 // createJobID formats a provider job ID to ensure uniqueness across providers
@@ -27,22 +29,17 @@ func createJobID(jobProviderName string, providerJobID string) string {
 	// Then replace any remaining underscores with hyphens
 	id = strings.ReplaceAll(id, "_", "-")
 
-	return fmt.Sprintf("%s:%s:%s", SearchProviderName, jobProviderName, id)
+	return fmt.Sprintf("%s-%s", jobProviderName, id)
 }
 
-// parseSalaryRange parses a salary string into a structured SalaryRange object
-func parseSalaryRange(ctx context.Context, basePay string) (*internal.SalaryRange, error) {
+// parseSalaryRange uses the LLM to extract a salary range from
+// arbitrary text from the job listing
+func parseSalaryRange(ctx context.Context, fs *internal.FirestoreClient, logger *slog.Logger, userID *string, basePay string) (*internal.SalaryRange, error) {
 	if basePay == "" {
-		return nil, nil
+		return nil, fmt.Errorf("no base pay provided")
 	}
 
-	// Basic validation for salary format
-	if !strings.Contains(basePay, "$") && !strings.Contains(strings.ToLower(basePay), "k") &&
-		!strings.Contains(basePay, ",") && !strings.Contains(strings.ToLower(basePay), "thousand") {
-		return nil, fmt.Errorf("invalid salary format: %s", basePay)
-	}
-
-	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/salary.parse-range.v001.txt")
+	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/salary.001.txt")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read salary prompt: %w", err)
 	}
@@ -54,10 +51,16 @@ func parseSalaryRange(ctx context.Context, basePay string) (*internal.SalaryRang
 		return nil, fmt.Errorf("failed to generate prompt: %w", err)
 	}
 
+	resp := openai.ChatCompletionResponse{}
 	salary, err := tools.StructuredAsk[internal.SalaryRange](ctx, prompt,
-		tools.WithModel(tools.GPT41Nano))
+		tools.WithModel(tools.GPT41Nano), tools.WantCompletionResponse(&resp))
 	if err != nil {
 		return nil, fmt.Errorf("failed to ask: %w", err)
+	}
+
+	// Record LLM cost for salary parsing
+	if err := internal.RecordLLMCost(ctx, fs, userID, string(tools.GPT41Nano), resp, "salary_parsing", nil); err != nil {
+		return nil, fmt.Errorf("failed to record LLM cost: %w", err)
 	}
 
 	return &salary, nil
@@ -102,7 +105,7 @@ func convertJobListings(jobProviderName string, jobListings []LinkedInJobListing
 }
 
 // convertJobDetail converts provider-specific job details to a common format
-func convertJobDetail(detail LinkedInJobDetail) (*internal.JobDetail, error) {
+func convertJobDetail(ctx context.Context, fs *internal.FirestoreClient, logger *slog.Logger, userID *string, detail LinkedInJobDetail) (*internal.JobDetail, error) {
 	// Parse posting date
 	var postedDate time.Time
 	var err error
@@ -116,9 +119,9 @@ func convertJobDetail(detail LinkedInJobDetail) (*internal.JobDetail, error) {
 	}
 
 	// Parse salary range
-	salaryRange, err := parseSalaryRange(context.Background(), detail.BasePay)
+	salaryRange, err := parseSalaryRange(ctx, fs, logger, userID, detail.BasePay)
 	if err != nil {
-		// noop - we don't want to fail the conversion
+		logger.Error("failed to parse salary range", "error", err)
 	}
 
 	// Convert recruiters
@@ -183,7 +186,7 @@ func convertJobDetail(detail LinkedInJobDetail) (*internal.JobDetail, error) {
 }
 
 // SummarizeJobDetails uses LLM to create a job summary directly on the JobDetail
-func SummarizeJobDetails(ctx context.Context, jobDetail *internal.JobDetail) error {
+func SummarizeJobDetails(ctx context.Context, fs *internal.FirestoreClient, logger *slog.Logger, userID *string, jobDetail *internal.JobDetail) error {
 
 	jobJSON, err := json.MarshalIndent(jobDetail, "", "  ")
 	if err != nil {
@@ -202,9 +205,15 @@ func SummarizeJobDetails(ctx context.Context, jobDetail *internal.JobDetail) err
 		return fmt.Errorf("failed to generate prompt: %w", err)
 	}
 
-	summary, err := tools.StructuredAsk[internal.JobDetailExtractedData](ctx, prompt)
+	resp := openai.ChatCompletionResponse{}
+	summary, err := tools.StructuredAsk[internal.JobDetailExtractedData](ctx, prompt, tools.WantCompletionResponse(&resp))
 	if err != nil {
 		return fmt.Errorf("failed to ask: %w", err)
+	}
+
+	// Record LLM cost for job summary
+	if err := internal.RecordLLMCost(ctx, fs, userID, string(tools.DeepSeekChat), resp, "job_summary", nil); err != nil {
+		logger.Error("failed to record LLM cost for job summary", "error", err)
 	}
 
 	jobDetail.ExtractedData = &summary

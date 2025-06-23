@@ -103,7 +103,7 @@ Note: The appointment must have status 'completed'.`,
 			log.Fatalf("Resume not found: %s", resumeID)
 		}
 
-		jobDesc, err := internal.GenerateJobDescription(ctx, *resume, *appointment)
+		jobDesc, err := internal.GenerateJobDescription(ctx, fs, slog.Default(), user.ID, *resume, *appointment)
 		if err != nil {
 			log.Fatalf("Error generating job description: %v", err)
 		}
