@@ -1,0 +1,98 @@
+{{define "page:main"}}
+<main class="container">
+    <hgroup>
+        <h1>Payment Cancelled</h1>
+        <p>No charges were made to your account</p>
+    </hgroup>
+    
+    <article>
+        <div class="grid">
+            <div>
+                <h2>Payment Process Cancelled</h2>
+                <p>You've cancelled the payment process. No charges have been made to your account, and your subscription remains unchanged.</p>
+                
+                <h3>What Happened?</h3>
+                <ul>
+                    <li>You closed the Stripe checkout page</li>
+                    <li>You clicked the back button during payment</li>
+                    <li>The payment process was interrupted</li>
+                    <li>No payment was processed</li>
+                </ul>
+            </div>
+            <div>
+                <article>
+                    <header>
+                        <h3>Your Current Status</h3>
+                    </header>
+                    {{if .User}}
+                    <dl>
+                        <dt>Current Tier</dt>
+                        <dd>
+                            {{if eq .User.Tier "pro"}}
+                            <mark>Pro Tier</mark>
+                            {{else}}
+                            Free Tier
+                            {{end}}
+                        </dd>
+                        
+                        {{if .User.SubscriptionEnd}}
+                        <dt>{{if eq .User.Tier "pro"}}Pro Access Until{{else}}Trial Status{{end}}</dt>
+                        <dd>
+                            {{.User.SubscriptionEnd | humanDate}}
+                            {{if .User.SubscriptionEnd.Before now}}
+                            <small>(Expired)</small>
+                            {{end}}
+                        </dd>
+                        {{end}}
+                    </dl>
+                    {{end}}
+                </article>
+            </div>
+        </div>
+    </article>
+    
+    <article>
+        <h2>Ready to Try Again?</h2>
+        <p>If you'd like to upgrade to Pro and unlock job applications, you can try the payment process again anytime.</p>
+        
+        <div class="grid">
+            <div>
+                <a href="/upgrade" role="button">Try Payment Again</a>
+            </div>
+            <div>
+                <a href="/dashboard" role="button" class="outline">Return to Dashboard</a>
+            </div>
+        </div>
+    </article>
+    
+    <article>
+        <h2>Questions About Upgrading?</h2>
+        <div class="grid">
+            <div>
+                <h3>💳 Secure Payments</h3>
+                <p>All payments are processed securely through Stripe. We never store your payment information.</p>
+            </div>
+            <div>
+                <h3>💰 One-Time Payment</h3>
+                <p>No recurring charges - you pay once for a specific period of Pro access.</p>
+            </div>
+            <div>
+                <h3>📧 Email Receipts</h3>
+                <p>You'll receive an email receipt immediately after successful payment.</p>
+            </div>
+            <div>
+                <h3>🔗 Instant Access</h3>
+                <p>Job application links become active immediately after payment confirmation.</p>
+            </div>
+        </div>
+    </article>
+    
+    <article>
+        <details>
+            <summary>Need Help?</summary>
+            <p>If you're experiencing issues with the payment process or have questions about upgrading, please reach out:</p>
+            <p>Email: <a href="mailto:support@talent.rodeo">support@talent.rodeo</a></p>
+        </details>
+    </article>
+</main>
+{{end}}

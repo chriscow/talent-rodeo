@@ -32,6 +32,9 @@ func (app *application) routes() http.Handler {
 	// VAPI webhook endpoint
 	mux.HandleFunc("/vapi/outbound-call", app.makeOutboundCall, "POST")
 	mux.HandleFunc("/webhooks/vapi", app.handleVapiWebhook, "POST")
+	
+	// Stripe webhook endpoint (no CSRF protection needed)
+	mux.HandleFunc("/webhooks/stripe", app.stripeWebhookPost, "POST")
 
 	fileServer := http.FileServer(http.FS(assets.EmbeddedFiles))
 	mux.Handle("/static/...", fileServer, "GET")
@@ -87,6 +90,13 @@ func (app *application) routes() http.Handler {
 			mux.HandleFunc("/account/delete", app.deleteAccount, "POST")
 
 			mux.HandleFunc("/dashboard", app.showDashboard, "GET", "POST")
+
+			// Payment and subscription routes
+			mux.HandleFunc("/upgrade", app.upgradeGet, "GET")
+			mux.HandleFunc("/billing", app.billingGet, "GET")
+			mux.HandleFunc("/payment/create-checkout-session", app.createCheckoutSessionPost, "POST")
+			mux.HandleFunc("/payment/success", app.paymentSuccessGet, "GET")
+			mux.HandleFunc("/payment/cancel", app.paymentCancelGet, "GET")
 
 			// Feedback routes
 			mux.HandleFunc("/feedback/job", app.handleJobFeedback, "POST")
