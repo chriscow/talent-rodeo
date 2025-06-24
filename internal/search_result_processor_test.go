@@ -249,9 +249,10 @@ func (m *MockEventDispatch) OnSearchStarted(task SearchTask, userID *string) {
 	m.searchStartedCalled = true
 	println("[MOCK] OnSearchStarted called")
 }
-func (m *MockEventDispatch) OnJobListing(task SearchTask, listing JobListing, userID *string) {
+func (m *MockEventDispatch) OnJobListing(task *SearchTask, listing JobListing, userID *string) bool {
 	m.jobListingCalled = true
 	println("[MOCK] OnJobListing called")
+	return true // Simulate that the job listing was processed
 }
 func (m *MockEventDispatch) OnJobDetail(task SearchTask, listing JobListing, details JobDetail, userID *string) {
 	m.jobDetailCalled = true
@@ -280,8 +281,10 @@ type MockJobEventHandler struct {
 	OnAllExtractionsCompleteCalled      bool
 }
 
-func (m *MockJobEventHandler) OnSearchStarted(task SearchTask, userID *string)                  {}
-func (m *MockJobEventHandler) OnJobListing(task SearchTask, listing JobListing, userID *string) {}
+func (m *MockJobEventHandler) OnSearchStarted(task SearchTask, userID *string) {}
+func (m *MockJobEventHandler) OnJobListing(task *SearchTask, listing JobListing, userID *string) bool {
+	return true
+}
 func (m *MockJobEventHandler) OnJobDetail(task SearchTask, listing JobListing, details JobDetail, userID *string) {
 }
 func (m *MockJobEventHandler) OnPageComplete(task SearchTask, page int, jobsFound int, errors []error, userID *string) {

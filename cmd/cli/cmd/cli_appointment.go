@@ -65,8 +65,9 @@ func (u *jobEventHandler) OnSearchStarted(task internal.SearchTask) {
 	fmt.Println("userNotifier:OnSearchStarted", task)
 }
 
-func (u *jobEventHandler) OnJobListing(task internal.SearchTask, listing internal.JobListing) {
+func (u *jobEventHandler) OnJobListing(task internal.SearchTask, listing internal.JobListing) bool {
 	fmt.Println("userNotifier:OnJobListing", task, listing)
+	return true // always return true to indicate we want to fetch details
 }
 
 func (u *jobEventHandler) OnJobDetail(task internal.SearchTask, details internal.JobDetail) {

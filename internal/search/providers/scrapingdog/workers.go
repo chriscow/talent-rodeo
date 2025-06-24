@@ -340,7 +340,16 @@ func (wm *WorkerManager) handleSearchTask(ctx context.Context, wt WorkerTask) {
 				return
 			default:
 			}
-			// Enqueue job detail fetch as a WorkerTask
+			// Notify event handler and determine if this is a new listing
+			shouldFetch := true
+			if wm.eventHandler != nil {
+				shouldFetch = wm.eventHandler.OnJobListing(&searchJob, job, wt.UserID)
+			}
+			if !shouldFetch {
+				logger.Debug("skipping job detail fetch for duplicate listing", "criteriaID", searchJob.Criteria.ID, "jobID", job.ID)
+				continue
+			}
+			// Enqueue job detail fetch as a WorkerTask for new listings
 			jobDetailTask := JobDetailTask{
 				SearchTask: searchJob,
 				JobListing: job,
@@ -353,10 +362,6 @@ func (wm *WorkerManager) handleSearchTask(ctx context.Context, wt WorkerTask) {
 				validJobs = append(validJobs, job)
 			default:
 				logger.Warn("task queue full, dropping job detail fetch", "criteriaID", searchJob.Criteria.ID)
-			}
-
-			if wm.eventHandler != nil {
-				wm.eventHandler.OnJobListing(searchJob, job, wt.UserID)
 			}
 		}
 		logger.Debug("found job listings", "page", page, "count", len(listings), "validJobs", len(validJobs), "criteriaID", searchJob.Criteria.ID)

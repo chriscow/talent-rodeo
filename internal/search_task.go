@@ -30,13 +30,15 @@ type SearchTask struct {
 	// ADD: UserID to track who initiated the search for progress updates
 	UserID *string
 	// Snapshot of the search criteria used for this task
-	Criteria       SearchCriteria
-	Provider       string
-	Status         SearchTaskStatus
-	Error          *string
-	PagesCompleted int
-	CreatedAt      time.Time
-	UpdatedAt      *time.Time
+	Criteria          SearchCriteria
+	Provider          string
+	Status            SearchTaskStatus
+	Error             *string
+	PagesCompleted    int
+	CreatedAt         time.Time
+	UpdatedAt         *time.Time
+	TotalListings     int // total number of job listings found
+	DuplicateListings int // number of duplicate listings skipped
 }
 
 type JobDetailRef struct {
