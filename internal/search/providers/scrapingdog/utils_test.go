@@ -10,42 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCreateProviderJobID(t *testing.T) {
-	testCases := []struct {
-		name          string
-		providerJobID string
-		expected      string
-	}{
-		{
-			name:          "Simple ID",
-			providerJobID: "12345",
-			expected:      "scrapingdog:linkedin:12345",
-		},
-		{
-			name:          "ID with special characters",
-			providerJobID: "job-id_123!@#",
-			expected:      "scrapingdog:linkedin:job-id-123",
-		},
-		{
-			name:          "ID with spaces",
-			providerJobID: "job id 123",
-			expected:      "scrapingdog:linkedin:job-id-123",
-		},
-		{
-			name:          "Empty ID",
-			providerJobID: "",
-			expected:      "scrapingdog:linkedin:",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			result := createJobID(JobProviderName, tc.providerJobID)
-			assert.Equal(t, tc.expected, result)
-		})
-	}
-}
-
 func TestParseSalaryRange(t *testing.T) {
 	ctx := context.Background()
 

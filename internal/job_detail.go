@@ -143,17 +143,13 @@ type RelatedJob struct {
 	URL         string
 }
 
-func (j *JobDetail) GetCacheKey() string {
-	return fmt.Sprintf("%s:%s", j.Provider, j.ProviderJobID)
-}
-
-func initJobDetail(_ context.Context, _ *FirestoreClient, job *JobDetail) {
+func initJobDetail(_ context.Context, _ *FirestoreClient, job *JobDetail) error {
 	if job == nil {
-		return
+		return fmt.Errorf("initJobDetail: job is nil")
 	}
 
 	if job.ID == "" {
-		job.ID = job.GetCacheKey()
+		job.ID = fmt.Sprintf("%s:%s", job.Provider, job.ProviderJobID)
 	}
 
 	if job.UpdatedAt == nil && !job.CreatedAt.IsZero() {
@@ -168,6 +164,8 @@ func initJobDetail(_ context.Context, _ *FirestoreClient, job *JobDetail) {
 	if job.SearchJobIDs == nil {
 		job.SearchJobIDs = []string{}
 	}
+
+	return nil
 }
 
 func ExtractJobDetailData(ctx context.Context, fs *FirestoreClient, userID *string, job *JobDetail) error {
