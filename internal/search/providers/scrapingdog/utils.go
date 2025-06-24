@@ -12,25 +12,10 @@ import (
 
 	"talent-rodeo/assets"
 	"talent-rodeo/internal"
-	"talent-rodeo/internal/funcs"
 
 	"github.com/chriscow/minds/tools"
 	"github.com/sashabaranov/go-openai"
 )
-
-// createJobID formats a provider job ID to ensure uniqueness across providers
-// example: scrapingdog-linkedin:1234567890
-func createJobID(jobProviderName string, providerJobID string) string {
-	if providerJobID == "[empty]" {
-		return SearchProviderName
-	}
-	// First slugify the ID to handle spaces and basic special characters
-	id := funcs.Slugify(providerJobID)
-	// Then replace any remaining underscores with hyphens
-	id = strings.ReplaceAll(id, "_", "-")
-
-	return fmt.Sprintf("%s-%s", jobProviderName, id)
-}
 
 // parseSalaryRange uses the LLM to extract a salary range from
 // arbitrary text from the job listing
@@ -97,8 +82,6 @@ func convertJobListings(jobProviderName string, jobListings []LinkedInJobListing
 			CreatedAt:      time.Now(),
 		}
 
-		result[i].ID = createJobID(jobProviderName, job.LinkedInJobID)
-		result[i].SearchHash = criteria.GetSearchHash()
 	}
 
 	return result, nil
@@ -160,7 +143,6 @@ func convertJobDetail(ctx context.Context, fs *internal.FirestoreClient, logger 
 	}
 
 	result := internal.JobDetail{
-		ID:            createJobID(JobProviderName, detail.ID), // linkedin-1234567890
 		Provider:      JobProviderName,
 		ProviderJobID: detail.ID,
 		Title:         detail.Position,
