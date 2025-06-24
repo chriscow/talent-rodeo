@@ -85,9 +85,9 @@ func CreateUser(ctx context.Context, fs *FirestoreClient, u *User) error {
 	if fs == nil {
 		return fmt.Errorf("firestore client is nil")
 	}
-	if u.Name == "" {
-		return fmt.Errorf("user name is required")
-	}
+	// if u.Name == "" {
+	// 	return fmt.Errorf("user name is required")
+	// }
 
 	if u.ID == "" {
 		u.ID = uuid.New().String()

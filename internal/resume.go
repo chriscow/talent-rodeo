@@ -76,10 +76,6 @@ func CreateResume(ctx context.Context, fs *FirestoreClient, user User, resume *R
 		return fmt.Errorf("resume text is required")
 	}
 
-	if user.Name == "" {
-		return fmt.Errorf("user name is required")
-	}
-
 	if resume.ID == "" {
 		if resume.JobID != nil {
 			resume.ID = funcs.Slugify(fmt.Sprintf("resume-for-jobid-%s-%d", funcs.Slugify(*resume.JobID), time.Now().UnixNano()))
@@ -359,6 +355,35 @@ func getAnnotatedResume(ctx context.Context, fs *FirestoreClient, logger *slog.L
 	extract, err := extractResumeAnalysis(analysis)
 	if err != nil {
 		return extractResumeAnalysisLLM(ctx, fs, logger, userID, analysis)
+	}
+
+	type userName struct {
+		FirstName string `description:"First name of the user"`
+		LastName  string `description:"Last name of the user"`
+		FullName  string `description:"Full name of the user"`
+	}
+
+	user, found, err := GetUser(ctx, fs, userID)
+	if err != nil {
+		return nil, fmt.Errorf("convertResume: failed to get user: %w", err)
+	}
+	if !found {
+		return nil, fmt.Errorf("convertResume: user not found: %s", userID)
+	}
+
+	if user.Name == "" {
+		userName, err := tools.StructuredAsk[userName](ctx, "Extract the user's name from the resume text: "+resume.RawText, tools.WithModel(tools.GPT41Nano), tools.WithMaxTokens(4096))
+		if err != nil {
+			return nil, fmt.Errorf("convertResume: failed to extract user name: %w", err)
+		}
+
+		if err := UpdateUser(ctx, fs, userID, map[string]any{
+			"Name":      userName.FullName,
+			"FirstName": userName.FirstName,
+			"LastName":  userName.LastName,
+		}); err != nil {
+			return nil, fmt.Errorf("convertResume: failed to update user with name: %w", err)
+		}
 	}
 
 	return extract, nil
