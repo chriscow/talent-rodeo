@@ -39,10 +39,18 @@
     <section>
         <span>
         {{if .Job.JobDetail.URL}}
+        {{if eq .User.Tier "pro"}}
         <a href="{{.Job.JobDetail.URL}}" target="_blank">View Job</a>
+        {{else}}
+        <a href="#" data-tooltip="Pro plan is required">View Job</a>
+        {{end}}
         {{end}}
         {{if .Job.JobDetail.ApplyURL}}
+        {{if eq .User.Tier "pro"}}
         &nbsp;&nbsp;<a href="{{.Job.JobDetail.ApplyURL}}" target="_blank">Apply Now</a>
+        {{else}}
+        &nbsp;&nbsp;<a href="#" data-tooltip="Pro plan is required">Apply Now</a>
+        {{end}}
         {{end}}
         </span>
     </section>

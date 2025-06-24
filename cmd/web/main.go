@@ -41,6 +41,7 @@ import (
 	"github.com/markbates/goth/providers/google"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/pusher/pusher-http-go/v5"
+	"github.com/stripe/stripe-go/v72/client"
 )
 
 func main() {
@@ -166,6 +167,7 @@ type application struct {
 	searchScheduler       *search.Scheduler
 	subscriptionProcessor *subscription.Processor
 	nudgeProcessor        *nudge.Processor
+	stripeClient          *client.API
 }
 
 func run(logger *slog.Logger) error {
@@ -406,6 +408,8 @@ func run(logger *slog.Logger) error {
 		return fmt.Errorf("failed to initialize S3 client: %w", err)
 	}
 
+	stripeClient := client.New(os.Getenv("STRIPE_SECRET_KEY"), nil)
+
 	app := &application{
 		config: cfg,
 		fs:     FirestoreClient,
@@ -420,6 +424,7 @@ func run(logger *slog.Logger) error {
 		// natsScheduler: scheduler,
 		// handlers:       handlers,
 		sessionManager: sessionManager,
+		stripeClient:   stripeClient,
 		// search:          searchScheduler,
 		// searchProvider:  searchProvider,
 		// searchScheduler: searchScheduler,
@@ -545,6 +550,8 @@ func checkEnv(logger *slog.Logger, envFile string) error {
 
 		"SCRAPINGDOG_API_KEY",
 		"SESSION_SECRET",
+
+		"STRIPE_SECRET_KEY", "STRIPE_PUBLISHABLE_KEY", "STRIPE_WEBHOOK_SECRET",
 
 		/*
 					SMTP_HOST="smtp.gmail.com"

@@ -1,0 +1,96 @@
+{{define "page:main"}}
+<main class="container">
+    <hgroup>
+        <h1>Upgrade to Pro</h1>
+        <p>Unlock job applications and get access to all features</p>
+    </hgroup>
+    
+    <article>
+        <h2>Choose Your Plan</h2>
+        <p>Your 7-day free trial has given you a taste of what Talent Rodeo can do. Upgrade to Pro to start applying for jobs and unlock the full potential of our job matching platform.</p>
+        
+        <div class="grid">
+            <div>
+                <article>
+                    <header>
+                        <h3>Weekly Pro</h3>
+                        <h4>$7 USD</h4>
+                        <p>Perfect for short-term job searches</p>
+                    </header>
+                    <ul>
+                        <li>✓ Full access to job applications</li>
+                        <li>✓ "View Job" and "Apply Now" links enabled</li>
+                        <li>✓ All existing features unlocked</li>
+                        <li>✓ 7 days of Pro access</li>
+                    </ul>
+                    <footer>
+                        <form method="POST" action="/payment/create-checkout-session">
+                            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                            <input type="hidden" name="plan_type" value="weekly">
+                            <button type="submit" class="contrast">Choose Weekly Pro</button>
+                        </form>
+                    </footer>
+                </article>
+            </div>
+            <div>
+                <article>
+                    <header>
+                        <h3>Monthly Pro</h3>
+                        <h4>$20 USD</h4>
+                        <p><small><mark>Best Value - Save $8!</mark></small></p>
+                    </header>
+                    <ul>
+                        <li>✓ Full access to job applications</li>
+                        <li>✓ "View Job" and "Apply Now" links enabled</li>
+                        <li>✓ All existing features unlocked</li>
+                        <li>✓ 30 days of Pro access</li>
+                        <li>✓ Extended search duration</li>
+                    </ul>
+                    <footer>
+                        <form method="POST" action="/payment/create-checkout-session">
+                            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                            <input type="hidden" name="plan_type" value="monthly">
+                            <button type="submit">Choose Monthly Pro</button>
+                        </form>
+                    </footer>
+                </article>
+            </div>
+        </div>
+    </article>
+    
+    <article>
+        <h2>What You Get with Pro</h2>
+        <div class="grid">
+            <div>
+                <h3>🔗 Job Applications</h3>
+                <p>Access direct links to job postings and application pages. Apply to jobs that match your criteria immediately.</p>
+            </div>
+            <div>
+                <h3>🎯 Full Platform Access</h3>
+                <p>Continue using all the features you've experienced during your trial, without restrictions.</p>
+            </div>
+            <div>
+                <h3>🔍 Continuous Matching</h3>
+                <p>Our system continues to find and match new job opportunities based on your preferences and phone interview.</p>
+            </div>
+            <div>
+                <h3>💬 Ongoing Support</h3>
+                <p>Get help when you need it from our dedicated support team.</p>
+            </div>
+        </div>
+    </article>
+    
+    <article>
+        <details>
+            <summary>Payment & Security Information</summary>
+            <ul>
+                <li>All payments are processed securely through Stripe</li>
+                <li>We never store your payment information</li>
+                <li>One-time payments - no recurring charges</li>
+                <li>Subscription stacks - multiple purchases extend your Pro access</li>
+                <li>Email receipts provided automatically</li>
+            </ul>
+        </details>
+    </article>
+</main>
+{{end}}

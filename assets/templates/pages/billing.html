@@ -1,0 +1,112 @@
+{{define "page:main"}}
+<main class="container">
+    <hgroup>
+        <h1>Billing & Subscription</h1>
+        <p>Manage your Pro subscription</p>
+    </hgroup>
+    
+    <article>
+        <h2>Current Subscription Status</h2>
+        <div class="grid">
+            <div>
+                <dl>
+                    <dt>Current Tier</dt>
+                    <dd>
+                        {{if eq .User.Tier "pro"}}
+                        <mark>Pro Tier</mark>
+                        {{else if eq .User.Tier "free"}}
+                        Free Tier
+                        {{else}}
+                        {{.User.Tier | title}} Tier
+                        {{end}}
+                    </dd>
+                    
+                    {{if .User.SubscriptionEnd}}
+                    <dt>{{if eq .User.Tier "pro"}}Pro Access Expires{{else}}Trial Ended{{end}}</dt>
+                    <dd>{{.User.SubscriptionEnd | humanDate}}</dd>
+                    {{end}}
+                    
+                    <dt>Status</dt>
+                    <dd>
+                        {{if eq .User.Tier "pro"}}
+                            {{if .User.SubscriptionEnd}}
+                                {{if .User.SubscriptionEnd.After now}}
+                                <mark>Active Pro Subscription</mark>
+                                {{else}}
+                                <mark class="secondary">Expired - Needs Renewal</mark>
+                                {{end}}
+                            {{else}}
+                            <mark>Active Pro Subscription</mark>
+                            {{end}}
+                        {{else}}
+                            {{if .User.SubscriptionEnd}}
+                                {{if .User.SubscriptionEnd.After now}}
+                                <mark class="secondary">Free Trial Active</mark>
+                                {{else}}
+                                Trial Expired
+                                {{end}}
+                            {{else}}
+                            Free Tier
+                            {{end}}
+                        {{end}}
+                    </dd>
+                </dl>
+            </div>
+            <div>
+                {{if ne .User.Tier "pro"}}
+                <h3>Upgrade to Pro</h3>
+                <p>Get full access to job applications and all platform features.</p>
+                <a href="/upgrade" role="button">Upgrade Now</a>
+                {{else}}
+                <h3>Extend Your Pro Access</h3>
+                <p>Purchase additional Pro time to extend your subscription.</p>
+                <a href="/upgrade" role="button" class="outline">Extend Subscription</a>
+                {{end}}
+            </div>
+        </div>
+    </article>
+    
+    {{if eq .User.Tier "pro"}}
+    <article>
+        <h2>Pro Features</h2>
+        <div class="grid">
+            <div>
+                <h3>✓ Job Applications Enabled</h3>
+                <p>Access "View Job" and "Apply Now" links on all job matches.</p>
+            </div>
+            <div>
+                <h3>✓ Full Platform Access</h3>
+                <p>Unrestricted access to all features and functionality.</p>
+            </div>
+            <div>
+                <h3>✓ Priority Support</h3>
+                <p>Get help from our support team when you need it.</p>
+            </div>
+            <div>
+                <h3>✓ Continuous Matching</h3>
+                <p>Our system actively finds new job opportunities for you.</p>
+            </div>
+        </div>
+    </article>
+    {{end}}
+    
+    <article>
+        <details>
+            <summary>Billing Information</summary>
+            <ul>
+                <li><strong>Payment Method:</strong> Secure payments processed through Stripe</li>
+                <li><strong>Billing Type:</strong> One-time payments (no recurring charges)</li>
+                <li><strong>Subscription Stacking:</strong> Multiple purchases extend your Pro access period</li>
+                <li><strong>Receipts:</strong> Email receipts sent automatically after each payment</li>
+                <li><strong>Refunds:</strong> Contact support@talent.rodeo for refund requests</li>
+            </ul>
+        </details>
+    </article>
+    
+    <article>
+        <h2>Need Help?</h2>
+        <p>If you have questions about your subscription or billing, please don't hesitate to reach out:</p>
+        <p>Email: <a href="mailto:support@talent.rodeo">support@talent.rodeo</a></p>
+    </article>
+</main>
+{{end}}

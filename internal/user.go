@@ -24,6 +24,12 @@ const (
 
 	UserAccessUpdateThreshold = time.Hour // 1 hour
 	UserCacheTTL              = 15 * time.Minute
+
+	// Stripe pricing constants (in cents)
+	StripeWeeklyProPrice    = 700  // $7.00 USD
+	StripeMonthlyProPrice   = 2000 // $20.00 USD
+	StripeWeeklyProDuration = 7 * 24 * time.Hour
+	StripeMonthlyProDuration = 30 * 24 * time.Hour
 )
 
 // User represents a user document in Firestore

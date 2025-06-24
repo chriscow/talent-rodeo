@@ -1,0 +1,78 @@
+{{define "page:main"}}
+<main class="container">
+    <hgroup>
+        <h1>🎉 Payment Successful!</h1>
+        <p>Welcome to Talent Rodeo Pro</p>
+    </hgroup>
+    
+    <article>
+        <div class="grid">
+            <div>
+                <h2>Your Pro Access is Active</h2>
+                <p>Congratulations! Your payment has been processed successfully and your account has been upgraded to Pro tier.</p>
+                
+                <h3>What's Next?</h3>
+                <ul>
+                    <li>✓ Job application links are now enabled</li>
+                    <li>✓ You have full access to all platform features</li>
+                    <li>✓ You'll receive an email receipt from Stripe</li>
+                    <li>✓ Your Pro access is immediately active</li>
+                </ul>
+                
+                <a href="/dashboard" role="button">Go to Dashboard</a>
+            </div>
+            <div>
+                <article>
+                    <header>
+                        <h3>Your Subscription Details</h3>
+                    </header>
+                    {{if .User}}
+                    <dl>
+                        <dt>Current Tier</dt>
+                        <dd><mark>Pro Tier</mark></dd>
+                        
+                        {{if .User.SubscriptionEnd}}
+                        <dt>Pro Access Until</dt>
+                        <dd>{{.User.SubscriptionEnd | humanDate}}</dd>
+                        {{end}}
+                        
+                        <dt>Payment Status</dt>
+                        <dd><mark>Confirmed</mark></dd>
+                    </dl>
+                    {{end}}
+                    
+                    <footer>
+                        <small>Need to extend your subscription? Visit your <a href="/billing">billing page</a>.</small>
+                    </footer>
+                </article>
+            </div>
+        </div>
+    </article>
+    
+    <article>
+        <h2>Start Applying to Jobs</h2>
+        <p>Now that you're a Pro member, you can click on "View Job" and "Apply Now" links to start applying for positions that match your criteria.</p>
+        
+        <div class="grid">
+            <div>
+                <a href="/dashboard" role="button" class="outline">Browse Job Matches</a>
+            </div>
+            <div>
+                <a href="/billing" role="button" class="outline">View Billing Details</a>
+            </div>
+        </div>
+    </article>
+    
+    <article>
+        <details>
+            <summary>Payment Receipt & Support</summary>
+            <ul>
+                <li>An email receipt has been sent to your registered email address</li>
+                <li>Your payment was processed securely through Stripe</li>
+                <li>If you have any questions, contact us at support@talent.rodeo</li>
+                <li>Your Pro features are active immediately</li>
+            </ul>
+        </details>
+    </article>
+</main>
+{{end}}
