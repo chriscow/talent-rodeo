@@ -362,6 +362,7 @@ func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, listing JobLis
 		s.logger.Error("failed to save job detail and link", "error", err, "jobID", jobDetail.ID, "criteriaID", jobSearch.Criteria.ID, "userID", userIDStr)
 		return
 	}
+	SetJobDetailCache(s.fs, &jobDetail)
 
 	// Only queue for extraction if it's a new, unique job.
 	if isNewCanonicalJob {
@@ -391,7 +392,7 @@ func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, listing JobLis
 // HandleDuplicateAndSave checks for duplicates via description hash and saves the job detail.
 // It uses a Firestore transaction to ensure atomicity.
 // It returns true if the job is a new, canonical job that should be queued for extraction.
-func (s *SearchResultProcessor) HandleDuplicateAndSave(ctx context.Context, jobSearch SearchTask, jobDetail *JobDetail) (bool, error) {
+func (s *SearchResultProcessor) HandleDuplicateAndSave(ctx context.Context, jobSearch SearchTask, jobDetail *JobDetail) (unique bool, err error) {
 	// First, check if we've already processed this specific provider job ID.
 	existingDetail, found, err := GetJobDetail(ctx, s.fs, jobDetail.ID)
 	if err != nil {

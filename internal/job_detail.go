@@ -21,6 +21,7 @@ import (
 
 const (
 	JobDetailsCollection = "job_details"
+	JobDetailCacheTTL    = 1 * time.Hour
 )
 
 type SearchQueue interface {
@@ -215,7 +216,12 @@ func SaveJobDetail(ctx context.Context, fs *FirestoreClient, job *JobDetail) err
 		return fmt.Errorf("firestore.Set: %w", err)
 	}
 
-	fs.jobDetailCache.SetWithTTL(job.ID, job, 1, 1*time.Hour)
+	if fs.jobDetailCache != nil {
+		if job.ID == "" {
+			return fmt.Errorf("SaveJobDetail: job ID is empty")
+		}
+		fs.jobDetailCache.SetWithTTL(job.ID, job, 1, JobDetailCacheTTL)
+	}
 	return nil
 }
 
@@ -235,20 +241,34 @@ func SaveJobDetailTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Tra
 		return fmt.Errorf("firestore.Transaction.Set: %w", err)
 	}
 
-	fs.jobDetailCache.SetWithTTL(job.ID, job, 1, 1*time.Hour)
-
 	return nil
+}
+
+func SetJobDetailCache(fs *FirestoreClient, job *JobDetail) {
+	if fs == nil {
+		return
+	}
+	if fs.jobDetailCache == nil {
+		return
+	}
+	if job.ID == "" {
+		return
+	}
+	fs.jobDetailCache.SetWithTTL(job.ID, job, 1, JobDetailCacheTTL)
 }
 
 func GetJobDetail(ctx context.Context, fs *FirestoreClient, id string) (*JobDetail, bool, error) {
 	if fs == nil {
 		return nil, false, fmt.Errorf("GetJobDetail: fs is nil")
 	}
-	if jobDetail, ok := fs.jobDetailCache.Get(id); ok {
-		if jobDetail == nil {
-			return nil, false, fmt.Errorf("GetJobDetail: jobDetail in cache is nil")
+
+	if fs.jobDetailCache != nil {
+		if jobDetail, ok := fs.jobDetailCache.Get(id); ok {
+			if jobDetail == nil {
+				return nil, false, fmt.Errorf("GetJobDetail: jobDetail in cache is nil")
+			}
+			return jobDetail, true, nil
 		}
-		return jobDetail, true, nil
 	}
 
 	doc, err := fs.Collection(JobDetailsCollection).Doc(id).Get(ctx)
@@ -262,6 +282,13 @@ func GetJobDetail(ctx context.Context, fs *FirestoreClient, id string) (*JobDeta
 	var jobDetail JobDetail
 	if err := doc.DataTo(&jobDetail); err != nil {
 		return nil, false, err
+	}
+
+	if fs.jobDetailCache != nil {
+		if jobDetail.ID == "" {
+			return nil, false, fmt.Errorf("GetJobDetail: jobDetail ID is empty")
+		}
+		fs.jobDetailCache.SetWithTTL(jobDetail.ID, &jobDetail, 1, JobDetailCacheTTL)
 	}
 
 	return &jobDetail, false, nil
@@ -375,6 +402,10 @@ func ListJobDetails(ctx context.Context, fs *FirestoreClient, limit int, offset 
 			return nil, fmt.Errorf("failed to parse job detail %s: %w", doc.Ref.ID, err)
 		}
 
+		if fs.jobDetailCache != nil {
+			fs.jobDetailCache.SetWithTTL(jobDetail.ID, &jobDetail, 1, 1*time.Hour)
+		}
+
 		details = append(details, jobDetail)
 	}
 
@@ -412,6 +443,13 @@ func DeleteJobDetailsByPrefix(ctx context.Context, fs *FirestoreClient, prefix s
 				return deleted, fmt.Errorf("failed to delete job detail %s: %w", doc.Ref.ID, err)
 			}
 			deleted++
+
+			if fs.jobDetailCache != nil {
+				// Remove from cache if it exists
+				if _, ok := fs.jobDetailCache.Get(doc.Ref.ID); ok {
+					fs.jobDetailCache.Del(doc.Ref.ID)
+				}
+			}
 		}
 	}
 
@@ -432,13 +470,13 @@ func GetJobDetailsByIDs(ctx context.Context, fs *FirestoreClient, ids []string) 
 	var missingIDs []string
 
 	for _, id := range ids {
-		if jobDetail, ok := fs.jobDetailCache.Get(id); ok {
-			if jobDetail != nil {
+		if fs.jobDetailCache != nil {
+			if jobDetail, ok := fs.jobDetailCache.Get(id); ok && jobDetail != nil {
 				result = append(result, *jobDetail)
-			} // else skip nil
-		} else {
-			missingIDs = append(missingIDs, id)
+				continue
+			}
 		}
+		missingIDs = append(missingIDs, id)
 	}
 
 	// If all IDs were found in cache, return early
@@ -466,8 +504,9 @@ func GetJobDetailsByIDs(ctx context.Context, fs *FirestoreClient, ids []string) 
 				return nil, fmt.Errorf("failed to parse job detail %s: %w", missingIDs[i], err)
 			}
 
-			// Add to cache
-			fs.jobDetailCache.SetWithTTL(jobDetail.ID, &jobDetail, 1, 1*time.Hour)
+			if fs.jobDetailCache != nil {
+				fs.jobDetailCache.SetWithTTL(jobDetail.ID, &jobDetail, 1, 1*time.Hour)
+			}
 
 			// Add to result
 			result = append(result, jobDetail)
@@ -571,8 +610,10 @@ func SearchJobDetails(ctx context.Context, fs *FirestoreClient, userID, criteria
 	}
 
 	// Check cache first
-	if cachedJobs, found := fs.semanticJobsCache.Get(cacheKey); found {
-		return cachedJobs, nil
+	if fs.semanticJobsCache != nil {
+		if cachedJobs, found := fs.semanticJobsCache.Get(cacheKey); found {
+			return cachedJobs, nil
+		}
 	}
 
 	filter, err := getSemanticJobsFilter(ctx, fs, userID, criteriaID, steeringQuery)
@@ -638,7 +679,9 @@ func SearchJobDetails(ctx context.Context, fs *FirestoreClient, userID, criteria
 	})
 
 	// Cache the results with 1-hour TTL
-	fs.semanticJobsCache.SetWithTTL(cacheKey, updatedScoredJobs, 1, 1*time.Hour)
+	if fs.semanticJobsCache != nil {
+		fs.semanticJobsCache.SetWithTTL(cacheKey, updatedScoredJobs, 1, JobDetailCacheTTL)
+	}
 
 	return updatedScoredJobs, nil
 }

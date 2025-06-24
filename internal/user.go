@@ -23,6 +23,7 @@ const (
 	usersCollection = "users"
 
 	UserAccessUpdateThreshold = time.Hour // 1 hour
+	UserCacheTTL              = 15 * time.Minute
 )
 
 // User represents a user document in Firestore
@@ -525,4 +526,26 @@ func UpdateUserTierTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Tr
 	return tx.Update(fs.Collection(usersCollection).Doc(user.ID), []firestore.Update{
 		{Path: "Tier", Value: tier},
 	})
+}
+
+func (fs *FirestoreClient) GetUserFromCache(id string) (*User, bool) {
+	if fs.userCache == nil {
+		return nil, false
+	}
+	user, found := fs.userCache.Get(id)
+	return user, found
+}
+
+func (fs *FirestoreClient) SetUserCache(id string, user *User) {
+	if fs.userCache == nil {
+		return
+	}
+	fs.userCache.SetWithTTL(id, user, 1, UserCacheTTL)
+}
+
+func (fs *FirestoreClient) EvictUserCache(id string) {
+	if fs.userCache == nil {
+		return
+	}
+	fs.userCache.Del(id)
 }
