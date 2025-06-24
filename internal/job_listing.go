@@ -11,6 +11,7 @@ import (
 
 const (
 	JobListingCollection = "job_listings"
+	JobListingCacheTTL   = 2 * time.Hour
 )
 
 // JobListing represents a basic job listing.
@@ -35,6 +36,9 @@ type JobListing struct {
 }
 
 func (j *JobListing) GetCacheKey() string {
+	if j.ID != "" {
+		return j.ID
+	}
 	return fmt.Sprintf("%s:%s", j.Provider, j.ProviderJobID)
 }
 
@@ -69,7 +73,9 @@ func SaveJobListing(ctx context.Context, fs *FirestoreClient, jobSearch SearchTa
 		return fmt.Errorf("SaveJobListing: firestore.Set: %w", err)
 	}
 
-	fs.jobListingCache.SetWithTTL(jobListing.ID, jobListing, 1, 1*time.Hour)
+	if fs.jobListingCache != nil {
+		fs.jobListingCache.SetWithTTL(jobListing.ID, jobListing, 1, JobListingCacheTTL)
+	}
 	return nil
 }
 
@@ -77,14 +83,14 @@ func GetJobListing(ctx context.Context, fs *FirestoreClient, id string) (*JobLis
 	if fs == nil {
 		return nil, fmt.Errorf("GetJobListing: FirestoreClient is nil")
 	}
-	if fs.jobListingCache == nil {
-		return nil, fmt.Errorf("GetJobListing: jobListingCache is nil")
-	}
 	if id == "" {
 		return nil, fmt.Errorf("GetJobListing: id is empty")
 	}
-	if jobListing, ok := fs.jobListingCache.Get(id); ok {
-		return jobListing, nil
+
+	if fs.jobListingCache != nil {
+		if jobListing, ok := fs.jobListingCache.Get(id); ok {
+			return jobListing, nil
+		}
 	}
 
 	doc, err := fs.Collection(JobListingCollection).Doc(id).Get(ctx)
@@ -97,11 +103,15 @@ func GetJobListing(ctx context.Context, fs *FirestoreClient, id string) (*JobLis
 		return nil, fmt.Errorf("GetJobListing: firestore.DataTo: %w", err)
 	}
 
+	if fs.jobListingCache != nil {
+		fs.jobListingCache.SetWithTTL(id, &jobListing, 1, JobListingCacheTTL)
+	}
+
 	return &jobListing, nil
 }
 
 // ListJobListings retrieves all job listings with optional limit and offset
-func ListJobListings(ctx context.Context, fs *FirestoreClient, limit int, offset int) ([]map[string]any, error) {
+func ListJobListings(ctx context.Context, fs *FirestoreClient, limit int, offset int) ([]JobListing, error) {
 	if fs == nil {
 		return nil, fmt.Errorf("ListJobListings: FirestoreClient is nil")
 	}
@@ -120,7 +130,11 @@ func ListJobListings(ctx context.Context, fs *FirestoreClient, limit int, offset
 	}
 
 	iter := query.Documents(ctx)
-	var listings []map[string]any
+	listings := []JobListing{}
+
+	if iter == nil {
+		return nil, fmt.Errorf("ListJobListings: iterator is nil")
+	}
 
 	for {
 		doc, err := iter.Next()
@@ -131,7 +145,20 @@ func ListJobListings(ctx context.Context, fs *FirestoreClient, limit int, offset
 			return nil, fmt.Errorf("failed to iterate job listings: %w", err)
 		}
 
-		listings = append(listings, doc.Data())
+		if doc == nil {
+			return nil, fmt.Errorf("ListJobListings: document is nil")
+		}
+
+		var jobListing JobListing
+		if err := doc.DataTo(&jobListing); err != nil {
+			return nil, fmt.Errorf("ListJobListings: firestore.DataTo: %w", err)
+		}
+
+		if fs.jobListingCache != nil {
+			fs.jobListingCache.SetWithTTL(doc.Ref.ID, &jobListing, 1, JobListingCacheTTL)
+		}
+
+		listings = append(listings, jobListing)
 	}
 
 	return listings, nil
@@ -166,6 +193,11 @@ func DeleteJobListingsByPrefix(ctx context.Context, fs *FirestoreClient, prefix 
 				return deleted, fmt.Errorf("failed to delete job listing %s: %w", doc.Ref.ID, err)
 			}
 			deleted++
+
+			if fs.jobListingCache != nil {
+				// Remove from cache if it exists
+				fs.jobListingCache.Del(doc.Ref.ID)
+			}
 		}
 	}
 

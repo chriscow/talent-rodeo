@@ -287,25 +287,3 @@ func (fs *FirestoreClient) DeleteCollectionTx(ctx context.Context, tx *firestore
 
 	return nil
 }
-
-func (fs *FirestoreClient) GetUserFromCache(id string) (*User, bool) {
-	if fs.userCache == nil {
-		return nil, false
-	}
-	user, found := fs.userCache.Get(id)
-	return user, found
-}
-
-func (fs *FirestoreClient) SetUserCache(id string, user *User) {
-	if fs.userCache == nil {
-		return
-	}
-	fs.userCache.SetWithTTL(id, user, 1, 15*time.Minute)
-}
-
-func (fs *FirestoreClient) EvictUserCache(id string) {
-	if fs.userCache == nil {
-		return
-	}
-	fs.userCache.Del(id)
-}
