@@ -913,7 +913,8 @@ func (h *searchCompletionHandler) Wait() <-chan struct{} {
 }
 
 func (h *searchCompletionHandler) OnSearchStarted(task internal.SearchTask, userID *string) {}
-func (h *searchCompletionHandler) OnJobListing(task internal.SearchTask, listing internal.JobListing, userID *string) {
+func (h *searchCompletionHandler) OnJobListing(task *internal.SearchTask, listing internal.JobListing, userID *string) bool {
+	return false // returning true will indicate it is a new job listing and it will get fetched. We don't know so return false.
 }
 func (h *searchCompletionHandler) OnJobDetail(task internal.SearchTask, listing internal.JobListing, details internal.JobDetail, userID *string) {
 }

@@ -59,11 +59,12 @@ func (m *MockEventHandler) OnSearchStarted(task internal.SearchTask, userID *str
 	m.onSearchStartedCalled = true
 }
 
-func (m *MockEventHandler) OnJobListing(search internal.SearchTask, listing internal.JobListing, userID *string) {
+func (m *MockEventHandler) OnJobListing(search *internal.SearchTask, listing internal.JobListing, userID *string) bool {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.onJobListingCalled = true
 	m.jobsReceived = append(m.jobsReceived, listing.ID)
+	return false // not a duplicate
 }
 
 func (m *MockEventHandler) OnJobDetail(search internal.SearchTask, listing internal.JobListing, details internal.JobDetail, userID *string) {

@@ -8,7 +8,8 @@ import (
 // JobEventHandler defines the interface for handling job-related events
 type JobEventHandler interface {
 	OnSearchStarted(task SearchTask, userID *string)
-	OnJobListing(task SearchTask, listing JobListing, userID *string)
+	// OnJobListing returns true if the listing is new (should fetch details), false if duplicate
+	OnJobListing(task *SearchTask, listing JobListing, userID *string) bool
 	OnJobDetail(task SearchTask, listing JobListing, details JobDetail, userID *string)
 	OnPageComplete(task SearchTask, page int, jobsFound int, errors []error, userID *string)
 	OnSearchCompleted(task SearchTask, totalJobs int, errors []error, userID *string)
@@ -87,7 +88,7 @@ func (jed *JobEventDispatch) OnSearchStarted(task SearchTask, userID *string) {
 }
 
 // OnJobListing implements JobEventHandler
-func (jed *JobEventDispatch) OnJobListing(task SearchTask, listing JobListing, userID *string) {
+func (jed *JobEventDispatch) OnJobListing(task *SearchTask, listing JobListing, userID *string) bool {
 	jed.mu.RLock()
 	handlers := make([]JobEventHandler, 0, len(jed.handlers))
 	for _, handler := range jed.handlers {
@@ -95,16 +96,20 @@ func (jed *JobEventDispatch) OnJobListing(task SearchTask, listing JobListing, u
 	}
 	jed.mu.RUnlock()
 
-	// Call handlers sequentially, ignoring any errors
+	// Call handlers sequentially, OR-ing their results
+	var result bool
 	for _, handler := range handlers {
 		func() {
 			defer func() {
 				// Ignore panics from handlers
 				recover()
 			}()
-			handler.OnJobListing(task, listing, userID)
+			if handler.OnJobListing(task, listing, userID) {
+				result = true // returning true indicates a new listing and it should be fetched
+			}
 		}()
 	}
+	return result
 }
 
 // OnJobDetail implements JobEventHandler

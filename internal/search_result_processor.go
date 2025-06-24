@@ -99,18 +99,6 @@ func NewSearchResultProcessor(fs *FirestoreClient, logger *slog.Logger, psh *pus
 	}
 }
 
-/*
-type JobEventHandler interface {
-	OnSearchStarted(task SearchTask, userID *string)
-	OnJobListing(task SearchTask, listing JobListing, userID *string)
-	OnJobDetail(task SearchTask, listing JobListing, details JobDetail, userID *string)
-	OnPageComplete(task SearchTask, page int, jobsFound int, errors []error, userID *string)
-	OnSearchCompleted(task SearchTask, totalJobs int, errors []error, userID *string)
-	OnJobDetailExtractionComplete(task SearchTask, jobDetail JobDetail, userID *string)
-	OnAllExtractionsComplete(task SearchTask, totalJobs int, userID *string)
-}
-*/
-
 // Start launches worker goroutines and periodic queue monitoring/requeueing.
 func (s *SearchResultProcessor) Start() {
 	// Start workers
@@ -547,17 +535,33 @@ func (s *SearchResultProcessor) OnSearchStarted(jobSearch SearchTask, userID *st
 }
 
 // search.JobEventHandler implementation
-func (s *SearchResultProcessor) OnJobListing(jobSearch SearchTask, job JobListing, userID *string) {
+func (s *SearchResultProcessor) OnJobListing(jobSearch *SearchTask, job JobListing, userID *string) bool {
 	if s.fs == nil {
 		s.logger.Error("firestore client is nil, cannot process job listing")
-		return
+		return true // return true to fetch the job listing since we can't know if it's a duplicate
 	}
 	s.logger.Debug("OnJobListing", "jobID", job.ID, "criteria", jobSearch.Criteria.ID)
 
 	ctx := context.Background()
-	if err := SaveJobListing(ctx, s.fs, jobSearch, &job); err != nil {
+	// Check if listing already exists
+	if existing, err := GetJobListing(ctx, s.fs, job.ID); err == nil && existing != nil {
+		// Duplicate listing, update counts
+		jobSearch.TotalListings++
+		jobSearch.DuplicateListings++
+		if err := UpdateSearchTask(ctx, s.fs, jobSearch); err != nil {
+			s.logger.Error("failed to update search task counts", "error", err)
+		}
+		return false // return false to skip fetching details for duplicates
+	}
+	// New listing: save and update total count
+	if err := SaveJobListing(ctx, s.fs, *jobSearch, &job); err != nil {
 		s.logger.Error("failed to create job listing", "error", err)
 	}
+	jobSearch.TotalListings++
+	if err := UpdateSearchTask(ctx, s.fs, jobSearch); err != nil {
+		s.logger.Error("failed to update search task total count", "error", err)
+	}
+	return true // return true to fetch the job listing details
 }
 
 func (s *SearchResultProcessor) OnPageComplete(jobSearch SearchTask, page int, jobsFound int, errors []error, userID *string) {

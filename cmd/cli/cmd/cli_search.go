@@ -31,13 +31,13 @@ func (f *jobSinkForwarder) OnSearchStarted(task internal.SearchTask, userID *str
 	f.jobSink.OnSearchStarted(task, userID)
 }
 
-func (f *jobSinkForwarder) OnJobListing(task internal.SearchTask, listing internal.JobListing, userID *string) {
+func (f *jobSinkForwarder) OnJobListing(task *internal.SearchTask, listing internal.JobListing, userID *string) bool {
 	f.logger.Info(internal.Blue("New job listing found"),
 		"jobID", listing.ID,
 		"title", listing.Title,
 		"company", listing.Company,
 		"location", listing.Location)
-	f.jobSink.OnJobListing(task, listing, userID)
+	return f.jobSink.OnJobListing(task, listing, userID)
 }
 
 func (f *jobSinkForwarder) OnJobDetail(task internal.SearchTask, listing internal.JobListing, details internal.JobDetail, userID *string) {

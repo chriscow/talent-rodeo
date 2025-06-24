@@ -17,10 +17,11 @@ func (m *mockJobEventHandler) OnSearchStarted(task SearchTask, userID *string) {
 	m.events = append(m.events, "OnSearchStarted")
 }
 
-func (m *mockJobEventHandler) OnJobListing(task SearchTask, listing JobListing, userID *string) {
+func (m *mockJobEventHandler) OnJobListing(task *SearchTask, listing JobListing, userID *string) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.events = append(m.events, "OnJobListing")
+	return true
 }
 
 func (m *mockJobEventHandler) OnJobDetail(task SearchTask, listing JobListing, details JobDetail, userID *string) {
@@ -138,7 +139,7 @@ func TestEventDispatching(t *testing.T) {
 	}
 
 	// Test OnJobListing
-	dispatch.OnJobListing(task, listing, nil)
+	dispatch.OnJobListing(&task, listing, nil)
 	events1 = handler1.getEvents()
 	events2 = handler2.getEvents()
 
@@ -174,7 +175,7 @@ func TestEventDispatchingWithNoHandlers(t *testing.T) {
 
 	// These should not panic even with no handlers
 	dispatch.OnSearchStarted(task, nil)
-	dispatch.OnJobListing(task, listing, nil)
+	dispatch.OnJobListing(&task, listing, nil)
 	dispatch.OnJobDetail(task, listing, detail, nil)
 	dispatch.OnSearchCompleted(task, 0, nil, nil)
 }
@@ -186,7 +187,7 @@ func (p *panicHandler) OnSearchStarted(task SearchTask, userID *string) {
 	panic("test panic")
 }
 
-func (p *panicHandler) OnJobListing(task SearchTask, listing JobListing, userID *string) {
+func (p *panicHandler) OnJobListing(task *SearchTask, listing JobListing, userID *string) bool {
 	panic("test panic")
 }
 
