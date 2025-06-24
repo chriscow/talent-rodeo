@@ -128,9 +128,17 @@
         <h1>What If Your Next Job Found You?</h1>
         <p>Because your next career move deserves more<br />than just keyword matching</p>
         {{if not .User}}
-            <button id="linkedin-signin" class="contrast" onclick="login()">
-                <img src="/static/img/linkedin/retina/Sign-In-Large---Active.png" alt="LinkedIn Logo" />
+                    <button id="linkedin-signin" class="contrast" onclick="login('linkedin')">
+            <img src="/static/img/linkedin/retina/Sign-In-Large---Active.png" alt="LinkedIn Logo" />
+        </button>
+        
+        <section style="margin-top: 2rem;">
+            <span>You can also login with</span>
+            <button class="outline secondary" onclick="login('google')">
+                <img src="/static/img/google-logo.svg" style="width: 20px; height: 20px;" alt="Google Logo" />
             </button>
+        </section>
+
             <img id="loading-spinner" src="/static/img/puff.svg" style="opacity: 0" />
         {{else}}
             <a href="/profile" role="button">Continue to Dashboard</a>
@@ -180,7 +188,7 @@
         <h2>Ready to Transform Your Job Search?</h2>
         <p>Join thousands of job seekers who have found their perfect role with Talent Rodeo.</p>
         {{if not .User}}
-            <button id="linkedin-signin" class="contrast" onclick="login()">
+            <button id="linkedin-signin" class="contrast" onclick="login('linkedin')">
                 <img src="/static/img/linkedin/retina/Sign-In-Large---Active.png" alt="LinkedIn Logo" />
             </button>
             <img id="loading-spinner" src="/static/img/puff.svg" style="opacity: 0" />
@@ -199,10 +207,10 @@
     });
 
     // LinkedIn login handling
-    function login() {
+    function login(provider) {
         document.getElementById('loading-spinner').style.opacity = 1;
         document.getElementById('linkedin-signin').style.display = 'none';
-        window.location.href = "/auth/linkedin"
+        window.location.href = "/auth/" + provider
     }
 </script>
 {{end}}

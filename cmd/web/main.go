@@ -38,6 +38,7 @@ import (
 	"github.com/lmittmann/tint"
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
+	"github.com/markbates/goth/providers/google"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/pusher/pusher-http-go/v5"
 )
@@ -106,6 +107,10 @@ type config struct {
 	firebase struct {
 		projectID string
 	}
+	google struct {
+		clientID     string
+		clientSecret string
+	}
 	notifications struct {
 		email string
 	}
@@ -166,6 +171,10 @@ func run(logger *slog.Logger) error {
 	flag.BoolVar(&cfg.autoHTTPS.staging, "auto-https-staging", false, "use LetsEncrypt staging environment")
 	flag.StringVar(&cfg.cookie.secretKey, "cookie-secret-key", "", "secret key for cookie authentication/encryption")
 	flag.StringVar(&cfg.firebase.projectID, "firebase-project-id", "", "Firebase project ID")
+
+	flag.StringVar(&cfg.google.clientID, "google-client-id", "", "Google client ID")
+	flag.StringVar(&cfg.google.clientSecret, "google-client-secret", "", "Google client secret")
+
 	flag.StringVar(&cfg.db.dsn, "db-dsn", "", "PostgreSQL DSN")
 	flag.BoolVar(&cfg.db.automigrate, "db-automigrate", false, "run migrations on startup")
 	flag.StringVar(&cfg.notifications.email, "notifications-email", "", "contact email address for error notifications")
@@ -229,6 +238,17 @@ func run(logger *slog.Logger) error {
 
 	if cfg.linkedin.clientID == "" || cfg.linkedin.clientSecret == "" {
 		return fmt.Errorf("LINKEDIN_AUTH_CLIENT_ID and LINKEDIN_AUTH_CLIENT_SECRET environment variables are required")
+	}
+
+	if cfg.google.clientID == "" {
+		cfg.google.clientID = os.Getenv("GOOGLE_AUTH_CLIENT_ID")
+	}
+	if cfg.google.clientSecret == "" {
+		cfg.google.clientSecret = os.Getenv("GOOGLE_AUTH_CLIENT_SECRET")
+	}
+
+	if cfg.google.clientID == "" || cfg.google.clientSecret == "" {
+		return fmt.Errorf("GOOGLE_AUTH_CLIENT_ID and GOOGLE_AUTH_CLIENT_SECRET environment variables are required")
 	}
 
 	sentryDSN := os.Getenv("SENTRY_DSN")
@@ -300,6 +320,7 @@ func run(logger *slog.Logger) error {
 	gothic.Store = auth.NewSCSAdapter(sessionManager)
 	goth.UseProviders(
 		auth.New(cfg.linkedin.clientID, cfg.linkedin.clientSecret, cfg.baseURL+"/auth/linkedin/callback"),
+		google.New(cfg.google.clientID, cfg.google.clientSecret, cfg.baseURL+"/auth/google/callback"),
 	)
 
 	// Create NATS server if embedded mode is enabled
@@ -496,6 +517,8 @@ func checkEnv(logger *slog.Logger, envFile string) error {
 		"CLOUDFLARE_KV_API_TOKEN", "CLOUDFLARE_KV_NAMESPACE_ID", "CLOUDFLARE_ACCOUNT_ID",
 
 		"FIREBASE_PROJECT_ID", "FIREBASE_CREDENTIALS",
+
+		"GOOGLE_AUTH_CLIENT_ID", "GOOGLE_AUTH_CLIENT_SECRET",
 
 		"JOB_ID_ENCRYPTION_KEY",
 
