@@ -24,7 +24,7 @@ func parseSalaryRange(ctx context.Context, fs *internal.FirestoreClient, logger 
 		return nil, fmt.Errorf("no base pay provided")
 	}
 
-	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/salary.001.txt")
+	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/salary.parse-range.v001.txt")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read salary prompt: %w", err)
 	}
