@@ -33,6 +33,7 @@ def setup_firebase(env_file=".env"):
         cred = credentials.Certificate(credentials_dict)
         initialize_app(cred, {'projectId': project_id})
     
+    print(f"Using env: {env_file} Firebase project: {project_id}")
     firestore_creds_json = base64.b64decode(os.getenv("FIREBASE_CREDENTIALS")).decode('utf-8')
     firestore_creds_dict = json.loads(firestore_creds_json)
     firestore_creds = service_account.Credentials.from_service_account_info(firestore_creds_dict)
@@ -49,9 +50,9 @@ def analyze_cost_transactions(db, days_back=7):
     
     print(f"Date range: {start_time.strftime('%Y-%m-%d %H:%M')} to {end_time.strftime('%Y-%m-%d %H:%M')}")
     
-    # Query cost transactions
+    # Query cost transactions (use PascalCase field names)
     cost_ref = db.collection(COST_TRANSACTIONS_COLLECTION)
-    query = cost_ref.where("created_at", ">=", start_time).where("created_at", "<=", end_time)
+    query = cost_ref.where("CreatedAt", ">=", start_time).where("CreatedAt", "<=", end_time)
     
     try:
         transactions = list(query.stream())
@@ -77,13 +78,13 @@ def analyze_cost_transactions(db, days_back=7):
     print("\n--- Recent Transactions ---")
     for i, doc in enumerate(transactions[:10]):  # Show first 10
         data = doc.to_dict()
-        cost = data.get('cost_usd', 0.0)
+        cost = data.get('CostUSD', 0.0)
         total_cost += cost
         
-        user_id = data.get('user_id', 'Unknown')
-        trans_type = data.get('type', 'Unknown')
-        model = data.get('model')
-        feature = data.get('feature_area', 'Unknown')
+        user_id = data.get('UserID', 'Unknown')
+        trans_type = data.get('Type', 'Unknown')
+        model = data.get('Model')
+        feature = data.get('FeatureArea', 'Unknown')
         
         # Aggregate stats
         by_user[user_id] = by_user.get(user_id, 0.0) + cost
@@ -94,16 +95,16 @@ def analyze_cost_transactions(db, days_back=7):
         
         print(f"{i+1}. User: {user_id}")
         print(f"   Type: {trans_type}, Cost: ${cost:.6f}")
-        print(f"   Description: {data.get('description', 'No description')}")
+        print(f"   Description: {data.get('Description', 'No description')}")
         if model:
             print(f"   Model: {model}")
-            tokens_in = data.get('prompt_tokens', 0)
-            tokens_out = data.get('completion_tokens', 0)
+            tokens_in = data.get('PromptTokens', 0)
+            tokens_out = data.get('CompletionTokens', 0)
             print(f"   Tokens: {tokens_in} input + {tokens_out} output")
-            if data.get('discount_applied'):
-                print(f"   Discount: {data.get('discount_percent', 0)}% off")
+            if data.get('DiscountApplied'):
+                print(f"   Discount: {data.get('DiscountPercent', 0)}% off")
         print(f"   Feature: {feature}")
-        print(f"   Time: {data.get('created_at')}")
+        print(f"   Time: {data.get('CreatedAt')}")
         print()
     
     # Summary stats
@@ -150,4 +151,4 @@ def main():
         sys.exit(1)
 
 if __name__ == "__main__":
-    main() 
+    main()
