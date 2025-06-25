@@ -284,12 +284,21 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 	weekAgo := time.Now().Add(-7 * 24 * time.Hour)
 	jobIDs, err := internal.GetJobIDsForCriteriaCreatedAfter(ctx, fs, criteria.ID, weekAgo)
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action":     "RefreshUserJobs: failed to get job IDs for criteria",
+			"userID":     user.ID,
+			"criteriaID": criteria.ID,
+		})
 		logger.Error("failed to get job ids for criteria created after", "error", err)
 		return err
 	}
 
 	userJobs, err := internal.ListUserJobs(ctx, fs, user.ID)
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "RefreshUserJobs: failed to get user jobs",
+			"userID": user.ID,
+		})
 		return fmt.Errorf("failed to get user jobs: %w", err)
 	}
 
@@ -319,11 +328,19 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 	// 2. Prepare LLM conversation
 	sysPrompt, err := assets.EmbeddedFiles.ReadFile("prompts/jobdetail.match-analysis.v001.txt")
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "RefreshUserJobs: failed to read match prompt",
+			"userID": user.ID,
+		})
 		return fmt.Errorf("failed to read match prompt: %w", err)
 	}
 
 	resume, found, err := internal.GetLatestResume(ctx, fs, user.ID)
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "RefreshUserJobs: failed to get latest resume",
+			"userID": user.ID,
+		})
 		return fmt.Errorf("failed to get latest resume: %w", err)
 	}
 	if !found {
@@ -353,6 +370,11 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 
 	jobs, err := internal.GetJobDetailsByIDs(ctx, fs, jobIDs)
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action":     "RefreshUserJobs: failed to get job details",
+			"userID":     user.ID,
+			"jobIDCount": fmt.Sprintf("%d", len(jobIDs)),
+		})
 		return fmt.Errorf("failed to get job details for IDs %v: %w", jobIDs, err)
 	}
 
