@@ -181,6 +181,9 @@ func (p *Provider) Validate(ctx context.Context) error {
 
 	_, err := p.SearchJobListings(ctx, criteria, 1)
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "Provider::Validate: validation failed",
+		})
 		return fmt.Errorf("validation failed: %w", err)
 	}
 

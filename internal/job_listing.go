@@ -19,7 +19,7 @@ const (
 // More detailed information is available via GetJobDetails.
 type JobListing struct {
 	ID             string
-	Provider       string
+	Provider       string // Where was this job listing found? e.g. "LinkedIn" etc.
 	ProviderJobID  string // Original ID from the provider
 	Title          string // maps to Position in ScrapingDog
 	Company        string // maps to CompanyName in ScrapingDog
