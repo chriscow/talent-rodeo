@@ -12,6 +12,8 @@ import (
 	"strings"
 	"talent-rodeo/internal"
 	"time"
+
+	"github.com/getsentry/sentry-go"
 )
 
 type SortBy string
@@ -113,6 +115,9 @@ func (c *APIClient) SearchJobListings(ctx context.Context, query, geoid string, 
 	// Build URL
 	baseURL, err := url.Parse(c.baseURL)
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "APIClient::SearchJobListings: failed to parse base URL",
+		})
 		return nil, fmt.Errorf("failed to parse base URL: %w", err)
 	}
 
@@ -132,12 +137,18 @@ func (c *APIClient) SearchJobListings(ctx context.Context, query, geoid string, 
 	// Create request
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL.String(), nil)
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "APIClient::SearchJobListings: failed to create request",
+		})
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	// Use retry mechanism
 	resp, err := c.doRequestWithRetry(ctx, req)
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "APIClient::SearchJobListings: failed to send request",
+		})
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
@@ -146,12 +157,20 @@ func (c *APIClient) SearchJobListings(ctx context.Context, query, geoid string, 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		apiErr := HandleAPIError(resp.StatusCode)
+		internal.SentryReportError(ctx, apiErr, sentry.LevelError, map[string]string{
+			"action":     "APIClient::SearchJobListings: API request failed",
+			"statusCode": fmt.Sprintf("%d", resp.StatusCode),
+			"response":   string(body),
+		})
 		return nil, fmt.Errorf("API request failed with status %d: %s: %w", resp.StatusCode, string(body), apiErr)
 	}
 
 	// Parse response
 	var jobs []LinkedInJobListing
 	if err := json.NewDecoder(resp.Body).Decode(&jobs); err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "APIClient::SearchJobListings: failed to decode response",
+		})
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
@@ -174,6 +193,9 @@ func (c *APIClient) GetJobDetails(ctx context.Context, jobID string) (LinkedInJo
 	// Construct URL with jobid parameter
 	baseURL, err := url.Parse(c.baseURL)
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "APIClient::GetJobDetails: failed to parse base URL",
+		})
 		return LinkedInJobDetail{}, fmt.Errorf("failed to parse base URL: %w", err)
 	}
 
@@ -189,19 +211,32 @@ func (c *APIClient) GetJobDetails(ctx context.Context, jobID string) (LinkedInJo
 	// Create request
 	req, err := http.NewRequestWithContext(ctx, "GET", baseURL.String(), nil)
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "APIClient::GetJobDetails: failed to create request",
+		})
 		return LinkedInJobDetail{}, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	// Execute request with retry
 	resp, err := c.doRequestWithRetry(ctx, req)
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "APIClient::GetJobDetails: failed to execute request",
+			"jobID":  jobID,
+		})
 		return LinkedInJobDetail{}, fmt.Errorf("failed to execute request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	// Check for API errors
 	if resp.StatusCode != http.StatusOK {
-		return LinkedInJobDetail{}, HandleAPIError(resp.StatusCode)
+		apiErr := HandleAPIError(resp.StatusCode)
+		internal.SentryReportError(ctx, apiErr, sentry.LevelError, map[string]string{
+			"action":     "APIClient::GetJobDetails: API request failed",
+			"statusCode": fmt.Sprintf("%d", resp.StatusCode),
+			"jobID":      jobID,
+		})
+		return LinkedInJobDetail{}, apiErr
 	}
 
 	// Check content type for debugging
@@ -215,6 +250,10 @@ func (c *APIClient) GetJobDetails(ctx context.Context, jobID string) (LinkedInJo
 	// Read the entire body for potential error debugging
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "APIClient::GetJobDetails: failed to read response body",
+			"jobID":  jobID,
+		})
 		return LinkedInJobDetail{}, fmt.Errorf("failed to read response body: %w", err)
 	}
 
@@ -228,12 +267,22 @@ func (c *APIClient) GetJobDetails(ctx context.Context, jobID string) (LinkedInJo
 		c.logger.Error("received HTML instead of JSON",
 			"jobID", jobID,
 			"preview", preview)
-		return LinkedInJobDetail{}, fmt.Errorf("received HTML response instead of JSON")
+		htmlErr := fmt.Errorf("received HTML response instead of JSON")
+		internal.SentryReportError(ctx, htmlErr, sentry.LevelError, map[string]string{
+			"action":  "APIClient::GetJobDetails: received HTML instead of JSON",
+			"jobID":   jobID,
+			"preview": preview,
+		})
+		return LinkedInJobDetail{}, htmlErr
 	}
 
 	// Parse the JSON response
 	items := make([]LinkedInJobDetail, 0)
 	if err := json.Unmarshal(body, &items); err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "APIClient::GetJobDetails: failed to decode response",
+			"jobID":  jobID,
+		})
 		return LinkedInJobDetail{}, fmt.Errorf("failed to decode response: %w", err)
 	}
 
@@ -340,9 +389,22 @@ func (c *APIClient) doRequestWithRetry(ctx context.Context, req *http.Request) (
 
 	// If we've exhausted all retries, return the last error
 	if err != nil {
-		return nil, fmt.Errorf("exhausted all retries (%d): %w", MaxRetries, err)
+		retryErr := fmt.Errorf("exhausted all retries (%d): %w", MaxRetries, err)
+		internal.SentryReportError(ctx, retryErr, sentry.LevelError, map[string]string{
+			"action":     "APIClient::doRequestWithRetry: exhausted all retries with error",
+			"maxRetries": fmt.Sprintf("%d", MaxRetries),
+			"url":        req.URL.String(),
+		})
+		return nil, retryErr
 	}
 
 	// If we reach here, we've exhausted retries due to status codes
-	return nil, fmt.Errorf("exhausted all retries (%d): last status code: %d", MaxRetries, statusCode)
+	retryErr := fmt.Errorf("exhausted all retries (%d): last status code: %d", MaxRetries, statusCode)
+	internal.SentryReportError(ctx, retryErr, sentry.LevelError, map[string]string{
+		"action":     "APIClient::doRequestWithRetry: exhausted all retries with status code",
+		"maxRetries": fmt.Sprintf("%d", MaxRetries),
+		"statusCode": fmt.Sprintf("%d", statusCode),
+		"url":        req.URL.String(),
+	})
+	return nil, retryErr
 }

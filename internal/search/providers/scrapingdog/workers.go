@@ -163,7 +163,11 @@ func (wm *WorkerManager) Shutdown(ctx context.Context) error {
 		wm.logger.Info("scrapingdog workers shutdown complete")
 		return nil
 	case <-ctx.Done():
-		return fmt.Errorf("shutdown timed out: %w", ctx.Err())
+		shutdownErr := fmt.Errorf("shutdown timed out: %w", ctx.Err())
+		internal.SentryReportError(ctx, shutdownErr, sentry.LevelError, map[string]string{
+			"action": "WorkerManager::Shutdown: shutdown timed out",
+		})
+		return shutdownErr
 	}
 }
 
@@ -187,7 +191,12 @@ func (wm *WorkerManager) QueueTask(ctx context.Context, task WorkerTask) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		return fmt.Errorf("task queue is full")
+		queueFullErr := fmt.Errorf("task queue is full")
+		internal.SentryReportError(ctx, queueFullErr, sentry.LevelError, map[string]string{
+			"action":    "WorkerManager::QueueTask: task queue is full",
+			"queueSize": fmt.Sprintf("%d", cap(wm.taskQueue)),
+		})
+		return queueFullErr
 	}
 }
 
@@ -272,7 +281,12 @@ func (wm *WorkerManager) startWorker(ctx context.Context, workerID int) {
 
 			// Log the result
 			duration := time.Since(startTime)
-			logger.Debug("completed task", "task", fmt.Sprintf("%+v", task), "duration", duration)
+
+			userID := ""
+			if task.UserID != nil {
+				userID = *task.UserID
+			}
+			logger.Debug("completed task", "userID", userID, "task", task, "duration", duration)
 		}
 	}
 }
