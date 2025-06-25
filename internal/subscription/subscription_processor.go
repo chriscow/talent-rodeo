@@ -102,7 +102,11 @@ func (p *Processor) WithInterval(interval time.Duration) *Processor {
 // Returns an error if the processor is already running.
 func (p *Processor) Start(ctx context.Context) error {
 	if p.isRunning {
-		return fmt.Errorf("processor is already running")
+		startErr := fmt.Errorf("processor is already running")
+		internal.SentryReportError(ctx, startErr, sentry.LevelError, map[string]string{
+			"action": "Processor::Start: processor is already running",
+		})
+		return startErr
 	}
 
 	p.logger.Info("starting subscription processor", "interval", p.settings.Interval)
@@ -386,6 +390,10 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 	now := time.Now()
 	criteria.LastPublishedAt = &now
 	if err := internal.SetSearchCriteria(ctx, p.fs, &criteria); err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action":     "Processor::processCriteria: failed to update LastPublishedAt",
+			"criteriaID": criteria.ID,
+		})
 		return fmt.Errorf("failed to update LastPublishedAt for criteria %s: %w", criteria.ID, err)
 	}
 

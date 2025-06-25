@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"runtime/debug"
 	"strings"
+	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
 
 	"github.com/getsentry/sentry-go"
@@ -18,7 +19,11 @@ func (app *application) reportServerError(r *http.Request, err error) {
 		trace   = string(debug.Stack())
 	)
 
-	sentry.CaptureException(err)
+	internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+		"action": "reportServerError: server error occurred",
+		"method": method,
+		"url":    url,
+	})
 
 	requestAttrs := slog.Group("request", "method", method, "url", url)
 	app.logger.Error(message, requestAttrs)

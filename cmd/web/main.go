@@ -63,17 +63,30 @@ func (app *application) loadTestUser() (*internal.User, error) {
 
 	// If no test user ID is specified, try to find any user
 	if testUserID == "" {
-		return nil, fmt.Errorf("no test user ID specified in environment variable LINKEDIN_USERNAME")
+		configErr := fmt.Errorf("no test user ID specified in environment variable LINKEDIN_USERNAME")
+		internal.SentryReportError(context.Background(), configErr, sentry.LevelError, map[string]string{
+			"action": "loadTestUser: no test user ID specified",
+		})
+		return nil, configErr
 	}
 
 	// Load the user by ID
 	user, found, err := internal.GetUserByEmail(context.Background(), app.fs, testUserID)
 	if err != nil {
+		internal.SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
+			"action":     "loadTestUser: failed to get test user",
+			"testUserID": testUserID,
+		})
 		return nil, fmt.Errorf("failed to get test user: %w", err)
 	}
 
 	if !found {
-		return nil, fmt.Errorf("test user not found with ID: %s", testUserID)
+		notFoundErr := fmt.Errorf("test user not found with ID: %s", testUserID)
+		internal.SentryReportError(context.Background(), notFoundErr, sentry.LevelError, map[string]string{
+			"action":     "loadTestUser: test user not found",
+			"testUserID": testUserID,
+		})
+		return nil, notFoundErr
 	}
 
 	app.logger.Info("loaded test user for testing mode",
@@ -616,6 +629,9 @@ func (app *application) startServices(ctx context.Context, smtpCfg *smtp.Config)
 	if !app.config.nudgeOnly {
 		app.feedbackProcessor = feedback.NewProcessor(app.fs, app.logger)
 		if err := app.feedbackProcessor.Start(ctx); err != nil {
+			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+				"action": "startServices: failed to start feedback processor",
+			})
 			return fmt.Errorf("failed to start feedback processor: %w", err)
 		}
 
@@ -630,18 +646,30 @@ func (app *application) startServices(ctx context.Context, smtpCfg *smtp.Config)
 		app.searchScheduler = search.NewScheduler(app.fs, app.logger, app.searchProvider, app.mailer, app.config.notifications.email)
 
 		if err := app.subscriptionProcessor.Start(ctx); err != nil {
+			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+				"action": "startServices: failed to start subscription processor",
+			})
 			return fmt.Errorf("failed to start subscription processor: %w", err)
 		}
 		if err := app.searchProvider.Start(ctx); err != nil {
+			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+				"action": "startServices: failed to start search provider",
+			})
 			return fmt.Errorf("failed to start search provider: %w", err)
 		}
 		if err := app.searchScheduler.Start(ctx); err != nil {
+			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+				"action": "startServices: failed to start search scheduler",
+			})
 			return fmt.Errorf("failed to start search scheduler: %w", err)
 		}
 	}
 
 	app.nudgeProcessor = nudge.NewProcessorWithDefaults(app.fs, smtpCfg, app.logger)
 	if err := app.nudgeProcessor.Start(ctx); err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "startServices: failed to start nudge processor",
+		})
 		return fmt.Errorf("failed to start nudge processor: %w", err)
 	}
 
