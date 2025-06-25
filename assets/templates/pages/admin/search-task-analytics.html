@@ -1,0 +1,230 @@
+{{define "title"}}Search Task Analytics{{end}}
+
+{{define "page:main"}}
+<main class="container">
+    <hgroup>
+        <h1>Search Task Analytics</h1>
+        <p>Aggregated statistics for search tasks grouped by criteria to identify duplicates and efficiency metrics.</p>
+    </hgroup>
+
+    {{if .Error}}
+    <article class="error" style="background-color: var(--pico-form-element-invalid-active-border-color); color: var(--pico-color-white);">
+        <strong>Error:</strong> {{.Error}}
+    </article>
+    {{end}}
+
+    <!-- Summary Statistics -->
+    <div class="grid">
+        <article>
+            <h3>{{.TotalCriteria}}</h3>
+            <p>Total Search Criteria</p>
+        </article>
+        <article>
+            <h3>{{.TotalTasks}}</h3>
+            <p>Total Search Tasks</p>
+        </article>
+        <article>
+            <h3>{{.TotalListings}}</h3>
+            <p>Total Job Listings</p>
+        </article>
+        <article>
+            <h3>{{printf "%.1f%%" .OverallDuplicatePercentage}}</h3>
+            <p>Overall Duplicate Rate</p>
+        </article>
+    </div>
+
+    {{if .MostActiveCriteria}}
+    <article style="margin-bottom: 2rem;">
+        <h4>Key Insights</h4>
+        <ul>
+            <li><strong>Most Active Criteria:</strong> <code>{{.MostActiveCriteria}}</code></li>
+            {{if .HighestDuplicateCriteria}}
+            <li><strong>Highest Duplicate Rate:</strong> <code>{{.HighestDuplicateCriteria}}</code> ({{printf "%.1f%%" .MaxDuplicatePercentage}})</li>
+            {{end}}
+        </ul>
+    </article>
+    {{end}}
+
+    <!-- Sorting Controls -->
+    <div style="margin-bottom: 1rem;">
+        <small>Sort by: </small>
+        <a href="?sort=task_count" {{if eq .CurrentSort "task_count"}}style="font-weight: bold;"{{end}}>Task Count</a> |
+        <a href="?sort=total_listings" {{if eq .CurrentSort "total_listings"}}style="font-weight: bold;"{{end}}>Total Listings</a> |
+        <a href="?sort=duplicates" {{if eq .CurrentSort "duplicates"}}style="font-weight: bold;"{{end}}>Duplicates</a> |
+        <a href="?sort=duplicate_percentage" {{if eq .CurrentSort "duplicate_percentage"}}style="font-weight: bold;"{{end}}>Duplicate %</a> |
+        <a href="?sort=last_search" {{if eq .CurrentSort "last_search"}}style="font-weight: bold;"{{end}}>Last Search</a> |
+        <a href="?" {{if eq .CurrentSort ""}}style="font-weight: bold;"{{end}}>Criteria ID</a>
+    </div>
+
+    <!-- Analytics Table -->
+    {{if .Analytics}}
+    <div class="overflow-auto">
+        <table role="grid">
+            <thead>
+                <tr>
+                    <th scope="col">Criteria ID</th>
+                    <th scope="col">Query</th>
+                    <th scope="col">Geo/Work/Experience</th>
+                    <th scope="col" style="text-align: center;">Tasks</th>
+                    <th scope="col" style="text-align: center;">Listings</th>
+                    <th scope="col" style="text-align: center;">Duplicates</th>
+                    <th scope="col" style="text-align: center;">Dup %</th>
+                    <th scope="col" style="text-align: center;">Status Breakdown</th>
+                    <th scope="col">Last Search</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Analytics}}
+                <tr>
+                    <td>
+                        <code title="{{.CriteriaID}}">{{slice .CriteriaID 0 12}}...</code>
+                    </td>
+                    <td>
+                        <strong>{{.CriteriaQuery}}</strong>
+                    </td>
+                    <td>
+                        <small>
+                            {{if .CriteriaGeoID}}<strong>{{.CriteriaGeoID}}</strong>{{else}}<em>Any Location</em>{{end}}<br>
+                            <span class="work-type-{{.CriteriaWorkType}}">{{.CriteriaWorkType}}</span> | 
+                            <span class="exp-level-{{.CriteriaExpLevel}}">{{.CriteriaExpLevel}}</span>
+                        </small>
+                    </td>
+                    <td style="text-align: center;">
+                        <strong>{{.TaskCount}}</strong>
+                    </td>
+                    <td style="text-align: center;">
+                        {{.TotalListings}}
+                    </td>
+                    <td style="text-align: center;" {{if gt .TotalDuplicates 0}}class="duplicate-warning"{{end}}>
+                        {{.TotalDuplicates}}
+                    </td>
+                    <td style="text-align: center;" {{if gt .DuplicatePercentage 50.0}}class="high-duplicate"{{else if gt .DuplicatePercentage 25.0}}class="medium-duplicate"{{end}}>
+                        {{if gt .TotalListings 0}}{{printf "%.1f%%" .DuplicatePercentage}}{{else}}-{{end}}
+                    </td>
+                    <td style="text-align: center;">
+                        <small>
+                            {{if gt .CompletedTasks 0}}<span class="status-completed">✓{{.CompletedTasks}}</span>{{end}}
+                            {{if gt .QueuedTasks 0}}<span class="status-queued">⏳{{.QueuedTasks}}</span>{{end}}
+                            {{if gt .ProcessingTasks 0}}<span class="status-processing">⚙️{{.ProcessingTasks}}</span>{{end}}
+                            {{if gt .FailedTasks 0}}<span class="status-failed">❌{{.FailedTasks}}</span>{{end}}
+                        </small>
+                    </td>
+                    <td>
+                        {{if .LastSearchAt}}
+                            <time datetime="{{.LastSearchAt.Format "2006-01-02T15:04:05Z"}}">
+                                {{.LastSearchAt.Format "Jan 2, 15:04"}}
+                            </time>
+                        {{else}}
+                            <span style="color: #999;">Never</span>
+                        {{end}}
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{else}}
+    <article>
+        <p>No search task analytics data found.</p>
+    </article>
+    {{end}}
+
+    <style>
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .grid article {
+            text-align: center;
+            padding: 1.5rem;
+        }
+        
+        .grid h3 {
+            margin: 0 0 0.5rem 0;
+            font-size: 2rem;
+            color: var(--pico-primary);
+        }
+        
+        .grid p {
+            margin: 0;
+            color: var(--pico-color-muted);
+            font-size: 0.875rem;
+        }
+        
+        .overflow-auto {
+            overflow-x: auto;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1200px;
+        }
+        
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--pico-table-border-color);
+            vertical-align: top;
+        }
+        
+        th {
+            font-weight: 600;
+            border-bottom: 2px solid var(--pico-table-border-color);
+            background-color: var(--pico-table-head-background-color);
+        }
+        
+        tr:hover {
+            background-color: var(--pico-table-row-hover-background-color);
+        }
+        
+        .duplicate-warning {
+            background-color: #fff3cd;
+            color: #856404;
+            font-weight: bold;
+        }
+        
+        .high-duplicate {
+            background-color: #f8d7da;
+            color: #721c24;
+            font-weight: bold;
+        }
+        
+        .medium-duplicate {
+            background-color: #fff3cd;
+            color: #856404;
+            font-weight: bold;
+        }
+        
+        .status-completed { color: #28a745; }
+        .status-queued { color: #ffc107; }
+        .status-processing { color: #17a2b8; }
+        .status-failed { color: #dc3545; }
+        
+        .work-type-at_work { color: #007bff; }
+        .work-type-remote { color: #28a745; }
+        .work-type-hybrid { color: #fd7e14; }
+        
+        .exp-level-internship { color: #6c757d; }
+        .exp-level-entry_level { color: #17a2b8; }
+        .exp-level-associate { color: #007bff; }
+        .exp-level-mid_senior_level { color: #fd7e14; }
+        .exp-level-director { color: #dc3545; }
+        
+        time {
+            white-space: nowrap;
+        }
+        
+        small {
+            font-size: 0.875rem;
+        }
+        
+        code {
+            font-size: 0.8rem;
+        }
+    </style>
+</main>
+{{end}}

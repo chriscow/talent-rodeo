@@ -1139,3 +1139,98 @@ func (app *application) adminUsers(w http.ResponseWriter, r *http.Request) {
 		app.serverError(w, r, err)
 	}
 }
+
+// --- Admin Search Task Analytics ---
+func (app *application) adminSearchTaskAnalytics(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	data := app.newTemplateData(r)
+
+	// Fetch aggregated search task analytics
+	analytics, err := internal.GetSearchTaskAnalyticsByCriteria(ctx, app.fs)
+	if err != nil {
+		app.serverError(w, r, fmt.Errorf("failed to get search task analytics: %w", err))
+		return
+	}
+
+	// Handle sorting
+	sortBy := r.URL.Query().Get("sort")
+	switch sortBy {
+	case "task_count":
+		sort.Slice(analytics, func(i, j int) bool {
+			return analytics[i].TaskCount > analytics[j].TaskCount
+		})
+	case "total_listings":
+		sort.Slice(analytics, func(i, j int) bool {
+			return analytics[i].TotalListings > analytics[j].TotalListings
+		})
+	case "duplicates":
+		sort.Slice(analytics, func(i, j int) bool {
+			return analytics[i].TotalDuplicates > analytics[j].TotalDuplicates
+		})
+	case "duplicate_percentage":
+		sort.Slice(analytics, func(i, j int) bool {
+			return analytics[i].DuplicatePercentage > analytics[j].DuplicatePercentage
+		})
+	case "last_search":
+		sort.Slice(analytics, func(i, j int) bool {
+			if analytics[i].LastSearchAt == nil && analytics[j].LastSearchAt == nil {
+				return false
+			}
+			if analytics[i].LastSearchAt == nil {
+				return false
+			}
+			if analytics[j].LastSearchAt == nil {
+				return true
+			}
+			return analytics[i].LastSearchAt.After(*analytics[j].LastSearchAt)
+		})
+	default:
+		// Default sort by criteria ID
+		sort.Slice(analytics, func(i, j int) bool {
+			return analytics[i].CriteriaID < analytics[j].CriteriaID
+		})
+	}
+
+	// Calculate summary statistics
+	totalCriteria := len(analytics)
+	var totalTasks, totalListings, totalDuplicates int
+	var maxTaskCount, maxDuplicatePercentage float64
+	var mostActiveCriteria, highestDuplicateCriteria string
+
+	for _, a := range analytics {
+		totalTasks += a.TaskCount
+		totalListings += a.TotalListings
+		totalDuplicates += a.TotalDuplicates
+		
+		if float64(a.TaskCount) > maxTaskCount {
+			maxTaskCount = float64(a.TaskCount)
+			mostActiveCriteria = a.CriteriaID
+		}
+		
+		if a.DuplicatePercentage > maxDuplicatePercentage {
+			maxDuplicatePercentage = a.DuplicatePercentage
+			highestDuplicateCriteria = a.CriteriaID
+		}
+	}
+
+	var overallDuplicatePercentage float64
+	if totalListings > 0 {
+		overallDuplicatePercentage = float64(totalDuplicates) / float64(totalListings) * 100
+	}
+
+	// Set template data
+	data["Analytics"] = analytics
+	data["TotalCriteria"] = totalCriteria
+	data["TotalTasks"] = totalTasks
+	data["TotalListings"] = totalListings
+	data["TotalDuplicates"] = totalDuplicates
+	data["OverallDuplicatePercentage"] = overallDuplicatePercentage
+	data["MostActiveCriteria"] = mostActiveCriteria
+	data["HighestDuplicateCriteria"] = highestDuplicateCriteria
+	data["MaxDuplicatePercentage"] = maxDuplicatePercentage
+	data["CurrentSort"] = sortBy
+
+	if err := response.Page(w, http.StatusOK, data, "pages/admin/search-task-analytics.html"); err != nil {
+		app.serverError(w, r, err)
+	}
+}
