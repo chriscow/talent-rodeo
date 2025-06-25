@@ -340,6 +340,9 @@ func (wm *WorkerManager) handleSearchTask(ctx context.Context, wt WorkerTask) {
 				return
 			default:
 			}
+
+			job.ID = job.GetCacheKey()
+
 			// Notify event handler and determine if this is a new listing
 			shouldFetch := true
 			if wm.eventHandler != nil {
@@ -349,6 +352,7 @@ func (wm *WorkerManager) handleSearchTask(ctx context.Context, wt WorkerTask) {
 				logger.Debug("skipping job detail fetch for duplicate listing", "criteriaID", searchJob.Criteria.ID, "jobID", job.ID)
 				continue
 			}
+
 			// Enqueue job detail fetch as a WorkerTask for new listings
 			jobDetailTask := JobDetailTask{
 				SearchTask: searchJob,
