@@ -46,6 +46,24 @@ type JobDetailRef struct {
 	CreatedAt time.Time
 }
 
+// SearchTaskCriteriaAnalytics represents aggregated analytics for search tasks grouped by criteria
+type SearchTaskCriteriaAnalytics struct {
+	CriteriaID          string    `json:"criteria_id"`
+	CriteriaQuery       string    `json:"criteria_query"`
+	CriteriaGeoID       string    `json:"criteria_geo_id"`
+	CriteriaWorkType    WorkType  `json:"criteria_work_type"`
+	CriteriaExpLevel    ExperienceLevel `json:"criteria_experience_level"`
+	TaskCount           int       `json:"task_count"`
+	TotalListings       int       `json:"total_listings"`
+	TotalDuplicates     int       `json:"total_duplicates"`
+	DuplicatePercentage float64   `json:"duplicate_percentage"`
+	LastSearchAt        *time.Time `json:"last_search_at"`
+	CompletedTasks      int       `json:"completed_tasks"`
+	FailedTasks         int       `json:"failed_tasks"`
+	QueuedTasks         int       `json:"queued_tasks"`
+	ProcessingTasks     int       `json:"processing_tasks"`
+}
+
 var ErrSearchTaskExists = errors.New("search task already exists")
 
 // Added: Define common errors for nil parameters
@@ -308,4 +326,84 @@ func DeleteSearchTaskTx(ctx context.Context, fs *FirestoreClient, tx *firestore.
 	}
 
 	return nil
+}
+
+// GetSearchTaskAnalyticsByCriteria aggregates search task data grouped by criteria ID
+func GetSearchTaskAnalyticsByCriteria(ctx context.Context, fs *FirestoreClient) ([]SearchTaskCriteriaAnalytics, error) {
+	if fs == nil {
+		return nil, ErrFirestoreClientIsNil
+	}
+
+	// Query all search tasks
+	iter := fs.Collection(SearchTaskCollection).Documents(ctx)
+	
+	// Map to aggregate data by criteria ID
+	analytics := make(map[string]*SearchTaskCriteriaAnalytics)
+	
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("error iterating search tasks: %w", err)
+		}
+		
+		searchTask := &SearchTask{}
+		if err = doc.DataTo(searchTask); err != nil {
+			return nil, fmt.Errorf("error parsing search task data: %w", err)
+		}
+		
+		criteriaID := searchTask.Criteria.ID
+		
+		// Initialize analytics for this criteria if not exists
+		if analytics[criteriaID] == nil {
+			analytics[criteriaID] = &SearchTaskCriteriaAnalytics{
+				CriteriaID:       criteriaID,
+				CriteriaQuery:    searchTask.Criteria.Query,
+				CriteriaGeoID:    searchTask.Criteria.GeoID,
+				CriteriaWorkType: searchTask.Criteria.WorkType,
+				CriteriaExpLevel: searchTask.Criteria.ExperienceLevel,
+			}
+		}
+		
+		// Aggregate the data
+		a := analytics[criteriaID]
+		a.TaskCount++
+		a.TotalListings += searchTask.TotalListings
+		a.TotalDuplicates += searchTask.DuplicateListings
+		
+		// Update last search time
+		if a.LastSearchAt == nil || (searchTask.UpdatedAt != nil && searchTask.UpdatedAt.After(*a.LastSearchAt)) {
+			if searchTask.UpdatedAt != nil {
+				a.LastSearchAt = searchTask.UpdatedAt
+			} else {
+				a.LastSearchAt = &searchTask.CreatedAt
+			}
+		}
+		
+		// Count by status
+		switch searchTask.Status {
+		case SearchTaskStatusCompleted:
+			a.CompletedTasks++
+		case SearchTaskStatusFailed:
+			a.FailedTasks++
+		case SearchTaskStatusQueued:
+			a.QueuedTasks++
+		case SearchTaskStatusProcessing:
+			a.ProcessingTasks++
+		}
+	}
+	
+	// Convert map to slice and calculate percentages
+	result := make([]SearchTaskCriteriaAnalytics, 0, len(analytics))
+	for _, a := range analytics {
+		// Calculate duplicate percentage
+		if a.TotalListings > 0 {
+			a.DuplicatePercentage = float64(a.TotalDuplicates) / float64(a.TotalListings) * 100
+		}
+		result = append(result, *a)
+	}
+	
+	return result, nil
 }
