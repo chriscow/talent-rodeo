@@ -366,11 +366,9 @@ func ProcessAppointmentFailed(ctx context.Context, fs *FirestoreClient, user *Us
 			return fmt.Errorf("failed to delete processing reference in transaction: %w", err)
 		}
 
-		// Update user state to error and set the error message
-		errorCopy := err.Error() // Make a copy to ensure it stays in memory
-
-		if err := UpdateUserStateWithErrorTx(ctx, fs, tx, user, errorCopy); err != nil {
-			return fmt.Errorf("failed to update user error state: %w", err)
+		// Reset the user status so they can try again
+		if err := UpdateUserStatusTx(ctx, fs, tx, user, UserStatusResumeUploaded); err != nil {
+			return fmt.Errorf("failed to update user status: %w", err)
 		}
 
 		return nil

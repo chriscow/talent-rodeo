@@ -19,11 +19,21 @@ task audit             # Quality control: fmt, vet, staticcheck, govulncheck
 task test-cover        # Run tests with coverage report
 ```
 
+If you run `go test` directly, you need to set the `FIRESTORE_EMULATOR_HOST` environment variable to `localhost:8200` and load the `.env` file `set -a; source .env; set +a`.
+
 **Database:**
 ```bash
 task firebase          # Start Firebase emulators for local development
 task migrations-up     # Apply database migrations
 task migrations-new    # Create new migration: task migrations-new -- migration_name
+```
+
+**Github:**
+The github command line tools are available in the `gh` command.
+```bash
+gh auth login
+gh repo clone https://github.com/chriscow/talent-rodeo
+gh pr create --title "Your PR title" --body "Your PR body"
 ```
 
 ## Architecture Overview
@@ -70,7 +80,7 @@ func (app *application) handlerName(w http.ResponseWriter, r *http.Request) {
 ```
 
 **Database Operations:**
-- Primary: Firestore via `app.firestoreClient`
+- Primary: Firestore via `app.firestoreClient` or `internal/firestore.go`
 - Testing: Firestore emulator (auto-started in tests)
 - Migrations: PostgreSQL-compatible but currently using Firestore
 
@@ -133,15 +143,15 @@ PUSHER_CLUSTER=us2
 
 **Test Environment:**
 - Firestore emulator automatically started via `TestMain()`
-- Test users auto-created/cleaned up per test suite
+- Test users auto-created/cleaned up per test suite (see `internal/test_helpers.go`)
 - Screenshots captured on UI test failures
 - Race detection enabled by default
 
 **Running Specific Tests:**
 ```bash
-go test ./internal/specific_package    # Single package
-task test:ui -- homepage              # Specific UI test
-go test -run TestSpecificFunction     # Single test function
+set -a; source .env; set +a; FIRESTORE_EMULATOR_HOST=localhost:8200 go test ./internal/specific_package    # Single package
+set -a; source .env; set +a; FIRESTORE_EMULATOR_HOST=localhost:8200 task test:ui -- homepage              # Specific UI test
+set -a; source .env; set +a; FIRESTORE_EMULATOR_HOST=localhost:8200 go test -run TestSpecificFunction     # Single test function
 ```
 
 ## Authentication Flow
@@ -182,6 +192,12 @@ go test -run TestSpecificFunction     # Single test function
 - Progressive enhancement with minimal JavaScript
 
 ## Common Debugging
+
+**Sentry Error Logging:**
+- Sentry is configured in `cmd/web/main.go`
+- `internal/sentry.go` are Sentry helper functions
+- Please ensure all errors are logged to Sentry.
+
 
 **Firestore Connection Issues:**
 - Check `FIREBASE_PROJECT_ID` and `FIREBASE_CREDENTIALS`

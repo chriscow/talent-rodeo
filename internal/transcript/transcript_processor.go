@@ -450,6 +450,96 @@ func SendRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user *int
 	return nil
 }
 
+func SendFailureEmail(ctx context.Context, fs *internal.FirestoreClient, user *internal.User, appointment *internal.Appointment, failureReason string, cfg *smtp.Config, logger *slog.Logger) error {
+	if cfg == nil {
+		logger.Debug("skipping failure email - no SMTP config", "userID", user.ID, "appointmentID", appointment.ID)
+		return nil
+	}
+
+	logger.Debug("generating failure email", "name", user.Name, "userID", user.ID, "appointmentID", appointment.ID, "failureReason", failureReason)
+	if err := GenerateFailureEmail(ctx, fs, user, failureReason, *cfg, logger); err != nil {
+		logger.Error("failed to generate failure email", "error", err, "userID", user.ID, "appointmentID", appointment.ID)
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"userID":         user.ID,
+			"appointment_id": appointment.ID,
+			"user_email":     user.Email,
+			"call_id":        func() string { if appointment.CallID != nil { return *appointment.CallID } else { return "nil" } }(),
+			"step":           "GenerateFailureEmail",
+		})
+		return fmt.Errorf("SendFailureEmail: GenerateFailureEmail: %w", err)
+	}
+
+	logger.Debug("failure email sent", "userID", user.ID, "appointmentID", appointment.ID)
+	return nil
+}
+
+func GenerateFailureEmail(ctx context.Context, fs *internal.FirestoreClient, user *internal.User, failureReason string, cfg smtp.Config, logger *slog.Logger) error {
+	mailer, err := smtp.NewMailSender(cfg.Host, cfg.Port, cfg.Username, cfg.Password, cfg.From)
+	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"error_type": "smtp_mailer_new",
+		})
+		return fmt.Errorf("GenerateFailureEmail: NewMailSender: %w", err)
+	}
+
+	promptData := map[string]any{
+		"FullName":      user.Name,
+		"FirstName":     user.FirstName,
+		"FailureReason": failureReason,
+	}
+
+	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/call-failure-email.001.txt")
+	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"error_type": "assets_read_file",
+		})
+		return fmt.Errorf("GenerateFailureEmail: ReadFile: %w", err)
+	}
+
+	prompt, err := tools.GeneratePrompt(tmpl, promptData)
+	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"error_type": "tools_generate_prompt",
+		})
+		return fmt.Errorf("GenerateFailureEmail: GeneratePrompt: %w", err)
+	}
+
+	resp := openai.ChatCompletionResponse{}
+	llmResp, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat), tools.WantCompletionResponse(&resp))
+	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"error_type": "tools_ask",
+		})
+		return fmt.Errorf("GenerateFailureEmail: Ask: %w", err)
+	}
+
+	// Record LLM cost for failure email generation
+	if err := internal.RecordLLMCost(ctx, fs, &user.ID, tools.DeepSeekChat, resp, "failure_email_generation", nil); err != nil {
+		// Log error but don't fail the operation
+		logger.Error("failed to record LLM cost for failure email generation", "error", err)
+	}
+
+	bodyData, err := extractEmailData(ctx, llmResp)
+	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"error_type": "extract_email_data",
+		})
+		logger.Error("failed to extract email data", "error", err, "userID", user.ID, "resp", llmResp)
+		return fmt.Errorf("GenerateFailureEmail: extractEmailData: %w", err)
+	}
+
+	err = mailer.SendFromTemplate(user.Email, bodyData, "call-failure-email.html")
+	if err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"error_type": "smtp_mailer_send",
+			"component":  "transcript_processor_send_failure",
+		})
+		return fmt.Errorf("GenerateFailureEmail: SendFromTemplate: %w", err)
+	}
+
+	return nil
+}
+
 func GenerateRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user *internal.User, transcript *internal.Transcript, cfg smtp.Config, logger *slog.Logger) error {
 	mailer, err := smtp.NewMailSender(cfg.Host, cfg.Port, cfg.Username, cfg.Password, cfg.From)
 	if err != nil {

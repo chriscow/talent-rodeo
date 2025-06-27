@@ -110,26 +110,39 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 		if err := internal.ProcessAppointmentFailed(r.Context(), app.fs, user, appt, fmt.Errorf("call failed based on endReason or success evaluation")); err != nil {
 			return fmt.Errorf("failed to process appointment failed: %w", err)
 		}
+
+		// Send failure email for failed calls
+		cfg := smtp.Config{
+			Host:     app.config.smtp.host,
+			Port:     app.config.smtp.port,
+			Username: app.config.smtp.username,
+			Password: app.config.smtp.password,
+			From:     app.config.smtp.from,
+		}
+
+		failureReason := app.getFailureReasonDescription(endReason)
+		go transcript.SendFailureEmail(r.Context(), app.fs, user, appt, failureReason, &cfg, app.logger)
 	} else {
 		var successEval any
 		if report.Analysis != nil {
 			successEval = report.Analysis.SuccessEvaluation
 		}
 		app.logger.Info("call was successful", "name", user.Name, "userID", user.ID, "endReason", endReason, "successEvaluation", successEval)
-	}
 
-	// This actually just starts a goroutine to process the appointment and
-	// doesn't return an error but we check anyway in case that changes
-	// in the future.
-	cfg := smtp.Config{
-		Host:     app.config.smtp.host,
-		Port:     app.config.smtp.port,
-		Username: app.config.smtp.username,
-		Password: app.config.smtp.password,
-		From:     app.config.smtp.from,
-	}
+		// Only process completion for successful calls
+		// This actually just starts a goroutine to process the appointment and
+		// doesn't return an error but we check anyway in case that changes
+		// in the future.
+		cfg := smtp.Config{
+			Host:     app.config.smtp.host,
+			Port:     app.config.smtp.port,
+			Username: app.config.smtp.username,
+			Password: app.config.smtp.password,
+			From:     app.config.smtp.from,
+		}
 
-	go transcript.ProcessCompletedCall(hub, app.fs, app.pusher, app.searchProvider, app.logger, app.jobDispatch, user, appt, &cfg)
+		go transcript.ProcessCompletedCall(hub, app.fs, app.pusher, app.searchProvider, app.logger, app.jobDispatch, user, appt, &cfg)
+	}
 	return nil
 }
 
@@ -169,6 +182,8 @@ func (app *application) evaluateCallSuccess(report *vapi.EndOfCallReport, endRea
 	case "assistant-ended-call", "customer-ended-call", "exceeded-max-duration":
 		// These are considered successful call completions
 		app.logger.Info("call completed successfully based on end reason", "end_reason", endReason)
+
+		// internal.AskBool(r.Context(), prompt, fs, userID)
 	default:
 		// All other endReason values (voicemail, errors, failures, etc.) are failures
 		app.logger.Info("call failed based on end reason", "end_reason", endReason)
@@ -213,4 +228,33 @@ func (app *application) evaluateCallSuccess(report *vapi.EndOfCallReport, endRea
 	app.logger.Error("success evaluation is neither bool nor string",
 		"success_evaluation", successEvaluation)
 	return true, nil // failure, process failure
+}
+
+// getFailureReasonDescription converts technical end reasons to user-friendly descriptions
+func (app *application) getFailureReasonDescription(endReason string) string {
+	switch endReason {
+	case "voicemail":
+		return "the call went to voicemail"
+	case "busy":
+		return "your phone was busy"
+	case "no-answer":
+		return "there was no answer"
+	case "failed":
+		return "the call failed to connect"
+	case "cancelled":
+		return "the call was cancelled"
+	case "dial-busy", "dial-failed":
+		return "we couldn't connect the call"
+	case "pipeline-error-openai", "pipeline-error-deepgram":
+		return "there was a technical issue with our AI system"
+	default:
+		if endReason == "" {
+			return "there was an issue with the call"
+		}
+		// For any other technical error codes, provide a generic message
+		if strings.Contains(endReason, "error") || strings.Contains(endReason, "failed") {
+			return "there was a technical issue"
+		}
+		return "the call did not complete successfully"
+	}
 }

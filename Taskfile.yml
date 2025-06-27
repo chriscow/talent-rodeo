@@ -32,7 +32,7 @@ tasks:
   test:
     desc: Run all test
     cmds:
-      - go test -v -race -buildvcs ./...
+      - FIRESTORE_EMULATOR_HOST=localhost:8200 go test -v -race -buildvcs ./...
 
   test:ui:
     desc: |
