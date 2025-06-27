@@ -19,7 +19,7 @@ import (
 
 // parseSalaryRange uses the LLM to extract a salary range from
 // arbitrary text from the job listing
-func parseSalaryRange(ctx context.Context, fs *internal.FirestoreClient, logger *slog.Logger, userID *string, basePay string) (*internal.SalaryRange, error) {
+func parseSalaryRange(ctx context.Context, fs *internal.FirestoreClient, _ *slog.Logger, userID *string, basePay string) (*internal.SalaryRange, error) {
 	if basePay == "" {
 		return nil, fmt.Errorf("no base pay provided")
 	}
@@ -104,7 +104,7 @@ func convertJobDetail(ctx context.Context, fs *internal.FirestoreClient, logger 
 	// Parse salary range
 	salaryRange, err := parseSalaryRange(ctx, fs, logger, userID, detail.BasePay)
 	if err != nil {
-		logger.Error("failed to parse salary range", "error", err)
+		logger.Warn("failed to parse salary range", "error", err)
 	}
 
 	// Convert recruiters
