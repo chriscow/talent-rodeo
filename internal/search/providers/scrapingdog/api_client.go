@@ -298,6 +298,26 @@ func (c *APIClient) GetJobDetails(ctx context.Context, jobID string) (LinkedInJo
 	return jobDetail, nil
 }
 
+// isRetryable400Error checks if a 400 error response contains messages indicating a temporary failure
+func isRetryable400Error(body []byte) bool {
+	bodyStr := string(body)
+	// Check for specific temporary failure messages from ScrapingDog API
+	retryableMessages := []string{
+		"Something went wrong, please try again",
+		"try again",
+		"temporary",
+		"temporarily unavailable",
+	}
+	
+	bodyLower := strings.ToLower(bodyStr)
+	for _, msg := range retryableMessages {
+		if strings.Contains(bodyLower, strings.ToLower(msg)) {
+			return true
+		}
+	}
+	return false
+}
+
 // doRequestWithRetry executes an HTTP request with retry logic and exponential backoff
 func (c *APIClient) doRequestWithRetry(ctx context.Context, req *http.Request) (*http.Response, error) {
 	var resp *http.Response
@@ -362,6 +382,44 @@ func (c *APIClient) doRequestWithRetry(ctx context.Context, req *http.Request) (
 			}
 
 			continue
+		} else if statusCode == http.StatusBadRequest {
+			// This is a 400 error - check if it's retryable based on the message
+			body, bodyErr := io.ReadAll(resp.Body)
+			resp.Body.Close() // Important: close this response before retrying
+
+			if bodyErr != nil {
+				c.logger.Warn("failed to read 400 error response body", "error", bodyErr)
+				// If we can't read the body, treat as non-retryable
+				return resp, nil
+			}
+
+			if isRetryable400Error(body) {
+				c.logger.Warn("retryable 400 error encountered, backing off",
+					"attempt", i+1,
+					"backoff", backoffDelay,
+					"response", string(body))
+
+				// Apply backoff for retryable 400 errors
+				select {
+				case <-time.After(backoffDelay):
+					// Increase backoff duration for next retry
+					backoffDelay = backoffDelay + (RetryDelay / 2)
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+
+				continue
+			} else {
+				// Not a retryable 400 error, reconstruct response and return
+				c.logger.Debug("non-retryable 400 error, not retrying", "response", string(body))
+				// Create a new response with the body we read
+				resp = &http.Response{
+					StatusCode: http.StatusBadRequest,
+					Header:     resp.Header,
+					Body:       io.NopCloser(strings.NewReader(string(body))),
+				}
+				return resp, nil
+			}
 		} else if statusCode == http.StatusRequestTimeout || statusCode == http.StatusGone || statusCode >= 500 {
 			// This is a 410 (request timeout) or 500+ (server-side) error - retry
 			resp.Body.Close() // Important: close this response before retrying
