@@ -32,7 +32,7 @@ HTTP response handling package managing html/template rendering with layouts, JS
 Core business logic package implementing automated recruiting functionality, including conversation management, candidate assessment, and workflow orchestration using AI-powered interactions.
 
 ### scrapingdog/
-Web scraping package specializing in LinkedIn job listing retrieval and analysis, with features for job matching, requirement extraction, and search optimization through the ScrapingDog API.
+Third party API client and service package specializing in LinkedIn job listing retrieval and analysis, with features for job matching, requirement extraction, and search optimization through the ScrapingDog API.
 
 ### smtp/
 Email handling package providing robust email functionality with template support and retry capabilities. Implements both HTML and plain text emails with configurable timeouts and connection pooling.
