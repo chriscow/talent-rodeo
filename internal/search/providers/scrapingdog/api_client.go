@@ -298,8 +298,8 @@ func (c *APIClient) GetJobDetails(ctx context.Context, jobID string) (LinkedInJo
 	return jobDetail, nil
 }
 
-// isRetryable400Error checks if a 400 error response contains messages indicating a temporary failure
-func isRetryable400Error(body []byte) bool {
+// IsRetryable400Error checks if a 400 error response contains messages indicating a temporary failure
+func IsRetryable400Error(body []byte) bool {
 	bodyStr := string(body)
 	// Check for specific temporary failure messages from ScrapingDog API
 	retryableMessages := []string{
@@ -393,7 +393,7 @@ func (c *APIClient) doRequestWithRetry(ctx context.Context, req *http.Request) (
 				return resp, nil
 			}
 
-			if isRetryable400Error(body) {
+			if IsRetryable400Error(body) {
 				c.logger.Warn("retryable 400 error encountered, backing off",
 					"attempt", i+1,
 					"backoff", backoffDelay,
