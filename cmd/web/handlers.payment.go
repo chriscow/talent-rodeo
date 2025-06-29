@@ -14,7 +14,6 @@ import (
 	"cloud.google.com/go/firestore"
 	"github.com/getsentry/sentry-go"
 	"github.com/stripe/stripe-go/v72"
-	"github.com/stripe/stripe-go/v72/checkout/session"
 	"github.com/stripe/stripe-go/v72/webhook"
 )
 
@@ -59,7 +58,7 @@ func (app *application) createCheckoutSessionPost(w http.ResponseWriter, r *http
 	// Determine pricing based on plan type
 	var priceInCents int64
 	var description string
-	
+
 	switch planType {
 	case "weekly":
 		priceInCents = internal.StripeWeeklyProPrice
@@ -96,17 +95,17 @@ func (app *application) createCheckoutSessionPost(w http.ResponseWriter, r *http
 				Quantity: stripe.Int64(1),
 			},
 		},
-		Mode:       stripe.String("payment"),
-		SuccessURL: stripe.String(fmt.Sprintf("%s/payment/success?session_id={CHECKOUT_SESSION_ID}", baseURL)),
-		CancelURL:  stripe.String(fmt.Sprintf("%s/payment/cancel", baseURL)),
+		Mode:          stripe.String("payment"),
+		SuccessURL:    stripe.String(fmt.Sprintf("%s/payment/success?session_id={CHECKOUT_SESSION_ID}", baseURL)),
+		CancelURL:     stripe.String(fmt.Sprintf("%s/payment/cancel", baseURL)),
 		CustomerEmail: stripe.String(user.Email),
 	}
-	
+
 	// Add metadata
 	params.AddMetadata("user_id", user.ID)
 	params.AddMetadata("plan_type", planType)
 
-	s, err := session.New(params)
+	s, err := app.stripeClient.CheckoutSessions.New(params)
 	if err != nil {
 		app.logger.Error("failed to create Stripe checkout session", "error", err, "user_id", user.ID, "plan_type", planType)
 		app.serverError(w, r, fmt.Errorf("failed to create checkout session: %w", err))
@@ -141,7 +140,7 @@ func (app *application) paymentSuccessGet(w http.ResponseWriter, r *http.Request
 // paymentCancelGet displays the payment cancellation page
 func (app *application) paymentCancelGet(w http.ResponseWriter, r *http.Request) {
 	app.logger.Info("payment cancelled by user")
-	
+
 	data := app.newTemplateData(r)
 	err := response.Page(w, http.StatusOK, data, "pages/payment-cancel.html")
 	if err != nil {
@@ -161,7 +160,7 @@ func (app *application) stripeWebhookPost(w http.ResponseWriter, r *http.Request
 	}
 
 	// Verify webhook signature
-	endpointSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")
+	endpointSecret := app.config.stripe.webhookSecret
 	if endpointSecret == "" {
 		app.logger.Error("STRIPE_WEBHOOK_SECRET not configured")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -206,7 +205,7 @@ func (app *application) handleCheckoutSessionCompleted(ctx context.Context, even
 		return fmt.Errorf("failed to parse checkout session: %w", err)
 	}
 
-	app.logger.Info("processing checkout session completed", 
+	app.logger.Info("processing checkout session completed",
 		"session_id", session.ID,
 		"customer_email", session.CustomerEmail,
 		"amount_total", session.AmountTotal)
@@ -255,7 +254,7 @@ func (app *application) handleCheckoutSessionCompleted(ctx context.Context, even
 	// Calculate new subscription end date (stacking subscriptions)
 	now := time.Now()
 	var newSubscriptionEnd time.Time
-	
+
 	if user.SubscriptionEnd != nil && user.SubscriptionEnd.After(now) {
 		// Subscription is still active, extend from current end date
 		newSubscriptionEnd = user.SubscriptionEnd.Add(duration)
@@ -270,8 +269,8 @@ func (app *application) handleCheckoutSessionCompleted(ctx context.Context, even
 		return fmt.Errorf("failed to upgrade user to pro: %w", err)
 	}
 
-	app.logger.Info("successfully upgraded user to pro", 
-		"user_id", user.ID, 
+	app.logger.Info("successfully upgraded user to pro",
+		"user_id", user.ID,
 		"plan_type", planType,
 		"subscription_end", newSubscriptionEnd.Format(time.RFC3339),
 		"amount_paid", session.AmountTotal)
@@ -296,15 +295,15 @@ func (app *application) upgradeUserToPro(ctx context.Context, user *internal.Use
 
 		// Record the payment
 		payment := map[string]interface{}{
-			"user_id":          user.ID,
+			"user_id":           user.ID,
 			"stripe_session_id": sessionID,
 			"stripe_event_id":   eventID,
-			"plan_type":        planType,
-			"amount_paid":      amountPaid,
-			"currency":         "usd",
-			"subscription_end": subscriptionEnd,
-			"created_at":       time.Now(),
-			"status":           "completed",
+			"plan_type":         planType,
+			"amount_paid":       amountPaid,
+			"currency":          "usd",
+			"subscription_end":  subscriptionEnd,
+			"created_at":        time.Now(),
+			"status":            "completed",
 		}
 
 		err = tx.Create(app.fs.Client.Collection("payments").NewDoc(), payment)
@@ -314,10 +313,10 @@ func (app *application) upgradeUserToPro(ctx context.Context, user *internal.Use
 
 		// Mark webhook event as processed
 		processedEvent := map[string]interface{}{
-			"event_id":    eventID,
-			"event_type":  "checkout.session.completed",
+			"event_id":     eventID,
+			"event_type":   "checkout.session.completed",
 			"processed_at": time.Now(),
-			"user_id":     user.ID,
+			"user_id":      user.ID,
 		}
 
 		err = tx.Create(app.fs.Client.Collection("processed_webhook_events").NewDoc(), processedEvent)
