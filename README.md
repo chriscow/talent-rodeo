@@ -1105,3 +1105,22 @@ Create a modern, responsive landing page for a fictional SaaS company. The landi
 - A pricing section with different plan options.
 - A final call-to-action section to encourage sign-ups.
 - A footer with important links and social media icons.
+
+# Claude Code
+
+## MCP Servers
+
+### snap-happy
+Screenshot capture MCP server for taking screenshots and visual notes.
+
+```bash
+claude mcp add snap-happy npx @mariozechner/snap-happy
+```
+
+This MCP server enables Claude Code to take screenshots for documentation and visual analysis purposes.
+
+
+# Competitors
+
+https://jobcopilot.com/pricing/
+
