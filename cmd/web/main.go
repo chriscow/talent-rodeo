@@ -143,6 +143,10 @@ type config struct {
 		clientID     string
 		clientSecret string
 	}
+	stripe struct {
+		secretKey     string
+		webhookSecret string
+	}
 	testing   bool   // Flag to indicate if the application is running in test mode
 	envFile   string // override which env file to load, e.g. ".env.prod" or ".env.dev"
 	nudgeOnly bool   // Flag to indicate if only the nudge processor should be started
@@ -208,6 +212,10 @@ func run(logger *slog.Logger) error {
 	flag.BoolVar(&cfg.nudgeOnly, "nudge-only", false, "only start the nudge processor, skip other services")
 	showVersion := flag.Bool("version", false, "display version and exit")
 
+	// Stripe flags
+	flag.StringVar(&cfg.stripe.secretKey, "stripe-secret-key", "", "Stripe secret key")
+	flag.StringVar(&cfg.stripe.webhookSecret, "stripe-webhook-secret", "", "Stripe webhook secret")
+
 	// Parse flags ONCE
 	flag.Parse()
 
@@ -266,6 +274,19 @@ func run(logger *slog.Logger) error {
 		return fmt.Errorf("GOOGLE_AUTH_CLIENT_ID and GOOGLE_AUTH_CLIENT_SECRET environment variables are required")
 	}
 
+	if cfg.testing {
+		logger.Info("running in testing mode")
+	}
+
+	if cfg.stripe.secretKey == "" {
+		cfg.stripe.secretKey = os.Getenv("STRIPE_SECRET_KEY")
+	}
+
+	if cfg.stripe.webhookSecret == "" {
+		cfg.stripe.webhookSecret = os.Getenv("STRIPE_WEBHOOK_SECRET")
+	}
+
+	// Sentry
 	sentryDSN := os.Getenv("SENTRY_DSN")
 	if sentryDSN == "" {
 		return fmt.Errorf("SENTRY_DSN environment variable is required")
@@ -408,7 +429,8 @@ func run(logger *slog.Logger) error {
 		return fmt.Errorf("failed to initialize S3 client: %w", err)
 	}
 
-	stripeClient := client.New(os.Getenv("STRIPE_SECRET_KEY"), nil)
+	// Initialize Stripe client
+	stripeClient := client.New(cfg.stripe.secretKey, nil)
 
 	app := &application{
 		config: cfg,
