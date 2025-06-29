@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode"
 
+	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 )
@@ -37,6 +38,7 @@ var TemplateFuncs = template.FuncMap{
 	// String functions
 	"uppercase": strings.ToUpper,
 	"lowercase": strings.ToLower,
+	"title":     titleCase,
 	"pluralize": pluralize,
 	"slugify":   Slugify,
 	"safeHTML":  safeHTML,
@@ -665,4 +667,9 @@ func formatPeriod(period string) string {
 		}
 		return ""
 	}
+}
+
+// titleCase converts a string to title case using the modern approach
+func titleCase(s string) string {
+	return cases.Title(language.English).String(s)
 }
