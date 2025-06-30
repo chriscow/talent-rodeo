@@ -19,6 +19,63 @@ This document describes the implementation of our "Freemium Trial" subscription 
 - `UserTierPro`: Paid users with extended SubscriptionEnd dates
 - `UserTierEnterprise`: Future tier for enterprise customers
 
+## Subscription Management Tools
+
+### CLI Management Tools
+
+The CLI provides powerful subscription management tools for administrators:
+
+**View Current Subscription:**
+```bash
+cli user subscription [user-id]
+# Shows current subscription status, remaining days, and user info
+```
+
+**Extend Subscription:**
+```bash
+cli user subscription --extend [days] [user-id]
+# Intelligently extends subscription:
+# - If subscription is ACTIVE: adds days to current end date
+# - If subscription is EXPIRED/not set: adds days to today
+```
+
+**Examples:**
+```bash
+# View current subscription status
+cli user subscription user-123
+# Output: 
+# User: John Doe (user-123)
+# Email: john@example.com
+# Tier: Free
+# Subscription End: 2025-02-06 15:04:05 (ACTIVE - 7 days remaining)
+
+# Extend active subscription by 30 days (extends from current end date)
+cli user subscription --extend 30 user-123
+# Output: Extended subscription for John Doe (user-123) from 2025-02-06 15:04:05 to 2025-03-08 15:04:05 (+30 days)
+
+# Extend expired subscription by 30 days (extends from today)
+cli user subscription --extend 30 user-456
+# Output: Extended subscription for Jane Smith (user-456) to 2025-03-01 15:04:05 (30 days from today)
+```
+
+### Admin Web Interface
+
+The admin subscription management page provides a user-friendly interface for managing subscriptions:
+
+**Features:**
+- View user subscription status (Active/Expired/Not Set)
+- Extend subscriptions with intelligent date calculation:
+  - **Active subscriptions**: Days are added to the current end date
+  - **Expired/unset subscriptions**: Days are added to today's date
+- Subscribe/unsubscribe users to search criteria
+- View current subscription counts
+- Refresh job searches for specific criteria
+
+**Subscription Extension Logic:**
+The system intelligently handles subscription extensions to ensure users don't lose time:
+- If a user has 5 days remaining and you add 30 days, they get 35 total days
+- If a user's subscription expired 3 days ago and you add 30 days, they get 30 days from today
+
 ## Core Components
 
 ### Search Criteria (`SearchCriteria`)

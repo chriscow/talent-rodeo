@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"talent-rodeo/internal"
+	"time"
 
 	"github.com/cheggaaa/pb"
 	"github.com/spf13/cobra"
@@ -13,6 +14,7 @@ import (
 
 var criteriaID string
 var unsubscribe bool
+var extendDays int
 
 var userSubscribeCmd = &cobra.Command{
 	Use:   "subscribe",
@@ -50,6 +52,82 @@ var userSubscribeCmd = &cobra.Command{
 	},
 }
 
+var userSubscriptionCmd = &cobra.Command{
+	Use:   "subscription [user-id]",
+	Short: "Manage user subscription settings",
+	Long:  `View current subscription status or extend a user's subscription end date by the specified number of days from today`,
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := context.Background()
+		fs, err := internal.NewFirestoreClient(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to create Firestore client: %w", err)
+		}
+		defer fs.Close()
+
+		userID := args[0]
+
+		// Get the user first
+		user, found, err := internal.GetUser(ctx, fs, userID)
+		if err != nil {
+			return fmt.Errorf("failed to get user: %w", err)
+		}
+		if !found {
+			return fmt.Errorf("user not found: %s", userID)
+		}
+
+		// If --extend flag is not provided or is 0, just display current subscription info
+		if extendDays <= 0 {
+			fmt.Printf("User: %s (%s)\n", user.Name, userID)
+			fmt.Printf("Email: %s\n", user.Email)
+			fmt.Printf("Tier: %s\n", user.Tier)
+			if user.SubscriptionEnd != nil {
+				now := time.Now()
+				if user.SubscriptionEnd.After(now) {
+					fmt.Printf("Subscription End: %s (ACTIVE - %d days remaining)\n",
+						user.SubscriptionEnd.Format("2006-01-02 15:04:05"),
+						int(user.SubscriptionEnd.Sub(now).Hours()/24))
+				} else {
+					fmt.Printf("Subscription End: %s (EXPIRED - %d days ago)\n",
+						user.SubscriptionEnd.Format("2006-01-02 15:04:05"),
+						int(now.Sub(*user.SubscriptionEnd).Hours()/24))
+				}
+			} else {
+				fmt.Printf("Subscription End: Not set\n")
+			}
+			return nil
+		}
+
+		// Calculate new subscription end date
+		var newSubscriptionEnd time.Time
+		now := time.Now()
+
+		if user.SubscriptionEnd != nil && user.SubscriptionEnd.After(now) {
+			// If subscription is still active, extend from current end date
+			newSubscriptionEnd = user.SubscriptionEnd.Add(time.Duration(extendDays) * 24 * time.Hour)
+			fmt.Printf("Extended subscription for user %s (%s) from %s to %s (+%d days)\n",
+				user.Name, userID,
+				user.SubscriptionEnd.Format("2006-01-02 15:04:05"),
+				newSubscriptionEnd.Format("2006-01-02 15:04:05"), extendDays)
+		} else {
+			// If subscription is expired or not set, extend from today
+			newSubscriptionEnd = now.Add(time.Duration(extendDays) * 24 * time.Hour)
+			fmt.Printf("Extended subscription for user %s (%s) to %s (%d days from today)\n",
+				user.Name, userID, newSubscriptionEnd.Format("2006-01-02 15:04:05"), extendDays)
+		}
+
+		// Update the user's subscription end date
+		err = internal.UpdateUser(ctx, fs, userID, map[string]any{
+			"SubscriptionEnd": newSubscriptionEnd,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to update user subscription: %w", err)
+		}
+
+		return nil
+	},
+}
+
 func init() {
 	// Add users command
 	RootCmd.AddCommand(usersCmd)
@@ -62,6 +140,7 @@ func init() {
 	usersCmd.AddCommand(importUsersCmd)
 	usersCmd.AddCommand(matchUserCmd)
 	usersCmd.AddCommand(userSubscribeCmd)
+	usersCmd.AddCommand(userSubscriptionCmd)
 
 	// Add flags
 	listUsersCmd.Flags().IntP("limit", "l", 100, "Maximum number of users to return per page")
@@ -92,6 +171,8 @@ func init() {
 	userSubscribeCmd.Flags().BoolVar(&unsubscribe, "unsubscribe", false, "Unsubscribe the user from the criteria instead of subscribing")
 	userSubscribeCmd.MarkFlagRequired("user")
 	userSubscribeCmd.MarkFlagRequired("criteria")
+
+	userSubscriptionCmd.Flags().IntVar(&extendDays, "extend", 0, "Number of days to extend subscription from today (optional - shows current info if not provided)")
 }
 
 var usersCmd = &cobra.Command{
