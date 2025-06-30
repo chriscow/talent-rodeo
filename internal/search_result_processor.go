@@ -541,32 +541,35 @@ func (s *SearchResultProcessor) OnSearchStarted(jobSearch SearchTask, userID *st
 
 // search.JobEventHandler implementation
 func (s *SearchResultProcessor) OnJobListing(jobSearch *SearchTask, job JobListing, userID *string) bool {
-	if s.fs == nil {
-		s.logger.Error("firestore client is nil, cannot process job listing")
-		return true // return true to fetch the job listing since we can't know if it's a duplicate
-	}
-	s.logger.Debug("OnJobListing", "jobID", job.ID, "criteria", jobSearch.Criteria.ID)
-
+	// Use a background context for the link operation, as it should not block the main search flow
 	ctx := context.Background()
-	// Check if listing already exists
-	if existing, err := GetJobListing(ctx, s.fs, job.ID); err == nil && existing != nil {
-		// Duplicate listing, update counts
-		jobSearch.TotalListings++
+
+	// Check if the job detail already exists in our system to avoid duplicate processing
+	exists, err := JobDetailExists(ctx, s.fs, job.ID)
+	if err != nil {
+		s.logger.Error("failed to check if job detail exists", "jobID", job.ID, "error", err)
+		// We proceed, but this may result in an attempt to re-fetch a job that's already there.
+		// The transaction in saveAndLinkJobDetail should handle this gracefully.
+		return true
+	}
+
+	if exists {
 		jobSearch.DuplicateListings++
-		if err := UpdateSearchTask(ctx, s.fs, jobSearch); err != nil {
-			s.logger.Error("failed to update search task counts", "error", err)
+		// The job already exists, but we need to ensure it's linked to the current search criteria.
+		err := s.fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+			return LinkJobDetailToCriteriaTx(ctx, s.fs, tx, jobSearch.Criteria.ID, job.ID)
+		})
+
+		// If the link already exists, that's fine. Any other error should be logged.
+		if err != nil && status.Code(err) != codes.AlreadyExists {
+			s.logger.Error("failed to link existing job detail to criteria", "jobID", job.ID, "criteriaID", jobSearch.Criteria.ID, "error", err)
 		}
-		return false // return false to skip fetching details for duplicates
+		// Job already exists, no need to fetch details again.
+		return false
 	}
-	// New listing: save and update total count
-	if err := SaveJobListing(ctx, s.fs, *jobSearch, &job); err != nil {
-		s.logger.Error("failed to create job listing", "error", err)
-	}
+
 	jobSearch.TotalListings++
-	if err := UpdateSearchTask(ctx, s.fs, jobSearch); err != nil {
-		s.logger.Error("failed to update search task total count", "error", err)
-	}
-	return true // return true to fetch the job listing details
+	return true
 }
 
 func (s *SearchResultProcessor) OnPageComplete(jobSearch SearchTask, page int, jobsFound int, errors []error, userID *string) {

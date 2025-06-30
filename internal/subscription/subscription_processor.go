@@ -322,6 +322,15 @@ func (p *Processor) process(ctx context.Context) error {
 // It retrieves all subscribers for the criteria, finds recent jobs matching the criteria,
 // and processes jobs for each subscribed user.
 //
+// SUBSCRIPTION-AWARE PROCESSING (Added 2025-01-30):
+// As part of the "Freemium Trial" business model implementation, this function now:
+// - Filters subscribers to only include users with active subscriptions (SubscriptionEnd > now)
+// - Skips job analysis and publishing for users whose trial/subscription has expired
+// - Updates LastPublishedAt even if no active subscribers exist to prevent repeated processing
+//
+// This ensures that expensive LLM-based job analysis is only performed for users who are
+// within their trial period or have active paid subscriptions, aligning costs with revenue.
+//
 // The function updates the LastPublishedAt timestamp on the criteria after successful processing.
 // Errors during processing for individual users are logged and reported to Sentry,
 // but do not stop the processing for other users.
@@ -359,11 +368,37 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 		return fmt.Errorf("failed to get users: %w", err)
 	}
 
+	// Filter for users with active subscriptions
+	var activeUsers []*internal.User
+	nowForFilter := time.Now()
+	for _, user := range users {
+		if user.SubscriptionEnd != nil && user.SubscriptionEnd.After(nowForFilter) {
+			activeUsers = append(activeUsers, user)
+		} else {
+			p.logger.Info("user subscription has lapsed, skipping for publication", "userID", user.ID)
+		}
+	}
+
+	if len(activeUsers) == 0 {
+		p.logger.Info("no active subscribers found for criteria, skipping publication", "id", criteria.ID)
+		// Update LastPublishedAt for this criteria so we don't check it again immediately
+		publishedTime := time.Now()
+		criteria.LastPublishedAt = &publishedTime
+		if err := internal.SetSearchCriteria(ctx, p.fs, &criteria); err != nil {
+			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+				"action":     "Processor::processCriteria: failed to update LastPublishedAt",
+				"criteriaID": criteria.ID,
+			})
+			return fmt.Errorf("failed to update LastPublishedAt for criteria %s: %w", criteria.ID, err)
+		}
+		return nil
+	}
+
 	// Use a semaphore to limit concurrency to 5
 	sem := make(chan struct{}, subscriptionConcurrency)
 	var wg sync.WaitGroup
 
-	for _, user := range users {
+	for _, user := range activeUsers {
 		sem <- struct{}{} // acquire a slot
 		wg.Add(1)
 		go func(user *internal.User) {
