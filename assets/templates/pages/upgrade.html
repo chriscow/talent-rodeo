@@ -9,21 +9,21 @@
         <h2>Choose Your Plan</h2>
         <p>Your 7-day free trial has given you a taste of what Talent Rodeo can do. Upgrade to Pro to start applying for jobs and unlock the full potential of our job matching platform.</p>
         
-        <div class="grid">
-            <div>
-                <article>
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+            <div style="display: flex;">
+                <article style="display: flex; flex-direction: column; width: 100%;">
                     <header>
                         <h3>Weekly Pro</h3>
                         <h4>$7 USD</h4>
                         <p>Perfect for short-term job searches</p>
                     </header>
-                    <ul>
+                    <ul style="flex-grow: 1;">
                         <li>✓ Full access to job applications</li>
                         <li>✓ "View Job" and "Apply Now" links enabled</li>
                         <li>✓ All existing features unlocked</li>
                         <li>✓ 7 days of Pro access</li>
                     </ul>
-                    <footer>
+                    <footer style="margin-top: auto;">
                         <form method="POST" action="/payment/create-checkout-session">
                             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                             <input type="hidden" name="plan_type" value="weekly">
@@ -32,21 +32,21 @@
                     </footer>
                 </article>
             </div>
-            <div>
-                <article>
+            <div style="display: flex;">
+                <article style="display: flex; flex-direction: column; width: 100%;">
                     <header>
                         <h3>Monthly Pro</h3>
                         <h4>$20 USD</h4>
                         <p><small><mark>Best Value - Save $8!</mark></small></p>
                     </header>
-                    <ul>
+                    <ul style="flex-grow: 1;">
                         <li>✓ Full access to job applications</li>
                         <li>✓ "View Job" and "Apply Now" links enabled</li>
                         <li>✓ All existing features unlocked</li>
                         <li>✓ 30 days of Pro access</li>
                         <li>✓ Extended search duration</li>
                     </ul>
-                    <footer>
+                    <footer style="margin-top: auto;">
                         <form method="POST" action="/payment/create-checkout-session">
                             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                             <input type="hidden" name="plan_type" value="monthly">
@@ -58,24 +58,24 @@
         </div>
     </article>
     
-    <article>
-        <h2>What You Get with Pro</h2>
-        <div class="grid">
-            <div>
-                <h3>🔗 Job Applications</h3>
-                <p>Access direct links to job postings and application pages. Apply to jobs that match your criteria immediately.</p>
+    <article style="margin-bottom: 2rem;">
+        <h2 style="margin-bottom: 1.5rem;">What You Get with Pro</h2>
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+            <div style="padding: 1rem; border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); min-height: 120px; display: flex; flex-direction: column;">
+                <h3 style="margin-bottom: 0.75rem; color: var(--pico-primary-color);">Job Applications</h3>
+                <p style="margin-bottom: 0; flex-grow: 1;">Access direct links to job postings and application pages. Apply to jobs that match your criteria immediately.</p>
             </div>
-            <div>
-                <h3>🎯 Full Platform Access</h3>
-                <p>Continue using all the features you've experienced during your trial, without restrictions.</p>
+            <div style="padding: 1rem; border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); min-height: 120px; display: flex; flex-direction: column;">
+                <h3 style="margin-bottom: 0.75rem; color: var(--pico-primary-color);">Full Platform Access</h3>
+                <p style="margin-bottom: 0; flex-grow: 1;">Continue using all the features you've experienced during your trial, without restrictions.</p>
             </div>
-            <div>
-                <h3>🔍 Continuous Matching</h3>
-                <p>Our system continues to find and match new job opportunities based on your preferences and phone interview.</p>
+            <div style="padding: 1rem; border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); min-height: 120px; display: flex; flex-direction: column;">
+                <h3 style="margin-bottom: 0.75rem; color: var(--pico-primary-color);">Continuous Matching</h3>
+                <p style="margin-bottom: 0; flex-grow: 1;">Our system continues to find and match new job opportunities based on your preferences and phone interview.</p>
             </div>
-            <div>
-                <h3>💬 Ongoing Support</h3>
-                <p>Get help when you need it from our dedicated support team.</p>
+            <div style="padding: 1rem; border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); min-height: 120px; display: flex; flex-direction: column;">
+                <h3 style="margin-bottom: 0.75rem; color: var(--pico-primary-color);">Ongoing Support</h3>
+                <p style="margin-bottom: 0; flex-grow: 1;">Get help when you need it from our dedicated support team.</p>
             </div>
         </div>
     </article>
