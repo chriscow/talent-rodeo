@@ -7,13 +7,13 @@
         <p>Manage your Pro subscription</p>
     </hgroup>
     
-    <article>
+    <article style="margin-bottom: 2rem;">
         <h2>Current Subscription Status</h2>
         <div class="grid">
-            <div>
-                <dl>
-                    <dt>Current Tier</dt>
-                    <dd>
+            <div style="padding-right: 1rem;">
+                <dl style="margin-bottom: 0;">
+                    <dt style="margin-bottom: 0.5rem;">Current Tier</dt>
+                    <dd style="margin-bottom: 1.5rem;">
                         {{if eq .User.Tier "pro"}}
                         <mark>Pro Tier</mark>
                         {{else if eq .User.Tier "free"}}
@@ -24,12 +24,12 @@
                     </dd>
                     
                     {{if .User.SubscriptionEnd}}
-                    <dt>{{if eq .User.Tier "pro"}}Pro Access Expires{{else}}Trial Ended{{end}}</dt>
-                    <dd>{{.User.SubscriptionEnd | humanDate}}</dd>
+                    <dt style="margin-bottom: 0.5rem;">{{if eq .User.Tier "pro"}}Pro Access Expires{{else}}Trial Ended{{end}}</dt>
+                    <dd style="margin-bottom: 1.5rem;">{{.User.SubscriptionEnd | humanDate}}</dd>
                     {{end}}
                     
-                    <dt>Status</dt>
-                    <dd>
+                    <dt style="margin-bottom: 0.5rem;">Status</dt>
+                    <dd style="margin-bottom: 0;">
                         {{if eq .User.Tier "pro"}}
                             {{if .User.SubscriptionEnd}}
                                 {{if .User.SubscriptionEnd.After now}}
@@ -54,7 +54,7 @@
                     </dd>
                 </dl>
             </div>
-            <div>
+            <div style="padding-left: 1rem;">
                 {{if ne .User.Tier "pro"}}
                 <h3>Upgrade to Pro</h3>
                 <p>Get full access to job applications and all platform features.</p>
@@ -69,24 +69,24 @@
     </article>
     
     {{if eq .User.Tier "pro"}}
-    <article>
-        <h2>Pro Features</h2>
-        <div class="grid">
-            <div>
-                <h5>✓ Job Applications Enabled</h5>
-                <p>Access "View Job" and "Apply Now" links on all job matches.</p>
+    <article style="margin-bottom: 2rem;">
+        <h2 style="margin-bottom: 1.5rem;">Pro Features</h2>
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+            <div style="padding: 1rem; border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); min-height: 120px; display: flex; flex-direction: column;">
+                <h5 style="margin-bottom: 0.75rem; color: var(--pico-primary-color);">✓ Job Applications Enabled</h5>
+                <p style="margin-bottom: 0; flex-grow: 1;">Access "View Job" and "Apply Now" links on all job matches.</p>
             </div>
-            <div>
-                <h5>✓ Full Platform Access</h5>
-                <p>Unrestricted access to all features and functionality.</p>
+            <div style="padding: 1rem; border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); min-height: 120px; display: flex; flex-direction: column;">
+                <h5 style="margin-bottom: 0.75rem; color: var(--pico-primary-color);">✓ Full Platform Access</h5>
+                <p style="margin-bottom: 0; flex-grow: 1;">Unrestricted access to all features and functionality.</p>
             </div>
-            <div>
-                <h5>✓ Priority Support</h5>
-                <p>Get help from our support team when you need it.</p>
+            <div style="padding: 1rem; border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); min-height: 120px; display: flex; flex-direction: column;">
+                <h5 style="margin-bottom: 0.75rem; color: var(--pico-primary-color);">✓ Priority Support</h5>
+                <p style="margin-bottom: 0; flex-grow: 1;">Get help from our support team when you need it.</p>
             </div>
-            <div>
-                <h5>✓ Continuous Matching</h5>
-                <p>Our system actively finds new job opportunities for you.</p>
+            <div style="padding: 1rem; border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); min-height: 120px; display: flex; flex-direction: column;">
+                <h5 style="margin-bottom: 0.75rem; color: var(--pico-primary-color);">✓ Continuous Matching</h5>
+                <p style="margin-bottom: 0; flex-grow: 1;">Our system actively finds new job opportunities for you.</p>
             </div>
         </div>
     </article>
