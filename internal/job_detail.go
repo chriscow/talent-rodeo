@@ -292,6 +292,17 @@ func GetJobDetail(ctx context.Context, fs *FirestoreClient, id string) (*JobDeta
 	return &jobDetail, false, nil
 }
 
+func JobDetailExists(ctx context.Context, fs *FirestoreClient, id string) (bool, error) {
+	if fs == nil {
+		return false, fmt.Errorf("JobDetailExists: fs is nil")
+	}
+	doc, err := fs.Collection(JobDetailsCollection).Doc(id).Get(ctx)
+	if err != nil {
+		return false, err
+	}
+	return doc.Exists(), nil
+}
+
 func GetJobDetailsWithNoExtractedData(ctx context.Context, fs *FirestoreClient) ([]JobDetail, error) {
 	if fs == nil {
 		return nil, fmt.Errorf("GetJobDetailsWithNoExtractedData: fs is nil")

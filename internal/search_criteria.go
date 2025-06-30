@@ -52,8 +52,12 @@ type SearchCriteria struct {
 	MaxPages        int
 	ListingAge      ListingAge // e.g., "day", "week", "month"
 	Error           string
-	LastSearchedAt  *time.Time
+
+	// LastSearchedAt is the last time the search criteria was searched with the scrapingdog search provider
+	LastSearchedAt *time.Time
+	// LastSearchJobID is the `SearchTask.ID` of the last search job that was run for this search criteria
 	LastSearchJobID string
+	// LastPublishedAt is the last time the search criteria was published via the `internal/subscription` package.
 	LastPublishedAt *time.Time
 }
 
@@ -148,22 +152,70 @@ func GetSearchCriteria(ctx context.Context, fs *FirestoreClient, id string) (*Se
 
 // GetSearchCriteriaNeedsSearch retrieves all search criteria that either have never been searched (LastSearchedAt is nil)
 // or haven't been searched in the last 24 hours, and don't already have incomplete search tasks.
+//
+// SUBSCRIPTION-AWARE FILTERING (Added 2025-01-30):
+// This function implements a "Freemium Trial" business model where:
+// - New users get a 7-day trial with full "pro" search benefits
+// - After trial expires (SubscriptionEnd date passes), users get no search benefits unless they upgrade to paid
+// - SearchCriteria are only scheduled for search if they have at least one subscriber with an active subscription
+//
+// The filtering process:
+// 1. Gets all subscriptions and identifies unique user IDs
+// 2. Fetches all users and filters for those with active subscriptions (SubscriptionEnd > now)
+// 3. Determines which SearchCriteria have at least one active subscriber
+// 4. Only returns SearchCriteria that:
+//   - Have at least one active subscriber (subscription hasn't expired)
+//   - Haven't been searched in the last 24 hours (or never searched)
+//   - Don't have incomplete search tasks already running
+//
+// This ensures we only perform expensive search operations for criteria that have paying users
+// or users still in their trial period, optimizing both costs and system resources.
 func GetSearchCriteriaNeedsSearch(ctx context.Context, fs *FirestoreClient) ([]SearchCriteria, error) {
 	if fs == nil {
 		return nil, fmt.Errorf("firestore client is nil")
 	}
 
-	ids, err := ListSubscribedCriteriaIDs(ctx, fs)
+	// Get all subscriptions to find active ones
+	allSubs, err := ListSubscriptions(ctx, fs)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list subscribed criteria IDs: %w", err)
+		return nil, fmt.Errorf("failed to list all subscriptions: %w", err)
 	}
-	if len(ids) == 0 {
-		// No subscribed criteria, return empty slice
+
+	if len(allSubs) == 0 {
 		return []SearchCriteria{}, nil
 	}
-	idSet := make(map[string]struct{}, len(ids))
-	for _, id := range ids {
-		idSet[id] = struct{}{}
+
+	// Collect unique user IDs from all subscriptions
+	userIDs := make(map[string]struct{})
+	for _, sub := range allSubs {
+		userIDs[sub.UserID] = struct{}{}
+	}
+	uniqueUserIDs := make([]string, 0, len(userIDs))
+	for id := range userIDs {
+		uniqueUserIDs = append(uniqueUserIDs, id)
+	}
+
+	// Get all users in one batch
+	users, err := GetUsersByIDs(ctx, fs, uniqueUserIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get users by IDs: %w", err)
+	}
+
+	// Create a set of user IDs with active subscriptions
+	activeUserIDs := make(map[string]struct{})
+	now := time.Now()
+	for _, user := range users {
+		if user.SubscriptionEnd != nil && user.SubscriptionEnd.After(now) {
+			activeUserIDs[user.ID] = struct{}{}
+		}
+	}
+
+	// Determine which criteria have at least one active subscriber
+	activeCriteriaIDs := make(map[string]struct{})
+	for _, sub := range allSubs {
+		if _, isActive := activeUserIDs[sub.UserID]; isActive {
+			activeCriteriaIDs[sub.CriteriaID] = struct{}{}
+		}
 	}
 
 	// Get incomplete search tasks to exclude criteria that are already being processed
@@ -184,8 +236,8 @@ func GetSearchCriteriaNeedsSearch(ctx context.Context, fs *FirestoreClient) ([]S
 	twentyFourHoursAgo := time.Now().Add(-24 * time.Hour)
 	var items []SearchCriteria
 	for _, criteria := range allCriteria {
-		// Only include criteria with subscribers
-		if _, ok := idSet[criteria.ID]; !ok {
+		// Only include criteria with active subscribers
+		if _, ok := activeCriteriaIDs[criteria.ID]; !ok {
 			continue
 		}
 		// Exclude criteria with incomplete search tasks

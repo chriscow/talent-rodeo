@@ -621,6 +621,43 @@ func (app *application) adminSubscriptions(w http.ResponseWriter, r *http.Reques
 					subscriptionSuccess = "Subscribed successfully."
 				}
 			}
+			// Handle extend subscription action
+			if extendDaysStr := r.PostForm.Get("extend_days"); extendDaysStr != "" {
+				extendDays, err := strconv.Atoi(extendDaysStr)
+				if err != nil || extendDays <= 0 {
+					subscriptionError = "Invalid number of days to extend"
+				} else {
+					// Get the current user to check their subscription end date
+					user, found, err := internal.GetUser(ctx, app.fs, selectedUserID)
+					if err != nil {
+						subscriptionError = fmt.Sprintf("Failed to get user: %v", err)
+					} else if !found {
+						subscriptionError = "User not found"
+					} else {
+						// Calculate new subscription end date
+						var newSubscriptionEnd time.Time
+						now := time.Now()
+
+						if user.SubscriptionEnd != nil && user.SubscriptionEnd.After(now) {
+							// If subscription is still active, extend from current end date
+							newSubscriptionEnd = user.SubscriptionEnd.Add(time.Duration(extendDays) * 24 * time.Hour)
+						} else {
+							// If subscription is expired or not set, extend from today
+							newSubscriptionEnd = now.Add(time.Duration(extendDays) * 24 * time.Hour)
+						}
+
+						err = internal.UpdateUser(ctx, app.fs, selectedUserID, map[string]any{
+							"SubscriptionEnd": newSubscriptionEnd,
+						})
+						if err != nil {
+							subscriptionError = fmt.Sprintf("Failed to extend subscription: %v", err)
+						} else {
+							subscriptionSuccess = fmt.Sprintf("Extended subscription by %d days to %s",
+								extendDays, newSubscriptionEnd.Format("2006-01-02 15:04:05"))
+						}
+					}
+				}
+			}
 
 			if refreshID := r.PostForm.Get("refresh_criteria_id"); refreshID != "" {
 				criteria, found, err := internal.GetSearchCriteria(ctx, app.fs, refreshID)
@@ -1201,12 +1238,12 @@ func (app *application) adminSearchTaskAnalytics(w http.ResponseWriter, r *http.
 		totalTasks += a.TaskCount
 		totalListings += a.TotalListings
 		totalDuplicates += a.TotalDuplicates
-		
+
 		if float64(a.TaskCount) > maxTaskCount {
 			maxTaskCount = float64(a.TaskCount)
 			mostActiveCriteria = a.CriteriaID
 		}
-		
+
 		if a.DuplicatePercentage > maxDuplicatePercentage {
 			maxDuplicatePercentage = a.DuplicatePercentage
 			highestDuplicateCriteria = a.CriteriaID

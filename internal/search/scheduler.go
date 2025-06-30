@@ -238,9 +238,8 @@ func (s *Scheduler) StartCriteriaSearch(ctx context.Context) {
 	}
 
 	processedCount := 0
-	s.logger.Debug("processing search criteria", "count", len(items))
 	for _, criteria := range items {
-		s.logger.Debug("queueing search for criteria", "criteria", criteria.ID)
+		s.logger.Info("queueing search for criteria", "criteria", criteria.ID)
 		if err := s.enqueueSearch(ctx, criteria); err != nil {
 			criteria.Error = err.Error()
 			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
@@ -259,7 +258,7 @@ func (s *Scheduler) StartCriteriaSearch(ctx context.Context) {
 				"action": "NewScheduler::StartCriteriaSearch: failed to get queue depth",
 			})
 		}
-		s.logger.Info("newly enqueued", "new", processedCount, "queue_depth", depth)
+		s.logger.Debug("newly enqueued", "new", processedCount, "queue_depth", depth)
 	}
 }
 

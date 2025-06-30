@@ -132,14 +132,37 @@ func TestSearchCriteria(t *testing.T) {
 		timestamp := time.Now().UnixNano()
 		user1 := CreateTestUser(t, client, "Test User 1", fmt.Sprintf("user1-%d@test.com", timestamp), "1234567890", false)
 		user2 := CreateTestUser(t, client, "Test User 2", fmt.Sprintf("user2-%d@test.com", timestamp), "1234567891", false)
+		user3 := CreateTestUser(t, client, "Test User 3", fmt.Sprintf("user3-%d@test.com", timestamp), "1234567892", false)
+
+		// Set subscription end dates:
+		// user1: active subscription (7 days from now)
+		// user2: active subscription (1 day from now)
+		// user3: expired subscription (1 day ago)
+		futureDate1 := time.Now().Add(7 * 24 * time.Hour)
+		futureDate2 := time.Now().Add(1 * 24 * time.Hour)
+		expiredDate := time.Now().Add(-1 * 24 * time.Hour)
+
+		err := UpdateUser(ctx, client, user1.ID, map[string]any{"SubscriptionEnd": futureDate1})
+		if err != nil {
+			t.Fatalf("Failed to update user1 subscription end: %v", err)
+		}
+		err = UpdateUser(ctx, client, user2.ID, map[string]any{"SubscriptionEnd": futureDate2})
+		if err != nil {
+			t.Fatalf("Failed to update user2 subscription end: %v", err)
+		}
+		err = UpdateUser(ctx, client, user3.ID, map[string]any{"SubscriptionEnd": expiredDate})
+		if err != nil {
+			t.Fatalf("Failed to update user3 subscription end: %v", err)
+		}
 
 		// Clean up test users
 		t.Cleanup(func() {
 			DeleteTestUserCriteria(ctx, t, client, user1.ID)
 			DeleteTestUserCriteria(ctx, t, client, user2.ID)
+			DeleteTestUserCriteria(ctx, t, client, user3.ID)
 		})
 
-		// Create criteria that needs search (never searched) with subscribers
+		// Create criteria that needs search (never searched) with ACTIVE subscribers
 		query1 := fmt.Sprintf("%s-never-searched-%d", testPrefix, timestamp)
 		workType1 := WorkTypeRemote
 		expLevel1 := ExperienceLevelEntryLevel
@@ -148,7 +171,7 @@ func TestSearchCriteria(t *testing.T) {
 			t.Fatalf("CreateSearchCriteria() never searched error = %v", err)
 		}
 
-		// Add subscribers to created1
+		// Add ACTIVE subscribers to created1
 		err = SubscribeToCriteria(ctx, client, user1.ID, created1.ID)
 		if err != nil {
 			t.Fatalf("SubscribeToCriteria() for user1 and created1 error = %v", err)
@@ -158,7 +181,7 @@ func TestSearchCriteria(t *testing.T) {
 			t.Fatalf("SubscribeToCriteria() for user2 and created1 error = %v", err)
 		}
 
-		// Create criteria searched more than 24 hours ago with subscribers
+		// Create criteria searched more than 24 hours ago with MIXED subscribers (active + expired)
 		query2 := fmt.Sprintf("%s-old-search-%d", testPrefix, timestamp)
 		workType2 := WorkTypeAtWork
 		expLevel2 := ExperienceLevelEntryLevel
@@ -167,14 +190,14 @@ func TestSearchCriteria(t *testing.T) {
 			t.Fatalf("CreateSearchCriteria() old search error = %v", err)
 		}
 
-		// Add subscribers to created2
+		// Add MIXED subscribers to created2 (one active, one expired)
 		err = SubscribeToCriteria(ctx, client, user1.ID, created2.ID)
 		if err != nil {
 			t.Fatalf("SubscribeToCriteria() for user1 and created2 error = %v", err)
 		}
-		err = SubscribeToCriteria(ctx, client, user2.ID, created2.ID)
+		err = SubscribeToCriteria(ctx, client, user3.ID, created2.ID)
 		if err != nil {
-			t.Fatalf("SubscribeToCriteria() for user2 and created2 error = %v", err)
+			t.Fatalf("SubscribeToCriteria() for user3 and created2 error = %v", err)
 		}
 
 		// Set LastSearchedAt to 25 hours ago
@@ -185,7 +208,7 @@ func TestSearchCriteria(t *testing.T) {
 			t.Fatalf("UpdateSearchCriteria() old search error = %v", err)
 		}
 
-		// Create criteria searched recently (should not need search) with subscribers
+		// Create criteria searched recently (should not need search) with ACTIVE subscribers
 		query3 := fmt.Sprintf("%s-recent-search-%d", testPrefix, timestamp)
 		workType3 := WorkTypeHybrid
 		expLevel3 := ExperienceLevelEntryLevel
@@ -194,7 +217,7 @@ func TestSearchCriteria(t *testing.T) {
 			t.Fatalf("CreateSearchCriteria() recent search error = %v", err)
 		}
 
-		// Add subscribers to created3
+		// Add ACTIVE subscribers to created3
 		err = SubscribeToCriteria(ctx, client, user1.ID, created3.ID)
 		if err != nil {
 			t.Fatalf("SubscribeToCriteria() for user1 and created3 error = %v", err)
@@ -221,20 +244,27 @@ func TestSearchCriteria(t *testing.T) {
 			t.Fatalf("CreateSearchCriteria() no subscribers error = %v", err)
 		}
 
-		// Create criteria searched more than 24 hours ago with NO subscribers
-		query5 := fmt.Sprintf("%s-old-search-no-subs-%d", testPrefix, timestamp)
+		// Create criteria searched more than 24 hours ago with ONLY EXPIRED subscribers
+		query5 := fmt.Sprintf("%s-old-search-expired-subs-%d", testPrefix, timestamp)
 		workType5 := WorkTypeAtWork
 		expLevel5 := ExperienceLevelEntryLevel
 		created5, err := CreateSearchCriteria(ctx, client, query5, "us-ga-atlanta", workType5, expLevel5, 2, ListingAgeMonth)
 		if err != nil {
-			t.Fatalf("CreateSearchCriteria() old search no subscribers error = %v", err)
+			t.Fatalf("CreateSearchCriteria() old search expired subscribers error = %v", err)
 		}
-		// Set LastSearchedAt to 25 hours ago and subscriber count to 0
+
+		// Add ONLY EXPIRED subscriber to created5
+		err = SubscribeToCriteria(ctx, client, user3.ID, created5.ID)
+		if err != nil {
+			t.Fatalf("SubscribeToCriteria() for user3 and created5 error = %v", err)
+		}
+
+		// Set LastSearchedAt to 25 hours ago
 		oldTime = time.Now().Add(-25 * time.Hour)
 		created5.LastSearchedAt = &oldTime
 		err = SetSearchCriteria(ctx, client, created5)
 		if err != nil {
-			t.Fatalf("UpdateSearchCriteria() old search no subscribers error = %v", err)
+			t.Fatalf("UpdateSearchCriteria() old search expired subscribers error = %v", err)
 		}
 
 		// Get criteria that needs search
@@ -249,29 +279,29 @@ func TestSearchCriteria(t *testing.T) {
 			foundIDs[c.ID] = true
 		}
 
-		// Check if never searched criteria WITH subscribers is found
+		// Check if never searched criteria WITH ACTIVE subscribers is found
 		if !foundIDs[created1.ID] {
-			t.Errorf("Never searched criteria WITH subscribers (ID %s) not found in results", created1.ID)
+			t.Errorf("Never searched criteria WITH ACTIVE subscribers (ID %s) not found in results", created1.ID)
 		}
 
-		// Check if old search criteria WITH subscribers is found
+		// Check if old search criteria WITH MIXED subscribers (including active) is found
 		if !foundIDs[created2.ID] {
-			t.Errorf("Old search criteria WITH subscribers (ID %s) not found in results", created2.ID)
+			t.Errorf("Old search criteria WITH MIXED subscribers including active (ID %s) not found in results", created2.ID)
 		}
 
-		// Check that recent search criteria WITH subscribers is NOT found (due to recent search)
+		// Check that recent search criteria WITH ACTIVE subscribers is NOT found (due to recent search)
 		if foundIDs[created3.ID] {
-			t.Errorf("Recent search criteria WITH subscribers (ID %s) was found, should not be included due to recent search", created3.ID)
+			t.Errorf("Recent search criteria WITH ACTIVE subscribers (ID %s) was found, should not be included due to recent search", created3.ID)
 		}
 
-		// Check that never searched criteria with NO subscribers is NOT found (due to subscriber count)
+		// Check that never searched criteria with NO subscribers is NOT found (due to no subscribers)
 		if foundIDs[created4.ID] {
-			t.Errorf("Never searched criteria with NO subscribers (ID %s) was found, should not be included due to subscriber count", created4.ID)
+			t.Errorf("Never searched criteria with NO subscribers (ID %s) was found, should not be included due to no subscribers", created4.ID)
 		}
 
-		// Check that old search criteria with NO subscribers is NOT found (due to subscriber count)
+		// Check that old search criteria with ONLY EXPIRED subscribers is NOT found (due to no active subscribers)
 		if foundIDs[created5.ID] {
-			t.Errorf("Old search criteria with NO subscribers (ID %s) was found, should not be included due to subscriber count", created5.ID)
+			t.Errorf("Old search criteria with ONLY EXPIRED subscribers (ID %s) was found, should not be included due to no active subscribers", created5.ID)
 		}
 
 		// Count expected criteria from our test set
@@ -294,8 +324,8 @@ func TestSearchCriteria(t *testing.T) {
 
 		// Create a set of expected IDs for easier comparison
 		expectedIDs := map[string]bool{
-			created1.ID: true,
-			created2.ID: true,
+			created1.ID: true, // Never searched with active subscribers
+			created2.ID: true, // Old search with mixed subscribers (has at least one active)
 		}
 
 		// Check for any unexpected criteria in results

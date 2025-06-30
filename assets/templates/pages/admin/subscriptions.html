@@ -33,12 +33,36 @@
         </header>
         <p><strong>User ID:</strong> {{.SelectedUser.ID}}</p>
         <p><strong>Last Accessed At:</strong> {{if .SelectedUser.LastAccessedAt.IsZero}}N/A{{else}}{{.SelectedUser.LastAccessedAt.Format "2006-01-02 15:04:05"}}{{end}}</p>
+        <p><strong>Subscription End:</strong> 
+            {{if .SelectedUser.SubscriptionEnd}}
+                {{.SelectedUser.SubscriptionEnd.Format "2006-01-02 15:04:05"}} 
+                {{if .SelectedUser.SubscriptionEnd.Before (now)}}
+                    <span style="color: red;">(EXPIRED)</span>
+                {{else}}
+                    <span style="color: green;">(ACTIVE)</span>
+                {{end}}
+            {{else}}
+                <span style="color: red;">Not set</span>
+            {{end}}
+        </p>
         {{if .SubscriptionError}}
         <article class="error">{{.SubscriptionError}}</article>
         {{end}}
         {{if .SubscriptionSuccess}}
         <article class="notice">{{.SubscriptionSuccess}}</article>
         {{end}}
+        
+        <!-- Subscription Extension Form -->
+        <form method="POST" style="margin-bottom: 1rem; display: flex; gap: 1rem; align-items: flex-end; background: #f8f9fa; padding: 1rem; border-radius: 8px;">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input type="hidden" name="user_id" value="{{.SelectedUserID}}">
+            <div>
+                <label for="extend_days"><strong>Extend Subscription:</strong></label>
+                <input type="number" name="extend_days" id="extend_days" min="1" max="365" placeholder="Days" required style="width: 100px;">
+            </div>
+            <button type="submit" style="background-color: #28a745; color: white;">Extend</button>
+        </form>
+        
         <form method="POST" style="margin-bottom: 1rem; display: flex; gap: 1rem; align-items: flex-end;">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <input type="hidden" name="user_id" value="{{.SelectedUserID}}">

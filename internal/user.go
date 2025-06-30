@@ -75,6 +75,11 @@ type User struct {
 	CompletedAt     *time.Time
 	SubscriptionEnd *time.Time
 
+	// Trial tracking
+	TrialAppointmentID *string    // ID of the appointment that started the trial
+	TrialStartedAt     *time.Time // When the trial period started
+	TrialEndAt         *time.Time // When the trial period ends (calculated)
+
 	LastAccessedAt time.Time // Last time the user accessed the system
 }
 
