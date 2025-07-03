@@ -52,6 +52,7 @@ Then, follow these steps to complete your analysis:
          There are some positives but there are significant qualifications or requirements 
          about the job that are unknown about the user or significant drawbacks or 
          mismatches that would make the user hesitant and require many follow up questions.
+         The job would also be a 3 if there is a mismatch for remote work vs hybrid or on-site.
 
      4 - The job is a good match with strong alignment to the user's preferences 
          and experience level. There may be minor concerns or areas that don't perfectly 
@@ -64,7 +65,8 @@ Then, follow these steps to complete your analysis:
 
       </numeric_rating>
       <rating_explaination>
-         One or two brief sentences written to the user on why this rating (e.g. "This job has some technical alignment but misses key preferences around remote work, AI focus, and company size, making it unlikely to interest you."
+         One or two brief sentences written as if you were talking to the user on why the job is rated the way it is. Use "you" and "your" in the sentence.
+         (e.g. "This job has some technical alignment but misses key preferences around remote work, AI focus, and company size, making it unlikely to interest you."
       </rating_explaination>
    </rating>
 
