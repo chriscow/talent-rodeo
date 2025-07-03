@@ -639,7 +639,7 @@ func (app *application) adminSubscriptions(w http.ResponseWriter, r *http.Reques
 			// Handle extend subscription action
 			if extendDaysStr := r.PostForm.Get("extend_days"); extendDaysStr != "" {
 				extendDays, err := strconv.Atoi(extendDaysStr)
-				if err != nil || extendDays <= 0 {
+				if err != nil || extendDays < 0 {
 					subscriptionError = "Invalid number of days to extend"
 				} else {
 					// Get the current user to check their subscription end date
