@@ -1,12 +1,12 @@
 # Trial Email Strategy Implementation Plan
 
-**Date:** January 30, 2025  
-**Lead Engineer:** Implementation Plan  
-**Project:** 7-Day Trial Email Sequence  
+**Date:** July 3, 2025  
+**Updated:** Based on TRIAL_EMAIL_STRATEGY.md  
+**Project:** 5-Email Trial Sequence Implementation  
 
 ## Project Overview
 
-Implement a 6-email trial sequence to maximize subscription conversion, starting with enhancing the existing recap email to serve as trial welcome, then building 5 additional emails with sophisticated targeting and personalization.
+Implement a refined 5-email trial sequence to maximize subscription conversion during the 7-day trial period. The approach focuses on template-based content with minimal LLM usage, emphasizing the established Shirely voice and strategic value positioning.
 
 ## ⚠️ **CRITICAL TIMEZONE ANALYSIS**
 
@@ -144,7 +144,19 @@ Trial Tracking Started → User Activity Monitoring (timezone-aware)
 Scheduled Trial Emails (Days 1-6) → Conversion Tracking → End at User's EOD
 ```
 
-## Implementation Plan
+## Refined Implementation Plan
+
+### Email Sequence Overview
+
+**5-Email Sequence** (aligned with TRIAL_EMAIL_STRATEGY.md):
+
+| Day | Email Type | Purpose | Content Approach | Testing Focus |
+|-----|------------|---------|------------------|---------------|
+| 0 | **Recap Email** | Personalized call recap + trial intro | Enhanced LLM-generated | Conversion impact |
+| 1 | **Welcome to Talent Rodeo** | Set expectations, reduce confusion | Template with Shirely voice | Engagement metrics |
+| 2 | **Why You Might Not See Many Matches Yet** | Prevent disappointment, manage expectations | Template with match volume switching | Volume category accuracy |
+| 3 | **3 Tips to Improve Your Matches** | Drive engagement, showcase features | Template with Shirely voice | Feature adoption |
+| 6 | **Trial Ending Soon – Stay in the Rodeo** | Convert while value is fresh | Template with Shirely voice | Conversion rate |
 
 ### Phase 0: Timezone Foundation (Priority 0 - Must Do First) ⚡
 
@@ -221,6 +233,13 @@ func CalculateDaysRemaining(trialEndUTC time.Time, userTimezone string) int {
 
 ### Phase 1: Enhanced Recap Email (Week 1) - **PRIORITY 1**
 
+**Testing Goal**: Verify recap email enhancement improves trial engagement without breaking existing functionality.
+
+**Success Metrics**:
+- Recap email delivery rate > 98%
+- Trial context appears correctly in all timezones
+- User engagement increase > 10% vs baseline
+
 #### 1.1 Update Existing Recap Email Prompt
 **File**: `assets/prompts/recap-email.001.txt`
 **Action**: Enhance with trial context while preserving personalization
@@ -268,18 +287,24 @@ func GenerateRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user 
 
 ### Phase 2: Core Trial Infrastructure (Week 2-3)
 
+**Testing Goal**: Establish reliable trial email scheduling and data collection.
+
+**Success Metrics**:
+- All 4 new nudge types defined and functional
+- Match volume categorization accuracy > 95%
+- Email scheduling works correctly across timezones
+- No performance degradation on existing systems
+
 #### 2.1 Extend Nudge Type System
 **File**: `internal/nudge/types.go`
 ```go
 const (
     // Existing types...
-    NudgeTypeTrialRecapWelcome      NudgeType = "trial_recap_welcome"
-    NudgeTypeTrialFirstActivity     NudgeType = "trial_first_activity"  
-    NudgeTypeTrialProgressUpdate    NudgeType = "trial_progress_update"
-    NudgeTypeTrialEducation         NudgeType = "trial_education"
-    NudgeTypeTrialFeatureSpotlight  NudgeType = "trial_feature_spotlight"
-    NudgeTypeTrialSocialProof       NudgeType = "trial_social_proof"
-    NudgeTypeTrialFinalCall         NudgeType = "trial_final_call"
+    // Note: Recap email uses existing system enhancement
+    NudgeTypeTrialWelcome           NudgeType = "trial_welcome"          // Day 1
+    NudgeTypeTrialExpectations      NudgeType = "trial_expectations"     // Day 2  
+    NudgeTypeTrialEngagement        NudgeType = "trial_engagement"       // Day 3
+    NudgeTypeTrialConversion        NudgeType = "trial_conversion"       // Day 6
 )
 ```
 
@@ -300,26 +325,18 @@ type TrialEmailData struct {
     TrialStartDateUser    string    // Formatted for user's timezone
     TrialEndDateUser      string    // Formatted for user's timezone
     
-    // Personalization data
-    AppointmentTimezone   string    // From appointment
-    CallCompletionDate    time.Time
-    
-    // Match statistics
+    // Match statistics (aligned with strategy)
     TotalJobsAnalyzed     int
     TotalMatches          int
-    HighQualityMatches    int
-    FiveStarMatches       int
+    HighQualityMatches    int       // Score >= 4.0 (used for volume determination)
+    FiveStarMatches       int       // Score >= 4.5
+    MatchVolumeCategory   string    // "high", "typical", "low" (strategy alignment)
     
     // Engagement metrics
     DashboardVisits       int
     FeedbackGiven         int
     LastActivityDate      *time.Time
     HasUsedFeedback       bool
-    
-    // Content targeting
-    MatchVolumeCategory   string // "high", "moderate", "low"  
-    IsNicheUser           bool   // < 3 matches rated 4+ stars
-    NicheExplanation      string // LLM-generated only for niche users
 }
 ```
 
@@ -412,49 +429,62 @@ func (s *TrialEmailScheduler) ShouldSendEmail(ctx context.Context, user *interna
 
 ### Phase 3: Email Templates & Content (Week 4-5)
 
+**Testing Goal**: Validate email content quality and delivery across all scenarios.
+
+**Success Metrics**:
+- All 4 email templates render correctly
+- Match volume switching works for high/typical/low categories
+- Shirely voice consistency maintained across templates
+- Email deliverability > 95% (no spam issues)
+
 #### 3.1 Static Email Template Creation (MVP Approach)
 Create `text/template` based HTML/text templates for standard content:
 
 **Static Templates to create:**
-- `assets/emails/trial-first-activity.html` - Standard activity nudge
-- `assets/emails/trial-progress-update.html` - Progress with match data
-- `assets/emails/trial-education.html` - Patience and strategy education
-- `assets/emails/trial-feature-spotlight.html` - Feedback system explanation
-- `assets/emails/trial-social-proof.html` - Success metrics and urgency
-- `assets/emails/trial-final-call.html` - Conversion call-to-action
+- `assets/emails/trial-welcome.html` - Welcome to Talent Rodeo (Day 1)
+- `assets/emails/trial-expectations.html` - Why You Might Not See Many Matches Yet (Day 2)
+- `assets/emails/trial-engagement.html` - 3 Tips to Improve Your Matches (Day 3)
+- `assets/emails/trial-conversion.html` - Trial Ending Soon (Day 6)
 
 **Template data structure:**
 ```html
 <p>Your trial period started on {{.TrialStartDateUser}} and will end on {{.TrialEndDateUser}}.</p>
 <p>You have <strong>{{.DaysRemaining}} days remaining</strong> to explore all features!</p>
 
-{{if .IsNicheUser}}
-<div class="niche-explanation">
-{{.NicheExplanation}} <!-- LLM-generated for < 3 matches only -->
-</div>
+{{if eq .MatchVolumeCategory "high"}}
+<p>Great news! We've found {{.HighQualityMatches}} quality matches for you!</p>
+{{else if eq .MatchVolumeCategory "typical"}}
+<p>We've found {{.HighQualityMatches}} quality matches - the best roles take time to appear.</p>
 {{else}}
-<p>We've found {{.HighQualityMatches}} quality matches for you!</p>
+<p>We've found {{.HighQualityMatches}} matches for your specialized criteria. Perfect roles are worth waiting for!</p>
 {{end}}
 ```
 
-#### 3.2 Limited LLM Usage (Niche Users Only)
-**File**: `assets/prompts/trial-niche-explanation.txt`
-```txt
-Generate a personalized explanation for a user with very specific criteria who has received fewer than 3 job matches rated 4+ stars.
+#### 3.2 Match Volume Detection Function
+**File**: `internal/nudge/match_volume.go`
+```go
+const (
+    HighVolumeMatchThreshold    = 10 // 10+ quality matches = high volume
+    TypicalVolumeMatchThreshold = 4  // 4-9 quality matches = typical volume
+                                     // 3 or fewer quality matches = low volume
+)
 
-User Role: {{.Role}}
-Matches Found: {{.HighQualityMatches}}
-User Industry: {{.Industry}}
-
-Explain why specialized roles like theirs take time to appear and position this as a strategic advantage.
-Keep it encouraging and professional.
+func DetermineMatchVolumeCategory(qualityMatches int) string {
+    if qualityMatches >= HighVolumeMatchThreshold { 
+        return "high" 
+    }
+    if qualityMatches >= TypicalVolumeMatchThreshold { 
+        return "typical" 
+    }
+    return "low"
+}
 ```
 
 #### 3.3 Simplified Content Generation
 **File**: `internal/nudge/trial_content.go`
 ```go
 type TrialContentBuilder struct {
-    llmClient tools.LLMClient // Only for niche users
+    fs *internal.FirestoreClient
 }
 
 func (b *TrialContentBuilder) BuildTrialEmailData(ctx context.Context, user *internal.User, emailType NudgeType) (*TrialEmailData, error) {
@@ -470,13 +500,7 @@ func (b *TrialContentBuilder) BuildTrialEmailData(ctx context.Context, user *int
     
     // Get match statistics
     highQualityMatches := b.getHighQualityMatchCount(ctx, user.ID)
-    isNiche := highQualityMatches < 3
-    
-    // Generate niche explanation only if needed
-    var nicheExplanation string
-    if isNiche {
-        nicheExplanation, _ = b.generateNicheExplanation(ctx, user)
-    }
+    matchVolumeCategory := DetermineMatchVolumeCategory(highQualityMatches)
     
     return &TrialEmailData{
         UserTimezone:          appointment.Timezone,
@@ -484,13 +508,20 @@ func (b *TrialContentBuilder) BuildTrialEmailData(ctx context.Context, user *int
         TrialEndDateUser:      formatUserTime(user.SubscriptionEnd, appointment.Timezone),
         DaysRemaining:         calculateDaysRemaining(user.SubscriptionEnd, appointment.Timezone),
         HighQualityMatches:    highQualityMatches,
-        IsNicheUser:          isNiche,
-        NicheExplanation:     nicheExplanation,
+        MatchVolumeCategory:   matchVolumeCategory,
     }, nil
 }
 ```
 
-### Phase 4: Advanced Features (Week 6-7)
+### Phase 4: Integration & End-to-End Testing (Week 6-7)
+
+**Testing Goal**: Complete email sequence functions perfectly from trial start to conversion.
+
+**Success Metrics**:
+- Complete 5-email sequence delivers without errors
+- No duplicate emails sent to users
+- Trial conversion rate improvement > 15%
+- System performance remains stable under load
 
 #### 4.1 Match Volume Detection
 **File**: `internal/nudge/targeting.go`
@@ -697,36 +728,75 @@ or state of daylight saving time.
 - [ ] Analytics/monitoring setup for email tracking
 - [ ] ⚠️ **Timezone calculation fix must be deployed first** (Phase 0)
 
-## Estimated Timeline (Simplified MVP Approach)
-- **Phase 0**: 3 days (Timezone foundation) ⚡ **CRITICAL**
-- **Phase 1**: 1 week (Enhanced recap email)
-- **Phase 2**: 1.5 weeks (Core infrastructure - simplified)
-- **Phase 3**: 1 week (Static templates and limited LLM)
-- **Phase 4**: 1 week (Testing & refinement)
-- **Total**: 5.5 weeks for MVP implementation
+## Phased Implementation with Testing
 
-**Critical Path**: Timezone fix → Enhanced recap email → Trial tracking → Static templates → Testing
+### Phase 0: Foundation (3 days) ⚡ **CRITICAL**
+**Goal**: Fix timezone handling and establish reliable trial period calculation
 
-**MVP Simplifications**:
-- Static templates instead of dynamic content generation
-- LLM only for niche users (< 3 matches)
-- No A/B testing infrastructure
-- Basic analytics only
-- Existing nudge scheduler (no new infrastructure) 
+**Tasks**:
+1. Fix trial period calculation in `internal/appointment.go`
+2. Add timezone helper functions
+3. Test timezone handling across multiple regions
+
+**Testing**: Manual testing with users in different timezones
+
+### Phase 1: Enhanced Recap Email (1 week)
+**Goal**: Enhance existing recap email with trial context
+
+**Tasks**:
+1. Update recap email prompt with trial information
+2. Add timezone-aware trial timeline data
+3. A/B test against current recap email
+
+**Testing**: A/B test with 50% of users, monitor engagement metrics
+
+### Phase 2: Core Infrastructure (1.5 weeks)  
+**Goal**: Build reliable trial email scheduling system
+
+**Tasks**:
+1. Add 4 new nudge types
+2. Implement TrialEmailData structure
+3. Create match volume detection logic
+4. Test email scheduling system
+
+**Testing**: Unit tests + integration tests with test users
+
+### Phase 3: Email Templates (1 week)
+**Goal**: Create and test all email templates
+
+**Tasks**:
+1. Create 4 email templates with Shirely voice
+2. Implement match volume switching logic
+3. Test template rendering across email clients
+
+**Testing**: Email deliverability tests, template rendering validation
+
+### Phase 4: End-to-End Testing (1 week)
+**Goal**: Complete sequence testing and optimization
+
+**Tasks**:
+1. Test complete 5-email sequence
+2. Performance testing under load
+3. Error handling and edge cases
+4. Monitoring and analytics setup
+
+**Testing**: Full user journey testing, load testing, error scenarios
+
+**Total Timeline**: 4.5 weeks for MVP implementation 
 
 ## Key Implementation Decisions ✅
 
 ### **MVP-First Approach**
 - **Static templates** for standard content (faster development, reliable)
-- **LLM only for niche users** (< 3 matches rated 4+ stars) 
+- **Template-based content** with match volume switching (no LLM needed)
 - **Existing nudge scheduler** (proven infrastructure, no new systems)
 - **No A/B testing** (single optimized sequence)
 - **Text/template engine** for email generation
-- **6 emails total** (including enhanced recap)
+- **5 emails total** (including enhanced recap)
 
 ### **User Experience Priorities** 
 - **Timezone fairness** - trial ends 11:59 PM in user's local time
-- **No unsubscribe** - 6 emails over 7 days is reasonable
+- **No unsubscribe** - 5 emails over 7 days is reasonable
 - **Activity-based targeting** - only send if no recent dashboard visits
 - **Quality over quantity** - show top 3 matches rated 4+ stars
 - **Essential onboarding** - emails are part of trial value proposition

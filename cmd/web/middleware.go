@@ -81,6 +81,10 @@ func (app *application) logAccess(next http.Handler) http.Handler {
 func (app *application) preventCSRF(next http.Handler) http.Handler {
 	csrfHandler := nosurf.New(next)
 
+	// Exempt Pusher auth endpoint from CSRF protection
+	// It's already protected by user authentication
+	csrfHandler.ExemptPath("/pusher/auth")
+
 	// Set up custom failure handler to provide more detailed logging
 	csrfHandler.SetFailureHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		app.logger.Error("CSRF validation failed",

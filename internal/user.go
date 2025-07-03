@@ -79,6 +79,7 @@ type User struct {
 	TrialAppointmentID *string    // ID of the appointment that started the trial
 	TrialStartedAt     *time.Time // When the trial period started
 	TrialEndAt         *time.Time // When the trial period ends (calculated)
+	Timezone           *string    // User's timezone from appointment scheduling
 
 	LastAccessedAt time.Time // Last time the user accessed the system
 }
@@ -536,6 +537,22 @@ func UpdateUserTierTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Tr
 
 	return tx.Update(fs.Collection(usersCollection).Doc(user.ID), []firestore.Update{
 		{Path: "Tier", Value: tier},
+	})
+}
+
+func UpdateUserTimezoneTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, user *User, timezone string) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
+
+	if timezone == "" {
+		return fmt.Errorf("timezone cannot be empty")
+	}
+
+	user.Timezone = &timezone
+
+	return tx.Update(fs.Collection(usersCollection).Doc(user.ID), []firestore.Update{
+		{Path: "Timezone", Value: timezone},
 	})
 }
 

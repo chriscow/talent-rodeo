@@ -203,6 +203,11 @@ func (p *Processor) runProcessingCycle(ctx context.Context) {
 		NudgeTypeNoResume,        // Priority 1
 		NudgeTypeNoCall,          // Priority 2
 		NudgeTypeFiveStarMatches, // Priority 3
+		// Trial email sequence
+		NudgeTypeTrialWelcome,      // Trial Day 1
+		NudgeTypeTrialExpectations, // Trial Day 2
+		NudgeTypeTrialEngagement,   // Trial Day 3
+		NudgeTypeTrialConversion,   // Trial Day 6
 	}
 
 	for _, nudgeType := range nudgeTypes {
@@ -224,7 +229,11 @@ func (p *Processor) runProcessingCycle(ctx context.Context) {
 		"total_errors", stats.TotalErrors,
 		"no_resume", stats.TypeStats[NudgeTypeNoResume].EmailsSent,
 		"no_call", stats.TypeStats[NudgeTypeNoCall].EmailsSent,
-		"five_star", stats.TypeStats[NudgeTypeFiveStarMatches].EmailsSent)
+		"five_star", stats.TypeStats[NudgeTypeFiveStarMatches].EmailsSent,
+		"trial_welcome", stats.TypeStats[NudgeTypeTrialWelcome].EmailsSent,
+		"trial_expectations", stats.TypeStats[NudgeTypeTrialExpectations].EmailsSent,
+		"trial_engagement", stats.TypeStats[NudgeTypeTrialEngagement].EmailsSent,
+		"trial_conversion", stats.TypeStats[NudgeTypeTrialConversion].EmailsSent)
 }
 
 // processNudgeType processes all users eligible for a specific nudge type
@@ -609,6 +618,23 @@ func GetNudgeEligibleUsers(ctx context.Context, logger *slog.Logger, fs *interna
 		if settings.MatchAlertDelayDays > 0 {
 			cutoffTime = cutoffTime.Add(-time.Duration(settings.MatchAlertDelayDays) * 24 * time.Hour)
 		}
+	// Trial emails use specific day delays from trial start
+	case NudgeTypeTrialWelcome:
+		if settings.TrialWelcomeDelayDays > 0 {
+			cutoffTime = cutoffTime.Add(-time.Duration(settings.TrialWelcomeDelayDays) * 24 * time.Hour)
+		}
+	case NudgeTypeTrialExpectations:
+		if settings.TrialExpectationsDelayDays > 0 {
+			cutoffTime = cutoffTime.Add(-time.Duration(settings.TrialExpectationsDelayDays) * 24 * time.Hour)
+		}
+	case NudgeTypeTrialEngagement:
+		if settings.TrialEngagementDelayDays > 0 {
+			cutoffTime = cutoffTime.Add(-time.Duration(settings.TrialEngagementDelayDays) * 24 * time.Hour)
+		}
+	case NudgeTypeTrialConversion:
+		if settings.TrialConversionDelayDays > 0 {
+			cutoffTime = cutoffTime.Add(-time.Duration(settings.TrialConversionDelayDays) * 24 * time.Hour)
+		}
 	}
 
 	for _, user := range allUsers {
@@ -621,6 +647,9 @@ func GetNudgeEligibleUsers(ctx context.Context, logger *slog.Logger, fs *interna
 			statusMatches = (user.Status == internal.UserStatusResumeUploaded)
 		case NudgeTypeFiveStarMatches:
 			statusMatches = (user.Status >= internal.UserStatusCallCompleted)
+		// Trial emails are for users who have completed calls and are in trial period
+		case NudgeTypeTrialWelcome, NudgeTypeTrialExpectations, NudgeTypeTrialEngagement, NudgeTypeTrialConversion:
+			statusMatches = (user.Status >= internal.UserStatusCallCompleted && user.SubscriptionEnd != nil && user.SubscriptionEnd.After(time.Now()))
 		}
 
 		if !statusMatches {
@@ -678,6 +707,14 @@ func isUserEligibleForNudge(user *internal.User, nudgeType NudgeType, cutoffTime
 		limitOnActivity = settings.LimitOnRecentActivityPerType.FiveStarMatches
 		// case NudgeTypeFollowUp:
 		// 	limitOnActivity = settings.LimitOnRecentActivityPerType.FollowUp
+	case NudgeTypeTrialWelcome:
+		limitOnActivity = settings.LimitOnRecentActivityPerType.TrialWelcome
+	case NudgeTypeTrialExpectations:
+		limitOnActivity = settings.LimitOnRecentActivityPerType.TrialExpectations
+	case NudgeTypeTrialEngagement:
+		limitOnActivity = settings.LimitOnRecentActivityPerType.TrialEngagement
+	case NudgeTypeTrialConversion:
+		limitOnActivity = settings.LimitOnRecentActivityPerType.TrialConversion
 	}
 
 	if limitOnActivity {
@@ -700,6 +737,14 @@ func isUserEligibleForNudge(user *internal.User, nudgeType NudgeType, cutoffTime
 			maxAllowed = settings.MaxNudgesPerType.FiveStarMatches
 			// case NudgeTypeFollowUp:
 			// 	maxAllowed = settings.MaxNudgesPerType.FollowUp
+		case NudgeTypeTrialWelcome:
+			maxAllowed = settings.MaxNudgesPerType.TrialWelcome
+		case NudgeTypeTrialExpectations:
+			maxAllowed = settings.MaxNudgesPerType.TrialExpectations
+		case NudgeTypeTrialEngagement:
+			maxAllowed = settings.MaxNudgesPerType.TrialEngagement
+		case NudgeTypeTrialConversion:
+			maxAllowed = settings.MaxNudgesPerType.TrialConversion
 		}
 
 		currentCount := user.NudgeTypeCount[string(nudgeType)]
@@ -708,7 +753,71 @@ func isUserEligibleForNudge(user *internal.User, nudgeType NudgeType, cutoffTime
 		}
 	}
 
+	// Special trial email timing checks
+	if isTrialNudgeType(nudgeType) {
+		return isUserEligibleForTrialEmail(user, nudgeType, settings)
+	}
+
 	return true, "eligible"
+}
+
+// isTrialNudgeType checks if the nudge type is a trial email
+func isTrialNudgeType(nudgeType NudgeType) bool {
+	switch nudgeType {
+	case NudgeTypeTrialWelcome, NudgeTypeTrialExpectations, NudgeTypeTrialEngagement, NudgeTypeTrialConversion:
+		return true
+	default:
+		return false
+	}
+}
+
+// isUserEligibleForTrialEmail performs trial-specific eligibility checks
+func isUserEligibleForTrialEmail(user *internal.User, nudgeType NudgeType, settings NudgeProcessorSettings) (bool, string) {
+	// Must have timezone and subscription end date
+	if user.Timezone == nil {
+		return false, "no timezone set"
+	}
+	if user.SubscriptionEnd == nil {
+		return false, "no trial end date"
+	}
+
+	// Must be in active trial
+	now := time.Now()
+	if user.SubscriptionEnd.Before(now) {
+		return false, "trial expired"
+	}
+
+	// Calculate trial start time (7 days before end)
+	trialStartTime := user.SubscriptionEnd.Add(-7 * 24 * time.Hour)
+	
+	// Determine which day of trial we should send this email
+	var targetDay int
+	switch nudgeType {
+	case NudgeTypeTrialWelcome:
+		targetDay = settings.TrialWelcomeDelayDays
+	case NudgeTypeTrialExpectations:
+		targetDay = settings.TrialExpectationsDelayDays
+	case NudgeTypeTrialEngagement:
+		targetDay = settings.TrialEngagementDelayDays
+	case NudgeTypeTrialConversion:
+		targetDay = settings.TrialConversionDelayDays
+	default:
+		return false, "unknown trial nudge type"
+	}
+
+	// Calculate when this email should be sent (target day after trial start)
+	targetSendTime := trialStartTime.Add(time.Duration(targetDay-1) * 24 * time.Hour)
+	
+	// Check if it's the right time to send this email (within 24 hours of target)
+	timeSinceTarget := now.Sub(targetSendTime)
+	if timeSinceTarget < 0 {
+		return false, fmt.Sprintf("too early (target send time is %s)", targetSendTime.Format(time.RFC3339))
+	}
+	if timeSinceTarget > 24*time.Hour {
+		return false, fmt.Sprintf("too late (target send time was %s)", targetSendTime.Format(time.RFC3339))
+	}
+
+	return true, "eligible for trial email"
 }
 
 func UpdateUserNudgeTrackingTx(ctx context.Context, fs *internal.FirestoreClient, tx *firestore.Transaction, userID string, nudgeType string) error {
@@ -738,6 +847,10 @@ func GetNudgeStats(ctx context.Context, fs *internal.FirestoreClient) (map[strin
 		"no_resume_nudges":        0,
 		"no_call_nudges":          0,
 		"five_star_nudges":        0,
+		"trial_welcome_nudges":    0,
+		"trial_expectations_nudges": 0,
+		"trial_engagement_nudges": 0,
+		"trial_conversion_nudges": 0,
 	}
 
 	iter := fs.Collection("users").
@@ -768,6 +881,14 @@ func GetNudgeStats(ctx context.Context, fs *internal.FirestoreClient) (map[strin
 				stats["no_call_nudges"]++
 			case "five_star_matches":
 				stats["five_star_nudges"]++
+			case "trial_welcome":
+				stats["trial_welcome_nudges"]++
+			case "trial_expectations":
+				stats["trial_expectations_nudges"]++
+			case "trial_engagement":
+				stats["trial_engagement_nudges"]++
+			case "trial_conversion":
+				stats["trial_conversion_nudges"]++
 			}
 		}
 	}

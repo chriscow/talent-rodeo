@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"talent-rodeo/assets"
 	"talent-rodeo/internal/funcs"
+	"talent-rodeo/internal/utils"
 	"time"
 
 	"sort"
@@ -333,7 +334,17 @@ func ProcessAppointmentComplete(ctx context.Context, fs *FirestoreClient, user *
 			return fmt.Errorf("failed to update user state: %w", err)
 		}
 
-		subscriptionEnd := time.Now().Add(24 * 7 * time.Hour) // 7 days from now
+		// Store user's timezone from appointment
+		if err := UpdateUserTimezoneTx(ctx, fs, tx, user, appointment.Timezone); err != nil {
+			return fmt.Errorf("failed to update user timezone: %w", err)
+		}
+
+		// Calculate trial end in user's timezone (11:59 PM on 7th day)
+		subscriptionEnd, err := utils.CalculateTrialEndDate(time.Now(), appointment.Timezone)
+		if err != nil {
+			// Fallback to 7 days UTC if timezone parsing fails
+			subscriptionEnd = time.Now().Add(7 * 24 * time.Hour)
+		}
 		if err := UpdateUserSubscriptionEndAtTx(ctx, fs, tx, user, subscriptionEnd); err != nil {
 			return fmt.Errorf("failed to update user subscription end at: %w", err)
 		}
