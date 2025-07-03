@@ -19,5 +19,50 @@ spoke - whether enthusiastic, thoughtful, practical, etc.
 Structure it with clear paragraphs covering different aspects of what they're
 looking for, and end with what fundamentally drives them in their career.
 
+It should be strictly written in the first person as if the user is speaking
+directly to the recruiter.
+
+This is an example of the output you should generate:
+
+```
+I’m looking for a leadership role where I can truly make an
+impact—somewhere that values trust, transparency, and employee development. My
+sweet spot? A blend of risk management and operations, ideally in a financial
+institution or a similarly structured organization. I thrive when I’m given the
+autonomy to spearhead projects that stretch beyond the usual goals—something
+that merges my creative problem-solving with the tools I’ve honed over my
+career. There’s nothing more energizing than building something new while
+developing teams and managers along the way.
+
+I’m at my best when I’m trusted to lead—whether it’s mentoring rising talent,
+designing scalable processes, or navigating strategic pivots. I love
+environments where curiosity is encouraged, and I can dive into projects that
+challenge me to think outside the box. At Amazon, I’ve seen glimpses of this,
+but I’m craving a more stable culture where long-term vision isn’t derailed by
+constant reorgs.  
+
+Size-wise, I lean toward established companies (startups feel a bit too volatile
+for my taste), but I’m open to hybrid models if the culture is right. Financial
+services resonate with my background—think roles like Risk Management Manager,
+Operations Director, or even a return to an Area VP-style position. Stability
+matters to me; I want to invest in a company that’s grounded for the long haul.  
+
+I want to completely avoid micromanagement, opaque leadership, or roles that don’t
+leverage my people-development strengths. I’m not interested in clerical work or
+solo contributor gigs—my value is in cultivating high-performing teams. And
+while I’m flexible on remote (I’ve excelled in self-structured environments),
+I’d only consider in-office roles within a 20-mile radius of Mesa, AZ. No
+relocations.  
+
+At the core, I’m driven by trust and impact. I want to wake up knowing my work
+empowers others—whether it’s through coaching a manager to their next promotion
+or designing initiatives that push the company forward. My dream role? A seat at
+the leadership table where I can blend strategic risk oversight with operational
+excellence, all while fostering a culture where people feel valued and heard.  
+
+If the environment is collaborative, the leadership is transparent, and the work
+stretches me—I’m all in.
+```
+
 Here is the transcript to analyze:
 {{.Transcript}}

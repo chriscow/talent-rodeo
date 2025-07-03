@@ -17,8 +17,14 @@ func TestFeedbackAnalysisChain_Run(t *testing.T) {
 
 	t.Run("successful analysis", func(t *testing.T) {
 		mockAnalysis := &SemanticFeedbackAnalysis{
-			LikedThemes: []SemanticTheme{
-				{Theme: "Go programming", Keywords: []string{"golang", "go"}},
+			SemanticThemes: struct {
+				Liked    []SemanticTheme `json:"Liked"`
+				Disliked []SemanticTheme `json:"Disliked"`
+			}{
+				Liked: []SemanticTheme{
+					{Theme: "Go programming", Keywords: []string{"golang", "go"}},
+				},
+				Disliked: []SemanticTheme{},
 			},
 			ConfidenceScore: 0.9,
 			Reasoning:       "User likes Go.",

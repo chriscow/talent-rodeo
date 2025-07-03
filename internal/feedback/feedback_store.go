@@ -12,6 +12,8 @@ type FeedbackStore interface {
 	GetUnprocessedUserFeedback(ctx context.Context, userID string) ([]*internal.UserFeedback, error)
 	GetUserSteeringQuery(ctx context.Context, userID string) (*internal.SteeringQuery, error)
 	SetUserSteeringQuery(ctx context.Context, userID string, sq internal.SteeringQuery) error
+	GetUserStatement(ctx context.Context, userID string) (*string, error)
+	SetUserStatement(ctx context.Context, userID string, statement string) error
 	MarkFeedbackAsProcessed(ctx context.Context, feedbackIDs []string, processedAt time.Time) error
 }
 
@@ -35,6 +37,21 @@ func (s *firestoreStore) GetUserSteeringQuery(ctx context.Context, userID string
 
 func (s *firestoreStore) SetUserSteeringQuery(ctx context.Context, userID string, sq internal.SteeringQuery) error {
 	return internal.SetUserSteeringQuery(ctx, s.fs, userID, sq)
+}
+
+func (s *firestoreStore) GetUserStatement(ctx context.Context, userID string) (*string, error) {
+	user, found, err := internal.GetUser(ctx, s.fs, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, nil
+	}
+	return user.Statement, nil
+}
+
+func (s *firestoreStore) SetUserStatement(ctx context.Context, userID string, statement string) error {
+	return internal.SetUserStatement(ctx, s.fs, userID, statement)
 }
 
 func (s *firestoreStore) MarkFeedbackAsProcessed(ctx context.Context, feedbackIDs []string, processedAt time.Time) error {

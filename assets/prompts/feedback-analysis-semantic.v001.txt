@@ -16,26 +16,30 @@ Analyze this feedback to extract:
 3.  **Trending Patterns**: Note any emerging or changing preferences over time.
 4.  **Reasoning**: Briefly explain your analysis and how you derived the themes.
 
-Your output MUST be a valid JSON object that matches the following structure:
+Please outout your response in the JSON format below.
 
+```json
 {
-  "liked_themes": [
-    {
-      "theme": "...",
-      "keywords": ["...", "..."],
-      "confidence": 0.9,
-      "frequency": 3
-    }
-  ],
-  "disliked_themes": [
-    {
-      "theme": "...",
-      "keywords": ["...", "..."],
-      "confidence": 0.8,
-      "frequency": 2
-    }
-  ],
-  "confidence_score": 0.85,
-  "trending_patterns": ["..."],
-  "reasoning": "..."
-} 
+    "SemanticThemes": {
+        "Liked": [
+            {
+                "Theme": "...",
+                "Keywords": ["...", "..."],
+                "ConfidenceScore": 0.9,
+                "Frequency": 3
+            }
+        ],
+        "Disliked": [
+            {
+                "Theme": "...",
+                "Keywords": ["...", "..."],
+                "ConfidenceScore": 0.9,
+                "Frequency": 3
+            }
+        ]
+    },
+    "ConfidenceScore": 0.9,
+    "TrendingPatterns": "...",
+    "Reasoning": "..."
+}
+```

@@ -190,10 +190,13 @@ func ProcessUserFeedback(ctx context.Context, fs *internal.FirestoreClient, logg
 	return llmProcessor.ProcessUserFeedback(ctx, userID)
 }
 
-// ProcessAllUsersFeedbackEnhanced processes feedback for all users who have unprocessed feedback
-// using the enhanced LLM processor.
+// ProcessAllUsersFeedback processes feedback for all users who have unprocessed feedback
+// using the enhanced LLM processor with metrics collection.
 func ProcessAllUsersFeedback(ctx context.Context, fs *internal.FirestoreClient, logger *slog.Logger) error {
 	llmProcessor := newLLMProcessor(newFeedbackStore(fs), logger, NewMindsClient())
+	metricsCollector := NewMetricsCollector(logger)
+
+	startTime := time.Now()
 
 	// Get all unprocessed feedback
 	allFeedback, err := internal.GetAllUnprocessedFeedback(ctx, fs, 1000) // Limit to prevent memory issues
@@ -202,6 +205,7 @@ func ProcessAllUsersFeedback(ctx context.Context, fs *internal.FirestoreClient, 
 	}
 
 	if len(allFeedback) == 0 {
+		logger.Info("no unprocessed feedback found")
 		return nil // No feedback to process
 	}
 
@@ -214,15 +218,22 @@ func ProcessAllUsersFeedback(ctx context.Context, fs *internal.FirestoreClient, 
 	// Process each user's feedback
 	var errors []error
 	processedUsers := 0
+	successfulUsers := 0
+	totalFeedbackItems := len(allFeedback)
 
 	for userID := range userFeedbackMap {
 		if err := llmProcessor.ProcessUserFeedback(ctx, userID); err != nil {
 			// Log error but continue processing other users
-			errors = append(errors, fmt.Errorf("failed to process enhanced feedback for user %s: %w", userID, err))
+			errors = append(errors, fmt.Errorf("failed to process feedback for user %s: %w", userID, err))
 			continue
 		}
 		processedUsers++
+		successfulUsers++
 	}
+
+	// Log daily processing summary
+	avgProcessingTime := time.Since(startTime) / time.Duration(len(userFeedbackMap))
+	metricsCollector.LogDailyProcessingSummary(ctx, len(userFeedbackMap), successfulUsers, len(errors), totalFeedbackItems, avgProcessingTime)
 
 	// Return aggregated error if any processing failed
 	if len(errors) > 0 {

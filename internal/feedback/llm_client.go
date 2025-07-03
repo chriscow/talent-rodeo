@@ -13,6 +13,7 @@ import (
 type LLMClient interface {
 	AnalyzeFeedback(ctx context.Context, prompt string) (*SemanticFeedbackAnalysis, error)
 	UpdateSteeringQuery(ctx context.Context, prompt string) (*internal.SteeringQuery, error)
+	UpdateStatement(ctx context.Context, prompt string) (string, error)
 }
 
 // mindsClient is an implementation of LLMClient that uses the minds library.
@@ -45,4 +46,16 @@ func (c *mindsClient) UpdateSteeringQuery(ctx context.Context, prompt string) (*
 		return nil, fmt.Errorf("llm failed to update steering query: %w", err)
 	}
 	return &updatedSQ, nil
+}
+
+// UpdateStatement uses an LLM call to update a user statement based on feedback.
+func (c *mindsClient) UpdateStatement(ctx context.Context, prompt string) (string, error) {
+	response, err := tools.Ask(ctx, prompt,
+		tools.WithModel(tools.DeepSeekChat),
+		tools.WithMaxTokens(4096),
+	)
+	if err != nil {
+		return "", fmt.Errorf("llm failed to update statement: %w", err)
+	}
+	return response, nil
 }

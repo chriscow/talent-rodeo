@@ -19,11 +19,4 @@ Follow these rules:
 4.  **Semantic Merging**: Do not just concatenate strings. Blend new themes with existing statements semantically.
 5.  **Preserve Intent**: Retain the core intent of the user's original query unless the feedback strongly contradicts it.
 
-Your output MUST be a valid JSON object representing the updated steering query structure. For example:
-
-{
-  "MoveToward": "...",
-  "MoveAway": "...",
-  "ForceAway": "...",
-  "HardConstraints": "..."
-} 
+Please output your response in the JSON format.
