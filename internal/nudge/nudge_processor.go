@@ -268,10 +268,10 @@ func (p *Processor) processNudgeType(ctx context.Context, nudgeType NudgeType, m
 
 // processUser processes a single user for nudge email
 func (p *Processor) processUser(ctx context.Context, user *internal.User, nudgeType NudgeType) (sent bool, err error) {
-	p.logger.Debug("processing user for nudge",
-		"user_id", user.ID,
-		"email", user.Email,
-		"type", nudgeType)
+	// p.logger.Debug("processing user for nudge",
+	// 	"user_id", user.ID,
+	// 	"email", user.Email,
+	// 	"type", nudgeType)
 
 	// Safety checks for testing
 	if !p.isEmailSafeToSend(user.Email) {
@@ -304,7 +304,7 @@ func (p *Processor) processUser(ctx context.Context, user *internal.User, nudgeT
 		}
 
 		if len(newJobs) == 0 {
-			p.logger.Debug("user has no new five-star matches to be notified about, skipping", "user_id", user.ID)
+			// p.logger.Debug("user has no new five-star matches to be notified about, skipping", "user_id", user.ID)
 			return false, nil // Not an error, just a successful skip
 		}
 
@@ -514,10 +514,10 @@ func (p *Processor) GetStats(ctx context.Context) (map[string]interface{}, error
 // isEmailSafeToSend checks if an email is safe to send based on current settings
 func (p *Processor) isEmailSafeToSend(email string) bool {
 	// Always log what we're checking
-	p.logger.Debug("checking email safety",
-		"email", email,
-		"test_mode", p.settings.TestModeEnabled,
-		"dry_run", p.settings.DryRun)
+	// p.logger.Debug("checking email safety",
+	// 	"email", email,
+	// 	"test_mode", p.settings.TestModeEnabled,
+	// 	"dry_run", p.settings.DryRun)
 
 	// In test mode, apply additional restrictions
 	if p.settings.TestModeEnabled {
