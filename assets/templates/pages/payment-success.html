@@ -32,8 +32,8 @@
                         <dd><mark>Pro Tier</mark></dd>
                         
                         {{if .User.SubscriptionEnd}}
-                        <dt>Pro Access Until</dt>
-                        <dd>{{.User.SubscriptionEnd | humanDate}}</dd>
+                        <dt>Pro Access Through</dt>
+                        <dd>{{formatTime "02 Jan 2006" .User.SubscriptionEnd}}</dd>
                         {{end}}
                         
                         <dt>Payment Status</dt>
