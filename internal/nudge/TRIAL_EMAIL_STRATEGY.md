@@ -5,12 +5,9 @@
 
 ## Executive Summary
 
-This strategy addresses the critical challenge of converting trial users to paid subscribers by creating a carefully orchestrated email sequence that demonstrates value, builds trust, and manages expectations. The approach recognizes that finding the "perfect job" takes time and positions waiting as a strategic advantage rather than a limitation.
+This strategy addresses the critical challenge of converting trial users to paid subscribers by creating a carefully orchestrated 5-email sequence that demonstrates value, builds trust, and manages expectations. The approach recognizes that finding the "perfect job" takes time and positions waiting as a strategic advantage rather than a limitation.
 
-**Key Update**: After analyzing the existing recap email system, we've
-determined that the current post-call recap email should be enhanced to serve as
-our trial welcome email, reducing the total sequence from 7 emails to 6 emails
-while leveraging existing personalization infrastructure.
+**Key Update**: After analyzing the existing recap email system and user experience considerations, we've determined that a focused 5-email sequence will be more effective than the original 7-email approach, reducing email fatigue while hitting key psychological moments in the trial journey.
 
 ## User Journey Context
 
@@ -22,9 +19,9 @@ while leveraging existing personalization infrastructure.
 
 ### User Archetypes
 1. **High-Volume Match Users**: Broad criteria, many good matches found quickly but not that specific.
-2. **Selective/Niche Users**: Very specific criteria, few but high-quality, specific matches. Lots of job postings found but few matches.
-3. **Hard-to-Match Users**: C-suite, specialized roles, limited job postings. Few job postings and nearly zero matches.
-5. **Passive Users**: Interested but not actively engaging with matches
+2. **Typical Match Users**: Moderate criteria, reasonable number of quality matches.
+3. **Low-Volume Match Users**: Very specific criteria, few but high-quality matches OR specialized roles with limited postings.
+4. **Passive Users**: Interested but not actively engaging with matches
 
 ## Email Strategy Framework
 
@@ -33,211 +30,86 @@ while leveraging existing personalization infrastructure.
 2. **Uniqueness**: "No one else does this kind of analysis"
 3. **Patience Education**: "Great jobs are worth waiting for"
 4. **Control & Tuning**: "You can refine your perfect match"
-5. **Urgency**: "Don't miss your perfect opportunity"
+5. **Quality Over Quantity**: "This service is for finding the RIGHT job, not ANY job"
 
-### Email Sequence Design
+### Shirely Voice & Tone Integration
 
-## Current Recap Email Analysis & Integration
+All email content must follow the established Shirely voice guidelines (see `SHIRELY_VOICE_AND_TONE_GUIDELINES.md`):
+- **Self-aware AI humor**: Confident about being an AI, references advantages
+- **Name play**: Frequent references to "HIRE is in my name"
+- **Conversational enthusiasm**: Genuine excitement about helping careers
+- **Professional but approachable**: Uses casual asides and contractions
+- **Career-focused empathy**: Understands job search frustrations and aspirations
 
-### Existing Recap Email System
-The current recap email is sent immediately after call completion as part of the
-`ProcessCompletedCall()` workflow. Analysis shows this email is perfectly
-positioned to serve as our trial welcome email.
+**Email Template Prompt**: "Write [email type] from Shirely, the AI behind Talent Rodeo. She's enthusiastic, self-aware about being an AI (in a confident way), and has HIRE literally in her name which she references playfully. She focuses on understanding career aspirations beyond resumes, works 24/7 as a personal recruiter, and genuinely cares about helping people find the right career moves. Tone should be conversational, encouraging, and professional but approachable. Include her personality quirks like referencing AI advantages, using casual asides, and showing excitement about helping people's careers."
 
-**Current Strengths:**
-- ✅ **Perfect timing** - sent immediately post-call (Day 0 of trial)
-- ✅ **Strong personalization** - uses transcript data and matches conversation tone
-- ✅ **Expectation setting** - explains search timing and process
-- ✅ **Feedback establishment** - introduces tuning concept
+## Refined 5-Email Sequence
 
-**Areas for Enhancement:**
-- ⚠️ **Missing trial context** - no mention of 7-day trial period
-- ⚠️ **Limited value positioning** - focuses on process vs. competitive advantages
-- ⚠️ **No subscription preparation** - doesn't explain what happens after trial
+### Email Type 0: Recap Email (Day 0)
+**Trigger**: Immediate post-call completion  
+**Purpose**: Personalized call recap with brief trial context  
+**Content**: LLM-generated using existing recap system with trial timeline added  
+**Tone**: Warm, personalized (matching call tone), sets stage for trial
 
-## Email Type 0: Enhanced Recap + Trial Welcome
-**Trigger**: Immediate post-call (replaces original "Welcome & Expectation Setting")  
-**Purpose**: Combine personalized call recap with trial welcome and expectation setting  
-**Tone**: Warm, personalized (matching call tone), excited about trial
+### Email Type 1: Welcome to Talent Rodeo (Day 1)
+**Trigger**: Day 1 after call  
+**Purpose**: Set expectations, reduce confusion, introduce platform value  
+**Content**: Template-based with Shirely voice  
+**Tone**: Enthusiastic welcome, educational about unique approach
 
-### Content Strategy (Enhanced Approach)
-#### Section 1: Personalized Recap (60% of email)
-- Keep LLM-generated call summary using transcript data
-- Preserve conversational tone matching from actual call
-- Include specific points discussed in conversation
-- Maintain technical expectations (search timing, dashboard refresh)
+**Key Messages:**
+- "Welcome to your personal AI recruiter experience"
+- "Here's what makes us different from job boards"
+- "Your 7-day trial timeline and what to expect"
+- "I'm working 24/7 to find your perfect matches"
 
-#### Section 2: Trial Welcome Context (30% of email)
-- "Your 7-day premium trial starts now"
-- "Full AI-powered job search for one week"  
-- "See what makes us different from other job platforms"
-- Clear trial timeline and benefits explanation
+### Email Type 2: Why You Might Not See Many Matches Yet (Day 2)
+**Trigger**: Day 2 after call  
+**Purpose**: Prevent drop-off from early disappointment, manage expectations  
+**Content**: Template-based with match volume switching (`high`/`typical`/`low`)  
+**Tone**: Understanding, educational, positioning scarcity as quality
 
-#### Section 3: Value & Uniqueness Messaging (10% of email)
-- "Unlike other platforms that just match keywords..."
-- "Your AI assistant is now working 24/7"
-- "We analyze jobs other platforms miss"
-- "Give feedback to train your personal AI"
+**Dynamic Content Based on Match Volume:**
 
-### Enhanced Prompt Template
-```txt
-You are Shirely, an AI job search specialist at Talent Rodeo.
-You just finished a phone call with {{.FullName}}, who is looking to you for assistance finding a job.
-
-Now that your call is finished, you promised to send them a recap email.
-
-IMPORTANT: This email also serves as their welcome to their 7-day premium trial.
-
-Your email should:
-1. Recap key points from your conversation (maintain personal tone)
-2. Welcome them to their 7-day premium trial 
-3. Explain what happens next (searches starting)
-4. Set expectations about trial timeline and benefits
-5. Position the uniqueness of AI-powered matching
-6. Request feedback for search refinement
-7. Include technical guidance about dashboard refresh
-
-The trial ends in exactly 7 days ({{.TrialEndDate}}).
-After the trial, they'll need to subscribe to continue receiving matches.
-
-Tone: Warm, excited about trial, professional but casual, matching your speaking style from the call.
-```
-
-### Implementation Requirements
-1. **Update recap email prompt** (`assets/prompts/recap-email.001.txt`)
-2. **Enhance email data structure** with trial timeline information
-3. **Add subscription context** to existing template
-4. **Mark as "Trial Email Type 0"** in nudge system
-
----
-
-## Email Type 1: First Activity Nudge
-**Trigger**: 24-36 hours after call, only if no dashboard activity  
-**Purpose**: Drive initial engagement with the platform  
-**Tone**: Helpful, encouraging
-
-### Content Strategy
-- Gentle reminder about platform features
-- Highlight the feedback/tuning system
-- Explain how their input improves matching
-- Create urgency around optimization
-
-### Key Messages
-- "Your job search is active - here's how to make it even better"
-- "The more feedback you give, the smarter our AI becomes"
-- "Users who tune their preferences find better matches faster"
-
----
-
-## Email Type 2: Progress Update & Value Demo
-**Trigger**: 48 hours after call (Day 2)  
-**Purpose**: Show progress and demonstrate value  
-**Tone**: Informative, proud of progress
-
-### Dynamic Content Based on Match Volume
-
-#### High-Volume Scenario (5+ matches)
+#### High Volume Scenario (10+ quality matches)
 - Celebrate the variety of opportunities found
-- Highlight top 2-3 matches with analysis snippets
-- Emphasize quality filtering working
-- Encourage feedback to refine further
+- Emphasize quality filtering is working
+- "I'm being selective for you - quality over quantity"
 
-#### Moderate-Volume Scenario (2-4 matches)
+#### Typical Scenario (4-9 quality matches)
 - Position selectivity as a strength
-- Showcase detailed analysis of best matches
-- Explain how being selective leads to better outcomes
-- Encourage patience for more opportunities
+- Explain market timing and job posting cycles
+- "The best roles take time to appear"
 
-#### Low/No-Match Scenario (0-1 matches)
-- Frame scarcity as exclusivity
-- Explain market dynamics for their role level
-- Position waiting as strategic advantage
-- Highlight the thoroughness of search criteria
-- Introduce expectation that perfect roles take time
+#### Low Volume Scenario (3 or fewer quality matches)
+- Frame scarcity as exclusivity for specialized roles
+- Explain market dynamics and posting cycles
+- "Perfect roles are worth waiting for"
 
-### Key Messages
-- "We've analyzed [X] jobs and found [Y] potential matches"
-- "Our AI found these insights about your market..."
-- "Quality over quantity - we're being selective for you"
+### Email Type 3: 3 Tips to Improve Your Matches (Day 3)
+**Trigger**: Day 3 after call  
+**Purpose**: Drive engagement, encourage feedback/tuning, showcase unique features  
+**Content**: Template-based with Shirely voice  
+**Tone**: Helpful, empowering, action-oriented  
+**Send to**: All users (additional touchpoint for engagement)
 
----
+**Key Messages:**
+- "Here's how to make me even smarter about your preferences"
+- "No other platform lets you train AI like this"
+- "3 specific ways to improve your match quality"
+- "I learn fast - it's one of my better qualities!"
 
-## Email Type 3: Education & Patience Building
-**Trigger**: Day 3-4, especially for users with few matches  
-**Purpose**: Build confidence in the waiting strategy  
-**Tone**: Educational, strategic advisor
+### Email Type 4: Trial Ending Soon – Stay in the Rodeo (Day 6)
+**Trigger**: Day 6 after call (24 hours before trial expiration)  
+**Purpose**: Drive subscription conversion while value is fresh  
+**Content**: Template-based with Shirely voice  
+**Tone**: Urgent but respectful, value-focused, quality-positioning
 
-### Content Strategy
-- Share market insights for their role/industry
-- Explain job posting cycles and timing
-- Position strategic patience as competitive advantage
-- Share success stories (anonymized)
-- Reinforce uniqueness of approach
-
-### Key Messages
-- "The best [role type] positions often take 2-4 weeks to appear"
-- "While others apply to hundreds of jobs, you're waiting for the right one"
-
----
-
-## Email Type 4: Feature Spotlight - Tuning System
-**Trigger**: Day 4-5, prioritize users who haven't used feedback  
-**Purpose**: Drive engagement with unique tuning feature  
-**Tone**: Empowering, educational
-
-### Content Strategy
-- Deep dive into feedback system capabilities
-- Show before/after examples of tuning impact
-- Emphasize competitive advantage of personalization
-- Create urgency around optimization time remaining
-
-### Key Messages
-- "No other job platform lets you train AI like this"
-- "Your feedback teaches our AI your preferences better than any resume"
-- "Users who tune their matches are 3x more likely to find their ideal role"
-- "You still have [X] days left in your trial to perfect your search"
-
----
-
-## Email Type 5: Social Proof & Urgency
-**Trigger**: Day 5-6  
-**Purpose**: Build confidence and create subscription urgency  
-**Tone**: Confident, with gentle urgency
-
-### Content Strategy
-- Share success metrics and testimonials
-- Explain what happens after trial ends
-- Create urgency without being pushy
-- Reinforce value proposition
-- Soft call-to-action for subscription
-
-### Key Messages
-- "Users report finding roles [X]% faster than traditional job search"
-- "Your trial ends in [X] days - here's what you'll miss without subscribing"
-- "Keep your AI working for you 24/7"
-- "The perfect role could appear tomorrow - stay ready"
-
----
-
-## Email Type 6: Final Day - Strong CTA
-**Trigger**: Day 6-7 (before expiration)  
-**Purpose**: Drive subscription conversion  
-**Tone**: Urgent but respectful, value-focused
-
-### Content Strategy
-- Summarize value delivered during trial
-- List specific achievements and insights
-- Clear explanation of subscription benefits
-- Strong but respectful call-to-action
-- Create urgency around losing momentum
-
-### Key Messages
-- "Your 7-day trial delivered: [specific achievements]"
-- "Don't lose momentum on your job search"
-- "Your AI has learned your preferences - keep the advantage"
-- "Subscribe now to continue your personalized job search"
-
----
+**Key Messages:**
+- "Jobs are posted constantly - you might miss your perfect opportunity"
+- "This service isn't for someone taking ANY job - it's for finding the RIGHT job"
+- "Keep your personal AI recruiter working for you"
+- "Don't lose momentum on finding your perfect career move"
 
 ## Implementation Specifications
 
@@ -246,41 +118,45 @@ Tone: Warm, excited about trial, professional but casual, matching your speaking
 ```go
 const (
     // Existing types...
-    NudgeTypeTrialRecapWelcome      NudgeType = "trial_recap_welcome"    // Enhanced recap email
-    NudgeTypeTrialFirstActivity     NudgeType = "trial_first_activity"  
-    NudgeTypeTrialProgressUpdate    NudgeType = "trial_progress_update"
-    NudgeTypeTrialEducation         NudgeType = "trial_education"
-    NudgeTypeTrialFeatureSpotlight  NudgeType = "trial_feature_spotlight"
-    NudgeTypeTrialSocialProof       NudgeType = "trial_social_proof"
-    NudgeTypeTrialFinalCall         NudgeType = "trial_final_call"
+    NudgeTypeTrialWelcome           NudgeType = "trial_welcome"          // Day 1
+    NudgeTypeTrialExpectations      NudgeType = "trial_expectations"     // Day 2
+    NudgeTypeTrialEngagement        NudgeType = "trial_engagement"       // Day 3
+    NudgeTypeTrialConversion        NudgeType = "trial_conversion"       // Day 6
 )
+```
+
+### Match Volume Constants
+
+```go
+const (
+    HighVolumeMatchThreshold    = 10 // 10+ quality matches (4+ stars) = high volume
+    TypicalVolumeMatchThreshold = 4  // 4-9 quality matches (4+ stars) = typical volume
+                                     // 3 or fewer quality matches (4+ stars) = low volume
+)
+
+func determineMatchVolumeCategory(qualityMatches int) string {
+    if qualityMatches >= HighVolumeMatchThreshold { 
+        return "high" 
+    }
+    if qualityMatches >= TypicalVolumeMatchThreshold { 
+        return "typical" 
+    }
+    return "low"
+}
 ```
 
 ### Timing Configuration
 
 ```go
 type TrialEmailSettings struct {
-    // Enhanced recap is sent immediately with call processing (no delay)
-    FirstActivityDelayHours     int // 24-36 hours, only if no activity
-    ProgressUpdateDelayHours    int // 48 hours
-    EducationStartDay           int // Day 3
-    FeatureSpotlightDay         int // Day 4-5
-    SocialProofDay              int // Day 5-6
-    FinalCallDay                int // Day 6-7
-    
-    // Activity thresholds
-    MinMatchesForHighVolume     int // 5+ matches
-    MinMatchesForModerate       int // 2-4 matches
-    
-    // Targeting controls
-    SendEducationToLowMatches   bool // Target users with few matches
-    SendFeatureToInactiveOnly   bool // Only users who haven't used feedback
+    WelcomeDelayDays        int // Day 1
+    ExpectationsDelayDays   int // Day 2
+    EngagementDelayDays     int // Day 3
+    ConversionDelayDays     int // Day 6 (24 hours before expiration)
 }
 ```
 
 ### Data Requirements
-
-Enhance `NudgeEmailData` for trial-specific content:
 
 ```go
 type TrialEmailData struct {
@@ -289,105 +165,36 @@ type TrialEmailData struct {
     // Trial progress
     TrialDay            int
     DaysRemaining       int
-    SubscriptionEndsAt  time.Time
+    TrialEndDate        time.Time
     
-    // Enhanced recap-specific data
-    Transcript          *internal.Transcript  // For personalized recap content
-    TrialStartDate      time.Time            // When trial began
-    TrialEndDate        time.Time            // When trial ends
-    
-    // Match statistics
+    // Match statistics for volume switching
     TotalJobsAnalyzed   int
     TotalMatches        int
-    HighQualityMatches  int    // Score >= 4.0
+    HighQualityMatches  int    // Score >= 4.0 (used for volume determination)
     FiveStarMatches     int    // Score >= 4.5
+    MatchVolumeCategory string // "high", "typical", "low" based on HighQualityMatches
     
     // Engagement metrics
     DashboardVisits     int
     FeedbackGiven       int
-    LastActivityDate    *time.Time
     HasUsedFeedback     bool
-    
-    // Content classification
-    IsNicheUser         bool   // < 3 matches rated 4+ stars
-    NicheExplanation    string // LLM-generated explanation for niche users only
-    
-    // Personalization
-    MatchVolumeCategory string // "high", "moderate", "low"
-    UserArchetype       string // Based on behavior analysis
-}
-```
-
-### Conditional Logic Requirements
-
-#### Match Volume Detection
-```go
-func determineMatchVolumeCategory(totalMatches int) string {
-    if totalMatches >= 5 { return "high" }
-    if totalMatches >= 2 { return "moderate" }
-    return "low"
-}
-```
-
-#### Activity-Based Targeting
-```go
-func shouldSendFirstActivityNudge(user *User, callTime time.Time) bool {
-    // Only send if no dashboard activity within 24-36 hours
-    if user.LastAccessedAt.After(callTime) {
-        return false // User has been active
-    }
-    return time.Since(callTime) >= 24*time.Hour
-}
-```
-
-#### Niche User Detection & Content
-```go
-func isNicheUser(highQualityMatches int) bool {
-    return highQualityMatches < 3
-}
-
-func generateNicheExplanation(user *User, role string) (string, error) {
-    // LLM-generated explanation for specialized roles
-    // Only called for users with < 3 matches rated 4+ stars
+    LastActivityDate    *time.Time
 }
 ```
 
 ### Email Templates Strategy
 
-#### Enhanced Recap Email (Type 0)
-- **Template**: Enhance existing `assets/emails/recap-email.html` 
-- **Prompt**: Update existing `assets/prompts/recap-email.001.txt`
-- **Implementation**: Modify existing `GenerateRecapEmail()` function
+**All emails use template-based approach** with `text/template`:
 
-#### New Trial Email Templates
-Create template files for remaining email types:
-- `assets/emails/trial-first-activity.html`
-- `assets/emails/trial-progress-update.html`
-- `assets/emails/trial-education.html`
-- `assets/emails/trial-feature-spotlight.html`
-- `assets/emails/trial-social-proof.html`
-- `assets/emails/trial-final-call.html`
+1. **Recap Email**: Enhance existing LLM-generated recap with trial context
+2. **Welcome Email**: `assets/emails/trial-welcome.html` 
+3. **Expectations Email**: `assets/emails/trial-expectations.html` (with match volume switching)
+4. **Engagement Email**: `assets/emails/trial-engagement.html`
+5. **Conversion Email**: `assets/emails/trial-conversion.html`
 
-### LLM Prompts Required
+**No additional LLM prompts required** beyond enhancing existing recap email prompt.
 
-#### Enhanced Recap Prompt (Priority 1)
-- **File**: `assets/prompts/recap-email.001.txt` (update existing)
-- **Purpose**: Add trial context while preserving personalization
-
-#### Email Template Strategy
-**Primary approach**: Use `text/template` for all standard email content
-**LLM usage**: Only for niche users (< 3 matches rated 4+ stars)
-
-**Static Templates (MVP)**:
-- `assets/emails/trial-first-activity.html`
-- `assets/emails/trial-progress-update.html` 
-- `assets/emails/trial-education.html`
-- `assets/emails/trial-feature-spotlight.html`
-- `assets/emails/trial-social-proof.html`
-- `assets/emails/trial-final-call.html`
-
-**LLM Prompt (Limited)**:
-- `assets/prompts/trial-niche-explanation.txt` - Only for specialized roles
+**Note**: Match volume switching is based on the number of 4+ star rated matches (HighQualityMatches field).
 
 ## Success Metrics
 
@@ -395,109 +202,69 @@ Create template files for remaining email types:
 - **Subscription Conversion Rate**: % of trial users who subscribe
 - **Email Engagement Rate**: Open rates, click rates by email type
 - **Platform Engagement**: Dashboard visits, feedback given during trial
-- **Time to First Match**: How quickly users get quality matches
+- **Time to First Quality Match**: How quickly users get 4+ star matches
 
 ### Secondary Metrics
 - **Match Quality Scores**: Average scores of matches found
 - **User Satisfaction**: Survey responses about trial experience
-- **Retention After Subscription**: 30-day retention of converted users
-- **Feature Adoption**: Usage of feedback/tuning system
+- **Feature Adoption**: Usage of feedback/tuning system during trial
+- **Email Sequence Completion**: How many users receive all 5 emails
 
-## Future Considerations (Post-MVP)
-
-### Potential A/B Testing (Future)
-1. **Email Frequency**: 6 emails vs. 4 emails vs. 3 emails
-2. **Tone Variations**: Professional vs. Casual vs. Friendly
-3. **Content Focus**: Match-focused vs. Feature-focused vs. Education-focused
-
-### Architecture Support for Future Testing
-- Template-based content allows easy variation testing
-- Nudge type system supports additional email types
-- User engagement tracking enables cohort analysis
-
-## Risk Mitigation
-
-### Email Fatigue Prevention
-- Monitor unsubscribe rates by email type
-- Implement send-time optimization
-- Respect user timezone preferences
-- Allow customization of email frequency
-
-### Content Quality Assurance
-- A/B test subject lines for open rates
-- Monitor spam folder placement
-- Ensure mobile-friendly templates
-- Test email rendering across clients
-
-### Conversion Pressure Balance
-- Avoid aggressive sales tactics
-- Focus on value demonstration
-- Respect user decision-making process
-- Provide clear value in every email
-
-## Benefits of Enhanced Recap Approach
-
-### ✅ **Operational Benefits**
-- **No new infrastructure needed** - uses existing email system
-- **Maintains conversation continuity** - seamless from call to trial
-- **Leverages existing personalization** - transcript-based content
-- **Preserves technical functionality** - dashboard guidance remains
+## Benefits of 5-Email Approach
 
 ### ✅ **User Experience Benefits**
-- **Single, comprehensive welcome** - no confusing multiple "welcome" emails
-- **Immediate value positioning** - sets trial expectations from start
-- **Personal connection maintained** - builds on call relationship
-- **Clear trial understanding** - user knows what they signed up for
+- **Reduced email fatigue**: 5 focused emails vs. 7 touchpoints
+- **Clear purpose per email**: Each email has distinct goal
+- **Predictable timing**: Simple schedule, no complex conditional logic
+- **Consistent voice**: All emails use established Shirely personality
+
+### ✅ **Operational Benefits**
+- **Simpler implementation**: Template-based content, no complex LLM integration
+- **Easier testing**: Clear A/B test boundaries per email type
+- **Maintainable content**: Templates can be updated without code changes
+- **Scalable approach**: Foundation for future personalization layers
 
 ### ✅ **Business Benefits**
-- **Earlier conversion preparation** - subscription context from day 0
-- **Better trial utilization** - users understand full trial value
-- **Reduced email fatigue** - 6 emails vs 7 emails total
-- **Higher engagement** - personalized content performs better
-
-## Updated Email Sequence Summary
-
-**New 6-Email Sequence:**
-
-0. **Enhanced Recap + Trial Welcome** (Immediate post-call) ← **Replaces standalone welcome**
-1. **First Activity Nudge** (24-36 hours after call, only if no dashboard activity)
-2. **Progress Update & Value Demo** (48 hours after call - Day 2)
-3. **Education & Patience Building** (Day 3-4, especially for users with few matches)
-4. **Feature Spotlight - Tuning System** (Day 4-5, prioritize users who haven't used feedback)
-5. **Social Proof & Urgency** (Day 5-6, building conversion motivation)
-6. **Final Day Strong CTA** (Day 6-7, respectful but urgent conversion push)
+- **Higher engagement**: Focused messages with clear calls-to-action
+- **Better conversion**: Builds value systematically toward subscription
+- **Quality positioning**: Reinforces "RIGHT job" vs "ANY job" messaging
+- **Retention foundation**: Sets proper expectations for long-term success
 
 ## Implementation Priority
 
-### Phase 1: Enhanced Recap Email (Week 1)
-1. **Update recap email prompt** with trial context
-2. **Enhance GenerateRecapEmail() function** with trial data
-3. **A/B test enhanced vs. current version** to validate approach
-4. **Mark as trial email type 0** in nudge system
+### Phase 1: Core Infrastructure (Week 1)
+1. **Define nudge types** and timing constants
+2. **Create email data structures** with match volume detection
+3. **Build template switching logic** for match volume categories
+4. **Enhance recap email** with trial context
 
-### Phase 2: Core Trial Infrastructure (Week 2-3)
-1. Implement remaining nudge types and data structures
-2. Create basic email templates for types 1-6
-3. Build conditional logic for match volume detection
-4. Implement timing controls for trial sequence
+### Phase 2: Template Development (Week 2)
+1. **Create 4 new email templates** using Shirely voice guidelines
+2. **Implement match volume switching** in expectations email based on 4+ star matches
+3. **Test email rendering** across different clients
 
-### Phase 3: Content Development (Week 4-5)
-1. Create static email templates using `text/template`
-2. Develop niche user detection logic
-3. Create LLM prompt for niche explanations only
-4. Implement match volume categorization
+### Phase 3: Integration & Testing (Week 3)
+1. **Integrate with existing nudge system**
+2. **Test complete email sequence** with real trial users
+3. **Monitor email delivery and engagement**
+4. **Refine timing and content** based on initial feedback
 
-### Phase 4: Testing & Refinement (Week 6-7)
-1. Test email sequence with real users
-2. Monitor email delivery and engagement
-3. Refine timing and content based on feedback
-4. Prepare for post-MVP iterations
+### Phase 4: Optimization (Week 4)
+1. **A/B test subject lines** and content variations
+2. **Analyze conversion metrics** by email type
+3. **Implement any needed adjustments**
+4. **Document learnings** for future iterations
 
-## Immediate Next Steps
+## Email Sequence Summary
 
-1. **Update `assets/prompts/recap-email.001.txt`** with trial context
-2. **Modify `GenerateRecapEmail()` function** to include trial timeline data
-3. **Test enhanced recap email** with existing users
-4. **Plan remaining trial email templates** based on validated approach
+**Final 5-Email Sequence:**
 
-This strategy transforms the 7-day trial from a simple time-limited demo into a comprehensive journey that builds value, manages expectations, and drives conversion through education and engagement rather than pressure tactics. The enhanced recap email serves as the perfect foundation, combining proven personalization with strategic trial positioning. 
+| Day | Email Type | Purpose | Content Approach |
+|-----|------------|---------|------------------|
+| 0 | **Recap Email** | Personalized call recap + trial intro | LLM-generated (enhanced) |
+| 1 | **Welcome to Talent Rodeo** | Set expectations, reduce confusion | Template with Shirely voice |
+| 2 | **Why You Might Not See Many Matches Yet** | Prevent disappointment, manage expectations | Template with match volume switching |
+| 3 | **3 Tips to Improve Your Matches** | Drive engagement, showcase features | Template with Shirely voice |
+| 6 | **Trial Ending Soon – Stay in the Rodeo** | Convert while value is fresh | Template with Shirely voice |
+
+This streamlined approach maintains the core psychological journey while simplifying implementation and reducing email fatigue. The focus on quality positioning and Shirely's unique voice will help differentiate the service while driving meaningful engagement and conversion. 
