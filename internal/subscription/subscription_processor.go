@@ -322,7 +322,7 @@ func (p *Processor) process(ctx context.Context) error {
 // It retrieves all subscribers for the criteria, finds recent jobs matching the criteria,
 // and processes jobs for each subscribed user.
 //
-// SUBSCRIPTION-AWARE PROCESSING (Added 2025-01-30):
+// SUBSCRIPTION-AWARE PROCESSING (Added 2025-06-30):
 // As part of the "Freemium Trial" business model implementation, this function now:
 // - Filters subscribers to only include users with active subscriptions (SubscriptionEnd > now)
 // - Skips job analysis and publishing for users whose trial/subscription has expired

@@ -1,27 +1,29 @@
 # 7-Day Trial Email Strategy
 
-**Date:** January 30, 2025  
+**Date:** July 3, 2025  
 **Purpose:** Maximize user engagement and subscription conversion during the free 7-day trial period
 
 ## Executive Summary
 
 This strategy addresses the critical challenge of converting trial users to paid subscribers by creating a carefully orchestrated email sequence that demonstrates value, builds trust, and manages expectations. The approach recognizes that finding the "perfect job" takes time and positions waiting as a strategic advantage rather than a limitation.
 
-**Key Update**: After analyzing the existing recap email system, we've determined that the current post-call recap email should be enhanced to serve as our trial welcome email, reducing the total sequence from 7 emails to 6 emails while leveraging existing personalization infrastructure.
+**Key Update**: After analyzing the existing recap email system, we've
+determined that the current post-call recap email should be enhanced to serve as
+our trial welcome email, reducing the total sequence from 7 emails to 6 emails
+while leveraging existing personalization infrastructure.
 
 ## User Journey Context
 
 ### Trial Timeline
 - **Day 0**: User completes AI call, subscription starts (7-day trial begins)
 - **Day 1-7**: Full service with job searches and match analysis
-- **Day 7**: Trial ends, subscription required to continue
-- **Post-Day 7**: No new searches for expired users
+- **End of Day 7**: Trial ends, subscription required to continue
+- **Post-Day 7**: No new searches performed or jobs analyzed for expired users
 
 ### User Archetypes
-1. **High-Volume Match Users**: Broad criteria, many good matches found quickly
-2. **Selective/Niche Users**: Specific criteria, fewer but higher-quality matches
-3. **Hard-to-Match Users**: C-suite, specialized roles, limited job postings
-4. **Overwhelmed Users**: Too many criteria, analysis paralysis
+1. **High-Volume Match Users**: Broad criteria, many good matches found quickly but not that specific.
+2. **Selective/Niche Users**: Very specific criteria, few but high-quality, specific matches. Lots of job postings found but few matches.
+3. **Hard-to-Match Users**: C-suite, specialized roles, limited job postings. Few job postings and nearly zero matches.
 5. **Passive Users**: Interested but not actively engaging with matches
 
 ## Email Strategy Framework
@@ -38,7 +40,9 @@ This strategy addresses the critical challenge of converting trial users to paid
 ## Current Recap Email Analysis & Integration
 
 ### Existing Recap Email System
-The current recap email is sent immediately after call completion as part of the `ProcessCompletedCall()` workflow. Analysis shows this email is perfectly positioned to serve as our trial welcome email.
+The current recap email is sent immediately after call completion as part of the
+`ProcessCompletedCall()` workflow. Analysis shows this email is perfectly
+positioned to serve as our trial welcome email.
 
 **Current Strengths:**
 - ✅ **Perfect timing** - sent immediately post-call (Day 0 of trial)
@@ -173,8 +177,6 @@ Tone: Warm, excited about trial, professional but casual, matching your speaking
 ### Key Messages
 - "The best [role type] positions often take 2-4 weeks to appear"
 - "While others apply to hundreds of jobs, you're waiting for the right one"
-- "Our data shows [industry] hiring peaks on [days/times]"
-- "Previous users in similar roles found their perfect match after [timeframe]"
 
 ---
 
@@ -306,9 +308,9 @@ type TrialEmailData struct {
     LastActivityDate    *time.Time
     HasUsedFeedback     bool
     
-    // Market insights
-    IndustryInsights    string // AI-generated market analysis
-    RoleInsights        string // AI-generated role-specific insights
+    // Content classification
+    IsNicheUser         bool   // < 3 matches rated 4+ stars
+    NicheExplanation    string // LLM-generated explanation for niche users only
     
     // Personalization
     MatchVolumeCategory string // "high", "moderate", "low"
@@ -338,12 +340,17 @@ func shouldSendFirstActivityNudge(user *User, callTime time.Time) bool {
 }
 ```
 
-#### Market Insights Generation
-Generate dynamic content using LLM:
-- Industry hiring trends
-- Role-specific market analysis  
-- Timing insights for their field
-- Competitive landscape observations
+#### Niche User Detection & Content
+```go
+func isNicheUser(highQualityMatches int) bool {
+    return highQualityMatches < 3
+}
+
+func generateNicheExplanation(user *User, role string) (string, error) {
+    // LLM-generated explanation for specialized roles
+    // Only called for users with < 3 matches rated 4+ stars
+}
+```
 
 ### Email Templates Strategy
 
@@ -367,11 +374,20 @@ Create template files for remaining email types:
 - **File**: `assets/prompts/recap-email.001.txt` (update existing)
 - **Purpose**: Add trial context while preserving personalization
 
-#### New Trial Prompts
-Create prompt files for dynamic content:
-- `assets/prompts/trial-market-insights.txt`
-- `assets/prompts/trial-progress-summary.txt`
-- `assets/prompts/trial-education-content.txt`
+#### Email Template Strategy
+**Primary approach**: Use `text/template` for all standard email content
+**LLM usage**: Only for niche users (< 3 matches rated 4+ stars)
+
+**Static Templates (MVP)**:
+- `assets/emails/trial-first-activity.html`
+- `assets/emails/trial-progress-update.html` 
+- `assets/emails/trial-education.html`
+- `assets/emails/trial-feature-spotlight.html`
+- `assets/emails/trial-social-proof.html`
+- `assets/emails/trial-final-call.html`
+
+**LLM Prompt (Limited)**:
+- `assets/prompts/trial-niche-explanation.txt` - Only for specialized roles
 
 ## Success Metrics
 
@@ -387,18 +403,17 @@ Create prompt files for dynamic content:
 - **Retention After Subscription**: 30-day retention of converted users
 - **Feature Adoption**: Usage of feedback/tuning system
 
-## A/B Testing Framework
+## Future Considerations (Post-MVP)
 
-### Test Variations
-1. **Email Frequency**: 7 emails vs. 5 emails vs. 4 emails
+### Potential A/B Testing (Future)
+1. **Email Frequency**: 6 emails vs. 4 emails vs. 3 emails
 2. **Tone Variations**: Professional vs. Casual vs. Friendly
-3. **Urgency Levels**: High urgency vs. Medium urgency vs. Educational
-4. **Content Types**: Match-focused vs. Feature-focused vs. Market-focused
+3. **Content Focus**: Match-focused vs. Feature-focused vs. Education-focused
 
-### Test Segments
-- Segment by user archetype (high-volume vs. selective vs. hard-to-match)
-- Segment by industry/role type
-- Segment by engagement level
+### Architecture Support for Future Testing
+- Template-based content allows easy variation testing
+- Nudge type system supports additional email types
+- User engagement tracking enables cohort analysis
 
 ## Risk Mitigation
 
@@ -467,16 +482,16 @@ Create prompt files for dynamic content:
 4. Implement timing controls for trial sequence
 
 ### Phase 3: Content Development (Week 4-5)
-1. Create high-quality email templates
-2. Develop LLM prompts for dynamic content
-3. Build market insights generation
-4. Create A/B testing framework
+1. Create static email templates using `text/template`
+2. Develop niche user detection logic
+3. Create LLM prompt for niche explanations only
+4. Implement match volume categorization
 
-### Phase 4: Optimization (Week 6-7)
-1. Implement advanced personalization
-2. Build comprehensive analytics
-3. Create user preference controls
-4. Launch full A/B testing program
+### Phase 4: Testing & Refinement (Week 6-7)
+1. Test email sequence with real users
+2. Monitor email delivery and engagement
+3. Refine timing and content based on feedback
+4. Prepare for post-MVP iterations
 
 ## Immediate Next Steps
 

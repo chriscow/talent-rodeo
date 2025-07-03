@@ -302,7 +302,7 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 		return fmt.Errorf("failed to get user jobs: %w", err)
 	}
 
-	// TODO: remove job IDs that the user already has
+	// remove job IDs that the user already has
 	for _, job := range userJobs {
 		if slices.Contains(jobIDs, job.ID) {
 			// Delete removes the elements s[i:j] from s, returning the modified
@@ -361,11 +361,6 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 		{Role: minds.RoleSystem, Content: string(sysPrompt)},
 		{Role: minds.RoleUser, Content: fmt.Sprintf("My name is %s.\n\n%s\n\nHere is my latest resume:\n%s\n\nI will send the job description next.", user.FirstName, *user.Statement, resume.RawText)},
 		{Role: minds.RoleAssistant, Content: "Ready for the first job description."},
-	}
-
-	if len(jobIDs) == 0 {
-		logger.Info("no new jobs found for criteria", "criteriaID", criteria.ID)
-		return nil // No new jobs to process
 	}
 
 	jobs, err := internal.GetJobDetailsByIDs(ctx, fs, jobIDs)
