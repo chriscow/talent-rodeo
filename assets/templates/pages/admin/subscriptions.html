@@ -18,10 +18,18 @@
         <label for="user_id"><strong>Select User</strong></label>
         <select name="user_id" id="user_id" required onchange="this.form.submit()">
             <option value="">-- Select a User --</option>
-            {{range .Users}}
+            {{range .SortedUsersWithSubs}}
                 {{$count := index $.UserSubscriptionCounts .ID}}
                 <option value="{{.ID}}" {{if eq $.SelectedUserID .ID}}selected{{end}}>
-                    {{.Name}} ({{.Email}}) - ({{if $count}}{{$count}}{{else}}0{{end}} subs) - {{.Status.String}}
+                    {{.Name}} ({{.Email}}) - ({{$count}} subs) - {{.Status.String}}
+                </option>
+            {{end}}
+            {{if and .SortedUsersWithSubs .SortedUsersWithoutSubs}}
+                <option disabled>──────────────────</option>
+            {{end}}
+            {{range .SortedUsersWithoutSubs}}
+                <option value="{{.ID}}" {{if eq $.SelectedUserID .ID}}selected{{end}}>
+                    {{.Name}} ({{.Email}}) - (0 subs) - {{.Status.String}}
                 </option>
             {{end}}
         </select>
@@ -33,6 +41,13 @@
         </header>
         <p><strong>User ID:</strong> {{.SelectedUser.ID}}</p>
         <p><strong>Last Accessed At:</strong> {{if .SelectedUser.LastAccessedAt.IsZero}}N/A{{else}}{{.SelectedUser.LastAccessedAt.Format "2006-01-02 15:04:05"}}{{end}}</p>
+        <p><strong>Tier:</strong> 
+            {{if .SelectedUser.Tier}}
+                <span style="font-weight: bold; text-transform: uppercase;">{{.SelectedUser.Tier}}</span>
+            {{else}}
+                <span style="color: gray;">Not set</span>
+            {{end}}
+        </p>
         <p><strong>Subscription End:</strong> 
             {{if .SelectedUser.SubscriptionEnd}}
                 {{.SelectedUser.SubscriptionEnd.Format "2006-01-02 15:04:05"}} 
@@ -58,9 +73,17 @@
             <input type="hidden" name="user_id" value="{{.SelectedUserID}}">
             <div>
                 <label for="extend_days"><strong>Extend Subscription:</strong></label>
-                <input type="number" name="extend_days" id="extend_days" min="1" max="365" placeholder="Days" required style="width: 100px;">
+                <input type="number" name="extend_days" id="extend_days" min="0" max="365" placeholder="Days" required style="width: 100px;">
             </div>
-            <button type="submit" style="background-color: #28a745; color: white;">Extend</button>
+            <div>
+                <label for="tier"><strong>Change Tier:</strong></label>
+                <select name="tier" id="tier" style="width: 120px;">
+                    <option value="">Keep Current</option>
+                    <option value="free" {{if eq .SelectedUser.Tier "free"}}selected{{end}}>Free</option>
+                    <option value="pro" {{if eq .SelectedUser.Tier "pro"}}selected{{end}}>Pro</option>
+                </select>
+            </div>
+            <button type="submit" style="background-color: #28a745; color: white;">Update</button>
         </form>
         
         <form method="POST" style="margin-bottom: 1rem; display: flex; gap: 1rem; align-items: flex-end;">

@@ -572,8 +572,23 @@ func (app *application) adminSubscriptions(w http.ResponseWriter, r *http.Reques
 		"duration", subscriptionCountDuration)
 
 	data["UserSubscriptionCounts"] = userSubscriptionCounts
+	// Sort users: subscribed users first, then non-subscribed users
+	var usersWithSubscriptions []*internal.User
+	var usersWithoutSubscriptions []*internal.User
+
+	for _, user := range allUsers {
+		if userSubscriptionCounts[user.ID] > 0 {
+			usersWithSubscriptions = append(usersWithSubscriptions, user)
+		} else {
+			usersWithoutSubscriptions = append(usersWithoutSubscriptions, user)
+		}
+	}
+
+	data["UserSubscriptionCounts"] = userSubscriptionCounts
 	data["UsersWithSubscriptions"] = len(subscribedUserIDs)
 	data["UsersWithoutSubscriptions"] = len(allUsers) - len(subscribedUserIDs)
+	data["SortedUsersWithSubs"] = usersWithSubscriptions
+	data["SortedUsersWithoutSubs"] = usersWithoutSubscriptions
 
 	selectedUserID := r.FormValue("user_id")
 	if selectedUserID != "" {
@@ -646,14 +661,28 @@ func (app *application) adminSubscriptions(w http.ResponseWriter, r *http.Reques
 							newSubscriptionEnd = now.Add(time.Duration(extendDays) * 24 * time.Hour)
 						}
 
-						err = internal.UpdateUser(ctx, app.fs, selectedUserID, map[string]any{
+						// Handle tier change if provided
+						updateFields := map[string]any{
 							"SubscriptionEnd": newSubscriptionEnd,
-						})
+						}
+
+						if tierStr := r.PostForm.Get("tier"); tierStr != "" {
+							tier := internal.UserTier(tierStr)
+							if tier == internal.UserTierFree || tier == internal.UserTierPro {
+								updateFields["Tier"] = tier
+							}
+						}
+
+						err = internal.UpdateUser(ctx, app.fs, selectedUserID, updateFields)
 						if err != nil {
 							subscriptionError = fmt.Sprintf("Failed to extend subscription: %v", err)
 						} else {
-							subscriptionSuccess = fmt.Sprintf("Extended subscription by %d days to %s",
+							successMsg := fmt.Sprintf("Extended subscription by %d days to %s",
 								extendDays, newSubscriptionEnd.Format("2006-01-02 15:04:05"))
+							if tierStr := r.PostForm.Get("tier"); tierStr != "" {
+								successMsg += fmt.Sprintf(" and updated tier to %s", tierStr)
+							}
+							subscriptionSuccess = successMsg
 						}
 					}
 				}
