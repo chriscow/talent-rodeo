@@ -242,7 +242,7 @@ func (p *Processor) processNudgeType(ctx context.Context, nudgeType NudgeType, m
 	}
 
 	stats.EligibleUsers = len(users)
-	p.logger.Debug("found eligible users", "type", nudgeType, "count", len(users))
+	p.logger.Debug("processing nudge type", "type", nudgeType, "eligible_users", len(users))
 
 	// Sort users by priority if needed (e.g., by last access time)
 	p.sortUsersByPriority(users, nudgeType)
@@ -575,7 +575,7 @@ func GetNudgeEligibleUsers(ctx context.Context, logger *slog.Logger, fs *interna
 
 	// Fetch all users since Firestore queries can be tricky with missing fields.
 	// This allows us to apply logic exhaustively and log decisions.
-	logger.Debug("fetching all users to check for nudge eligibility")
+	// logger.Debug("fetching all users to check for nudge eligibility")
 	var allUsers []*internal.User
 	offset := 0
 	limit := 200 // Process in batches of 200
@@ -590,7 +590,7 @@ func GetNudgeEligibleUsers(ctx context.Context, logger *slog.Logger, fs *interna
 		}
 		offset += limit
 	}
-	logger.Debug("finished fetching users", "total_users", len(allUsers))
+	// logger.Debug("finished fetching users", "total_users", len(allUsers))
 
 	var eligibleUsers []*internal.User
 	cutoffTime := time.Now()
@@ -624,29 +624,29 @@ func GetNudgeEligibleUsers(ctx context.Context, logger *slog.Logger, fs *interna
 		}
 
 		if !statusMatches {
-			logger.Debug(internal.Black("user not eligible for nudge"), "name", user.Name, "user_id", user.ID, "nudge_type", nudgeType, "reason", "incorrect_status", "user_status", user.Status)
+			// logger.Debug(internal.Black("user not eligible for nudge"), "name", user.Name, "user_id", user.ID, "nudge_type", nudgeType, "reason", "incorrect_status", "user_status", user.Status)
 			continue
 		}
 
 		// 3. Perform other eligibility checks
-		var lastNudgeSentLog any = "never"
-		if user.LastNudgeEmailSent != nil {
-			lastNudgeSentLog = *user.LastNudgeEmailSent
-		}
-		logger.Debug("checking user eligibility details",
-			"user_id", user.ID,
-			"last_nudge_sent_at", lastNudgeSentLog,
-			"nudge_count", user.NudgeEmailsSentCount,
-			"weekly_rate_limit", settings.WeeklyRateLimit.String(),
-		)
+		// var lastNudgeSentLog any = "never"
+		// if user.LastNudgeEmailSent != nil {
+		// 	lastNudgeSentLog = *user.LastNudgeEmailSent
+		// }
+		// logger.Debug("checking user eligibility details",
+		// 	"user_id", user.ID,
+		// 	"last_nudge_sent_at", lastNudgeSentLog,
+		// 	"nudge_count", user.NudgeEmailsSentCount,
+		// 	"weekly_rate_limit", settings.WeeklyRateLimit.String(),
+		// )
 
-		eligible, reason := isUserEligibleForNudge(user, nudgeType, cutoffTime, settings)
+		eligible, _ := isUserEligibleForNudge(user, nudgeType, cutoffTime, settings)
 		if !eligible {
-			logger.Debug(internal.Black("user not eligible for nudge"), "name", user.Name, "user_id", user.ID, "nudge_type", nudgeType, "reason", reason)
+			// logger.Debug(internal.Black("user not eligible for nudge"), "name", user.Name, "user_id", user.ID, "nudge_type", nudgeType, "reason", reason)
 			continue
 		}
 
-		logger.Info(internal.Cyan("user IS eligible for nudge"), "name", user.Name, "user_id", user.ID, "email", user.Email, "nudge_type", nudgeType)
+		// logger.Info(internal.Cyan("user IS eligible for nudge"), "name", user.Name, "user_id", user.ID, "email", user.Email, "nudge_type", nudgeType)
 		eligibleUsers = append(eligibleUsers, user)
 	}
 
