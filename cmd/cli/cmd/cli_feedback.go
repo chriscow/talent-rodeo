@@ -42,10 +42,19 @@ var showFeedbackStatsCmd = &cobra.Command{
 	RunE:  showFeedbackStats,
 }
 
+var cleanupOrphanedFeedbackCmd = &cobra.Command{
+	Use:   "cleanup-orphaned",
+	Short: "Clean up feedback for deleted users",
+	Long: `Mark feedback as processed for users that no longer exist in the system.
+This prevents feedback processing errors and cleans up orphaned data.`,
+	RunE: cleanupOrphanedFeedback,
+}
+
 func init() {
 	feedbackCmd.AddCommand(processFeedbackCmd)
 	feedbackCmd.AddCommand(processFeedbackUserCmd)
 	feedbackCmd.AddCommand(showFeedbackStatsCmd)
+	feedbackCmd.AddCommand(cleanupOrphanedFeedbackCmd)
 	RootCmd.AddCommand(feedbackCmd)
 }
 
@@ -166,5 +175,28 @@ func showFeedbackStats(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	return nil
+}
+
+func cleanupOrphanedFeedback(cmd *cobra.Command, args []string) error {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+
+	// Initialize Firestore client
+	fs, err := internal.NewFirestoreClient(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to initialize Firestore client: %w", err)
+	}
+	defer fs.Close()
+
+	fmt.Printf("Starting orphaned feedback cleanup at %s\n", time.Now().Format(time.RFC3339))
+
+	// Clean up orphaned feedback
+	err = feedback.CleanupOrphanedFeedback(ctx, fs, logger)
+	if err != nil {
+		return fmt.Errorf("failed to cleanup orphaned feedback: %w", err)
+	}
+
+	fmt.Printf("Orphaned feedback cleanup completed at %s\n", time.Now().Format(time.RFC3339))
 	return nil
 }

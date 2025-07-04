@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"talent-rodeo/internal"
@@ -124,6 +125,17 @@ func (p *llmProcessor) ProcessUserFeedback(ctx context.Context, userID string) e
 
 	// Save updated statement
 	if err := p.store.SetUserStatement(ctx, userID, updatedStatement); err != nil {
+		// Check if this is a "user not found" error (user was deleted)
+		if strings.Contains(err.Error(), "user not found") {
+			p.logger.Warn("skipping statement update for deleted user", 
+				"user_id", userID, 
+				"feedback_count", len(feedbacks),
+				"error", err)
+			// Mark feedback as processed even though user is deleted
+			// This prevents infinite retry loops for orphaned feedback
+			finalErr = fmt.Errorf("user deleted: %w", err)
+			return finalErr
+		}
 		finalErr = fmt.Errorf("failed to save updated statement: %w", err)
 		return finalErr
 	}

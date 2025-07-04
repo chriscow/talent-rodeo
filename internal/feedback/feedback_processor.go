@@ -190,6 +190,60 @@ func ProcessUserFeedback(ctx context.Context, fs *internal.FirestoreClient, logg
 	return llmProcessor.ProcessUserFeedback(ctx, userID)
 }
 
+// CleanupOrphanedFeedback removes feedback for users that no longer exist
+// This can be run as a maintenance task to clean up orphaned data
+func CleanupOrphanedFeedback(ctx context.Context, fs *internal.FirestoreClient, logger *slog.Logger) error {
+	// Get all unprocessed feedback
+	allFeedback, err := internal.GetAllUnprocessedFeedback(ctx, fs, 0) // No limit for cleanup
+	if err != nil {
+		return fmt.Errorf("failed to get unprocessed feedback: %w", err)
+	}
+
+	// Group feedback by user ID
+	userFeedbackMap := make(map[string][]*internal.UserFeedback)
+	for _, feedback := range allFeedback {
+		userFeedbackMap[feedback.UserID] = append(userFeedbackMap[feedback.UserID], feedback)
+	}
+
+	cleanedCount := 0
+	for userID, feedbacks := range userFeedbackMap {
+		// Check if user exists
+		_, found, err := internal.GetUser(ctx, fs, userID)
+		if err != nil {
+			logger.Error("error checking user existence during cleanup", 
+				"user_id", userID, 
+				"error", err)
+			continue
+		}
+
+		if !found {
+			// User doesn't exist, mark their feedback as processed
+			feedbackIDs := make([]string, 0, len(feedbacks))
+			for _, feedback := range feedbacks {
+				feedbackIDs = append(feedbackIDs, feedback.ID)
+			}
+
+			if err := internal.MarkFeedbackAsProcessed(ctx, fs, feedbackIDs, time.Now()); err != nil {
+				logger.Error("failed to mark orphaned feedback as processed during cleanup", 
+					"user_id", userID, 
+					"feedback_count", len(feedbackIDs),
+					"error", err)
+			} else {
+				logger.Info("cleaned up orphaned feedback for deleted user", 
+					"user_id", userID, 
+					"feedback_count", len(feedbackIDs))
+				cleanedCount += len(feedbackIDs)
+			}
+		}
+	}
+
+	logger.Info("orphaned feedback cleanup completed", 
+		"total_feedback_items", len(allFeedback),
+		"cleaned_items", cleanedCount)
+
+	return nil
+}
+
 // ProcessAllUsersFeedback processes feedback for all users who have unprocessed feedback
 // using the enhanced LLM processor with metrics collection.
 func ProcessAllUsersFeedback(ctx context.Context, fs *internal.FirestoreClient, logger *slog.Logger) error {
@@ -223,8 +277,29 @@ func ProcessAllUsersFeedback(ctx context.Context, fs *internal.FirestoreClient, 
 
 	for userID := range userFeedbackMap {
 		if err := llmProcessor.ProcessUserFeedback(ctx, userID); err != nil {
-			// Log error but continue processing other users
-			errors = append(errors, fmt.Errorf("failed to process feedback for user %s: %w", userID, err))
+			// Check if this is a deleted user error
+			if strings.Contains(err.Error(), "user deleted") {
+				// Mark feedback as processed to prevent infinite retries for deleted users
+				feedbackIDs := make([]string, 0, len(userFeedbackMap[userID]))
+				for _, feedback := range userFeedbackMap[userID] {
+					feedbackIDs = append(feedbackIDs, feedback.ID)
+				}
+				if markErr := internal.MarkFeedbackAsProcessed(ctx, fs, feedbackIDs, time.Now()); markErr != nil {
+					logger.Error("failed to mark orphaned feedback as processed", 
+						"user_id", userID, 
+						"feedback_count", len(feedbackIDs),
+						"error", markErr)
+				} else {
+					logger.Info("marked orphaned feedback as processed for deleted user", 
+						"user_id", userID, 
+						"feedback_count", len(feedbackIDs))
+				}
+				// Count as processed but not successful
+				processedUsers++
+			} else {
+				// Log error but continue processing other users
+				errors = append(errors, fmt.Errorf("failed to process feedback for user %s: %w", userID, err))
+			}
 			continue
 		}
 		processedUsers++
