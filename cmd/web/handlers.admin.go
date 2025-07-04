@@ -350,12 +350,49 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 	data["ActiveStatus"] = string(internal.JobStatusNew)
 
 	// Fetch all users for the dropdown
-	users, err := internal.ListUsers(ctx, app.fs, 100, 0)
+	allUsers, err := internal.ListUsers(ctx, app.fs, 10000, 0)
 	if err != nil {
 		app.serverError(w, r, err)
 		return
 	}
-	data["Users"] = users
+
+	// Fetch all subscriptions to determine which users have subscriptions
+	allSubscriptions, err := internal.ListSubscriptions(ctx, app.fs)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	// Build map of users with subscriptions
+	userSubscriptionCounts := make(map[string]int)
+	for _, subscription := range allSubscriptions {
+		userSubscriptionCounts[subscription.UserID]++
+	}
+
+	// Group users according to the requirements
+	now := time.Now()
+	var activeUsers []*internal.User  // Group 1: Active subscriptions or future SubscriptionEnd
+	var expiredUsers []*internal.User // Group 2: Subscriptions but expired SubscriptionEnd
+	var otherUsers []*internal.User   // Group 3: All other users
+
+	for _, user := range allUsers {
+		hasSubscription := userSubscriptionCounts[user.ID] > 0
+		hasActiveSubscriptionEnd := user.SubscriptionEnd != nil && user.SubscriptionEnd.After(now)
+
+		if hasSubscription || hasActiveSubscriptionEnd {
+			activeUsers = append(activeUsers, user)
+		} else if user.SubscriptionEnd != nil && user.SubscriptionEnd.Before(now) {
+			expiredUsers = append(expiredUsers, user)
+		} else {
+			otherUsers = append(otherUsers, user)
+		}
+	}
+
+	data["Users"] = allUsers // Keep for backward compatibility
+	data["ActiveUsers"] = activeUsers
+	data["ExpiredUsers"] = expiredUsers
+	data["OtherUsers"] = otherUsers
+	data["UserSubscriptionCounts"] = userSubscriptionCounts
 
 	if r.Method == http.MethodGet {
 		if err := response.Page(w, http.StatusOK, data, "pages/admin/user-dashboard.html"); err != nil {
@@ -572,23 +609,36 @@ func (app *application) adminSubscriptions(w http.ResponseWriter, r *http.Reques
 		"duration", subscriptionCountDuration)
 
 	data["UserSubscriptionCounts"] = userSubscriptionCounts
-	// Sort users: subscribed users first, then non-subscribed users
-	var usersWithSubscriptions []*internal.User
-	var usersWithoutSubscriptions []*internal.User
+
+	// Group users according to the requirements (same as adminUserDashboard)
+	now := time.Now()
+	var activeUsers []*internal.User  // Group 1: Active subscriptions or future SubscriptionEnd
+	var expiredUsers []*internal.User // Group 2: Subscriptions but expired SubscriptionEnd
+	var otherUsers []*internal.User   // Group 3: All other users
 
 	for _, user := range allUsers {
-		if userSubscriptionCounts[user.ID] > 0 {
-			usersWithSubscriptions = append(usersWithSubscriptions, user)
+		hasSubscription := userSubscriptionCounts[user.ID] > 0
+		hasActiveSubscriptionEnd := user.SubscriptionEnd != nil && user.SubscriptionEnd.After(now)
+
+		if hasSubscription || hasActiveSubscriptionEnd {
+			activeUsers = append(activeUsers, user)
+		} else if user.SubscriptionEnd != nil && user.SubscriptionEnd.Before(now) {
+			expiredUsers = append(expiredUsers, user)
 		} else {
-			usersWithoutSubscriptions = append(usersWithoutSubscriptions, user)
+			otherUsers = append(otherUsers, user)
 		}
 	}
 
-	data["UserSubscriptionCounts"] = userSubscriptionCounts
+	// Keep backward compatibility data
 	data["UsersWithSubscriptions"] = len(subscribedUserIDs)
 	data["UsersWithoutSubscriptions"] = len(allUsers) - len(subscribedUserIDs)
-	data["SortedUsersWithSubs"] = usersWithSubscriptions
-	data["SortedUsersWithoutSubs"] = usersWithoutSubscriptions
+	data["SortedUsersWithSubs"] = activeUsers                            // Update to use new grouping
+	data["SortedUsersWithoutSubs"] = append(expiredUsers, otherUsers...) // Combine expired and other
+
+	// Add new grouped data
+	data["ActiveUsers"] = activeUsers
+	data["ExpiredUsers"] = expiredUsers
+	data["OtherUsers"] = otherUsers
 
 	selectedUserID := r.FormValue("user_id")
 	if selectedUserID != "" {
@@ -757,12 +807,49 @@ func (app *application) adminUploadResume(w http.ResponseWriter, r *http.Request
 	data := app.newTemplateData(r)
 
 	// Fetch all users for the dropdown
-	users, err := internal.ListUsers(ctx, app.fs, 100, 0)
+	allUsers, err := internal.ListUsers(ctx, app.fs, 10000, 0)
 	if err != nil {
 		app.serverError(w, r, err)
 		return
 	}
-	data["Users"] = users
+
+	// Fetch all subscriptions to determine which users have subscriptions
+	allSubscriptions, err := internal.ListSubscriptions(ctx, app.fs)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	// Build map of users with subscriptions
+	userSubscriptionCounts := make(map[string]int)
+	for _, subscription := range allSubscriptions {
+		userSubscriptionCounts[subscription.UserID]++
+	}
+
+	// Group users according to the requirements
+	now := time.Now()
+	var activeUsers []*internal.User  // Group 1: Active subscriptions or future SubscriptionEnd
+	var expiredUsers []*internal.User // Group 2: Subscriptions but expired SubscriptionEnd
+	var otherUsers []*internal.User   // Group 3: All other users
+
+	for _, user := range allUsers {
+		hasSubscription := userSubscriptionCounts[user.ID] > 0
+		hasActiveSubscriptionEnd := user.SubscriptionEnd != nil && user.SubscriptionEnd.After(now)
+
+		if hasSubscription || hasActiveSubscriptionEnd {
+			activeUsers = append(activeUsers, user)
+		} else if user.SubscriptionEnd != nil && user.SubscriptionEnd.Before(now) {
+			expiredUsers = append(expiredUsers, user)
+		} else {
+			otherUsers = append(otherUsers, user)
+		}
+	}
+
+	data["Users"] = allUsers // Keep for backward compatibility
+	data["ActiveUsers"] = activeUsers
+	data["ExpiredUsers"] = expiredUsers
+	data["OtherUsers"] = otherUsers
+	data["UserSubscriptionCounts"] = userSubscriptionCounts
 
 	if r.Method == http.MethodGet {
 		if err := response.Page(w, http.StatusOK, data, "pages/admin/upload-resume.html"); err != nil {
@@ -1048,12 +1135,49 @@ func (app *application) adminAppointments(w http.ResponseWriter, r *http.Request
 
 	// --- GET Data Loading ---
 	// Fetch all users for the dropdown
-	users, err := internal.ListUsers(ctx, app.fs, 100, 0)
+	allUsers, err := internal.ListUsers(ctx, app.fs, 10000, 0)
 	if err != nil {
 		app.serverError(w, r, err)
 		return
 	}
-	data["Users"] = users
+
+	// Fetch all subscriptions to determine which users have subscriptions
+	allSubscriptions, err := internal.ListSubscriptions(ctx, app.fs)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	// Build map of users with subscriptions
+	userSubscriptionCounts := make(map[string]int)
+	for _, subscription := range allSubscriptions {
+		userSubscriptionCounts[subscription.UserID]++
+	}
+
+	// Group users according to the requirements
+	now := time.Now()
+	var activeUsers []*internal.User  // Group 1: Active subscriptions or future SubscriptionEnd
+	var expiredUsers []*internal.User // Group 2: Subscriptions but expired SubscriptionEnd
+	var otherUsers []*internal.User   // Group 3: All other users
+
+	for _, user := range allUsers {
+		hasSubscription := userSubscriptionCounts[user.ID] > 0
+		hasActiveSubscriptionEnd := user.SubscriptionEnd != nil && user.SubscriptionEnd.After(now)
+
+		if hasSubscription || hasActiveSubscriptionEnd {
+			activeUsers = append(activeUsers, user)
+		} else if user.SubscriptionEnd != nil && user.SubscriptionEnd.Before(now) {
+			expiredUsers = append(expiredUsers, user)
+		} else {
+			otherUsers = append(otherUsers, user)
+		}
+	}
+
+	data["Users"] = allUsers // Keep for backward compatibility
+	data["ActiveUsers"] = activeUsers
+	data["ExpiredUsers"] = expiredUsers
+	data["OtherUsers"] = otherUsers
+	data["UserSubscriptionCounts"] = userSubscriptionCounts
 
 	// Check for a selected user
 	selectedUserID := r.URL.Query().Get("user_id")
