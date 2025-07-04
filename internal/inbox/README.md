@@ -65,6 +65,169 @@ config := inbox.InboxConfig{
 }
 ```
 
+## Gmail Token Management
+
+The Gmail integration requires two types of credentials:
+
+1. **Application Credentials** (`GMAIL_READER_CREDENTIALS`): Your app's OAuth2 credentials from Google Cloud Console (base64 encoded)
+2. **User Authorization Token**: OAuth token proving user has authorized your app to access their Gmail
+
+### Initial Gmail Setup
+
+#### Step 1: Create Google Cloud Credentials
+
+1. **Go to Google Cloud Console**: https://console.cloud.google.com/
+2. **Create/select a project**
+3. **Enable Gmail API**: 
+   - APIs & Services → Library 
+   - Search "Gmail API" → Enable
+4. **Create OAuth2 credentials**:
+   - APIs & Services → Credentials → Create Credentials → OAuth 2.0 Client IDs
+   - Application type: **Desktop application**
+   - Name it (e.g., "Gmail Reader")
+5. **Download JSON**: Click download button next to your OAuth client
+6. **Encode credentials**: `cat credentials.json | base64` and save this value as `GMAIL_READER_CREDENTIALS`
+
+#### Step 2: Generate Initial OAuth Token
+
+```bash
+# Set your application credentials
+export GMAIL_READER_CREDENTIALS="your_base64_encoded_app_credentials"
+
+# Run CLI setup to authorize Gmail access
+go run cmd/cli/cli_main.go gmail setup
+
+# Follow the prompts:
+# 1. Open the provided URL in your browser
+# 2. Sign in and authorize the application
+# 3. Copy the authorization code from the page
+# 4. Paste it into the terminal
+```
+
+This creates `gmail_token.json` in your project root.
+
+### Regenerating Expired Tokens
+
+When you see this error:
+```
+oauth2: "invalid_grant" "Token has been expired or revoked."
+```
+
+#### Method 1: Using CLI Tool (Recommended)
+
+```bash
+# Navigate to project root
+cd /path/to/talent-rodeo
+
+# Regenerate token
+go run cmd/cli/cli_main.go gmail setup
+
+# Test the new token
+go run cmd/cli/cli_main.go gmail test --max 5
+```
+
+#### Method 2: Using Web Server Flag
+
+```bash
+# Run server in Gmail setup mode
+go run cmd/web/main.go --gmail-setup
+```
+
+#### Method 3: Production Token Regeneration
+
+For production environments, regenerate locally then deploy:
+
+```bash
+# 1. Regenerate token locally
+go run cmd/cli/cli_main.go gmail setup --token production_gmail_token.json
+
+# 2. Encode token for deployment
+cat production_gmail_token.json | base64
+
+# 3. Set as environment variable (Fly.io example)
+fly secrets set GMAIL_TOKEN_BASE64="base64_encoded_token_content"
+
+# 4. Restart application
+fly restart
+```
+
+### Testing Gmail Integration
+
+```bash
+# Test connection and fetch recent emails
+go run cmd/cli/cli_main.go gmail test --max 5
+
+# List unread emails in JSON format
+go run cmd/cli/cli_main.go gmail list --json --max 10
+
+# Check health endpoint (if server is running)
+curl http://localhost:2304/health/gmail
+```
+
+### Health Check Endpoints
+
+Monitor Gmail integration status:
+
+- `/health` - Overall application health including Gmail
+- `/health/gmail` - Gmail-specific health check
+
+**Expected Responses:**
+
+Gmail working:
+```json
+{
+  "service": "gmail",
+  "status": "healthy", 
+  "message": "Gmail connection successful",
+  "timestamp": "2025-07-04T17:00:00Z"
+}
+```
+
+Token expired:
+```json
+{
+  "service": "gmail",
+  "status": "unhealthy",
+  "message": "unhealthy: oauth2: \"invalid_grant\" \"Token has been expired or revoked.\"",
+  "timestamp": "2025-07-04T17:00:00Z"
+}
+```
+
+### Environment Variables
+
+| Variable | Required | Purpose | Example |
+|----------|----------|---------|---------|
+| `GMAIL_READER_CREDENTIALS` | Yes | App OAuth2 credentials (base64) | `eyJjbGllbnRfaWQi...` |
+| `GMAIL_TOKEN_BASE64` | Optional | User auth token (base64) | `eyJhY2Nlc3NfdG9rZW4i...` |
+| `GMAIL_TOKEN_PATH` | Optional | Custom token file path | `/app/custom_token.json` |
+
+### Troubleshooting
+
+**"Gmail credentials not configured"**
+- Set `GMAIL_READER_CREDENTIALS` environment variable
+- Ensure the value is properly base64 encoded
+
+**"Gmail token not found"**
+- Run `go run cmd/cli/cli_main.go gmail setup` to create token
+- Or set `GMAIL_TOKEN_BASE64` for deployed applications
+
+**"invalid_grant" OAuth error**
+- Token has expired - regenerate using steps above
+- Ensure OAuth client is configured for "Desktop application"
+- Check that redirect URI is set to `urn:ietf:wg:oauth:2.0:oob`
+
+**"Gmail connection failed"**
+- Check network connectivity
+- Verify Gmail API is enabled in Google Cloud Console
+- Ensure OAuth client has correct configuration
+
+### Token Security
+
+- **Development**: Token stored as local file (`gmail_token.json`)
+- **Production**: Token stored as base64 environment variable (`GMAIL_TOKEN_BASE64`)
+- **File permissions**: Token files created with `0600` permissions (read/write for owner only)
+- **Automatic refresh**: OAuth2 library handles token refresh automatically using refresh_token
+
 ### Custom Email Handler
 
 ```go

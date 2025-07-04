@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -478,4 +479,277 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 			"entity_type": "dashboard_page",
 		})
 	}
+}
+
+// FeedbackDashboardData contains all data for the feedback processing dashboard
+type FeedbackDashboardData struct {
+	RecentActivity      []RecentFeedbackActivity
+	SystemMetrics       FeedbackSystemMetrics
+	UserActivity        []UserFeedbackActivity
+	ProcessingTrends    []ProcessingTrend
+	TopUsers            []TopFeedbackUser
+	ErrorSummary        []ErrorSummary
+	LastUpdateTime      time.Time
+}
+
+// RecentFeedbackActivity represents recent feedback processing activity
+type RecentFeedbackActivity struct {
+	UserID               string
+	UserName             string
+	FeedbackCount        int
+	AnalysisConfidence   float64
+	StatementUpdated     bool
+	SteeringQueryUpdated bool
+	ProcessingDuration   time.Duration
+	ProcessedAt          time.Time
+	ErrorMessage         string
+	Success              bool
+}
+
+// FeedbackSystemMetrics represents overall system metrics
+type FeedbackSystemMetrics struct {
+	TotalUsers           int
+	TotalFeedbackItems   int
+	UnprocessedFeedback  int
+	AvgProcessingTime    time.Duration
+	SuccessRate          float64
+	AvgConfidenceScore   float64
+	StatementsUpdated    int
+	QueriesUpdated       int
+	ProcessingErrors     int
+	LastProcessingRun    time.Time
+}
+
+// UserFeedbackActivity represents user-specific feedback activity
+type UserFeedbackActivity struct {
+	UserID              string
+	UserName            string
+	TotalFeedback       int
+	UnprocessedFeedback int
+	LastFeedbackAt      time.Time
+	ProcessingSuccess   bool
+	LastProcessedAt     time.Time
+}
+
+// ProcessingTrend represents processing trends over time
+type ProcessingTrend struct {
+	Date           time.Time
+	ProcessedUsers int
+	SuccessRate    float64
+	AvgDuration    time.Duration
+	ErrorCount     int
+}
+
+// TopFeedbackUser represents users with most feedback
+type TopFeedbackUser struct {
+	UserID        string
+	UserName      string
+	FeedbackCount int
+	LastActive    time.Time
+}
+
+// ErrorSummary represents common errors in feedback processing
+type ErrorSummary struct {
+	ErrorType    string
+	Count        int
+	LastOccurred time.Time
+	SampleError  string
+}
+
+// showFeedbackDashboard handles the admin feedback processing dashboard
+func (app *application) showFeedbackDashboard(w http.ResponseWriter, r *http.Request) {
+	// Check if user is authenticated and has admin privileges
+	user := contextGetAuthenticatedUser(r)
+	if user == nil {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	// TODO: Add proper admin role checking
+	// For now, restrict to specific user ID or implement role-based access
+	if user.ID != "admin" && user.Email != "chris@talentrodeo.com" {
+		http.Error(w, "Access denied", http.StatusForbidden)
+		return
+	}
+
+	data := app.newTemplateData(r)
+	
+	// Get date range for analysis (default to last 30 days)
+	endDate := time.Now()
+	startDate := endDate.AddDate(0, 0, -30)
+
+	// Parse query parameters for date range
+	if start := r.URL.Query().Get("start_date"); start != "" {
+		if parsed, err := time.Parse("2006-01-02", start); err == nil {
+			startDate = parsed
+		}
+	}
+	if end := r.URL.Query().Get("end_date"); end != "" {
+		if parsed, err := time.Parse("2006-01-02", end); err == nil {
+			endDate = parsed
+		}
+	}
+
+	// Gather dashboard data
+	dashboardData, err := app.getFeedbackDashboardData(r.Context(), startDate, endDate)
+	if err != nil {
+		app.logger.Error("Failed to get feedback dashboard data", "error", err)
+		app.serverError(w, r, fmt.Errorf("failed to get feedback dashboard data: %w", err))
+		return
+	}
+
+	// Add data to template
+	data["DashboardData"] = dashboardData
+	data["StartDate"] = startDate.Format("2006-01-02")
+	data["EndDate"] = endDate.Format("2006-01-02")
+	data["RefreshInterval"] = 300 // 5 minutes in seconds
+
+	if err := response.Page(w, http.StatusOK, data, "pages/admin/feedback-dashboard.html"); err != nil {
+		app.serverError(w, r, fmt.Errorf("failed to render feedback dashboard page: %w", err))
+	}
+}
+
+// getFeedbackDashboardData gathers all data needed for the feedback dashboard
+func (app *application) getFeedbackDashboardData(ctx context.Context, startDate, endDate time.Time) (*FeedbackDashboardData, error) {
+	dashboardData := &FeedbackDashboardData{
+		LastUpdateTime: time.Now(),
+	}
+
+	// Get system metrics
+	systemMetrics, err := app.getFeedbackSystemMetrics(ctx, startDate, endDate)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get system metrics: %w", err)
+	}
+	dashboardData.SystemMetrics = *systemMetrics
+
+	// Get recent processing activity
+	recentActivity, err := app.getRecentFeedbackActivity(ctx, 50) // Last 50 activities
+	if err != nil {
+		return nil, fmt.Errorf("failed to get recent activity: %w", err)
+	}
+	dashboardData.RecentActivity = recentActivity
+
+	// Get user activity summary
+	userActivity, err := app.getUserFeedbackActivity(ctx, startDate, endDate)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user activity: %w", err)
+	}
+	dashboardData.UserActivity = userActivity
+
+	// Get top users by feedback count
+	topUsers, err := app.getTopFeedbackUsers(ctx, 10) // Top 10 users
+	if err != nil {
+		return nil, fmt.Errorf("failed to get top users: %w", err)
+	}
+	dashboardData.TopUsers = topUsers
+
+	return dashboardData, nil
+}
+
+// getFeedbackSystemMetrics calculates overall system metrics
+func (app *application) getFeedbackSystemMetrics(ctx context.Context, startDate, endDate time.Time) (*FeedbackSystemMetrics, error) {
+	metrics := &FeedbackSystemMetrics{}
+
+	// Get total unprocessed feedback across all users
+	unprocessedFeedback, err := internal.GetAllUnprocessedFeedback(ctx, app.fs, 0) // 0 = no limit
+	if err != nil {
+		return nil, fmt.Errorf("failed to get unprocessed feedback: %w", err)
+	}
+	metrics.UnprocessedFeedback = len(unprocessedFeedback)
+
+	// For now, return basic metrics
+	// In production, you'd want to store processing logs in Firestore to calculate these accurately
+	metrics.TotalUsers = 0
+	metrics.TotalFeedbackItems = len(unprocessedFeedback)
+	metrics.AvgProcessingTime = 0
+	metrics.SuccessRate = 0.0
+	metrics.AvgConfidenceScore = 0.0
+	metrics.StatementsUpdated = 0
+	metrics.QueriesUpdated = 0
+	metrics.ProcessingErrors = 0
+	metrics.LastProcessingRun = time.Now()
+
+	return metrics, nil
+}
+
+// getRecentFeedbackActivity gets recent feedback processing activity
+func (app *application) getRecentFeedbackActivity(ctx context.Context, limit int) ([]RecentFeedbackActivity, error) {
+	// For now, return mock data
+	// In production, you'd query actual processing logs from Firestore
+	activities := []RecentFeedbackActivity{
+		{
+			UserID:               "user123",
+			UserName:             "John Doe",
+			FeedbackCount:        5,
+			AnalysisConfidence:   0.85,
+			StatementUpdated:     true,
+			SteeringQueryUpdated: true,
+			ProcessingDuration:   2340 * time.Millisecond,
+			ProcessedAt:          time.Now().Add(-1 * time.Hour),
+			Success:              true,
+		},
+		{
+			UserID:               "user456",
+			UserName:             "Jane Smith",
+			FeedbackCount:        3,
+			AnalysisConfidence:   0.92,
+			StatementUpdated:     true,
+			SteeringQueryUpdated: false,
+			ProcessingDuration:   1890 * time.Millisecond,
+			ProcessedAt:          time.Now().Add(-2 * time.Hour),
+			Success:              true,
+		},
+	}
+
+	return activities, nil
+}
+
+// getUserFeedbackActivity gets user-specific feedback activity
+func (app *application) getUserFeedbackActivity(ctx context.Context, startDate, endDate time.Time) ([]UserFeedbackActivity, error) {
+	// For now, return mock data
+	// In production, you'd query actual user feedback from Firestore
+	activities := []UserFeedbackActivity{
+		{
+			UserID:              "user123",
+			UserName:            "John Doe",
+			TotalFeedback:       25,
+			UnprocessedFeedback: 5,
+			LastFeedbackAt:      time.Now().Add(-1 * time.Hour),
+			ProcessingSuccess:   true,
+			LastProcessedAt:     time.Now().Add(-6 * time.Hour),
+		},
+		{
+			UserID:              "user456",
+			UserName:            "Jane Smith",
+			TotalFeedback:       18,
+			UnprocessedFeedback: 3,
+			LastFeedbackAt:      time.Now().Add(-2 * time.Hour),
+			ProcessingSuccess:   true,
+			LastProcessedAt:     time.Now().Add(-8 * time.Hour),
+		},
+	}
+
+	return activities, nil
+}
+
+// getTopFeedbackUsers gets users with the most feedback
+func (app *application) getTopFeedbackUsers(ctx context.Context, limit int) ([]TopFeedbackUser, error) {
+	// For now, return mock data
+	// In production, you'd query actual user feedback stats from Firestore
+	users := []TopFeedbackUser{
+		{
+			UserID:        "user123",
+			UserName:      "John Doe",
+			FeedbackCount: 25,
+			LastActive:    time.Now().Add(-1 * time.Hour),
+		},
+		{
+			UserID:        "user456",
+			UserName:      "Jane Smith",
+			FeedbackCount: 18,
+			LastActive:    time.Now().Add(-2 * time.Hour),
+		},
+	}
+
+	return users, nil
 }
