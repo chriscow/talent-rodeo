@@ -206,4 +206,94 @@ The system uses sophisticated prompt templates:
 
 **Phase 3 Goal**: Deploy to production with reliable daily processing and monitoring.
 
-The integration testing and monitoring framework is complete and ready for production! 🚀 
+The integration testing and monitoring framework is complete and ready for production! 🚀
+
+## CLI Commands
+
+The feedback system includes comprehensive CLI commands for management and troubleshooting:
+
+### Available Commands
+
+```bash
+# Process all unprocessed feedback (daily batch job)
+cli feedback process
+
+# Process feedback for a specific user
+cli feedback process-user [userID]
+
+# Show feedback statistics and unprocessed counts
+cli feedback stats
+
+# Clean up orphaned feedback for deleted users
+cli feedback cleanup-orphaned
+```
+
+### Command Details
+
+**`cli feedback process`**
+- Processes all unprocessed user feedback across the system
+- Designed to be run as a daily batch job
+- Uses enhanced LLM processor with metrics collection
+- Handles errors gracefully and continues processing other users
+- Automatically manages orphaned feedback for deleted users
+
+**`cli feedback process-user [userID]`**
+- Processes feedback for a specific user
+- Useful for testing or targeted processing
+- Shows detailed processing logs and metrics
+- Example: `cli feedback process-user 58d3e019-9db5-4791-bcfd-8cd5ab9b575a`
+
+**`cli feedback stats`**
+- Displays comprehensive feedback statistics
+- Shows total unprocessed feedback counts
+- Breaks down by liked/disliked items
+- Lists unique users and jobs with feedback
+- Supports `--json` flag for structured output
+- Shows top users by feedback volume
+
+**`cli feedback cleanup-orphaned`**
+- Identifies and cleans up feedback for deleted users
+- Marks orphaned feedback as processed to prevent infinite retries
+- Prevents feedback processing errors caused by deleted users
+- Safe to run multiple times (idempotent operation)
+- Logs all cleanup actions for auditing
+
+### Error Handling & Resilience
+
+The CLI commands include robust error handling:
+
+- **Deleted User Handling**: Automatically detects and handles feedback for deleted users
+- **Graceful Degradation**: Individual user failures don't stop batch processing
+- **Orphaned Data Cleanup**: Prevents infinite retry loops for deleted users
+- **Detailed Logging**: Comprehensive logging for troubleshooting and monitoring
+- **Metrics Collection**: Processing duration, success rates, and confidence scores
+
+### Usage Examples
+
+```bash
+# Daily processing (production use)
+cli feedback process
+
+# Check system health
+cli feedback stats --json
+
+# Clean up after user deletions
+cli feedback cleanup-orphaned
+
+# Debug specific user issues
+cli feedback process-user abc123
+
+# Get help for any command
+cli feedback --help
+cli feedback process --help
+```
+
+### Integration with Production
+
+- Commands designed for production automation
+- Compatible with cron jobs and scheduled tasks
+- Structured logging for monitoring systems
+- Exit codes indicate success/failure for automation
+- JSON output option for programmatic processing
+
+The CLI provides complete operational control over the feedback processing system! 
