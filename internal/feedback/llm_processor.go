@@ -53,6 +53,7 @@ type FeedbackItem struct {
 
 type llmProcessor struct {
 	store                FeedbackStore
+	fs                   *internal.FirestoreClient
 	logger               *slog.Logger
 	analysisChain        *analyzer
 	queryUpdateChain     *queryUpdater
@@ -61,9 +62,10 @@ type llmProcessor struct {
 	metrics              *MetricsCollector
 }
 
-func newLLMProcessor(store FeedbackStore, logger *slog.Logger, llm LLMClient) *llmProcessor {
+func newLLMProcessor(store FeedbackStore, fs *internal.FirestoreClient, logger *slog.Logger, llm LLMClient) *llmProcessor {
 	return &llmProcessor{
 		store:                store,
+		fs:                   fs,
 		logger:               logger.With("component", "llm_feedback_processor"),
 		analysisChain:        newAnalyzer(llm, logger),
 		queryUpdateChain:     newQueryUpdater(llm, logger),
@@ -76,6 +78,8 @@ func newLLMProcessor(store FeedbackStore, logger *slog.Logger, llm LLMClient) *l
 // ProcessUserFeedback processes user feedback to update both statement and steering query.
 // Statement updates are prioritized as the primary function.
 func (p *llmProcessor) ProcessUserFeedback(ctx context.Context, userID string) error {
+	startTime := time.Now()
+	
 	// Get unprocessed feedback
 	feedbacks, err := p.store.GetUnprocessedUserFeedback(ctx, userID)
 	if err != nil {
@@ -86,13 +90,74 @@ func (p *llmProcessor) ProcessUserFeedback(ctx context.Context, userID string) e
 		return nil // No feedback to process
 	}
 
+	// Get user info for logging
+	user, found, userErr := internal.GetUser(ctx, p.fs, userID)
+	if userErr != nil || !found {
+		// Continue with processing but log the issue
+		p.logger.Warn("could not get user details for logging", "user_id", userID, "error", userErr)
+		user = &internal.User{ID: userID} // Create minimal user for logging
+	}
+
 	// Start metrics collection
 	recordMetrics := p.metrics.RecordProcessingStart(userID, len(feedbacks))
 	var analysis *SemanticFeedbackAnalysis
 	var statementUpdated, queryUpdated bool
 	var finalErr error
 
+	// Initialize processing log
+	processingLog := &internal.FeedbackProcessingLog{
+		UserID:           userID,
+		UserName:         user.Name,
+		UserEmail:        user.Email,
+		ProcessedAt:      time.Now(),
+		FeedbackCount:    len(feedbacks),
+		ProcessorVersion: "v1.0",
+		LLMModel:        "deepseek-chat",
+	}
+
+	// Collect feedback IDs
+	feedbackIDs := make([]string, len(feedbacks))
+	for i, feedback := range feedbacks {
+		feedbackIDs[i] = feedback.ID
+	}
+	processingLog.FeedbackItems = feedbackIDs
+
+	// Get current statement for before/after comparison
+	currentStatement, err := p.store.GetUserStatement(ctx, userID)
+	if err != nil {
+		p.logger.Warn("failed to get current user statement", "user_id", userID, "error", err)
+		processingLog.StatementBefore = ""
+	} else if currentStatement != nil {
+		processingLog.StatementBefore = *currentStatement
+	}
+
 	defer func() {
+		// Complete processing log
+		processingLog.ProcessingDuration = time.Since(startTime).Milliseconds()
+		processingLog.Success = (finalErr == nil)
+		processingLog.StatementUpdated = statementUpdated
+		processingLog.SteeringQueryUpdated = queryUpdated
+		
+		if analysis != nil {
+			processingLog.AnalysisConfidence = analysis.ConfidenceScore
+			// Extract theme names
+			for _, theme := range analysis.SemanticThemes.Liked {
+				processingLog.LikedThemes = append(processingLog.LikedThemes, theme.Theme)
+			}
+			for _, theme := range analysis.SemanticThemes.Disliked {
+				processingLog.DislikedThemes = append(processingLog.DislikedThemes, theme.Theme)
+			}
+		}
+		
+		if finalErr != nil {
+			processingLog.ErrorMessage = finalErr.Error()
+		}
+
+		// Store processing log
+		if logErr := internal.CreateFeedbackProcessingLog(ctx, p.fs, processingLog); logErr != nil {
+			p.logger.Error("failed to create processing log", "error", logErr, "user_id", userID)
+		}
+
 		recordMetrics(analysis, statementUpdated, queryUpdated, finalErr)
 	}()
 
@@ -111,11 +176,7 @@ func (p *llmProcessor) ProcessUserFeedback(ctx context.Context, userID string) e
 	}
 
 	// Phase 2a: Update user statement (primary function)
-	currentStatement, err := p.store.GetUserStatement(ctx, userID)
-	if err != nil {
-		p.logger.Warn("failed to get current statement", "user_id", userID, "error", err)
-		currentStatement = nil
-	}
+	// (currentStatement already retrieved above for logging)
 
 	updatedStatement, err := p.statementUpdateChain.Run(ctx, currentStatement, analysis)
 	if err != nil {
@@ -140,6 +201,9 @@ func (p *llmProcessor) ProcessUserFeedback(ctx context.Context, userID string) e
 		return finalErr
 	}
 	statementUpdated = true
+	
+	// Record the updated statement for logging
+	processingLog.StatementAfter = updatedStatement
 
 	// Phase 2b: Update steering query (secondary function for backwards compatibility)
 	/*
@@ -162,10 +226,7 @@ func (p *llmProcessor) ProcessUserFeedback(ctx context.Context, userID string) e
 	*/
 
 	// Mark feedback as processed
-	feedbackIDs := make([]string, len(feedbacks))
-	for i, feedback := range feedbacks {
-		feedbackIDs[i] = feedback.ID
-	}
+	// (feedbackIDs already created above for logging)
 
 	if err := p.store.MarkFeedbackAsProcessed(ctx, feedbackIDs, time.Now()); err != nil {
 		finalErr = fmt.Errorf("failed to mark feedback as processed: %w", err)
