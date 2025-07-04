@@ -14,10 +14,38 @@
         <label for="user_id"><strong>Select User</strong></label>
         <select name="user_id" id="user_id" required>
             <option value="">-- Select a User --</option>
-            {{range .Users}}
-                <option value="{{.ID}}" {{if eq $.SelectedUserID .ID}}selected{{end}}>
-                    {{.Name}} ({{.Email}})
-                </option>
+            {{if .ActiveUsers}}
+                <optgroup label="🟢 ACTIVE USERS">
+                    {{range .ActiveUsers}}
+                        {{$count := index $.UserSubscriptionCounts .ID}}
+                        <option value="{{.ID}}" {{if eq $.SelectedUserID .ID}}selected{{end}}>
+                            {{.Name}} ({{.Email}})
+                            {{if .Tier}} - {{.Tier }}{{end}}
+                            {{if gt $count 0}} - ({{$count}} subs){{end}}
+                        </option>
+                    {{end}}
+                </optgroup>
+            {{end}}
+            {{if .ExpiredUsers}}
+                <optgroup label="🟡 EXPIRED SUBSCRIPTIONS">
+                    {{range .ExpiredUsers}}
+                        {{$count := index $.UserSubscriptionCounts .ID}}
+                        <option value="{{.ID}}" {{if eq $.SelectedUserID .ID}}selected{{end}}>
+                            {{.Name}} ({{.Email}})
+                            {{if .Tier}} - {{.Tier }}{{end}}
+                            {{if gt $count 0}} - ({{$count}} subs){{end}}
+                        </option>
+                    {{end}}
+                </optgroup>
+            {{end}}
+            {{if .OtherUsers}}
+                <optgroup label="⚪ OTHER USERS">
+                    {{range .OtherUsers}}
+                        <option value="{{.ID}}" {{if eq $.SelectedUserID .ID}}selected{{end}}>
+                            {{.Name}} ({{.Email}})
+                        </option>
+                    {{end}}
+                </optgroup>
             {{end}}
         </select>
         <label for="phone">Phone Number (optional, E.164 format)</label>

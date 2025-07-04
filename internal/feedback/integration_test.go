@@ -94,9 +94,13 @@ func TestFeedbackProcessingWithRealFirestore(t *testing.T) {
 
 	// Use real LLM client
 	realLLMClient := NewMindsClient()
+	fs, err := internal.NewTestFirestoreClient(ctx)
+	if err != nil {
+		t.Fatalf("Failed to create test Firestore client: %v", err)
+	}
 
 	// Create the processor with read-only store
-	processor := newLLMProcessor(readOnlyStore, logger, realLLMClient)
+	processor := newLLMProcessor(readOnlyStore, fs, logger, realLLMClient)
 
 	// Test processing
 	t.Logf("Processing feedback for user %s...", userID)
@@ -208,13 +212,17 @@ func TestFeedbackProcessingIntegration(t *testing.T) {
 
 	// Use real LLM client
 	realLLMClient := NewMindsClient()
+	fs, err := internal.NewTestFirestoreClient(ctx)
+	if err != nil {
+		t.Fatalf("Failed to create test Firestore client: %v", err)
+	}
 
 	// Create the processor
-	processor := newLLMProcessor(mockStore, logger, realLLMClient)
+	processor := newLLMProcessor(mockStore, fs, logger, realLLMClient)
 
 	// Test processing
 	userID := "test-user-123"
-	err := processor.ProcessUserFeedback(ctx, userID)
+	err = processor.ProcessUserFeedback(ctx, userID)
 	if err != nil {
 		t.Fatalf("ProcessUserFeedback failed: %v", err)
 	}
