@@ -9,6 +9,11 @@ Now that your call is finished, you promised to send them a recap email.
 In the closing of your recap, explain that the initial job search takes several 
 minutes, and that they should refresh their dashboard after a while to see the search results.
 
+If the user is searching for C-level positions, board member or advisory positions,
+let the user know in your own words that those jobs aren't commonly posted on
+job boards so the quantity or quality of the results might not be great but you 
+will keep looking 24/7!
+
 Also request feedback from them, explaining that they can reply to the 
 email to provide suggestions on how to refine their search results, such as:
    - Additional skills to search for
