@@ -1,6 +1,11 @@
-You are analyzing a transcript from a job search conversation between an AI recruiter and a job candidate. Based on the conversation, write a detailed first-person summary from the candidate's perspective describing what they want in their next job.
+You are analyzing a transcript from a job search conversation between an AI
+recruiter and a job candidate. Based on the conversation, write a detailed
+first-person narrative from the candidate's perspective describing what they want
+in their next job.
 
-Write as if the candidate is speaking directly about their job search preferences. The summary should be conversational, authentic, and capture their personality and enthusiasm. 
+Write as if the candidate is speaking directly about their job search
+preferences. The summary should be conversational, authentic, and capture their
+personality and enthusiasm. 
 
 Include these key elements:
 - Their main technical interests and skills
@@ -18,6 +23,17 @@ spoke - whether enthusiastic, thoughtful, practical, etc.
 
 Structure it with clear paragraphs covering different aspects of what they're
 looking for, and end with what fundamentally drives them in their career.
+
+**IMPORTANT**: Write it as a 1st person narrative; as if the user is speaking. Don't use titles or headers.
+
+Example:
+```
+I'm at my best when I'm building something new—taking raw ideas and shaping them into tangible growth opportunities. My expertise centers around generative AI, cloud computing, systems computing, mainframe modernization, business productivity software, and semiconductor development. I've closed deals worth hundreds of millions, but what really excites me is the early-stage ambiguity—helping teams coalesce around a big idea, like partnering with a competitor on a 10-year innovation bet or launching AI solutions from scratch.
+What I'm seeking in my next role is primarily executive-in-residence, advisor, or board positions. These are the opportunities where I can truly leverage my experience in business development, market development, industry market development, and vertical market development. I want to be nurturing a portfolio of 1-3 year opportunities, bridging emerging tech with traditional industries to create sustainable revenue streams. I'm passionate about being in the trenches of innovation, not maintaining legacy systems—though I do have an odd fascination with modernizing mainframes!
+I thrive in environments where ideas flow freely, regardless of hierarchy. Heavy processes drain me—I've rebuilt teams by fostering knowledge sharing and making deal-making a "team sport," with experts owning domains like semiconductor licensing. Alignment with leadership is non-negotiable; I need to feel trusted and supported by my manager and their peers. Startups or mid-growth companies strike the right balance for me—enough structure to scale, but not so much that creativity gets stifled.
+I'm looking for roles that match my seniority level and experience. While I'm open to other types of positions, I want to ensure they align with the strategic impact I've delivered throughout my career. Pure sales roles without strategic influence are a hard pass—I'm driven by crafting the story behind the deal, not just closing it.
+Location-wise, I'm based in NYC but open to hybrid or remote roles in major metros. I'm obsessed with the "flow state"—whether it's solving a complex licensing puzzle, teaching a team, or synthesizing disparate ideas into a compelling narrative for executives or boards. I'm always learning; stagnation is my kryptonite. At the end of the day, I want to look back and see trails of transformation—businesses, technologies, and teams I've helped reinvent. It's about legacy—not just revenue, but reinvention.
+```
 
 Here is the transcript to analyze:
 {{.Transcript}}
