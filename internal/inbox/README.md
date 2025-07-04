@@ -139,17 +139,29 @@ For production environments, regenerate locally then deploy:
 
 ```bash
 # 1. Regenerate token locally
-go run cmd/cli/cli_main.go gmail setup --token production_gmail_token.json
+go run cmd/cli/cli_main.go gmail setup
 
-# 2. Encode token for deployment
-cat production_gmail_token.json | base64
+# 2. Encode token for deployment (IMPORTANT: use tr -d '\n' to remove line breaks)
+ENCODED_TOKEN=$(cat gmail_token.json | base64 | tr -d '\n')
 
-# 3. Set as environment variable (Fly.io example)
-fly secrets set GMAIL_TOKEN_BASE64="base64_encoded_token_content"
+# 3. Verify the encoding looks correct (should be one long line with no spaces)
+echo "Token length: ${#ENCODED_TOKEN}"
+echo "First 50 chars: ${ENCODED_TOKEN:0:50}..."
 
-# 4. Restart application
-fly restart
+# 4. Set as environment variable (Fly.io example)
+fly secrets set GMAIL_TOKEN_BASE64="$ENCODED_TOKEN"
+
+# 5. Restart application
+fly machines restart
+
+# 6. Verify Gmail is working
+curl -s https://your-app.fly.dev/health/gmail | jq .
 ```
+
+**⚠️ Important Notes:**
+- **Always use `tr -d '\n'`** to remove line breaks from base64 output
+- The encoded token should be one continuous string with no spaces or line breaks
+- If you get "illegal base64 data" errors, the encoding was corrupted - regenerate it
 
 ### Testing Gmail Integration
 
@@ -216,6 +228,16 @@ Token expired:
 - Ensure OAuth client is configured for "Desktop application"
 - Check that redirect URI is set to `urn:ietf:wg:oauth:2.0:oob`
 
+**"illegal base64 data" error**
+- The `GMAIL_TOKEN_BASE64` environment variable is corrupted
+- **Solution**: Re-encode the token properly:
+  ```bash
+  # Generate clean base64 encoding without line breaks
+  ENCODED_TOKEN=$(cat gmail_token.json | base64 | tr -d '\n')
+  fly secrets set GMAIL_TOKEN_BASE64="$ENCODED_TOKEN"
+  fly machines restart
+  ```
+
 **"Gmail connection failed"**
 - Check network connectivity
 - Verify Gmail API is enabled in Google Cloud Console
@@ -227,6 +249,151 @@ Token expired:
 - **Production**: Token stored as base64 environment variable (`GMAIL_TOKEN_BASE64`)
 - **File permissions**: Token files created with `0600` permissions (read/write for owner only)
 - **Automatic refresh**: OAuth2 library handles token refresh automatically using refresh_token
+
+## Monitoring and Alerting
+
+### How to Know When Token Regeneration is Needed
+
+You'll know the Gmail token needs regeneration when you see these signs:
+
+**1. Application Logs:**
+```
+oauth2: "invalid_grant" "Token has been expired or revoked."
+```
+
+**2. Health Check Failures:**
+```bash
+curl https://talent-rodeo.fly.dev/health/gmail
+# Returns status: "unhealthy" with oauth2 error
+```
+
+**3. Sentry Alerts:**
+- Gmail authentication errors are automatically reported to Sentry
+- Look for alerts tagged with `component: inbox_processor`
+
+### Monitoring Options
+
+#### Option 1: Sentry Monitoring (Recommended)
+Gmail errors are automatically sent to Sentry with these tags:
+- `component: inbox_processor`
+- `error_type: gmail_authentication`
+
+**Setup Sentry Alerts:**
+1. Go to your Sentry project
+2. Create a new Alert Rule
+3. Set conditions:
+   - `event.tags.component:inbox_processor`
+   - `event.message` contains `"invalid_grant"`
+4. Configure notifications (email, Slack, etc.)
+
+#### Option 2: Health Check Monitoring
+Monitor the health endpoint with external services:
+
+**Uptime Robot / Pingdom:**
+- URL: `https://talent-rodeo.fly.dev/health/gmail`
+- Alert when status code is not 200
+- Check frequency: Every 5-15 minutes
+
+**Script example:**
+```bash
+#!/bin/bash
+# Check Gmail health and send alert if failed
+HEALTH_STATUS=$(curl -s https://talent-rodeo.fly.dev/health/gmail | jq -r '.status')
+
+if [ "$HEALTH_STATUS" != "healthy" ]; then
+    # Send notification (email, Slack, etc.)
+    echo "Gmail integration unhealthy: $HEALTH_STATUS" | mail -s "Gmail Token Alert" admin@yourcompany.com
+fi
+```
+
+#### Option 3: Fly.io Monitoring
+Fly.io provides built-in monitoring capabilities:
+
+**1. Set up Fly.io Health Checks:**
+```toml
+# In fly.toml
+[http_service.checks.gmail]
+  grace_period = "10s"
+  interval = "30s"
+  method = "GET"
+  path = "/health/gmail"
+  protocol = "http"
+  timeout = "5s"
+  headers = {}
+```
+
+**2. Configure Fly.io Notifications:**
+```bash
+# Set up webhook notifications
+fly apps config set --app talent-rodeo WEBHOOK_URL="your-slack-webhook-url"
+```
+
+#### Option 4: Application-Level Monitoring
+The application already includes comprehensive error reporting:
+
+**Automatic Sentry Reporting:**
+- All Gmail errors are automatically sent to Sentry
+- Includes context like user ID, operation, and error details
+- Uses structured tags for easy filtering
+
+**Email Notifications:**
+- Server errors automatically trigger email notifications
+- Configure via `--notifications-email` flag
+- Uses template in `assets/emails/error-notification.html`
+
+### Token Refresh Schedule
+
+**OAuth2 tokens typically expire:**
+- Access tokens: 1 hour (automatically refreshed)
+- Refresh tokens: 6 months to 1 year (manual regeneration needed)
+
+**Recommended monitoring frequency:**
+- Health checks: Every 5-15 minutes
+- Proactive token regeneration: Every 3-6 months
+- Emergency response: Monitor Sentry for immediate alerts
+
+### Emergency Response Playbook
+
+**When you receive a Gmail token expiration alert:**
+
+1. **Immediate Response (< 5 minutes):**
+   ```bash
+   # Quickly regenerate token locally
+   go run cmd/cli/cli_main.go gmail setup
+   ```
+
+2. **Deploy Fix (< 10 minutes):**
+   ```bash
+   # Encode and deploy new token
+   ENCODED_TOKEN=$(cat gmail_token.json | base64 | tr -d '\n')
+   fly secrets set GMAIL_TOKEN_BASE64="$ENCODED_TOKEN"
+   fly machines restart
+   ```
+
+3. **Verify Fix (< 15 minutes):**
+   ```bash
+   # Confirm Gmail is working
+   curl -s https://talent-rodeo.fly.dev/health/gmail | jq .
+   ```
+
+4. **Post-Incident:**
+   - Check Sentry for any related errors
+   - Review logs for impact duration
+   - Update monitoring if needed
+
+### Proactive Token Management
+
+**Set up calendar reminders:**
+- Monthly health check review
+- Quarterly token regeneration (preventive)
+- Annual OAuth client credential review
+
+**Monitor token expiration proactively:**
+```bash
+# Check token expiration locally
+go run cmd/cli/cli_main.go gmail test --max 1
+# If this fails, regenerate immediately
+```
 
 ### Custom Email Handler
 
