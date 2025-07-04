@@ -202,7 +202,7 @@ set -a; source .env; set +a; FIRESTORE_EMULATOR_HOST=localhost:8200 go test -run
 **Firestore Connection Issues:**
 - Check `FIREBASE_PROJECT_ID` and `FIREBASE_CREDENTIALS`
 - Verify service account has Firestore permissions
-- Use emulator for local development: `task firebase`
+- When testing locally, add `FIRESTORE_EMULATOR_HOST=localhost:8200` to your environment variables.
 
 **Authentication Problems:**
 - Verify LinkedIn app credentials and redirect URLs
@@ -242,3 +242,7 @@ set -a; source .env; set +a; FIRESTORE_EMULATOR_HOST=localhost:8200 go test -run
 - `/health` endpoint for load balancer checks
 - Graceful shutdown with configurable timeout
 - Database connection validation on startup
+
+**Available Tools:**
+- Github CLI: `gh`
+- Fly.io CLI: `fly`

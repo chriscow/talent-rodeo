@@ -8,6 +8,7 @@ import (
 	"strings"
 	"talent-rodeo/internal/smtp"
 	"talent-rodeo/internal/subscription"
+	"talent-rodeo/internal/utils"
 
 	// Removing self-import of internal package
 	"talent-rodeo/assets"
@@ -555,7 +556,36 @@ func GenerateRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user 
 		"Transcript": transcript,
 	}
 
-	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/recap-email.001.txt")
+	// Check if user has trial information and timezone to include trial context
+	var templateFile string
+	if user.SubscriptionEnd != nil && user.Timezone != nil {
+		// User is in trial period - add trial context
+		trialStartFormatted, _ := utils.FormatTimeInUserTimezone(
+			time.Now(),
+			*user.Timezone,
+			"January 2, 2006 at 3:04 PM MST",
+		)
+
+		trialEndFormatted, _ := utils.FormatTimeInUserTimezone(
+			*user.SubscriptionEnd,
+			*user.Timezone,
+			"January 2, 2006 at 11:59 PM MST",
+		)
+
+		daysRemaining := utils.CalculateDaysRemaining(*user.SubscriptionEnd, *user.Timezone)
+
+		// Add trial context to prompt data
+		promptData["TrialStartDateUser"] = trialStartFormatted
+		promptData["TrialEndDateUser"] = trialEndFormatted
+		promptData["DaysRemaining"] = daysRemaining
+
+		templateFile = "prompts/recap-email-with-trial.001.txt"
+	} else {
+		// Use original template for users without trial context
+		templateFile = "prompts/recap-email.001.txt"
+	}
+
+	tmpl, err := assets.EmbeddedFiles.ReadFile(templateFile)
 	if err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"error_type": "assets_read_file",
