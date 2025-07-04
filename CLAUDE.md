@@ -246,3 +246,8 @@ set -a; source .env; set +a; FIRESTORE_EMULATOR_HOST=localhost:8200 go test -run
 **Available Tools:**
 - Github CLI: `gh`
 - Fly.io CLI: `fly`
+
+**CRITICAL:**
+- You are not to put in placeholders for any code unless you explicitly ask me first or if I ask you to.
+- When you put in placeholders, you MUST use the key "TODO:" and explain why you are doing it and what the placeholder is for.
+- Before you claim that something is fully implemented you must have resolved all TODOs or gotten explicit approval from me.

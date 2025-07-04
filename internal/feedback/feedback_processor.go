@@ -186,7 +186,7 @@ func (p *Processor) process(ctx context.Context) error {
 }
 
 func ProcessUserFeedback(ctx context.Context, fs *internal.FirestoreClient, logger *slog.Logger, userID string) error {
-	llmProcessor := newLLMProcessor(newFeedbackStore(fs), logger, NewMindsClient())
+	llmProcessor := newLLMProcessor(newFeedbackStore(fs), fs, logger, NewMindsClient())
 	return llmProcessor.ProcessUserFeedback(ctx, userID)
 }
 
@@ -247,7 +247,7 @@ func CleanupOrphanedFeedback(ctx context.Context, fs *internal.FirestoreClient, 
 // ProcessAllUsersFeedback processes feedback for all users who have unprocessed feedback
 // using the enhanced LLM processor with metrics collection.
 func ProcessAllUsersFeedback(ctx context.Context, fs *internal.FirestoreClient, logger *slog.Logger) error {
-	llmProcessor := newLLMProcessor(newFeedbackStore(fs), logger, NewMindsClient())
+	llmProcessor := newLLMProcessor(newFeedbackStore(fs), fs, logger, NewMindsClient())
 	metricsCollector := NewMetricsCollector(logger)
 
 	startTime := time.Now()
