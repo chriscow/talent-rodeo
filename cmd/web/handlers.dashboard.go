@@ -558,17 +558,10 @@ type ErrorSummary struct {
 
 // showFeedbackDashboard handles the admin feedback processing dashboard
 func (app *application) showFeedbackDashboard(w http.ResponseWriter, r *http.Request) {
-	// Check if user is authenticated and has admin privileges
+	// User authentication and admin privileges are handled by requireSuperUser middleware
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
-
-	// TODO: Add proper admin role checking
-	// For now, restrict to specific user ID or implement role-based access
-	if user.ID != "admin" && user.Email != "chris@talentrodeo.com" {
-		http.Error(w, "Access denied", http.StatusForbidden)
 		return
 	}
 
