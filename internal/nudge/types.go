@@ -15,6 +15,12 @@ const (
 	NudgeTypeNoCall          NudgeType = "no_call"
 	NudgeTypeFiveStarMatches NudgeType = "five_star_matches"
 	// NudgeTypeFollowUp        NudgeType = "follow_up" // not implemented yet
+	
+	// Trial email sequence types
+	NudgeTypeTrialWelcome      NudgeType = "trial_welcome"     // Day 1
+	NudgeTypeTrialExpectations NudgeType = "trial_expectations" // Day 2
+	NudgeTypeTrialEngagement   NudgeType = "trial_engagement"  // Day 3
+	NudgeTypeTrialConversion   NudgeType = "trial_conversion"  // Day 6
 )
 
 var AllNudgeTypes = []NudgeType{
@@ -22,6 +28,12 @@ var AllNudgeTypes = []NudgeType{
 	NudgeTypeNoCall,
 	NudgeTypeFiveStarMatches,
 	// NudgeTypeFollowUp,  // not implemented yet
+	
+	// Trial email sequence types
+	NudgeTypeTrialWelcome,
+	NudgeTypeTrialExpectations,
+	NudgeTypeTrialEngagement,
+	NudgeTypeTrialConversion,
 }
 
 // NudgeProcessorSettings configures the nudge processor behavior
@@ -54,6 +66,12 @@ type NudgeProcessorSettings struct {
 	NoCallDelayDays int
 	// MatchAlertDelayDays is the minimum number of days to wait before sending a "five star matches" nudge.
 	MatchAlertDelayDays int
+	
+	// Trial email delay settings - days since trial start when each email should be sent
+	TrialWelcomeDelayDays      int // Day 1 (should be 1)
+	TrialExpectationsDelayDays int // Day 2 (should be 2)
+	TrialEngagementDelayDays   int // Day 3 (should be 3)
+	TrialConversionDelayDays   int // Day 6 (should be 6)
 
 	// MaxNudgesPerType defines limits for each specific nudge type. This allows for more granular
 	// control over the user journey, ensuring that early-stage nudges don't exhaust the budget
@@ -125,12 +143,23 @@ var DefaultNudgeSettings = NudgeProcessorSettings{
 	NoResumeDelayDays:   2,
 	NoCallDelayDays:     3,
 	MatchAlertDelayDays: 2,
+	
+	// Trial email timing based on strategy document
+	TrialWelcomeDelayDays:      1, // Day 1 after trial start
+	TrialExpectationsDelayDays: 2, // Day 2 after trial start
+	TrialEngagementDelayDays:   3, // Day 3 after trial start
+	TrialConversionDelayDays:   6, // Day 6 after trial start
 	WeeklyRateLimit:     7 * 24 * time.Hour,
 	LimitOnRecentActivityPerType: LimitOnRecentActivitySettings{
 		NoResume:        false,
 		NoCall:          false,
 		FiveStarMatches: false,
 		FollowUp:        false,
+		// Trial emails should not be limited by recent activity
+		TrialWelcome:      false,
+		TrialExpectations: false,
+		TrialEngagement:   false,
+		TrialConversion:   false,
 	},
 
 	MaxNudgesPerType: MaxNudgesPerType{
@@ -138,6 +167,11 @@ var DefaultNudgeSettings = NudgeProcessorSettings{
 		NoCall:          1, // 1 reminder for a call should be enough
 		FiveStarMatches: 5, // Allow a few of these high-value emails
 		FollowUp:        1, // 1 follow-up
+		// Trial emails - only 1 of each during trial period
+		TrialWelcome:      1,
+		TrialExpectations: 1,
+		TrialEngagement:   1,
+		TrialConversion:   1,
 	},
 
 	DryRun:             false,
@@ -202,6 +236,13 @@ type NudgeEmailData struct {
 
 	// For NudgeTypeFiveStarMatches
 	Matches []FiveStarMatchData
+	
+	// For trial email sequence types
+	TrialStartDateUser  string // Formatted for user's timezone
+	TrialEndDateUser    string // Formatted for user's timezone
+	DaysRemaining       int    // Days remaining in trial
+	HighQualityMatches  int    // Number of quality matches (4+ stars)
+	MatchVolumeCategory string // "high", "typical", "low"
 }
 
 // GeneratedEmail holds the content of a generated email.
@@ -224,6 +265,12 @@ type MaxNudgesPerType struct {
 	NoCall          int
 	FiveStarMatches int
 	FollowUp        int
+	
+	// Trial email sequence limits (typically 1 for each)
+	TrialWelcome      int
+	TrialExpectations int
+	TrialEngagement   int
+	TrialConversion   int
 }
 
 // LimitOnRecentActivitySettings defines whether to limit nudges based on recent activity for each nudge type.
@@ -232,6 +279,12 @@ type LimitOnRecentActivitySettings struct {
 	NoCall          bool
 	FiveStarMatches bool
 	FollowUp        bool
+	
+	// Trial emails typically shouldn't be limited by recent activity
+	TrialWelcome      bool
+	TrialExpectations bool
+	TrialEngagement   bool
+	TrialConversion   bool
 }
 
 // Interfaces for dependency injection and testing
@@ -267,7 +320,8 @@ func (nt NudgeType) String() string {
 // IsValid checks if the nudge type is valid
 func (nt NudgeType) IsValid() bool {
 	switch nt {
-	case NudgeTypeNoResume, NudgeTypeNoCall, NudgeTypeFiveStarMatches: //, NudgeTypeFollowUp:
+	case NudgeTypeNoResume, NudgeTypeNoCall, NudgeTypeFiveStarMatches, // NudgeTypeFollowUp,
+		NudgeTypeTrialWelcome, NudgeTypeTrialExpectations, NudgeTypeTrialEngagement, NudgeTypeTrialConversion:
 		return true
 	default:
 		return false
@@ -318,6 +372,16 @@ func (nt NudgeType) EmailTemplatePath() string {
 		return "emails/shirely-five-star-matches.html"
 	// case NudgeTypeFollowUp:
 	// 	return "emails/shirely-follow-up-questions.html"
+	
+	// Trial email sequence templates
+	case NudgeTypeTrialWelcome:
+		return "emails/trial-welcome.html"
+	case NudgeTypeTrialExpectations:
+		return "emails/trial-expectations.html"
+	case NudgeTypeTrialEngagement:
+		return "emails/trial-engagement.html"
+	case NudgeTypeTrialConversion:
+		return "emails/trial-conversion.html"
 	default:
 		return ""
 	}

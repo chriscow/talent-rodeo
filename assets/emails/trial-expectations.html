@@ -1,0 +1,127 @@
+{{define "subject"}}🎯 {{.FirstName}}, here's the thing about quality job searches...{{end}}
+
+{{define "plainBody"}}
+Hey {{.FirstName}},
+
+It's me again - Shirely! I've been working non-stop since our call, and I wanted to give you a quick update on what I'm finding.
+
+{{if eq .MatchVolumeCategory "high"}}
+GREAT NEWS! I've found {{.HighQualityMatches}} quality matches for you
+
+You've got some fantastic opportunities coming your way! Here's why I'm being selective even with all these options:
+- Quality filtering is working: I'm not just throwing every job at you - I'm curating the best ones
+- Variety means choice: Different companies, different growth paths, different opportunities to shine
+- I'm being your strategic advisor: Not every "match" is worth your time, so I focus on the gems
+
+The abundance of good options means we can be picky - and that's exactly where you want to be!
+{{else if eq .MatchVolumeCategory "typical"}}
+I've found {{.HighQualityMatches}} quality matches - right on track!
+
+This is actually exactly what I like to see. Here's why this number is perfect:
+- Quality over quantity: I'd rather find 5 amazing opportunities than 50 mediocre ones
+- Market timing matters: The best roles don't get posted every day - they appear in cycles
+- I'm being selective for you: Each match I show you has real potential
+
+Remember: the best roles take time to appear, and when they do, you'll be ready!
+{{else}}
+I've found {{.HighQualityMatches}} matches - and here's why that's actually great
+
+I know what you might be thinking, but let me explain why this is actually a good sign:
+- Your criteria are specific: You know what you want, and I respect that
+- Specialized roles are rare gems: The best opportunities in your field don't appear every day
+- Market dynamics are real: Companies post strategic roles in waves, not constantly
+- Perfect roles are worth waiting for: I'd rather you get THE job than just any job
+
+Think of it this way: I'm not a job board showing you everything. I'm your personal recruiter finding you the right things.
+{{end}}
+
+HERE'S WHAT I'M DOING WHILE YOU WAIT:
+- Monitoring multiple job sources - I check way more than just the big job boards
+- Learning your preferences - Every rating you give makes me smarter
+- Timing the market - I know when companies typically post new roles
+- Analyzing trends - I spot patterns you might miss
+
+Trust me, I'm like that friend who knows exactly what you're looking for and won't settle for less. HIRE is in my name for a reason - I take this seriously!
+
+Your trial timeline: {{.DaysRemaining}} days remaining until {{.TrialEndDateUser}}
+
+Check your latest matches: https://talent.rodeo
+
+Tomorrow I'll share some tips to help me find even better matches for you. Ready for that?
+
+Keep the faith,
+Shirely
+AI Job Search Assistant - Talent Rodeo
+"Quality matches take time - but they're worth it"
+
+You're receiving this email as part of your 7-day trial. I'm working around the clock to find your perfect career opportunity!
+{{end}}
+
+{{define "htmlBody"}}
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px; text-align: center;">
+        <h1>🎯 Here's the thing about quality job searches...</h1>
+        <p><strong>Day 2 of your trial - let me explain what's happening behind the scenes</strong></p>
+    </div>
+
+    <p>Hey {{.FirstName}},</p>
+    
+    <p>It's me again - Shirely! I've been working non-stop since our call, and I wanted to give you a quick update on what I'm finding.</p>
+
+    {{if eq .MatchVolumeCategory "high"}}
+    <div style="background: #e3f2fd; padding: 15px; border-radius: 6px; margin: 15px 0;">
+        <h3>🎉 Great news! I've found {{.HighQualityMatches}} quality matches for you</h3>
+        <p>You've got some fantastic opportunities coming your way! Here's why I'm being selective even with all these options:</p>
+        <ul>
+            <li><strong>Quality filtering is working:</strong> I'm not just throwing every job at you - I'm curating the best ones</li>
+            <li><strong>Variety means choice:</strong> Different companies, different growth paths, different opportunities to shine</li>
+            <li><strong>I'm being your strategic advisor:</strong> Not every "match" is worth your time, so I focus on the gems</li>
+        </ul>
+        <p>The abundance of good options means we can be picky - and that's exactly where you want to be!</p>
+    </div>
+    {{else if eq .MatchVolumeCategory "typical"}}
+    <div style="background: #f3e5f5; padding: 15px; border-radius: 6px; margin: 15px 0;">
+        <h3>🎯 I've found {{.HighQualityMatches}} quality matches - right on track!</h3>
+        <p>This is actually exactly what I like to see. Here's why this number is perfect:</p>
+        <ul>
+            <li><strong>Quality over quantity:</strong> I'd rather find 5 amazing opportunities than 50 mediocre ones</li>
+            <li><strong>Market timing matters:</strong> The best roles don't get posted every day - they appear in cycles</li>
+            <li><strong>I'm being selective for you:</strong> Each match I show you has real potential</li>
+        </ul>
+        <p>Remember: the best roles take time to appear, and when they do, you'll be ready!</p>
+    </div>
+    {{else}}
+    <div style="background: #fce4ec; padding: 15px; border-radius: 6px; margin: 15px 0;">
+        <h3>💎 I've found {{.HighQualityMatches}} matches - and here's why that's actually great</h3>
+        <p>I know what you might be thinking, but let me explain why this is actually a good sign:</p>
+        <ul>
+            <li><strong>Your criteria are specific:</strong> You know what you want, and I respect that</li>
+            <li><strong>Specialized roles are rare gems:</strong> The best opportunities in your field don't appear every day</li>
+            <li><strong>Market dynamics are real:</strong> Companies post strategic roles in waves, not constantly</li>
+            <li><strong>Perfect roles are worth waiting for:</strong> I'd rather you get THE job than just any job</li>
+        </ul>
+        <p>Think of it this way: I'm not a job board showing you everything. I'm your personal recruiter finding you the right things.</p>
+    </div>
+    {{end}}
+
+    <p>Trust me, I'm like that friend who knows exactly what you're looking for and won't settle for less. HIRE is in my name for a reason - I take this seriously!</p>
+
+    <p><strong>Your trial timeline:</strong><br>
+    {{.DaysRemaining}} days remaining until {{.TrialEndDateUser}}</p>
+
+    <p><a href="https://talent.rodeo" style="background: #2196f3; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Check Your Latest Matches</a></p>
+
+    <p>Tomorrow I'll share some tips to help me find even better matches for you. Ready for that?</p>
+
+    <div style="margin-top: 20px; font-style: italic;">
+        <p>Keep the faith,<br>
+        <strong>Shirely</strong><br>
+        AI Job Search Assistant - Talent Rodeo<br>
+        <em>"Quality matches take time - but they're worth it"</em></p>
+    </div>
+
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 14px; color: #666;">
+        <p>You're receiving this email as part of your 7-day trial. I'm working around the clock to find your perfect career opportunity!</p>
+    </div>
+</div>
+{{end}}

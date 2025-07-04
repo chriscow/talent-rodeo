@@ -1,0 +1,95 @@
+{{define "subject"}}🎉 Welcome to Talent Rodeo, {{.FirstName}}!{{end}}
+
+{{define "plainBody"}}
+Hi {{.FirstName}},
+
+I'm practically buzzing with excitement! Your 7-day trial started yesterday, and I've been working around the clock (perks of being an AI - no sleep required!) to find opportunities that match what we discussed.
+
+YOUR TRIAL TIMELINE
+Started: {{.TrialStartDateUser}}
+Ends: {{.TrialEndDateUser}}
+Days Remaining: {{.DaysRemaining}} days to explore everything!
+
+HERE'S WHAT MAKES US DIFFERENT FROM THOSE OTHER JOB BOARDS:
+
+🧠 I actually understand your career goals
+Instead of just keyword matching, I analyze what you really want and find roles that fit your aspirations - not just your resume.
+
+📊 Every job gets a personalized match score
+I rate each opportunity based on how well it aligns with your specific criteria. No more scrolling through hundreds of irrelevant postings!
+
+🎯 Quality over quantity, always
+I'm not here to flood your inbox. I'm here to find the RIGHT opportunities that could actually change your career trajectory.
+
+⚡ I learn and adapt fast
+Rate the matches I find, and I'll get smarter about what you're looking for. It's like having a recruiter who actually pays attention!
+
+WHAT TO EXPECT THIS WEEK:
+- Today: I'll share some insights about your job search strategy
+- Tomorrow: Tips to help me find even better matches for you
+- Throughout the week: Regular updates as I discover new opportunities
+
+Trust me, HIRE isn't just in my name - it's my mission! I'm genuinely excited to help you find not just ANY job, but the RIGHT job.
+
+Check your dashboard: https://talent.rodeo
+
+Questions? Just reply to this email - I love hearing from people!
+
+Best regards,
+Shirely
+AI Job Search Assistant - Talent Rodeo
+"They put HIRE in my name for good reason"
+
+You're receiving this email because you started your 7-day trial with Talent Rodeo.
+{{end}}
+
+{{define "htmlBody"}}
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px; text-align: center;">
+        <h1>🎉 Welcome to Talent Rodeo, {{.FirstName}}!</h1>
+        <p><strong>Your personal AI recruiter is now working 24/7 for you</strong></p>
+    </div>
+
+    <p>Hi {{.FirstName}},</p>
+    
+    <p>I'm practically buzzing with excitement! Your 7-day trial started yesterday, and I've been working around the clock (perks of being an AI - no sleep required!) to find opportunities that match what we discussed.</p>
+
+    <div style="background: #e3f2fd; padding: 15px; border-radius: 6px; margin: 15px 0;">
+        <h3>🕐 Your Trial Timeline</h3>
+        <p><strong>Started:</strong> {{.TrialStartDateUser}}<br>
+        <strong>Ends:</strong> {{.TrialEndDateUser}}<br>
+        <strong>Days Remaining:</strong> {{.DaysRemaining}} days to explore everything!</p>
+    </div>
+
+    <h3>Here's what makes us different from those other job boards:</h3>
+    
+    <p><strong>🧠 I actually understand your career goals</strong><br>
+    Instead of just keyword matching, I analyze what you really want and find roles that fit your aspirations - not just your resume.</p>
+
+    <p><strong>📊 Every job gets a personalized match score</strong><br>
+    I rate each opportunity based on how well it aligns with your specific criteria. No more scrolling through hundreds of irrelevant postings!</p>
+
+    <p><strong>🎯 Quality over quantity, always</strong><br>
+    I'm not here to flood your inbox. I'm here to find the RIGHT opportunities that could actually change your career trajectory.</p>
+
+    <p><strong>⚡ I learn and adapt fast</strong><br>
+    Rate the matches I find, and I'll get smarter about what you're looking for. It's like having a recruiter who actually pays attention!</p>
+
+    <p>Trust me, HIRE isn't just in my name - it's my mission! I'm genuinely excited to help you find not just ANY job, but the RIGHT job.</p>
+
+    <p><a href="https://talent.rodeo" style="background: #2196f3; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Check Your Dashboard</a></p>
+
+    <p>Questions? Just reply to this email - I love hearing from people!</p>
+
+    <div style="margin-top: 20px; font-style: italic;">
+        <p>Best regards,<br>
+        <strong>Shirely</strong><br>
+        AI Job Search Assistant - Talent Rodeo<br>
+        <em>"They put HIRE in my name for good reason"</em></p>
+    </div>
+
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 14px; color: #666;">
+        <p>You're receiving this email because you started your 7-day trial with Talent Rodeo.</p>
+    </div>
+</div>
+{{end}}

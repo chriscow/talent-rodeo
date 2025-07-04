@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"talent-rodeo/internal"
+	"time"
 )
 
 // EmailGenerator handles generation of nudge emails using dependency injection
@@ -127,6 +128,11 @@ func (eg *EmailGenerator) BuildEmailData(user *internal.User, nudgeType NudgeTyp
 		}
 	}
 
+	// Populate trial email data
+	if isTrialEmailType(nudgeType) {
+		eg.populateTrialEmailData(data, user, additionalData)
+	}
+
 	return data
 }
 
@@ -202,4 +208,91 @@ func parseLLMResponse(response string) (*GeneratedEmail, error) {
 		// For LLMs, we assume the body is HTML, which can be used for plain text conversion later.
 		HTMLBody: strings.TrimSpace(bodyMatch[1]),
 	}, nil
+}
+
+// isTrialEmailType checks if the nudge type is a trial email
+func isTrialEmailType(nudgeType NudgeType) bool {
+	switch nudgeType {
+	case NudgeTypeTrialWelcome, NudgeTypeTrialExpectations, NudgeTypeTrialEngagement, NudgeTypeTrialConversion:
+		return true
+	default:
+		return false
+	}
+}
+
+// populateTrialEmailData populates trial-specific data fields
+func (eg *EmailGenerator) populateTrialEmailData(data *NudgeEmailData, user *internal.User, additionalData map[string]any) {
+	// Default timezone if not set
+	timezone := "UTC"
+	if user.Timezone != nil {
+		timezone = *user.Timezone
+	}
+
+	// Calculate trial dates if user has subscription end
+	if user.SubscriptionEnd != nil {
+		// Trial start is 7 days before end
+		trialStartTime := user.SubscriptionEnd.Add(-7 * 24 * time.Hour)
+		
+		// Format dates for user display
+		if startFormatted, err := formatTimeInUserTimezone(trialStartTime, timezone, "January 2, 2006 at 3:04 PM MST"); err == nil {
+			data.TrialStartDateUser = startFormatted
+		}
+		if endFormatted, err := formatTimeInUserTimezone(*user.SubscriptionEnd, timezone, "January 2, 2006 at 11:59 PM MST"); err == nil {
+			data.TrialEndDateUser = endFormatted
+		}
+		
+		// Calculate days remaining
+		data.DaysRemaining = calculateDaysRemaining(*user.SubscriptionEnd, timezone)
+	}
+
+	// Get quality matches count (from additional data or default)
+	data.HighQualityMatches = 5 // Default value
+	if additionalData != nil {
+		if qualityMatches, ok := additionalData["qualityMatches"].(int); ok {
+			data.HighQualityMatches = qualityMatches
+		}
+	}
+	
+	// Determine match volume category
+	data.MatchVolumeCategory = determineMatchVolumeCategory(data.HighQualityMatches)
+}
+
+// Helper functions that mirror the utils package functions
+func formatTimeInUserTimezone(t time.Time, timezone string, layout string) (string, error) {
+	loc, err := time.LoadLocation(timezone)
+	if err != nil {
+		return "", err
+	}
+	return t.In(loc).Format(layout), nil
+}
+
+func calculateDaysRemaining(endTime time.Time, timezone string) int {
+	loc, err := time.LoadLocation(timezone)
+	if err != nil {
+		loc = time.UTC
+	}
+	
+	now := time.Now().In(loc)
+	endInTz := endTime.In(loc)
+	
+	// Calculate days until end date
+	diff := endInTz.Sub(now)
+	days := int(diff.Hours() / 24)
+	
+	// If we're on the last day but haven't reached end time, count as 1 day
+	if days == 0 && endInTz.After(now) {
+		days = 1
+	}
+	
+	return days
+}
+
+func determineMatchVolumeCategory(qualityMatches int) string {
+	if qualityMatches >= 10 {
+		return "high"
+	}
+	if qualityMatches >= 4 {
+		return "typical"
+	}
+	return "low"
 }
