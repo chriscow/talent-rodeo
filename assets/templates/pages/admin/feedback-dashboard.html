@@ -1,0 +1,333 @@
+{{define "title"}}Feedback Processing Dashboard{{end}}
+
+{{define "main"}}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h2">Feedback Processing Dashboard</h1>
+                <div class="d-flex align-items-center">
+                    <small class="text-muted me-3">Last updated: {{.DashboardData.LastUpdateTime.Format "15:04:05"}}</small>
+                    <button class="btn btn-outline-primary btn-sm" onclick="window.location.reload()">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Date Range Filter -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <form method="GET" class="row g-3 align-items-end">
+                        <div class="col-md-3">
+                            <label for="start_date" class="form-label">Start Date</label>
+                            <input type="date" class="form-control" id="start_date" name="start_date" value="{{.StartDate}}">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="end_date" class="form-label">End Date</label>
+                            <input type="date" class="form-control" id="end_date" name="end_date" value="{{.EndDate}}">
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-primary">Apply Filter</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Metrics Overview -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">Total Users</h6>
+                            <h2 class="mb-0">{{.DashboardData.SystemMetrics.TotalUsers}}</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-users fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">Unprocessed Feedback</h6>
+                            <h2 class="mb-0">{{.DashboardData.SystemMetrics.UnprocessedFeedback}}</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-clock fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">Success Rate</h6>
+                            <h2 class="mb-0">{{printf "%.1f%%" .DashboardData.SystemMetrics.SuccessRate}}</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-check-circle fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title">Avg Processing Time</h6>
+                            <h2 class="mb-0">{{.DashboardData.SystemMetrics.AvgProcessingTime.Milliseconds}}ms</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-stopwatch fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Recent Processing Activity -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Recent Processing Activity</h5>
+                </div>
+                <div class="card-body">
+                    {{if .DashboardData.RecentActivity}}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>User</th>
+                                    <th>Feedback Items</th>
+                                    <th>Confidence</th>
+                                    <th>Updates</th>
+                                    <th>Duration</th>
+                                    <th>Processed At</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{range .DashboardData.RecentActivity}}
+                                <tr>
+                                    <td>
+                                        <div>
+                                            <strong>{{.UserName}}</strong>
+                                            <br><small class="text-muted">{{.UserID}}</small>
+                                        </div>
+                                    </td>
+                                    <td>{{.FeedbackCount}}</td>
+                                    <td>
+                                        <div class="progress" style="height: 20px;">
+                                            <div class="progress-bar {{if ge .AnalysisConfidence 0.8}}bg-success{{else if ge .AnalysisConfidence 0.6}}bg-warning{{else}}bg-danger{{end}}" 
+                                                 role="progressbar" 
+                                                 style="width: {{printf "%.0f" (mul .AnalysisConfidence 100)}}%">
+                                                {{printf "%.2f" .AnalysisConfidence}}
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {{if .StatementUpdated}}<span class="badge bg-success">Statement</span>{{end}}
+                                        {{if .SteeringQueryUpdated}}<span class="badge bg-info">Query</span>{{end}}
+                                    </td>
+                                    <td>{{.ProcessingDuration.Milliseconds}}ms</td>
+                                    <td>{{.ProcessedAt.Format "01/02 15:04"}}</td>
+                                    <td>
+                                        {{if .Success}}
+                                            <span class="badge bg-success">Success</span>
+                                        {{else}}
+                                            <span class="badge bg-danger" title="{{.ErrorMessage}}">Failed</span>
+                                        {{end}}
+                                    </td>
+                                </tr>
+                                {{end}}
+                            </tbody>
+                        </table>
+                    </div>
+                    {{else}}
+                    <div class="text-center py-4">
+                        <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">No recent processing activity found.</p>
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+
+        <!-- System Health Sidebar -->
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">System Health</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-6">
+                            <div class="text-center">
+                                <h6 class="text-muted">Statements Updated</h6>
+                                <h4 class="text-primary">{{.DashboardData.SystemMetrics.StatementsUpdated}}</h4>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-center">
+                                <h6 class="text-muted">Queries Updated</h6>
+                                <h4 class="text-info">{{.DashboardData.SystemMetrics.QueriesUpdated}}</h4>
+                            </div>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="row">
+                        <div class="col-6">
+                            <div class="text-center">
+                                <h6 class="text-muted">Processing Errors</h6>
+                                <h4 class="text-danger">{{.DashboardData.SystemMetrics.ProcessingErrors}}</h4>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-center">
+                                <h6 class="text-muted">Avg Confidence</h6>
+                                <h4 class="text-success">{{printf "%.2f" .DashboardData.SystemMetrics.AvgConfidenceScore}}</h4>
+                            </div>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="text-center">
+                        <h6 class="text-muted">Last Processing Run</h6>
+                        <p class="mb-0">{{.DashboardData.SystemMetrics.LastProcessingRun.Format "01/02/2006 15:04:05"}}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Top Users by Feedback -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Top Active Users</h5>
+                </div>
+                <div class="card-body">
+                    {{if .DashboardData.TopUsers}}
+                    <div class="list-group list-group-flush">
+                        {{range .DashboardData.TopUsers}}
+                        <div class="list-group-item d-flex justify-content-between align-items-center px-0">
+                            <div>
+                                <strong>{{.UserName}}</strong>
+                                <br><small class="text-muted">{{.UserID}}</small>
+                                <br><small class="text-muted">Last active: {{.LastActive.Format "01/02 15:04"}}</small>
+                            </div>
+                            <span class="badge bg-primary rounded-pill">{{.FeedbackCount}}</span>
+                        </div>
+                        {{end}}
+                    </div>
+                    {{else}}
+                    <div class="text-center py-3">
+                        <i class="fas fa-user-slash fa-2x text-muted mb-2"></i>
+                        <p class="text-muted mb-0">No active users found.</p>
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Activity Table -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">User Activity Summary</h5>
+                </div>
+                <div class="card-body">
+                    {{if .DashboardData.UserActivity}}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>User</th>
+                                    <th>Total Feedback</th>
+                                    <th>Unprocessed</th>
+                                    <th>Last Feedback</th>
+                                    <th>Last Processed</th>
+                                    <th>Processing Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{range .DashboardData.UserActivity}}
+                                <tr>
+                                    <td>
+                                        <div>
+                                            <strong>{{.UserName}}</strong>
+                                            <br><small class="text-muted">{{.UserID}}</small>
+                                        </div>
+                                    </td>
+                                    <td>{{.TotalFeedback}}</td>
+                                    <td>
+                                        {{if gt .UnprocessedFeedback 0}}
+                                            <span class="badge bg-warning">{{.UnprocessedFeedback}}</span>
+                                        {{else}}
+                                            <span class="badge bg-success">0</span>
+                                        {{end}}
+                                    </td>
+                                    <td>{{.LastFeedbackAt.Format "01/02 15:04"}}</td>
+                                    <td>{{.LastProcessedAt.Format "01/02 15:04"}}</td>
+                                    <td>
+                                        {{if .ProcessingSuccess}}
+                                            <span class="badge bg-success">Success</span>
+                                        {{else}}
+                                            <span class="badge bg-danger">Failed</span>
+                                        {{end}}
+                                    </td>
+                                </tr>
+                                {{end}}
+                            </tbody>
+                        </table>
+                    </div>
+                    {{else}}
+                    <div class="text-center py-4">
+                        <i class="fas fa-chart-line fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">No user activity data available for the selected date range.</p>
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Auto-refresh script -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-refresh every 5 minutes
+    const refreshInterval = {{.RefreshInterval}} * 1000;
+    setTimeout(function() {
+        window.location.reload();
+    }, refreshInterval);
+    
+    // Show countdown
+    let countdown = {{.RefreshInterval}};
+    const updateCountdown = () => {
+        countdown--;
+        if (countdown <= 0) {
+            window.location.reload();
+        }
+    };
+    setInterval(updateCountdown, 1000);
+});
+</script>
+{{end}}

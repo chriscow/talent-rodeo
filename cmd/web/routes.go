@@ -149,6 +149,9 @@ func (app *application) routes() http.Handler {
 			// Add users management page
 			mux.HandleFunc("/admin/users", app.adminUsers, "GET")
 
+			// Add feedback processing dashboard
+			mux.HandleFunc("/admin/feedback-dashboard", app.showFeedbackDashboard, "GET")
+
 		})
 	})
 
