@@ -349,7 +349,8 @@ func ProcessAppointmentComplete(ctx context.Context, fs *FirestoreClient, user *
 			return fmt.Errorf("failed to update user subscription end at: %w", err)
 		}
 
-		if err := UpdateUserTierTx(ctx, fs, tx, user, UserTierPro); err != nil {
+		// User always starts as a free-trial user.  If they pay, we'll upgrade them to Pro.
+		if err := UpdateUserTierTx(ctx, fs, tx, user, UserTierFree); err != nil {
 			return fmt.Errorf("failed to update user tier to Pro: %w", err)
 		}
 
