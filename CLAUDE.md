@@ -71,6 +71,13 @@ assets/
 
 ## Key Development Patterns
 
+**Struct Tags Policy:**
+- **DO NOT** use struct tags for internal-only structs
+- Struct tags create case-sensitive bugs and add unnecessary noise
+- Only use struct tags when explicitly requested or for public-facing APIs
+- Assume all structs are internal unless told otherwise
+- This applies to all tag types: `json`, `firestore`, `xml`, `yaml`, etc.
+
 **Handler Structure:**
 ```go
 func (app *application) handlerName(w http.ResponseWriter, r *http.Request) {
@@ -246,6 +253,7 @@ set -a; source .env; set +a; FIRESTORE_EMULATOR_HOST=localhost:8200 go test -run
 **Available Tools:**
 - Github CLI: `gh`
 - Fly.io CLI: `fly`
+- Project CLI: `go run ./cmd/cli` - Command-line interface for managing the many aspects of the project (e.g. users, jobs, firestore, payments, etc.)
 
 **CRITICAL:**
 - You are not to put in placeholders for any code unless you explicitly ask me first or if I ask you to.

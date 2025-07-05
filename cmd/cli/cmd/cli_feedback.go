@@ -2,10 +2,13 @@ package cmd
 
 import (
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
+	"strings"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/feedback"
 	"time"
@@ -50,11 +53,68 @@ This prevents feedback processing errors and cleans up orphaned data.`,
 	RunE: cleanupOrphanedFeedback,
 }
 
+var listUserFeedbackCmd = &cobra.Command{
+	Use:   "list-user [userID]",
+	Short: "List all feedback for a specific user",
+	Long:  `Display all feedback items for a specific user, both processed and unprocessed.`,
+	Args:  cobra.ExactArgs(1),
+	RunE:  listUserFeedback,
+}
+
+var showFeedbackCmd = &cobra.Command{
+	Use:   "show [feedbackID]",
+	Short: "Show detailed information about a specific feedback item",
+	Long:  `Display detailed information about a specific feedback item including all fields.`,
+	Args:  cobra.ExactArgs(1),
+	RunE:  showFeedback,
+}
+
+var listJobFeedbackCmd = &cobra.Command{
+	Use:   "list-job [jobID]",
+	Short: "List all feedback for a specific job",
+	Long:  `Display all feedback items for a specific job across all users.`,
+	Args:  cobra.ExactArgs(1),
+	RunE:  listJobFeedback,
+}
+
+var userStatsCmd = &cobra.Command{
+	Use:   "user-stats [userID]",
+	Short: "Show comprehensive user feedback statistics",
+	Long:  `Display detailed statistics about a user's feedback activity.`,
+	Args:  cobra.ExactArgs(1),
+	RunE:  showUserStats,
+}
+
+var searchDateCmd = &cobra.Command{
+	Use:   "search-date [userID] [startDate] [endDate]",
+	Short: "Search feedback by date range",
+	Long:  `Search for feedback within a date range for a specific user. Dates should be in YYYY-MM-DD format.`,
+	Args:  cobra.ExactArgs(3),
+	RunE:  searchFeedbackByDate,
+}
+
+var exportFeedbackCmd = &cobra.Command{
+	Use:   "export [userID]",
+	Short: "Export feedback data for analysis",
+	Long:  `Export feedback data in JSON or CSV format for analysis.`,
+	Args:  cobra.ExactArgs(1),
+	RunE:  exportFeedback,
+}
+
 func init() {
 	feedbackCmd.AddCommand(processFeedbackCmd)
 	feedbackCmd.AddCommand(processFeedbackUserCmd)
 	feedbackCmd.AddCommand(showFeedbackStatsCmd)
 	feedbackCmd.AddCommand(cleanupOrphanedFeedbackCmd)
+	feedbackCmd.AddCommand(listUserFeedbackCmd)
+	feedbackCmd.AddCommand(showFeedbackCmd)
+	feedbackCmd.AddCommand(listJobFeedbackCmd)
+	feedbackCmd.AddCommand(userStatsCmd)
+	feedbackCmd.AddCommand(searchDateCmd)
+	feedbackCmd.AddCommand(exportFeedbackCmd)
+	
+	// Add flags
+	exportFeedbackCmd.Flags().StringP("format", "f", "json", "Export format (json or csv)")
 	RootCmd.AddCommand(feedbackCmd)
 }
 
@@ -198,5 +258,356 @@ func cleanupOrphanedFeedback(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Orphaned feedback cleanup completed at %s\n", time.Now().Format(time.RFC3339))
+	return nil
+}
+
+func listUserFeedback(cmd *cobra.Command, args []string) error {
+	userID := args[0]
+	ctx := context.Background()
+
+	// Initialize Firestore client
+	fs, err := internal.NewFirestoreClient(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to initialize Firestore client: %w", err)
+	}
+	defer fs.Close()
+
+	// Get all feedback for the user
+	feedbacks, err := internal.ListUserFeedback(ctx, fs, userID)
+	if err != nil {
+		return fmt.Errorf("failed to list user feedback: %w", err)
+	}
+
+	if len(feedbacks) == 0 {
+		fmt.Printf("No feedback found for user %s\n", userID)
+		return nil
+	}
+
+	// Output results
+	if jsonOutput {
+		jsonBytes, err := json.MarshalIndent(feedbacks, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal feedback to JSON: %w", err)
+		}
+		fmt.Println(string(jsonBytes))
+	} else {
+		fmt.Printf("Feedback for user %s:\n", userID)
+		fmt.Printf("=====================\n")
+		for i, feedback := range feedbacks {
+			fmt.Printf("%d. ID: %s\n", i+1, feedback.ID)
+			fmt.Printf("   Job ID: %s\n", feedback.JobID)
+			fmt.Printf("   Item ID: %s\n", feedback.ItemID)
+			fmt.Printf("   Type: %s\n", feedback.FeedbackType)
+			fmt.Printf("   Liked: %t\n", feedback.Liked)
+			fmt.Printf("   Created: %s\n", feedback.CreatedAt.Format(time.RFC3339))
+			if feedback.ProcessedAt != nil {
+				fmt.Printf("   Processed: %s\n", feedback.ProcessedAt.Format(time.RFC3339))
+			} else {
+				fmt.Printf("   Processed: Not processed\n")
+			}
+			fmt.Printf("   Item Text: %s\n", feedback.ItemText)
+			fmt.Println()
+		}
+		fmt.Printf("Total: %d feedback items\n", len(feedbacks))
+	}
+
+	return nil
+}
+
+func showFeedback(cmd *cobra.Command, args []string) error {
+	feedbackID := args[0]
+	ctx := context.Background()
+
+	// Initialize Firestore client
+	fs, err := internal.NewFirestoreClient(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to initialize Firestore client: %w", err)
+	}
+	defer fs.Close()
+
+	// Get specific feedback
+	feedback, found, err := internal.GetUserFeedback(ctx, fs, feedbackID)
+	if err != nil {
+		return fmt.Errorf("failed to get feedback: %w", err)
+	}
+
+	if !found {
+		fmt.Printf("Feedback with ID %s not found\n", feedbackID)
+		return nil
+	}
+
+	// Output results
+	if jsonOutput {
+		jsonBytes, err := json.MarshalIndent(feedback, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal feedback to JSON: %w", err)
+		}
+		fmt.Println(string(jsonBytes))
+	} else {
+		fmt.Printf("Feedback Details:\n")
+		fmt.Printf("================\n")
+		fmt.Printf("ID: %s\n", feedback.ID)
+		fmt.Printf("User ID: %s\n", feedback.UserID)
+		fmt.Printf("Job ID: %s\n", feedback.JobID)
+		fmt.Printf("Item ID: %s\n", feedback.ItemID)
+		fmt.Printf("Feedback Type: %s\n", feedback.FeedbackType)
+		fmt.Printf("Liked: %t\n", feedback.Liked)
+		fmt.Printf("Created At: %s\n", feedback.CreatedAt.Format(time.RFC3339))
+		if feedback.ProcessedAt != nil {
+			fmt.Printf("Processed At: %s\n", feedback.ProcessedAt.Format(time.RFC3339))
+		} else {
+			fmt.Printf("Processed At: Not processed\n")
+		}
+		fmt.Printf("Item Text: %s\n", feedback.ItemText)
+	}
+
+	return nil
+}
+
+func listJobFeedback(cmd *cobra.Command, args []string) error {
+	jobID := args[0]
+	ctx := context.Background()
+
+	// Initialize Firestore client
+	fs, err := internal.NewFirestoreClient(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to initialize Firestore client: %w", err)
+	}
+	defer fs.Close()
+
+	// Get all unprocessed feedback first to search through it
+	feedbacks, err := internal.GetAllUnprocessedFeedback(ctx, fs, 0)
+	if err != nil {
+		return fmt.Errorf("failed to get all feedback: %w", err)
+	}
+
+	// Filter by job ID
+	var jobFeedbacks []*internal.UserFeedback
+	for _, feedback := range feedbacks {
+		if feedback.JobID == jobID {
+			jobFeedbacks = append(jobFeedbacks, feedback)
+		}
+	}
+
+	if len(jobFeedbacks) == 0 {
+		fmt.Printf("No feedback found for job %s\n", jobID)
+		return nil
+	}
+
+	// Output results
+	if jsonOutput {
+		jsonBytes, err := json.MarshalIndent(jobFeedbacks, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal feedback to JSON: %w", err)
+		}
+		fmt.Println(string(jsonBytes))
+	} else {
+		fmt.Printf("Feedback for job %s:\n", jobID)
+		fmt.Printf("====================\n")
+		for i, feedback := range jobFeedbacks {
+			fmt.Printf("%d. User: %s\n", i+1, feedback.UserID)
+			fmt.Printf("   Item ID: %s\n", feedback.ItemID)
+			fmt.Printf("   Type: %s\n", feedback.FeedbackType)
+			fmt.Printf("   Liked: %t\n", feedback.Liked)
+			fmt.Printf("   Created: %s\n", feedback.CreatedAt.Format(time.RFC3339))
+			if feedback.ProcessedAt != nil {
+				fmt.Printf("   Processed: %s\n", feedback.ProcessedAt.Format(time.RFC3339))
+			} else {
+				fmt.Printf("   Processed: Not processed\n")
+			}
+			fmt.Printf("   Item Text: %s\n", feedback.ItemText)
+			fmt.Println()
+		}
+		fmt.Printf("Total: %d feedback items\n", len(jobFeedbacks))
+	}
+
+	return nil
+}
+
+func showUserStats(cmd *cobra.Command, args []string) error {
+	userID := args[0]
+	ctx := context.Background()
+
+	// Initialize Firestore client
+	fs, err := internal.NewFirestoreClient(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to initialize Firestore client: %w", err)
+	}
+	defer fs.Close()
+
+	// Get user feedback statistics
+	stats, err := internal.GetUserFeedbackStats(ctx, fs, userID)
+	if err != nil {
+		return fmt.Errorf("failed to get user feedback stats: %w", err)
+	}
+
+	// Output results
+	if jsonOutput {
+		jsonBytes, err := json.MarshalIndent(stats, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal stats to JSON: %w", err)
+		}
+		fmt.Println(string(jsonBytes))
+	} else {
+		fmt.Printf("User Feedback Statistics for %s:\n", userID)
+		fmt.Printf("=================================\n")
+		fmt.Printf("Total Feedback: %d\n", stats.TotalFeedback)
+		fmt.Printf("Liked Items: %d\n", stats.LikedItems)
+		fmt.Printf("Disliked Items: %d\n", stats.DislikedItems)
+		fmt.Printf("Unprocessed Count: %d\n", stats.UnprocessedCount)
+		if stats.LastFeedbackAt != nil {
+			fmt.Printf("Last Feedback: %s\n", stats.LastFeedbackAt.Format(time.RFC3339))
+			fmt.Printf("Most Recent Job ID: %s\n", stats.MostRecentJobID)
+		} else {
+			fmt.Printf("Last Feedback: None\n")
+		}
+		
+		if stats.TotalFeedback > 0 {
+			likePercentage := float64(stats.LikedItems) / float64(stats.TotalFeedback) * 100
+			fmt.Printf("Like Percentage: %.1f%%\n", likePercentage)
+		}
+	}
+
+	return nil
+}
+
+func searchFeedbackByDate(cmd *cobra.Command, args []string) error {
+	userID := args[0]
+	startDateStr := args[1]
+	endDateStr := args[2]
+	ctx := context.Background()
+
+	// Parse dates
+	startDate, err := time.Parse("2006-01-02", startDateStr)
+	if err != nil {
+		return fmt.Errorf("invalid start date format (expected YYYY-MM-DD): %w", err)
+	}
+
+	endDate, err := time.Parse("2006-01-02", endDateStr)
+	if err != nil {
+		return fmt.Errorf("invalid end date format (expected YYYY-MM-DD): %w", err)
+	}
+
+	// Set end date to end of day
+	endDate = endDate.Add(24*time.Hour - time.Nanosecond)
+
+	// Initialize Firestore client
+	fs, err := internal.NewFirestoreClient(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to initialize Firestore client: %w", err)
+	}
+	defer fs.Close()
+
+	// Get feedback by date range
+	feedbacks, err := internal.GetUserFeedbackByDateRange(ctx, fs, userID, startDate, endDate)
+	if err != nil {
+		return fmt.Errorf("failed to get feedback by date range: %w", err)
+	}
+
+	if len(feedbacks) == 0 {
+		fmt.Printf("No feedback found for user %s between %s and %s\n", userID, startDateStr, endDateStr)
+		return nil
+	}
+
+	// Output results
+	if jsonOutput {
+		jsonBytes, err := json.MarshalIndent(feedbacks, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal feedback to JSON: %w", err)
+		}
+		fmt.Println(string(jsonBytes))
+	} else {
+		fmt.Printf("Feedback for user %s from %s to %s:\n", userID, startDateStr, endDateStr)
+		fmt.Printf("==========================================\n")
+		for i, feedback := range feedbacks {
+			fmt.Printf("%d. ID: %s\n", i+1, feedback.ID)
+			fmt.Printf("   Job ID: %s\n", feedback.JobID)
+			fmt.Printf("   Item ID: %s\n", feedback.ItemID)
+			fmt.Printf("   Type: %s\n", feedback.FeedbackType)
+			fmt.Printf("   Liked: %t\n", feedback.Liked)
+			fmt.Printf("   Created: %s\n", feedback.CreatedAt.Format(time.RFC3339))
+			if feedback.ProcessedAt != nil {
+				fmt.Printf("   Processed: %s\n", feedback.ProcessedAt.Format(time.RFC3339))
+			} else {
+				fmt.Printf("   Processed: Not processed\n")
+			}
+			fmt.Printf("   Item Text: %s\n", feedback.ItemText)
+			fmt.Println()
+		}
+		fmt.Printf("Total: %d feedback items\n", len(feedbacks))
+	}
+
+	return nil
+}
+
+func exportFeedback(cmd *cobra.Command, args []string) error {
+	userID := args[0]
+	format, _ := cmd.Flags().GetString("format")
+	ctx := context.Background()
+
+	// Initialize Firestore client
+	fs, err := internal.NewFirestoreClient(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to initialize Firestore client: %w", err)
+	}
+	defer fs.Close()
+
+	// Get all feedback for the user
+	feedbacks, err := internal.ListUserFeedback(ctx, fs, userID)
+	if err != nil {
+		return fmt.Errorf("failed to list user feedback: %w", err)
+	}
+
+	if len(feedbacks) == 0 {
+		fmt.Printf("No feedback found for user %s\n", userID)
+		return nil
+	}
+
+	// Export in requested format
+	switch strings.ToLower(format) {
+	case "json":
+		jsonBytes, err := json.MarshalIndent(feedbacks, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal feedback to JSON: %w", err)
+		}
+		fmt.Println(string(jsonBytes))
+
+	case "csv":
+		writer := csv.NewWriter(os.Stdout)
+		defer writer.Flush()
+
+		// Write header
+		header := []string{"ID", "UserID", "JobID", "ItemID", "ItemText", "FeedbackType", "Liked", "CreatedAt", "ProcessedAt"}
+		if err := writer.Write(header); err != nil {
+			return fmt.Errorf("failed to write CSV header: %w", err)
+		}
+
+		// Write data rows
+		for _, feedback := range feedbacks {
+			processedAt := ""
+			if feedback.ProcessedAt != nil {
+				processedAt = feedback.ProcessedAt.Format(time.RFC3339)
+			}
+
+			row := []string{
+				feedback.ID,
+				feedback.UserID,
+				feedback.JobID,
+				feedback.ItemID,
+				feedback.ItemText,
+				string(feedback.FeedbackType),
+				strconv.FormatBool(feedback.Liked),
+				feedback.CreatedAt.Format(time.RFC3339),
+				processedAt,
+			}
+			if err := writer.Write(row); err != nil {
+				return fmt.Errorf("failed to write CSV row: %w", err)
+			}
+		}
+
+	default:
+		return fmt.Errorf("unsupported format: %s (supported: json, csv)", format)
+	}
+
 	return nil
 }

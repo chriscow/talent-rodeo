@@ -10,6 +10,59 @@ go build -o trcli ./cmd/cli
 
 ## Commands
 
+### User Jobs (userjobs)
+
+Manage user jobs in the system.
+
+```bash
+trcli userjobs [command]
+```
+
+**Note:** There may be a command name conflict with two "update" commands. Consider renaming one of them (e.g., "modify" for job status/notes updates).
+
+Available Commands:
+- `list <user-id>`: List all jobs for a specific user
+- `update [user-id] [--all]`: Update user job ratings from JobMatchAnalysis for all users or a specific user
+- `followup <user-id>`: Show or dump follow-up questions for user jobs
+- `update <user-id> --id <job-id>`: Update a specific user job's status or notes (Note: This may conflict with the above command)
+- `delete <user-id> [--id <job-id>] [--prefix <prefix>]`: Delete user job(s)
+
+Flags:
+- `--json`: Output in JSON format (for list command)
+- `--all`: Update ratings for all users (for update command)
+- `--dump`: Dump all follow-up questions, one per line (for followup command)
+- `--id`: Job ID for updates/deletion
+- `--status`: Update job status (viewed, saved, applied, archived)
+- `--notes`: Update notes for job
+- `--prefix`: Prefix for bulk deletion
+
+### Job Details (job-details, job)
+
+Manage job details and listings in the system.
+
+```bash
+trcli job-details [command]
+trcli job [command]  # alias
+```
+
+Available Commands:
+- `listings [job-listing-id] [--all]`: Get a specific job listing or list all job listings
+- `job [job-id] [--all]`: Get a specific job detail or list all job details
+- `delete-listings --prefix <prefix>`: Delete job listings by prefix
+- `delete-details --prefix <prefix>`: Delete job details by prefix
+- `delete-user-jobs --prefix <prefix>`: Delete user jobs by prefix across all users
+- `upsert`: Upsert job details to Pinecone
+- `process-related`: Process related jobs for a specific job detail
+
+Flags:
+- `--all`: List all items instead of a specific one
+- `--limit`: Maximum number of items to return (default: 100)
+- `--offset`: Number of items to skip (default: 0)
+- `--prefix`: Prefix for bulk deletion
+- `--job-id`: Job detail ID to process related jobs for
+- `--criteria-id`: Search criteria ID to associate related jobs with
+- `--dry-run`: Show what would be processed without actually doing it
+
 ### Firestore Tools (fs)
 
 The `fs` namespace contains commands for managing data in the Firestore database.
@@ -36,32 +89,6 @@ Flags:
 - `--id`: User ID for deletion
 - `--email`: User email for deletion
 - `--prefix`: Prefix for bulk deletion
-
-#### Jobs
-
-```bash
-trcli fs jobs [command]
-```
-
-Available Commands:
-- `list`: List jobs for a specific user
-- `update`: Update job status or notes
-- `delete`: Delete a job by ID or prefix
-- `listings`: List all job listings
-- `details`: List all job details
-- `delete-listings`: Delete job listings by prefix
-- `delete-details`: Delete job details by prefix
-- `delete-user-jobs`: Delete user jobs by prefix across all users
-
-Flags:
-- `--user`: User ID (required for user-specific operations)
-- `--id`: Job ID for updates/deletion
-- `--status`: Update job status (viewed, saved, applied, archived)
-- `--notes`: Update notes for job
-- `--prefix`: Prefix for bulk deletion
-- `--limit`: Maximum number of items to return (default: 100)
-- `--offset`: Number of items to skip (default: 0)
-- `--pretty`: Pretty print JSON output
 
 #### Webhooks
 
@@ -146,6 +173,72 @@ Displays statistics about nudge emails that have already been sent, including:
 
 ## Examples
 
+### User Jobs Examples
+
+1. List all jobs for a user:
+```bash
+trcli userjobs list user123 --json
+```
+
+2. Update job ratings for all users:
+```bash
+trcli userjobs update --all
+```
+
+3. Update job ratings for a specific user:
+```bash
+trcli userjobs update user123
+```
+
+4. Get follow-up questions for a user:
+```bash
+trcli userjobs followup user123 --dump
+```
+
+5. Update a specific job's status (Note: May conflict with rating update command):
+```bash
+trcli userjobs update user123 --id job456 --status applied
+```
+
+6. Delete a specific job:
+```bash
+trcli userjobs delete user123 --id job456
+```
+
+7. Delete jobs by prefix:
+```bash
+trcli userjobs delete user123 --prefix "test-"
+```
+
+### Job Details Examples
+
+1. List all job listings:
+```bash
+trcli job-details listings --all --limit 50
+```
+
+2. Get a specific job listing:
+```bash
+trcli job-details listings linkedin123456
+```
+
+3. List all job details:
+```bash
+trcli job-details job --all --limit 50
+```
+
+4. Get a specific job detail:
+```bash
+trcli job-details job linkedin123456
+```
+
+5. Delete job listings by prefix:
+```bash
+trcli job-details delete-listings --prefix "test-"
+```
+
+### Firestore Tools Examples
+
 1. List all users with pretty printing:
 ```bash
 trcli fs users list --pretty
@@ -156,22 +249,12 @@ trcli fs users list --pretty
 trcli fs users delete --id <user-id>
 ```
 
-3. List jobs for a user:
-```bash
-trcli fs jobs list --user <user-id> --pretty
-```
-
-4. Update job status:
-```bash
-trcli fs jobs update --user <user-id> --id <job-id> --status viewed
-```
-
-5. Generate test data:
+3. Generate test data:
 ```bash
 trcli fs test-data --users 3 --jobs 5 --prefix "dev-"
 ```
 
-6. Delete test data:
+4. Delete test data:
 ```bash
 trcli fs users delete --prefix "dev-"
 ```

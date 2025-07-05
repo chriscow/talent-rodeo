@@ -43,14 +43,6 @@ const (
 	ExperienceDirector   ExperienceLevel = "director"
 )
 
-// JobProvider interface defines methods that must be implemented by all job providers
-type JobProvider interface {
-	Name() string
-	Validate(ctx context.Context) error
-	SearchJobListings(ctx context.Context, criteria internal.SearchCriteria) ([]internal.JobListing, error)
-	GetJobDetails(ctx context.Context, userID *string, jobID string) (*internal.JobDetail, error)
-}
-
 type JobCache interface {
 	GetJobListings(ctx context.Context, key string) ([]internal.JobListing, bool)
 	GetJobDetail(ctx context.Context, key string) (*internal.JobDetail, bool)
