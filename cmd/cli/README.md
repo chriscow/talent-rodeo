@@ -1,6 +1,6 @@
 # Talent Rodeo CLI
 
-A command line interface for Talent Rodeo operations.
+A comprehensive command line interface for Talent Rodeo operations.
 
 ## Building
 
@@ -8,269 +8,447 @@ A command line interface for Talent Rodeo operations.
 go build -o trcli ./cmd/cli
 ```
 
-## Commands
+## Global Flags
 
-### User Jobs (userjobs)
+- `--json`: Output in JSON format (available for most commands)
+- `--env <file>`: Path to environment file (default: ".env")
+- `--verbose`: Enable verbose output
 
-Manage user jobs in the system.
+## Commands Overview
+
+### User Jobs (`userjobs`)
+
+Manage user jobs, which are job records assigned to specific users with ratings, status, and notes.
 
 ```bash
 trcli userjobs [command]
 ```
 
-**Note:** There may be a command name conflict with two "update" commands. Consider renaming one of them (e.g., "modify" for job status/notes updates).
-
-Available Commands:
+**Available Commands:**
 - `list <user-id>`: List all jobs for a specific user
-- `update [user-id] [--all]`: Update user job ratings from JobMatchAnalysis for all users or a specific user
+- `update [user-id] [--all]`: Update user job ratings from JobMatchAnalysis
 - `followup <user-id>`: Show or dump follow-up questions for user jobs
-- `update <user-id> --id <job-id>`: Update a specific user job's status or notes (Note: This may conflict with the above command)
+- `update <user-id> --id <job-id>`: Update a specific user job's status or notes
 - `delete <user-id> [--id <job-id>] [--prefix <prefix>]`: Delete user job(s)
 
-Flags:
-- `--json`: Output in JSON format (for list command)
-- `--all`: Update ratings for all users (for update command)
-- `--dump`: Dump all follow-up questions, one per line (for followup command)
+**Key Flags:**
+- `--json`: Output in JSON format
+- `--all`: Update ratings for all users
+- `--dump`: Dump all follow-up questions, one per line
 - `--id`: Job ID for updates/deletion
-- `--status`: Update job status (viewed, saved, applied, archived)
+- `--status`: Update job status (new, saved, applied, archived)
 - `--notes`: Update notes for job
 - `--prefix`: Prefix for bulk deletion
 
-### Job Details (job-details, job)
+### Job Details (`job-details`, `job`)
 
-Manage job details and listings in the system.
+Manage job details, job listings, and process related jobs (SimilarJobs and PeopleAlsoViewed).
 
 ```bash
 trcli job-details [command]
 trcli job [command]  # alias
 ```
 
-Available Commands:
-- `listings [job-listing-id] [--all]`: Get a specific job listing or list all job listings
-- `job [job-id] [--all]`: Get a specific job detail or list all job details
+**Available Commands:**
+- `listings [job-listing-id] [--all]`: View job listings (basic job info from search results)
+- `job [job-id] [--all]`: View job details (comprehensive job data including SimilarJobs and PeopleAlsoViewed)
 - `delete-listings --prefix <prefix>`: Delete job listings by prefix
 - `delete-details --prefix <prefix>`: Delete job details by prefix
 - `delete-user-jobs --prefix <prefix>`: Delete user jobs by prefix across all users
-- `upsert`: Upsert job details to Pinecone
-- `process-related`: Process related jobs for a specific job detail
+- `upsert`: Upsert job details to vector database (Pinecone)
+- `process-related`: **Process SimilarJobs and PeopleAlsoViewed for a job detail**
 
-Flags:
+**Key Flags:**
 - `--all`: List all items instead of a specific one
 - `--limit`: Maximum number of items to return (default: 100)
 - `--offset`: Number of items to skip (default: 0)
 - `--prefix`: Prefix for bulk deletion
-- `--job-id`: Job detail ID to process related jobs for
-- `--criteria-id`: Search criteria ID to associate related jobs with
+- `--user`, `-u`: User ID to associate jobs with (for process-related)
+- `--job-id`, `-j`: Job detail ID to process related jobs for
+- `--criteria-id`, `-c`: Search criteria ID to associate related jobs with
 - `--dry-run`: Show what would be processed without actually doing it
 
-### Firestore Tools (fs)
+### Users (`users`)
 
-The `fs` namespace contains commands for managing data in the Firestore database.
-
-```bash
-trcli fs [command]
-```
-
-#### Users
+Manage users in the system.
 
 ```bash
-trcli fs users [command]
+trcli users [command]
 ```
 
-Available Commands:
+**Available Commands:**
 - `list`: List all users
+- `create`: Create a new user
 - `delete`: Delete a user by ID, email, or prefix
-- `list-geoids`: List all geographic location IDs
+- `import`: Import users from a file
+- `subscribe`: Subscribe/unsubscribe user to search criteria
+- `subscription`: Manage user subscriptions
+- `timezone`: Update user timezone
 
-Flags:
-- `--pretty`: Pretty print JSON output
+**Key Flags:**
 - `--limit`: Maximum number of users to return (default: 100)
 - `--offset`: Number of users to skip (default: 0)
-- `--id`: User ID for deletion
-- `--email`: User email for deletion
-- `--prefix`: Prefix for bulk deletion
+- `--user-id`, `--email`, `--prefix`: User identification options
+- `--name`, `--phone`: User creation options
 
-#### Webhooks
+### Search (`search`)
 
-```bash
-trcli fs webhooks [command]
-```
-
-Available Commands:
-- `list`: List all webhook data
-- `delete`: Delete webhook(s) by ID or prefix
-
-Flags:
-- `--pretty`: Pretty print JSON output
-- `--id-only`: Only output document IDs (for list command)
-- `--id`: Webhook ID to delete
-- `--prefix`: Delete all webhooks with this prefix
-- `--all`: Delete all webhooks in the collection
-- `--force`: Skip confirmation prompt when using --all
-
-#### Test Data
+Manage job searches and search criteria.
 
 ```bash
-trcli fs test-data
+trcli search [command]
 ```
 
-Generates test data for development and testing.
+**Available Commands:**
+- `queue --criteria-id <criteria-id>`: Queue a new job search with saved criteria
 
-Flags:
-- `--users`: Number of test users to create (default: 5)
-- `--jobs`: Number of test jobs to create per user (default: 10)
-- `--prefix`: Prefix for test data IDs (default: "test-")
+**Key Flags:**
+- `--criteria-id`, `-c`: ID of saved search criteria to use
 
-### Nudge Tools
+### Search Criteria (`criteria`)
 
-The `nudge` namespace contains commands for managing and analyzing nudge emails.
+Manage search criteria for job searches.
+
+```bash
+trcli criteria [command]
+```
+
+**Available Commands:**
+- `list`: List all search criteria
+- `create`: Create new search criteria
+- `update`: Update existing search criteria
+- `delete`: Delete search criteria
+
+### Feedback (`feedback`)
+
+Manage and analyze user feedback on job listings.
+
+```bash
+trcli feedback [command]
+```
+
+**Available Commands:**
+- `process`: Process all unprocessed user feedback
+- `process-user <user-id>`: Process feedback for a specific user
+- `stats`: Show feedback statistics
+- `cleanup-orphaned`: Clean up feedback for deleted users
+- `list-user <user-id>`: List all feedback for a specific user
+- `show <feedback-id>`: Show detailed feedback information
+- `list-job <job-id>`: List all feedback for a specific job
+- `user-stats <user-id>`: Show comprehensive user feedback statistics
+- `search-date <user-id> <start-date> <end-date>`: Search feedback by date range
+- `export <user-id>`: Export feedback data for analysis
+
+**Key Flags:**
+- `--format`: Export format (json or csv)
+
+### Nudge (`nudge`)
+
+Manage nudge emails and email campaigns.
 
 ```bash
 trcli nudge [command]
 ```
 
-Available Commands:
+**Available Commands:**
 - `list`: List predicted nudges for users who will receive nudges in the future
 - `stats`: Show statistics about nudge emails that have been sent
+- `test-email`: Generate test emails for preview
 
-#### List Predicted Nudges
+**Key Flags:**
+- `--type`: Email type (trial_welcome, trial_expectations, trial_engagement, trial_conversion, no_resume, no_call, five_star_matches)
+- `--user-id`: User ID for real data
+- `--test-data`: Use synthetic test data
+- `--format`: Output format (plain, html, both, json)
 
-```bash
-trcli nudge list
-```
+### Appointments (`appointment`)
 
-Analyzes all users and predicts when they will receive nudge emails based on their current state and the nudge system settings. The output shows:
-
-- **ID**: First 5 characters of the user ID
-- **Name**: User's name (truncated if long)
-- **Email**: User's email address (truncated if long)
-- **Sub Days**: Days remaining until subscription expires (or "EXPIRED" if past due, "N/A" if no subscription)
-- **Nudge Type**: The type of nudge they'll receive next
-- **When**: Date and time the nudge will be sent
-- **Days**: Number of days until the nudge is sent
-- **Reason**: Brief explanation of why they're eligible
-
-The prediction logic follows the same rules as the actual nudge processor:
-1. **No Resume**: Users who signed up but haven't uploaded a resume (after 2 days)
-2. **No Call**: Users who uploaded a resume but haven't scheduled a call (after 3 days)
-3. **Five Star Matches**: Users with actual 5-star job matches that haven't been sent (after 2 days)
-4. **Trial Emails**: Users in trial period receiving sequence emails (Days 1, 2, 3, 6)
-
-The system verifies that five-star match users actually have high-scoring jobs (≥4.5 rating) created within the last 90 days that haven't been included in previous nudges. This ensures only users who will actually receive emails are shown.
-
-Factors in rate limiting (7 days between nudges), per-type limits, and user activity restrictions.
-
-#### Show Nudge Statistics
+Manage user appointments and call processing.
 
 ```bash
-trcli nudge stats
+trcli appointment [command]
 ```
 
-Displays statistics about nudge emails that have already been sent, including:
-- Total users who have received nudges
-- Count of each nudge type sent
-- Breakdown by trial email sequence
+**Available Commands:**
+- `list`: List appointments
+- `create --user <user-id>`: Create appointment for a user
+- `latest`: Show latest appointment
+- `reprocess`: Reprocess a completed appointment
+- `send-recap`: Send recap email for an appointment
+
+**Key Flags:**
+- `--user`, `-u`: User ID
+- `--appointment`, `-a`: Appointment ID
+- `--completed`: Only show completed appointments
+- `--send-recap`: Send recap email after reprocessing
+- `--all`: Process all users
+
+### Resume (`resume`)
+
+Manage user resumes.
+
+```bash
+trcli resume [command]
+```
+
+**Available Commands:**
+- `create <user-id> <resume-file>`: Create a resume for a user
+- `list <user-id>`: List resumes for a user
+- `annotate`: Annotate a resume with AI analysis
+- `delete`: Delete a resume
+
+**Key Flags:**
+- `--user`, `-u`: User ID
+- `--resume`, `-r`: Resume ID
+
+### Payments (`payments`)
+
+Manage payments and billing.
+
+```bash
+trcli payments [command]
+```
+
+**Available Commands:**
+- `list`: List payments
+- `webhooks`: List processed webhooks
+- `upgrade`: Upgrade user subscription
+- `reset`: Reset user subscription
+
+### Pinecone (`pinecone`)
+
+Manage vector database operations.
+
+```bash
+trcli pinecone [command]
+```
+
+**Available Commands:**
+- `delete-all`: Delete all records from vector database
+- `similarity`: Search for jobs using cosine similarity
+
+**Key Flags:**
+- `--dense`: Use dense index
+- `--sparse`: Use sparse index
+- `--namespace`: Pinecone namespace
+- `--user`: User ID for similarity search
+
+### Generate (`generate`)
+
+Generate test data and AI content.
+
+```bash
+trcli generate [command]
+```
+
+**Available Commands:**
+- `job-desc`: Generate job descriptions
+- `steering-query`: Generate steering queries
+- `statement`: Generate user statements
+
+### Webhooks (`webhooks`)
+
+Manage webhook data.
+
+```bash
+trcli webhooks [command]
+```
+
+**Available Commands:**
+- `list`: List all webhook data
+- `delete`: Delete webhook(s) by ID or prefix
+
+**Key Flags:**
+- `--id`: Webhook ID
+- `--prefix`: Webhook prefix for bulk operations
+- `--all`: Delete all webhooks
+- `--force`: Skip confirmation prompts
+
+### Gmail (`gmail`)
+
+Manage Gmail integration.
+
+```bash
+trcli gmail [command]
+```
+
+**Available Commands:**
+- `setup`: Setup Gmail OAuth
+- `test`: Test Gmail connectivity
+- `list`: List Gmail messages
+
+### Geographic IDs (`geoids`)
+
+Manage geographic location IDs.
+
+```bash
+trcli geoids [command]
+```
+
+**Available Commands:**
+- `list`: List all geographic location IDs
+- `search`: Search for geographic IDs
+
+### Test Data (`test-data`)
+
+Generate test data for development.
+
+```bash
+trcli test-data
+```
+
+**Key Flags:**
+- `--users`: Number of test users to create (default: 5)
+- `--jobs`: Number of test jobs to create per user (default: 10)
+- `--prefix`: Prefix for test data IDs (default: "test-")
 
 ## Examples
 
-### User Jobs Examples
+### Processing SimilarJobs and PeopleAlsoViewed
 
-1. List all jobs for a user:
 ```bash
+# Process related jobs for a specific job detail
+trcli job process-related --user user123 --job-id scrapingdog:12345 --criteria-id criteria456
+
+# Dry run to see what would be processed
+trcli job process-related --user user123 --job-id scrapingdog:12345 --criteria-id criteria456 --dry-run
+```
+
+### User Jobs Management
+
+```bash
+# List all jobs for a user
 trcli userjobs list user123 --json
-```
 
-2. Update job ratings for all users:
-```bash
+# Update job ratings for all users
 trcli userjobs update --all
-```
 
-3. Update job ratings for a specific user:
-```bash
+# Update job ratings for a specific user
 trcli userjobs update user123
-```
 
-4. Get follow-up questions for a user:
-```bash
+# Get follow-up questions for a user
 trcli userjobs followup user123 --dump
-```
 
-5. Update a specific job's status (Note: May conflict with rating update command):
-```bash
+# Update a specific job's status
 trcli userjobs update user123 --id job456 --status applied
-```
 
-6. Delete a specific job:
-```bash
+# Delete a specific job
 trcli userjobs delete user123 --id job456
-```
 
-7. Delete jobs by prefix:
-```bash
+# Delete jobs by prefix
 trcli userjobs delete user123 --prefix "test-"
 ```
 
-### Job Details Examples
+### Job Details Management
 
-1. List all job listings:
 ```bash
-trcli job-details listings --all --limit 50
+# List job details with SimilarJobs and PeopleAlsoViewed
+trcli job job --all --limit 20
+
+# View a specific job detail
+trcli job job scrapingdog:12345 --json
+
+# List basic job listings
+trcli job listings --all --limit 50
+
+# Delete test job data
+trcli job delete-details --prefix "test-"
 ```
 
-2. Get a specific job listing:
+### User Management
+
 ```bash
-trcli job-details listings linkedin123456
+# List all users
+trcli users list --json
+
+# Create a new user
+trcli users create --name "John Doe" --email "john@example.com"
+
+# Delete a user by ID
+trcli users delete --user-id user123
+
+# Generate test data
+trcli test-data --users 3 --jobs 5 --prefix "dev-"
 ```
 
-3. List all job details:
-```bash
-trcli job-details job --all --limit 50
-```
+### Search Operations
 
-4. Get a specific job detail:
 ```bash
-trcli job-details job linkedin123456
-```
+# Queue a job search with saved criteria
+trcli search queue --criteria-id golang-developer-103644278
 
-5. Delete job listings by prefix:
-```bash
-trcli job-details delete-listings --prefix "test-"
-```
-
-### Firestore Tools Examples
-
-1. List all users with pretty printing:
-```bash
-trcli fs users list --pretty
-```
-
-2. Delete a user by ID:
-```bash
-trcli fs users delete --id <user-id>
-```
-
-3. Generate test data:
-```bash
-trcli fs test-data --users 3 --jobs 5 --prefix "dev-"
-```
-
-4. Delete test data:
-```bash
-trcli fs users delete --prefix "dev-"
-```
-
-7. List predicted nudges:
-```bash
+# List predicted nudges
 trcli nudge list
+
+# Show nudge statistics
+trcli nudge stats
 ```
 
-8. Show nudge statistics:
+### Feedback Analysis
+
 ```bash
-trcli nudge stats
+# Process all unprocessed feedback
+trcli feedback process
+
+# Show feedback statistics
+trcli feedback stats
+
+# Export user feedback data
+trcli feedback export user123 --format csv
 ```
 
 ## Environment Variables
 
-The CLI requires proper configuration of Firebase credentials. Make sure either:
-- A `.env` file exists in the project root with `FIREBASE_CREDENTIALS`
-- The `FIREBASE_CREDENTIALS` environment variable is set in your system 
+The CLI requires proper configuration of environment variables:
+
+- `FIREBASE_CREDENTIALS`: Firebase service account credentials
+- `SCRAPINGDOG_API_KEY`: ScrapingDog API key for job fetching
+- `PINECONE_API_KEY`: Pinecone API key for vector operations
+- `OPENAI_API_KEY`: OpenAI API key for AI operations
+
+Make sure your `.env` file contains these variables, or set them in your system environment.
+
+## Common Workflows
+
+### 1. Processing Related Jobs Workflow
+
+```bash
+# 1. Find a job with good ratings
+trcli job job --all --limit 20 | grep -A 5 -B 5 "scrapingdog:"
+
+# 2. Process its related jobs
+trcli job process-related --user user123 --job-id scrapingdog:12345 --criteria-id criteria456
+
+# 3. Check the results
+trcli userjobs list user123 --json
+```
+
+### 2. User Feedback Analysis Workflow
+
+```bash
+# 1. Process all feedback
+trcli feedback process
+
+# 2. Show statistics
+trcli feedback stats
+
+# 3. Analyze specific user
+trcli feedback user-stats user123
+
+# 4. Export data for analysis
+trcli feedback export user123 --format csv > user123_feedback.csv
+```
+
+### 3. Data Cleanup Workflow
+
+```bash
+# 1. Delete test job data
+trcli job delete-details --prefix "test-"
+trcli job delete-listings --prefix "test-"
+
+# 2. Clean up test user jobs
+trcli job delete-user-jobs --prefix "test-"
+
+# 3. Remove test users
+trcli users delete --prefix "test-"
+``` 

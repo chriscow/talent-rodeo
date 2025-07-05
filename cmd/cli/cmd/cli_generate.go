@@ -39,28 +39,39 @@ func init() {
 }
 
 var generateCmd = &cobra.Command{
-	Use:     "generate",
-	Short:   "Use an LLM to generate various artifacts",
-	Long:    `Use an LLM to generate various artifacts`,
+	Use:   "generate",
+	Short: "Generate AI content from user data and transcripts",
+	Long: `Generate various AI-powered content using LLMs and user data.
+
+This command group uses large language models to generate content based on
+user resumes, appointment transcripts, and other data. Useful for creating
+test data, analyzing user preferences, and generating personalized content.
+
+Generated content includes:
+- Job descriptions based on user qualifications
+- Steering queries to improve job matching
+- User statements summarizing preferences`,
 	Aliases: []string{"gen"},
 }
 
 var genJobDescCmd = &cobra.Command{
-	Use:   "job-desc --user <userID> --appointment <appointmentID> --resume <resumeID>",
-	Short: "Generate a job description for a completed appointment using a resume.",
-	Long: `Generate a fictitious job description for a completed appointment.
+	Use:   "job-desc --user <user-id> --appointment <appointment-id> --resume <resume-id>",
+	Short: "Generate a fictitious job description tailored to a user",
+	Long: `Generate a fictitious job description based on a user's resume and appointment data.
 
-This command uses a user's resume and appointment data to generate a job description using an LLM.
-All three flags --user, --appointment, and --resume are required.
+This command uses AI to create a realistic job description that matches the
+user's qualifications and preferences discussed in their appointment. Useful
+for testing, demos, or creating sample job postings.
 
-Note: The appointment must have status 'completed'.`,
-	Example: `
-  # Generate a job description using long flags
-  go run ./cmd/cli generate job-desc --user 1234abcd --appointment abcd5678 --resume 9876wxyz
+The appointment must have "completed" status for this command to work.
 
-  # Generate a job description using short flags
-  go run ./cmd/cli generate job-desc -u 1234abcd -a abcd5678 -r 9876wxyz
-    `,
+Required flags:
+  --user, -u: User ID who owns the resume and appointment
+  --appointment, -a: Completed appointment ID to base description on
+  --resume, -r: Resume ID to use for qualification matching
+
+Examples:
+  trcli generate job-desc --user user123 --appointment appt456 --resume resume789`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if userID == "" {
 			log.Fatalf("--user flag is required")
@@ -113,17 +124,31 @@ Note: The appointment must have status 'completed'.`,
 }
 
 var genSteeringQueryCmd = &cobra.Command{
-	Use:     "steering-query --user <userID> --appointment <appointmentID> [--save]",
+	Use:     "steering-query [--user <user-id> --appointment <appointment-id>] [--all] [--save]",
 	Aliases: []string{"query"},
-	Short:   "Generate a steering query for a completed appointment.",
-	Long:    `Generate a steering query for a completed appointment.`,
-	Example: `
-  # Generate a steering query using long flags
-  go run ./cmd/cli generate steering-query --user 1234abcd --appointment abcd5678 --save
+	Short:   "Generate steering queries to improve job matching for users",
+	Long: `Generate steering queries based on appointment transcripts and resumes.
 
-  # Generate a steering query using short flags
-  go run ./cmd/cli generate steering-query -u 1234abcd -a abcd5678 -s
-    `,
+Steering queries are AI-generated search terms and preferences that improve
+job matching accuracy. They're derived from what users say they want during
+their appointment calls and their resume content.
+
+Options:
+  Single user: --user + --appointment to generate for specific appointment
+  All users: --all to generate for all users' latest completed appointments
+  
+Optional flags:
+  --save: Save the generated steering query to the database
+
+Examples:
+  # Generate steering query for specific user/appointment
+  trcli generate steering-query --user user123 --appointment appt456
+  
+  # Generate and save to database
+  trcli generate steering-query --user user123 --appointment appt456 --save
+  
+  # Generate steering queries for all users (bulk operation)
+  trcli generate steering-query --all --save`,
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		fs, err := internal.NewFirestoreClient(ctx)
@@ -237,9 +262,18 @@ var genSteeringQueryCmd = &cobra.Command{
 }
 
 var genStatementCmd = &cobra.Command{
-	Use:   "statement --user <userID>",
-	Short: "Generate a user statement for the latest completed appointment.",
-	Long:  `Generate a user statement for the latest completed appointment for a user using the transcript and LLM.`,
+	Use:   "statement --user <user-id>",
+	Short: "Generate a user statement summarizing their preferences",
+	Long: `Generate a user statement from their latest completed appointment transcript.
+
+The user statement is an AI-generated summary of what the user said about
+their job preferences, career goals, and requirements during their call.
+This statement is used to improve job matching and personalization.
+
+The statement is automatically saved to the user's profile.
+
+Examples:
+  trcli generate statement --user user123            # Generate from latest appointment`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if userID == "" {
 			log.Fatalf("--user flag is required")

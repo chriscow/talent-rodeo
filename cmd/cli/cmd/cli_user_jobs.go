@@ -13,15 +13,34 @@ import (
 // UserJobs update command
 var userJobsCmd = &cobra.Command{
 	Use:   "userjobs",
-	Short: "Manage user jobs",
-	Long:  `UserJobs command allows you to manage user jobs in the system`,
+	Short: "Manage user jobs (jobs assigned to users)",
+	Long: `Manage user jobs, which are job records assigned to specific users.
+	
+User jobs contain job details plus user-specific metadata like ratings, status,
+and notes. This command group allows you to:
+- List jobs for a user
+- Update job ratings and metadata
+- Delete user jobs
+- View follow-up questions for jobs`,
 }
 
 var userJobsUpdateCmd = &cobra.Command{
 	Use:   "update [user-id] [--all]",
-	Short: "Update user job ratings from JobMatchAnalysis",
-	Long:  `Update the top-level Rating field of user jobs from JobMatchAnalysis.Rating.NumericRating for all users or a specific user`,
-	Args:  cobra.RangeArgs(0, 1),
+	Short: "Update user job ratings from AI match analysis",
+	Long: `Update the top-level Rating field of user jobs from JobMatchAnalysis results.
+
+This command syncs the Rating field (1-5 stars) from the JobMatchAnalysis.Rating.NumericRating
+field for better performance and easier querying. Run this after changes to the
+job matching algorithm or when ratings seem out of sync.
+
+Options:
+  --all: Update ratings for all users in the system (bulk operation)
+  user-id: Update ratings for a specific user only
+
+Examples:
+  trcli userjobs update user123                       # Update specific user
+  trcli userjobs update --all                         # Update all users (bulk)`,
+	Args: cobra.RangeArgs(0, 1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 		fs, err := internal.NewFirestoreClient(ctx)
@@ -99,10 +118,18 @@ var userJobsUpdateCmd = &cobra.Command{
 }
 
 var userJobsFollowupCmd = &cobra.Command{
-	Use:   "followup <user-id>",
-	Short: "Show or dump follow-up questions for user jobs",
-	Long:  `Dump all follow-up questions from JobMatchAnalysis for all jobs of a user, one per line`,
-	Args:  cobra.ExactArgs(1),
+	Use:   "followup <user-id> [--dump]",
+	Short: "Show or export follow-up questions from job matches",
+	Long: `Display follow-up questions generated from JobMatchAnalysis for user jobs.
+
+Follow-up questions are AI-generated conversation starters based on job matches
+that recruiters can use during appointments. They help personalize conversations
+and explore specific aspects of job opportunities.
+
+Examples:
+  trcli userjobs followup user123                     # Show summary of questions
+  trcli userjobs followup user123 --dump              # Export all questions, one per line`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 		userID := args[0]
@@ -134,13 +161,16 @@ var userJobsFollowupCmd = &cobra.Command{
 
 var listUserJobsCmd = &cobra.Command{
 	Use:   "list <user-id>",
-	Short: "List user jobs",
-	Long: `List all user jobs for a user
+	Short: "List all jobs assigned to a user with status and ratings",
+	Long: `List all jobs in a user's collection with their status and metadata.
 
-	Example:
-		trcli userjobs list --json [user-id]
-		trcli userjobs list [user-id]
-	`,
+Shows job IDs, statuses (new, saved, applied, archived), titles, and ratings.
+This gives an overview of all jobs the user has received and their current
+status in the job application process.
+
+Examples:
+  trcli userjobs list user123                         # Show jobs with basic info
+  trcli userjobs list user123 --json                  # Get full job details in JSON`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		userID := args[0]
@@ -211,10 +241,31 @@ var listUserJobsCmd = &cobra.Command{
 }
 
 var updateUserJobCmd = &cobra.Command{
-	Use:   "update <user-id> --id <job-id>",
-	Short: "Update a user job",
-	Long:  `Update a user job's status or notes`,
-	Args:  cobra.ExactArgs(1),
+	Use:   "update <user-id> --id <job-id> [--status <status>] [--notes <notes>]",
+	Short: "Update status or notes for a specific user job",
+	Long: `Update the status or notes for a specific job in a user's collection.
+
+This allows manual updates to job status (tracking application progress) or
+adding notes for follow-up. Useful for managing the job application pipeline
+and tracking user interactions with specific jobs.
+
+Required flags:
+  --id, -i: Job ID to update
+
+Optional flags:
+  --status, -s: New status (new, saved, applied, archived)
+  --notes, -n: Notes to add or update
+
+Examples:
+  # Update job status to applied
+  trcli userjobs update user123 --id job456 --status applied
+  
+  # Add notes to a job
+  trcli userjobs update user123 --id job456 --notes "Great company culture"
+  
+  # Update both status and notes
+  trcli userjobs update user123 --id job456 --status applied --notes "Applied via company website"`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		userID := args[0]
 		jobID, _ := cmd.Flags().GetString("id")
@@ -259,17 +310,36 @@ var updateUserJobCmd = &cobra.Command{
 }
 
 var deleteUserJobCmd = &cobra.Command{
-	Use:   "delete <user-id> [--id <job-id>] [--prefix <prefix>]",
-	Short: "Delete user job(s)",
-	Long:  `Delete user job(s) by ID or prefix`,
-	Args:  cobra.ExactArgs(1),
+	Use:   "delete <user-id> [--id <job-id> | --prefix <prefix> | --all]",
+	Short: "Delete jobs from a user's collection",
+	Long: `Delete one or more jobs from a user's job collection.
+
+WARNING: This permanently removes job records from the user's collection.
+The jobs may be re-added if they match future searches.
+
+Deletion options (choose one):
+  --id, -i: Delete specific job by ID
+  --prefix, -p: Delete all jobs whose IDs start with prefix (BULK)
+  --all: Delete ALL jobs for the user (DANGEROUS)
+
+Examples:
+  # Delete specific job
+  trcli userjobs delete user123 --id job456
+  
+  # Delete test jobs
+  trcli userjobs delete user123 --prefix "test-"
+  
+  # Delete all jobs for user (careful!)
+  trcli userjobs delete user123 --all`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		userID := args[0]
 		jobID, _ := cmd.Flags().GetString("id")
 		prefix, _ := cmd.Flags().GetString("prefix")
+		all, _ := cmd.Flags().GetBool("all")
 
-		if jobID == "" && prefix == "" {
-			return fmt.Errorf("must specify either --id or --prefix")
+		if jobID == "" && prefix == "" && !all {
+			return fmt.Errorf("must specify either --id, --prefix, or --all")
 		}
 
 		ctx := context.Background()
@@ -278,6 +348,24 @@ var deleteUserJobCmd = &cobra.Command{
 			return fmt.Errorf("failed to create Firestore client: %w", err)
 		}
 		defer fs.Close()
+
+		if all {
+			// Delete all jobs for the user
+			jobs, err := internal.ListUserJobs(ctx, fs, userID)
+			if err != nil {
+				return fmt.Errorf("failed to get user jobs: %w", err)
+			}
+
+			deleted := 0
+			for _, job := range jobs {
+				if err := internal.DeleteUserJob(ctx, fs, userID, job.ID); err != nil {
+					return fmt.Errorf("failed to delete job %s: %w", job.ID, err)
+				}
+				deleted++
+			}
+			fmt.Printf("Deleted %d jobs for user %s\n", deleted, userID)
+			return nil
+		}
 
 		if prefix != "" {
 			// Delete all jobs with prefix

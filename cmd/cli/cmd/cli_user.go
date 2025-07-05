@@ -17,9 +17,23 @@ var unsubscribe bool
 var extendDays int
 
 var userSubscribeCmd = &cobra.Command{
-	Use:   "subscribe",
-	Short: "Subscribe or unsubscribe a user to a search criteria",
-	Long:  `Subscribe a user to a search criteria, or unsubscribe if --unsubscribe is set`,
+	Use:   "subscribe --user <user-id> --criteria <criteria-id> [--unsubscribe]",
+	Short: "Subscribe or unsubscribe a user to job search criteria",
+	Long: `Subscribe a user to job search criteria to receive job matches, or unsubscribe them.
+
+When subscribed, users receive job matches based on the search criteria.
+This creates a subscription record that links the user to ongoing job searches.
+
+Required flags:
+  --user, -u: User ID to subscribe/unsubscribe
+  --criteria, -c: Search criteria ID to subscribe to
+
+Examples:
+  # Subscribe user to search criteria
+  trcli users subscribe --user user123 --criteria golang-remote
+  
+  # Unsubscribe user from search criteria  
+  trcli users subscribe --user user123 --criteria golang-remote --unsubscribe`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 		fs, err := internal.NewFirestoreClient(ctx)
@@ -53,10 +67,18 @@ var userSubscribeCmd = &cobra.Command{
 }
 
 var userSubscriptionCmd = &cobra.Command{
-	Use:   "subscription [user-id]",
-	Short: "Manage user subscription settings",
-	Long:  `View current subscription status or extend a user's subscription end date by the specified number of days from today`,
-	Args:  cobra.ExactArgs(1),
+	Use:   "subscription <user-id> [--extend <days>]",
+	Short: "View or extend user subscription settings",
+	Long: `View current subscription status or extend a user's subscription.
+
+Shows subscription tier, end date, and days remaining. Can extend subscription
+by a specified number of days from either today (if expired) or from current
+end date (if still active).
+
+Examples:
+  trcli users subscription user123                     # View subscription status
+  trcli users subscription user123 --extend 30        # Extend by 30 days`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 		fs, err := internal.NewFirestoreClient(ctx)
@@ -129,10 +151,17 @@ var userSubscriptionCmd = &cobra.Command{
 }
 
 var userTimezoneCmd = &cobra.Command{
-	Use:   "timezone [user-id]",
-	Short: "Manage user timezone settings",
-	Long:  `View current timezone or set a new timezone for a user`,
-	Args:  cobra.ExactArgs(1),
+	Use:   "timezone <user-id> [--set <timezone>]",
+	Short: "View or update user timezone settings",
+	Long: `View current timezone or set a new timezone for a user.
+
+Timezone affects when nudge emails and other time-sensitive features are
+triggered. Use standard timezone names like "America/New_York" or "UTC".
+
+Examples:
+  trcli users timezone user123                        # View current timezone
+  trcli users timezone user123 --set "America/New_York"  # Set timezone`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 		fs, err := internal.NewFirestoreClient(ctx)
@@ -236,15 +265,38 @@ func init() {
 }
 
 var usersCmd = &cobra.Command{
-	Use:   "user",
-	Short: "Manage a user",
-	Long:  `User command allows you to manage a user in the system`,
+	Use:     "users",
+	Aliases: []string{"user"},
+	Short:   "Manage users in the system",
+	Long: `Manage users, subscriptions, and user settings.
+
+Users are the core entity in Talent Rodeo, representing job seekers who
+receive job matches and interact with the platform. This command group
+allows you to:
+- List and create users
+- Delete users by ID, email, or prefix  
+- Manage user subscriptions and settings
+- Import users from JSON files`,
 }
 
 var createUserCmd = &cobra.Command{
-	Use:   "create",
-	Short: "Create a new user",
-	Long:  `Create a new user with the given name, email, and phone number`,
+	Use:   "create --name <name> --email <email> [--phone <phone>]",
+	Short: "Create a new user with basic information",
+	Long: `Create a new user with name, email, and optional phone number.
+
+The new user is created with "call completed" status, meaning they can
+immediately receive job matches. Use this for testing or manual user creation.
+
+Required flags:
+  --name, -n: Full name of the user
+  --email, -e: Email address of the user
+
+Optional flags:
+  --phone, -p: Phone number of the user
+
+Examples:
+  trcli users create --name "John Doe" --email "john@example.com"
+  trcli users create --name "Jane Smith" --email "jane@example.com" --phone "+1-555-0123"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
@@ -276,9 +328,17 @@ var createUserCmd = &cobra.Command{
 }
 
 var listUsersCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List all users",
-	Long:  `List all users in the system with their IDs, names and phone numbers`,
+	Use:   "list [--limit <N>] [--offset <N>]",
+	Short: "List users in the system with basic information",
+	Long: `List users with their IDs, names, phone numbers, and email addresses.
+
+Supports pagination through limit and offset parameters. Output can be
+formatted as JSON for programmatic use or as tab-separated text for readability.
+
+Examples:
+  trcli users list                                     # List first 100 users
+  trcli users list --limit 50 --offset 100            # List users 100-150
+  trcli users list --json                             # Get users in JSON format`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
@@ -335,9 +395,23 @@ var listUsersCmd = &cobra.Command{
 }
 
 var deleteUserCmd = &cobra.Command{
-	Use:   "delete",
-	Short: "Delete user(s)",
-	Long:  `Delete user(s) by ID, email, or prefix`,
+	Use:   "delete [--user-id <id> | --email <email> | --prefix <prefix>]",
+	Short: "Delete users by ID, email, or prefix pattern",
+	Long: `Delete one or more users from the system.
+
+WARNING: This permanently removes user data including jobs, feedback, and
+appointments. Use with caution, especially with the --prefix option which
+can delete multiple users at once.
+
+Deletion options (choose one):
+  --user-id, -u: Delete specific user by ID
+  --email, -e: Delete user by email address  
+  --prefix, -p: Delete all users whose IDs start with prefix (BULK OPERATION)
+
+Examples:
+  trcli users delete --user-id user123                # Delete specific user
+  trcli users delete --email "john@example.com"       # Delete by email
+  trcli users delete --prefix "test-"                 # Delete all test users (CAREFUL!)`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, _ := cmd.Flags().GetString("user-id")
 		email, _ := cmd.Flags().GetString("email")
@@ -397,8 +471,16 @@ var deleteUserCmd = &cobra.Command{
 
 var listGeoIDsCmd = &cobra.Command{
 	Use:   "list-geoids",
-	Short: "List all GeoIDs",
-	Long:  `List all GeoIDs in the system with their IDs and values`,
+	Short: "List all geographic location IDs available for job searches",
+	Long: `List all geographic location IDs (GeoIDs) available in the system.
+
+GeoIDs are used in job search criteria to specify locations like cities,
+states, or regions. Each GeoID corresponds to a specific geographic area
+that job search providers understand.
+
+Examples:
+  trcli users list-geoids                             # List all GeoIDs
+  trcli users list-geoids --json                      # Get GeoIDs in JSON format`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
@@ -432,10 +514,27 @@ var listGeoIDsCmd = &cobra.Command{
 }
 
 var importUsersCmd = &cobra.Command{
-	Use:   "import [json-file]",
-	Short: "Import users from a JSON file",
-	Long:  `Import users from a JSON file containing an array of User structs`,
-	Args:  cobra.ExactArgs(1),
+	Use:   "import <json-file>",
+	Short: "Import multiple users from a JSON file",
+	Long: `Import users from a JSON file containing an array of User objects.
+
+The JSON file should contain an array of user objects with fields like
+name, email, phone, status, etc. Useful for bulk user creation or data
+migration. Shows progress and reports success/failure counts.
+
+JSON file format:
+  [
+    {
+      "name": "John Doe",
+      "email": "john@example.com",
+      "phone": "+1-555-0123",
+      "status": "call_completed"
+    }
+  ]
+
+Examples:
+  trcli users import users.json                       # Import users from file`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 

@@ -28,14 +28,40 @@ type PredictedNudge struct {
 
 var nudgeCmd = &cobra.Command{
 	Use:   "nudge",
-	Short: "Manage nudge emails",
-	Long:  `Nudge command allows you to manage and predict nudge emails in the system`,
+	Short: "Manage nudge emails and email campaigns",
+	Long: `Manage nudge emails and automated email campaigns to engage users.
+
+Nudge emails are automated messages sent to users based on their status and activity:
+- No Resume: Users who signed up but haven't uploaded a resume  
+- No Call: Users who uploaded a resume but haven't scheduled a call
+- Five Star Matches: Users with high-quality job matches to alert them
+- Trial Emails: Welcome, expectations, engagement, and conversion emails for trial users
+
+This command group allows you to:
+- Predict when users will receive nudge emails
+- View statistics about sent nudges
+- Generate test emails for development and preview`,
 }
 
 var nudgeListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List predicted nudges for users",
-	Long:  `List users who will receive nudges in the future based on their current state and nudge settings`,
+	Short: "List predicted nudges for users who will receive emails",
+	Long: `Analyze all users and predict when they will receive nudge emails.
+
+This command shows which users are eligible for nudge emails based on their
+current status, activity patterns, and nudge system settings. It factors in
+rate limiting, per-type limits, and user activity restrictions.
+
+The output shows:
+- User ID, name, and email
+- Subscription days remaining  
+- Nudge type they'll receive next
+- When the nudge will be sent
+- Days until the nudge is sent
+- Reason they're eligible
+
+Examples:
+  trcli nudge list                                     # Show predicted nudges`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
@@ -67,8 +93,15 @@ var nudgeListCmd = &cobra.Command{
 
 var nudgeStatsCmd = &cobra.Command{
 	Use:   "stats",
-	Short: "Show nudge statistics",
-	Long:  `Show statistics about nudge emails that have been sent`,
+	Short: "Show statistics about nudge emails that have been sent",
+	Long: `Display statistics about nudge emails that have already been sent.
+
+Shows counts for each nudge type including trial sequence emails, helping
+you understand email volume and campaign effectiveness. Useful for monitoring
+nudge system performance and user engagement.
+
+Examples:
+  trcli nudge stats                                    # Show nudge email statistics`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
@@ -101,9 +134,45 @@ var nudgeStatsCmd = &cobra.Command{
 }
 
 var nudgeTestEmailCmd = &cobra.Command{
-	Use:   "test-email",
-	Short: "Generate a test email for preview",
-	Long:  `Generate a test email using either real user data or synthetic test data for email template testing`,
+	Use:   "test-email --type <email-type> [--user-id <user-id> | --test-data]",
+	Short: "Generate test emails for preview and development",
+	Long: `Generate test emails using either real user data or synthetic test data.
+
+This command helps with email template development, testing, and preview.
+You can generate emails using real user data to see actual content, or
+use synthetic test data for development and testing.
+
+Required flags:
+  --type: Email type to generate
+
+Email types:
+  trial_welcome       - Day 1 trial welcome email
+  trial_expectations  - Day 2 trial expectations email  
+  trial_engagement    - Day 3 trial engagement email
+  trial_conversion    - Day 6 trial conversion email
+  no_resume          - Nudge for users without resumes
+  no_call            - Nudge for users who haven't scheduled calls
+  five_star_matches  - Alert for users with high-quality job matches
+
+Data source (choose one):
+  --user-id: Use real user data
+  --test-data: Use synthetic test data
+
+Output formats:
+  --format plain: Plain text only
+  --format html: HTML only  
+  --format both: Both plain text and HTML
+  --format json: JSON with both formats
+
+Examples:
+  # Generate welcome email with test data
+  trcli nudge test-email --type trial_welcome --test-data
+  
+  # Generate no-resume nudge for real user  
+  trcli nudge test-email --type no_resume --user-id user123
+  
+  # Generate HTML format only
+  trcli nudge test-email --type five_star_matches --test-data --format html`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 

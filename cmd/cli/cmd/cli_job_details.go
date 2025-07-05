@@ -63,6 +63,7 @@ func init() {
 	deleteJobDetailsCmd.Flags().StringP("prefix", "p", "", "Delete all job details with this prefix")
 
 	// Add flags for process related jobs command
+	processRelatedJobsCmd.Flags().StringP("user", "u", "", "User ID to associate the jobs with")
 	processRelatedJobsCmd.Flags().StringP("job-id", "j", "", "Job detail ID to process related jobs for")
 	processRelatedJobsCmd.Flags().StringP("criteria-id", "c", "", "Search criteria ID to associate related jobs with")
 	processRelatedJobsCmd.Flags().BoolP("dry-run", "d", false, "Show what would be processed without actually doing it")
@@ -71,15 +72,31 @@ func init() {
 var jobDetailsCmd = &cobra.Command{
 	Use:     "job-details",
 	Aliases: []string{"job"},
-	Short:   "Manage job details",
-	Long:    `Job details command allows you to manage job details in the system`,
+	Short:   "Manage job details and process related jobs",
+	Long: `Manage job details, job listings, and process related jobs (SimilarJobs and PeopleAlsoViewed).
+	
+This command group allows you to:
+- List and view job details and listings
+- Delete job records by prefix
+- Process related jobs from LinkedIn (SimilarJobs and PeopleAlsoViewed)
+- Upsert job data to vector databases
+
+Use 'job-details' or the shorter 'job' alias to access these commands.`,
 }
 
 var listJobListingsCmd = &cobra.Command{
 	Use:   "listings [job-listing-id] [--all] [--limit N] [--offset N]",
-	Short: "Get a specific job listing or list all job listings",
-	Long:  `Get a specific job listing by ID, or list all job listings with --all flag`,
-	Args:  cobra.RangeArgs(0, 1),
+	Short: "View job listings (basic job info from search results)",
+	Long: `View job listings, which contain basic job information from search results.
+
+Job listings are the initial records created when jobs are found during searches.
+They contain basic information like title, company, location, and URL.
+
+Examples:
+  trcli job listings --all --limit 50         # List first 50 job listings
+  trcli job listings scrapingdog:12345        # View specific job listing
+  trcli job listings --json --limit 10        # Get 10 listings in JSON format`,
+	Args: cobra.RangeArgs(0, 1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
@@ -160,9 +177,19 @@ var listJobListingsCmd = &cobra.Command{
 
 var listJobDetailsCmd = &cobra.Command{
 	Use:   "job [job-id] [--all] [--limit N] [--offset N]",
-	Short: "Get a specific job detail or list all job details",
-	Long:  `Get a specific job detail by ID, or list all job details with --all flag`,
-	Args:  cobra.RangeArgs(0, 1),
+	Short: "View job details (comprehensive job data including SimilarJobs and PeopleAlsoViewed)",
+	Long: `View job details, which contain comprehensive job information including descriptions, 
+requirements, SimilarJobs, and PeopleAlsoViewed data.
+
+Job details are created when we fetch full job information from providers.
+They include rich data like full descriptions, requirements, salary info, 
+similar jobs, and people also viewed sections.
+
+Examples:
+  trcli job job --all --limit 20               # List first 20 job details
+  trcli job job scrapingdog:12345              # View specific job detail
+  trcli job job --json scrapingdog:12345       # Get job detail in JSON format`,
+	Args: cobra.RangeArgs(0, 1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
@@ -242,9 +269,16 @@ var listJobDetailsCmd = &cobra.Command{
 }
 
 var deleteJobListingsCmd = &cobra.Command{
-	Use:   "delete-listings",
-	Short: "Delete job listing(s)",
-	Long:  `Delete job listing(s) by prefix`,
+	Use:   "delete-listings --prefix <prefix>",
+	Short: "Delete job listings by prefix (useful for cleaning up test data)",
+	Long: `Delete job listings that match a specific prefix.
+
+This is useful for cleaning up test data or removing jobs from specific sources.
+Use with caution as this permanently removes job listing records.
+
+Examples:
+  trcli job delete-listings --prefix "test-"    # Delete all test job listings
+  trcli job delete-listings --prefix "old-"     # Delete all old job listings`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		prefix, _ := cmd.Flags().GetString("prefix")
 		if prefix == "" {
@@ -269,9 +303,17 @@ var deleteJobListingsCmd = &cobra.Command{
 }
 
 var deleteJobDetailsCmd = &cobra.Command{
-	Use:   "delete-details",
-	Short: "Delete job detail(s)",
-	Long:  `Delete job detail(s) by prefix`,
+	Use:   "delete-details --prefix <prefix>",
+	Short: "Delete job details by prefix (useful for cleaning up test data)",
+	Long: `Delete job details that match a specific prefix.
+
+This removes comprehensive job detail records. Use with caution as this
+permanently removes job detail data including descriptions, requirements,
+and related jobs information.
+
+Examples:
+  trcli job delete-details --prefix "test-"     # Delete all test job details
+  trcli job delete-details --prefix "old-"      # Delete all old job details`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		prefix, _ := cmd.Flags().GetString("prefix")
 		if prefix == "" {
@@ -296,9 +338,17 @@ var deleteJobDetailsCmd = &cobra.Command{
 }
 
 var deleteAllUserJobsCmd = &cobra.Command{
-	Use:   "delete-user-jobs",
-	Short: "Delete jobs across all users",
-	Long:  `Delete jobs with a specific prefix across all users`,
+	Use:   "delete-user-jobs --prefix <prefix>",
+	Short: "Delete user jobs by prefix across all users (bulk cleanup)",
+	Long: `Delete user jobs that match a specific prefix across all users in the system.
+
+This is a bulk operation that removes user job records from all users' collections.
+Use with extreme caution as this affects all users and permanently removes
+their job records.
+
+Examples:
+  trcli job delete-user-jobs --prefix "test-"   # Delete all test user jobs
+  trcli job delete-user-jobs --prefix "old-"    # Delete all old user jobs`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		prefix, _ := cmd.Flags().GetString("prefix")
 		if prefix == "" {
@@ -347,8 +397,15 @@ var deleteAllUserJobsCmd = &cobra.Command{
 
 var upsertJobDetailsCmd = &cobra.Command{
 	Use:   "upsert",
-	Short: "Upsert job details",
-	Long:  `Upsert job details to Pinecone`,
+	Short: "Upsert job details to vector database (Pinecone)",
+	Long: `Upsert job details to the vector database for semantic search.
+
+This command processes job details and creates/updates their vector embeddings
+in Pinecone for semantic job matching. Run this after importing new job data
+to make it searchable.
+
+Examples:
+  trcli job upsert                              # Upsert all job details to Pinecone`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
@@ -395,11 +452,30 @@ var upsertJobDetailsCmd = &cobra.Command{
 }
 
 var processRelatedJobsCmd = &cobra.Command{
-	Use:   "process-related",
-	Short: "Process related jobs for a specific job detail",
-	Long: `Process related jobs (SimilarJobs and PeopleAlsoViewed) for a job detail.
-This command extracts LinkedIn job IDs from the related jobs, checks if they exist in the database,
-adds existing ones to the user's collection, and queues missing ones for fetching.`,
+	Use:   "process-related --user <user-id> --job-id <job-id> --criteria-id <criteria-id>",
+	Short: "Process SimilarJobs and PeopleAlsoViewed for a job detail",
+	Long: `Process related jobs (SimilarJobs and PeopleAlsoViewed) for a specific job detail.
+
+This command extracts LinkedIn job IDs from the SimilarJobs and PeopleAlsoViewed
+arrays of a job detail, then:
+1. Checks if those jobs already exist in our database
+2. Adds existing jobs to the user's collection
+3. Queues missing jobs for fetching via the job provider
+
+This is useful for expanding a user's job matches by processing the related
+jobs that LinkedIn suggests are similar or frequently viewed together.
+
+Required flags:
+  --user, -u:      User ID to associate the jobs with
+  --job-id, -j:    Job detail ID to process related jobs for
+  --criteria-id, -c: Search criteria ID to associate the jobs with
+
+Examples:
+  # Process related jobs for a specific job detail
+  trcli job process-related --user user123 --job-id scrapingdog:12345 --criteria-id criteria456
+  
+  # Dry run to see what would be processed
+  trcli job process-related --user user123 --job-id scrapingdog:12345 --criteria-id criteria456 --dry-run`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		userID, _ := cmd.Flags().GetString("user")
 		jobID, _ := cmd.Flags().GetString("job-id")
@@ -495,8 +571,8 @@ adds existing ones to the user's collection, and queues missing ones for fetchin
 
 		// Show summary of what was done
 		fmt.Println("\nTo see the results:")
-		fmt.Printf("  ./cli jobs list --user %s\n", userID)
-		fmt.Printf("  ./cli search list-queued --criteria %s\n", criteriaID)
+		fmt.Printf("  trcli userjobs list %s --json\n", userID)
+		fmt.Printf("  trcli search queue --criteria-id %s\n", criteriaID)
 
 		return nil
 	},
