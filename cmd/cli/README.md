@@ -94,6 +94,56 @@ Flags:
 - `--jobs`: Number of test jobs to create per user (default: 10)
 - `--prefix`: Prefix for test data IDs (default: "test-")
 
+### Nudge Tools
+
+The `nudge` namespace contains commands for managing and analyzing nudge emails.
+
+```bash
+trcli nudge [command]
+```
+
+Available Commands:
+- `list`: List predicted nudges for users who will receive nudges in the future
+- `stats`: Show statistics about nudge emails that have been sent
+
+#### List Predicted Nudges
+
+```bash
+trcli nudge list
+```
+
+Analyzes all users and predicts when they will receive nudge emails based on their current state and the nudge system settings. The output shows:
+
+- **ID**: First 5 characters of the user ID
+- **Name**: User's name (truncated if long)
+- **Email**: User's email address (truncated if long)
+- **Sub Days**: Days remaining until subscription expires (or "EXPIRED" if past due, "N/A" if no subscription)
+- **Nudge Type**: The type of nudge they'll receive next
+- **When**: Date and time the nudge will be sent
+- **Days**: Number of days until the nudge is sent
+- **Reason**: Brief explanation of why they're eligible
+
+The prediction logic follows the same rules as the actual nudge processor:
+1. **No Resume**: Users who signed up but haven't uploaded a resume (after 2 days)
+2. **No Call**: Users who uploaded a resume but haven't scheduled a call (after 3 days)
+3. **Five Star Matches**: Users with actual 5-star job matches that haven't been sent (after 2 days)
+4. **Trial Emails**: Users in trial period receiving sequence emails (Days 1, 2, 3, 6)
+
+The system verifies that five-star match users actually have high-scoring jobs (≥4.5 rating) created within the last 90 days that haven't been included in previous nudges. This ensures only users who will actually receive emails are shown.
+
+Factors in rate limiting (7 days between nudges), per-type limits, and user activity restrictions.
+
+#### Show Nudge Statistics
+
+```bash
+trcli nudge stats
+```
+
+Displays statistics about nudge emails that have already been sent, including:
+- Total users who have received nudges
+- Count of each nudge type sent
+- Breakdown by trial email sequence
+
 ## Examples
 
 1. List all users with pretty printing:
@@ -124,6 +174,16 @@ trcli fs test-data --users 3 --jobs 5 --prefix "dev-"
 6. Delete test data:
 ```bash
 trcli fs users delete --prefix "dev-"
+```
+
+7. List predicted nudges:
+```bash
+trcli nudge list
+```
+
+8. Show nudge statistics:
+```bash
+trcli nudge stats
 ```
 
 ## Environment Variables

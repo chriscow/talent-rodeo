@@ -669,9 +669,9 @@ func GetNudgeEligibleUsers(ctx context.Context, logger *slog.Logger, fs *interna
 		// 	"weekly_rate_limit", settings.WeeklyRateLimit.String(),
 		// )
 
-		eligible, _ := isUserEligibleForNudge(user, nudgeType, cutoffTime, settings)
+		eligible, reason := isUserEligibleForNudge(user, nudgeType, cutoffTime, settings)
 		if !eligible {
-			// logger.Debug(internal.Black("user not eligible for nudge"), "name", user.Name, "user_id", user.ID, "nudge_type", nudgeType, "reason", reason)
+			logger.Debug("user not eligible for nudge", "name", user.Name, "user_id", user.ID, "nudge_type", nudgeType, "reason", reason)
 			continue
 		}
 
@@ -688,11 +688,15 @@ func isUserEligibleForNudge(user *internal.User, nudgeType NudgeType, cutoffTime
 		return false, "expired subscription"
 	}
 
-	// Global rate limiting: check if any nudge was sent recently
-	if user.LastNudgeEmailSent != nil {
-		timeSinceLastNudge := time.Since(*user.LastNudgeEmailSent)
-		if timeSinceLastNudge < settings.WeeklyRateLimit {
-			return false, fmt.Sprintf("rate limited (last nudge sent %v ago)", timeSinceLastNudge.Round(time.Minute))
+	// Skip global rate limiting for trial emails (they have their own timing logic)
+	// Trial emails are limited by per-type limits (max 1 each) and specific timing windows
+	if !isTrialNudgeType(nudgeType) {
+		// Global rate limiting: check if any nudge was sent recently
+		if user.LastNudgeEmailSent != nil {
+			timeSinceLastNudge := time.Since(*user.LastNudgeEmailSent)
+			if timeSinceLastNudge < settings.WeeklyRateLimit {
+				return false, fmt.Sprintf("rate limited (last nudge sent %v ago)", timeSinceLastNudge.Round(time.Minute))
+			}
 		}
 	}
 
@@ -775,10 +779,10 @@ func isTrialNudgeType(nudgeType NudgeType) bool {
 func isUserEligibleForTrialEmail(user *internal.User, nudgeType NudgeType, settings NudgeProcessorSettings) (bool, string) {
 	// Must have timezone and subscription end date
 	if user.Timezone == nil {
-		return false, "no timezone set"
+		return false, fmt.Sprintf("no timezone set (user_id=%s)", user.ID)
 	}
 	if user.SubscriptionEnd == nil {
-		return false, "no trial end date"
+		return false, fmt.Sprintf("no trial end date (user_id=%s)", user.ID)
 	}
 
 	// Must be in active trial
@@ -789,7 +793,7 @@ func isUserEligibleForTrialEmail(user *internal.User, nudgeType NudgeType, setti
 
 	// Calculate trial start time (7 days before end)
 	trialStartTime := user.SubscriptionEnd.Add(-7 * 24 * time.Hour)
-	
+
 	// Determine which day of trial we should send this email
 	var targetDay int
 	switch nudgeType {
@@ -807,17 +811,20 @@ func isUserEligibleForTrialEmail(user *internal.User, nudgeType NudgeType, setti
 
 	// Calculate when this email should be sent (target day after trial start)
 	targetSendTime := trialStartTime.Add(time.Duration(targetDay-1) * 24 * time.Hour)
-	
+
 	// Check if it's the right time to send this email (within 24 hours of target)
 	timeSinceTarget := now.Sub(targetSendTime)
 	if timeSinceTarget < 0 {
-		return false, fmt.Sprintf("too early (target send time is %s)", targetSendTime.Format(time.RFC3339))
+		return false, fmt.Sprintf("too early (target send time is %s, now is %s, user_id=%s)",
+			targetSendTime.Format(time.RFC3339), now.Format(time.RFC3339), user.ID)
 	}
 	if timeSinceTarget > 24*time.Hour {
-		return false, fmt.Sprintf("too late (target send time was %s)", targetSendTime.Format(time.RFC3339))
+		return false, fmt.Sprintf("too late (target send time was %s, now is %s, hours_since=%0.1f, user_id=%s)",
+			targetSendTime.Format(time.RFC3339), now.Format(time.RFC3339), timeSinceTarget.Hours(), user.ID)
 	}
 
-	return true, "eligible for trial email"
+	return true, fmt.Sprintf("eligible for trial email (target=%s, now=%s, user_id=%s)",
+		targetSendTime.Format(time.RFC3339), now.Format(time.RFC3339), user.ID)
 }
 
 func UpdateUserNudgeTrackingTx(ctx context.Context, fs *internal.FirestoreClient, tx *firestore.Transaction, userID string, nudgeType string) error {
@@ -843,14 +850,14 @@ func GetNudgeStats(ctx context.Context, fs *internal.FirestoreClient) (map[strin
 	}
 
 	stats := map[string]int{
-		"total_users_with_nudges": 0,
-		"no_resume_nudges":        0,
-		"no_call_nudges":          0,
-		"five_star_nudges":        0,
-		"trial_welcome_nudges":    0,
+		"total_users_with_nudges":   0,
+		"no_resume_nudges":          0,
+		"no_call_nudges":            0,
+		"five_star_nudges":          0,
+		"trial_welcome_nudges":      0,
 		"trial_expectations_nudges": 0,
-		"trial_engagement_nudges": 0,
-		"trial_conversion_nudges": 0,
+		"trial_engagement_nudges":   0,
+		"trial_conversion_nudges":   0,
 	}
 
 	iter := fs.Collection("users").

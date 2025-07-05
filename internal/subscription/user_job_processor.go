@@ -186,9 +186,9 @@ func (p *UserJobProcessor) evaluateJob(ctx context.Context, task userJobEvaluati
 	matchAnalysis.CompletionTokens = resp.Usage.CompletionTokens
 	matchAnalysis.ProcessingComplete = true
 
-	// If the score is 3, 4 or 5 set the status as JobStatusNew otherwise set it to JobStatusArchived
+	// If the score is 4+ set the status as JobStatusNew otherwise set it to JobStatusArchived
 	status := internal.JobStatusNew
-	if matchAnalysis.Rating.NumericRating < 3 {
+	if matchAnalysis.Rating.NumericRating < internal.QualityJobRatingThreshold {
 		status = internal.JobStatusArchived
 	}
 
@@ -281,6 +281,13 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 		logger = slog.New(handler).With("pkg", "RefreshUserJobs")
 	}
 
+	// Track job evaluation statistics
+	var totalJobsEvaluated int
+	var newJobsFound int
+	var rejectedJobsCount int
+	var qualityJobsFound int
+	evaluationStartTime := time.Now()
+
 	weekAgo := time.Now().Add(-7 * 24 * time.Hour)
 	jobIDs, err := internal.GetJobIDsForCriteriaCreatedAfter(ctx, fs, criteria.ID, weekAgo)
 	if err != nil {
@@ -292,6 +299,8 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 		logger.Error("failed to get job ids for criteria created after", "error", err)
 		return err
 	}
+
+	totalJobsEvaluated = len(jobIDs)
 
 	userJobs, err := internal.ListUserJobs(ctx, fs, user.ID)
 	if err != nil {
@@ -316,9 +325,28 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 		}
 	}
 
+	newJobsFound = len(jobIDs)
+
 	if len(jobIDs) == 0 {
 		logger.Info("no new jobs found for user/criteria", "name", user.Name, "userID", user.ID, "criteriaID", criteria.ID)
 		internal.SendPusherRedirect(psh, user.ID, "/dashboard")
+
+		// Update user statistics even when no new jobs found
+		now := time.Now()
+		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+
+		err = internal.UpdateUser(ctx, fs, user.ID, map[string]any{
+			"LastJobEvaluationRun": evaluationStartTime,
+			"LastEvaluationDate":   today,
+			"TotalJobsEvaluated":   totalJobsEvaluated,
+			"NewJobsFound":         newJobsFound,
+			"RejectedJobsCount":    0,
+			"QualityJobsFound":     0,
+		})
+		if err != nil {
+			logger.Error("failed to update user job evaluation statistics", "error", err)
+		}
+
 		return nil // No new jobs to process
 	}
 
@@ -440,6 +468,43 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 
 	// Wait for all workers to finish processing all the jobs in the queue.
 	processor.Wait()
+
+	// After processing is complete, gather statistics and update user record
+	userJobsAfterProcessing, err := internal.ListUserJobs(ctx, fs, user.ID)
+	if err != nil {
+		logger.Error("failed to get user jobs after processing for statistics", "error", err)
+	} else {
+		// Count rejected and quality jobs from the newly processed jobs
+		for _, userJob := range userJobsAfterProcessing {
+			// Only count jobs that were part of this evaluation run
+			if slices.Contains(jobIDs, userJob.ID) {
+				if userJob.Rating < internal.QualityJobRatingThreshold || userJob.Status == internal.JobStatusArchived || userJob.Status == internal.JobStatusDismissed {
+					rejectedJobsCount++
+				}
+				if userJob.Rating >= internal.QualityJobRatingThreshold {
+					qualityJobsFound++
+				}
+			}
+		}
+	}
+
+	// Update user with job evaluation statistics
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+
+	err = internal.UpdateUser(ctx, fs, user.ID, map[string]any{
+		"LastJobEvaluationRun": evaluationStartTime,
+		"LastEvaluationDate":   today,
+		"TotalJobsEvaluated":   totalJobsEvaluated,
+		"NewJobsFound":         newJobsFound,
+		"RejectedJobsCount":    rejectedJobsCount,
+		"QualityJobsFound":     qualityJobsFound,
+	})
+	if err != nil {
+		logger.Error("failed to update user job evaluation statistics", "error", err)
+	}
+
+	logger.Info("job evaluation completed", "totalEvaluated", totalJobsEvaluated, "newJobs", newJobsFound, "rejected", rejectedJobsCount, "quality", qualityJobsFound)
 
 	return nil
 }

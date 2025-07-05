@@ -25,10 +25,13 @@ const (
 	UserAccessUpdateThreshold = time.Hour // 1 hour
 	UserCacheTTL              = 15 * time.Minute
 
+	// Job rating quality threshold - jobs with rating >= this value are considered "quality"
+	QualityJobRatingThreshold = 4
+
 	// Stripe pricing constants (in cents)
-	StripeWeeklyProPrice    = 700  // $7.00 USD
-	StripeMonthlyProPrice   = 2000 // $20.00 USD
-	StripeWeeklyProDuration = 7 * 24 * time.Hour
+	StripeWeeklyProPrice     = 700  // $7.00 USD
+	StripeMonthlyProPrice    = 2000 // $20.00 USD
+	StripeWeeklyProDuration  = 7 * 24 * time.Hour
 	StripeMonthlyProDuration = 30 * 24 * time.Hour
 )
 
@@ -80,6 +83,14 @@ type User struct {
 	TrialStartedAt     *time.Time // When the trial period started
 	TrialEndAt         *time.Time // When the trial period ends (calculated)
 	Timezone           *string    // User's timezone from appointment scheduling
+
+	// Daily job evaluation tracking
+	LastJobEvaluationRun *time.Time // When the last job evaluation was completed
+	LastEvaluationDate   *time.Time // Date of the last evaluation (for daily tracking)
+	TotalJobsEvaluated   int        // Total jobs evaluated in the last run
+	NewJobsFound         int        // New jobs found in the last run
+	RejectedJobsCount    int        // Jobs rejected (rating < QualityJobRatingThreshold or archived/dismissed) in the last run
+	QualityJobsFound     int        // Jobs with rating >= QualityJobRatingThreshold found in the last run
 
 	LastAccessedAt time.Time // Last time the user accessed the system
 }

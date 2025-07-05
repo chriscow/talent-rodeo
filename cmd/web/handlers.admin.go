@@ -444,6 +444,14 @@ func (app *application) adminUserDashboard(w http.ResponseWriter, r *http.Reques
 	data["SelectedUser"] = selectedUser
 	data["SelectedUserID"] = selectedUserID
 
+	// Add daily job evaluation statistics for the selected user
+	data["LastJobEvaluationRun"] = selectedUser.LastJobEvaluationRun
+	data["LastEvaluationDate"] = selectedUser.LastEvaluationDate
+	data["TotalJobsEvaluated"] = selectedUser.TotalJobsEvaluated
+	data["NewJobsFound"] = selectedUser.NewJobsFound
+	data["RejectedJobsCount"] = selectedUser.RejectedJobsCount
+	data["QualityJobsFound"] = selectedUser.QualityJobsFound
+
 	// Get all user jobs and aggregate rating statistics
 	allUserJobs, err := internal.ListUserJobs(ctx, app.fs, selectedUserID)
 	if err != nil {

@@ -24,6 +24,17 @@ This is actually exactly what I like to see. Here's why this number is perfect:
 
 Remember: the best roles take time to appear, and when they do, you'll be ready!
 {{else}}
+    {{if eq .HighQualityMatches 0}}
+I'm still building your perfect match list - and here's why that's actually great
+
+I know what you might be thinking, but let me explain why this is actually a good sign:
+- Your criteria are specific: You know what you want, and I respect that
+- I'm being extra selective: Better to wait for the right opportunity than settle
+- Market timing matters: The best roles often appear in waves, not constantly  
+- I'm learning your preferences: Every day I get smarter about what you're looking for
+
+Think of it this way: I'm not a job board showing you everything. I'm your personal recruiter who won't waste your time.
+    {{else}}
 I've found {{.HighQualityMatches}} matches - and here's why that's actually great
 
 I know what you might be thinking, but let me explain why this is actually a good sign:
@@ -33,7 +44,17 @@ I know what you might be thinking, but let me explain why this is actually a goo
 - Perfect roles are worth waiting for: I'd rather you get THE job than just any job
 
 Think of it this way: I'm not a job board showing you everything. I'm your personal recruiter finding you the right things.
+    {{end}}
 {{end}}
+
+HELP ME GET SMARTER ABOUT WHAT YOU WANT:
+When you see jobs on your dashboard, here's how to train me:
+- Thumbs up/down on skills: Love Java? Thumbs up. Hate it? Thumbs down.
+- "Trash" completely wrong jobs: Use the trash icon next to the job title
+- "Save" jobs you're interested in: Use the save icon next to the title  
+- "X" dismiss jobs you're indifferent about: Top-right corner when you're just not interested
+
+Every rating makes me smarter about finding YOUR perfect role.
 
 HERE'S WHAT I'M DOING WHILE YOU WAIT:
 - Monitoring multiple job sources - I check way more than just the big job boards
@@ -91,6 +112,19 @@ You're receiving this email as part of your 7-day trial. I'm working around the 
         <p>Remember: the best roles take time to appear, and when they do, you'll be ready!</p>
     </div>
     {{else}}
+    {{if eq .HighQualityMatches 0}}
+    <div style="background: #fce4ec; padding: 15px; border-radius: 6px; margin: 15px 0;">
+        <h3>💎 I'm still building your perfect match list - and here's why that's actually great</h3>
+        <p>I know what you might be thinking, but let me explain why this is actually a good sign:</p>
+        <ul>
+            <li><strong>Your criteria are specific:</strong> You know what you want, and I respect that</li>
+            <li><strong>I'm being extra selective:</strong> Better to wait for the right opportunity than settle</li>
+            <li><strong>Market timing matters:</strong> The best roles often appear in waves, not constantly</li>
+            <li><strong>I'm learning your preferences:</strong> Every day I get smarter about what you're looking for</li>
+        </ul>
+        <p>Think of it this way: I'm not a job board showing you everything. I'm your personal recruiter who won't waste your time.</p>
+    </div>
+    {{else}}
     <div style="background: #fce4ec; padding: 15px; border-radius: 6px; margin: 15px 0;">
         <h3>💎 I've found {{.HighQualityMatches}} matches - and here's why that's actually great</h3>
         <p>I know what you might be thinking, but let me explain why this is actually a good sign:</p>
@@ -102,6 +136,7 @@ You're receiving this email as part of your 7-day trial. I'm working around the 
         </ul>
         <p>Think of it this way: I'm not a job board showing you everything. I'm your personal recruiter finding you the right things.</p>
     </div>
+    {{end}}
     {{end}}
 
     <p>Trust me, I'm like that friend who knows exactly what you're looking for and won't settle for less. HIRE is in my name for a reason - I take this seriously!</p>

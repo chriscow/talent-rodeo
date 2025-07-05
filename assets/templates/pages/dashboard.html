@@ -1,6 +1,45 @@
 {{define "page:main"}}
 <main class="container">
     
+    <!-- Daily Job Evaluation Stats -->
+    {{if .LastJobEvaluationRun}}
+    <section class="job-evaluation-stats">
+        <article>
+            <header>
+                <h4>Latest Job Search Update</h4>
+                <small>{{.LastJobEvaluationRun | approxTime}}</small>
+            </header>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <span class="stat-number">{{.TotalJobsEvaluated}}</span>
+                    <span class="stat-label">Jobs Evaluated</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number">{{.NewJobsFound}}</span>
+                    <span class="stat-label">New Jobs Found</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number">{{.QualityJobsFound}}</span>
+                    <span class="stat-label">Quality Matches</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number">{{.RejectedJobsCount}}</span>
+                    <span class="stat-label">Jobs Filtered Out</span>
+                </div>
+            </div>
+            {{if eq .NewJobsFound 0}}
+                <p class="no-new-jobs-message">
+                    <small>No new jobs met your criteria this time. We'll keep searching for you!</small>
+                </p>
+            {{else}}
+                <p class="new-jobs-message">
+                    <small>{{.QualityJobsFound}} quality job{{if ne .QualityJobsFound 1}}s{{end}} added to your feed.</small>
+                </p>
+            {{end}}
+        </article>
+    </section>
+    {{end}}
+    
     <!-- Job Status Tabs -->
     <nav class="job-status-tabs">
         <ul>
@@ -392,6 +431,84 @@
 {{define "page:styles"}}
 {{template "job-styles" .}}
 <style>
+    /* Job Evaluation Stats */
+    .job-evaluation-stats {
+        margin-bottom: 2rem;
+    }
+    
+    .job-evaluation-stats article {
+        background: var(--card-background-color);
+        border: 1px solid var(--card-border-color);
+        border-radius: var(--border-radius);
+        padding: 1.5rem;
+        margin-bottom: 0;
+    }
+    
+    .job-evaluation-stats header {
+        margin-bottom: 1rem;
+        text-align: center;
+    }
+    
+    .job-evaluation-stats h4 {
+        margin-bottom: 0.25rem;
+        color: var(--primary);
+    }
+    
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+    
+    .stat-item {
+        text-align: center;
+        padding: 0.75rem;
+        background: var(--card-sectionning-background-color);
+        border-radius: var(--border-radius);
+        border: 1px solid var(--muted-border-color);
+    }
+    
+    .stat-number {
+        display: block;
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: var(--primary);
+        margin-bottom: 0.25rem;
+    }
+    
+    .stat-label {
+        display: block;
+        font-size: 0.875rem;
+        color: var(--muted-color);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    .no-new-jobs-message {
+        text-align: center;
+        margin: 0;
+        padding: 0.5rem;
+        background: var(--secondary-focus);
+        border-radius: var(--border-radius);
+        color: var(--secondary-inverse);
+    }
+    
+    .new-jobs-message {
+        text-align: center;
+        margin: 0;
+        padding: 0.5rem;
+        background: var(--primary-focus);
+        border-radius: var(--border-radius);
+        color: var(--primary-inverse);
+    }
+    
+    @media (max-width: 768px) {
+        .stats-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
     /* Star rating colors */
     .rating-3 { color: #c8630a; } /* Amber 500 */
     .rating-4 { color: #065fd4; } /* Cyan 500 */

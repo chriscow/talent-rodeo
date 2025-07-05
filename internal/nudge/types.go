@@ -15,12 +15,12 @@ const (
 	NudgeTypeNoCall          NudgeType = "no_call"
 	NudgeTypeFiveStarMatches NudgeType = "five_star_matches"
 	// NudgeTypeFollowUp        NudgeType = "follow_up" // not implemented yet
-	
+
 	// Trial email sequence types
-	NudgeTypeTrialWelcome      NudgeType = "trial_welcome"     // Day 1
+	NudgeTypeTrialWelcome      NudgeType = "trial_welcome"      // Day 1
 	NudgeTypeTrialExpectations NudgeType = "trial_expectations" // Day 2
-	NudgeTypeTrialEngagement   NudgeType = "trial_engagement"  // Day 3
-	NudgeTypeTrialConversion   NudgeType = "trial_conversion"  // Day 6
+	NudgeTypeTrialEngagement   NudgeType = "trial_engagement"   // Day 3
+	NudgeTypeTrialConversion   NudgeType = "trial_conversion"   // Day 6
 )
 
 var AllNudgeTypes = []NudgeType{
@@ -28,7 +28,7 @@ var AllNudgeTypes = []NudgeType{
 	NudgeTypeNoCall,
 	NudgeTypeFiveStarMatches,
 	// NudgeTypeFollowUp,  // not implemented yet
-	
+
 	// Trial email sequence types
 	NudgeTypeTrialWelcome,
 	NudgeTypeTrialExpectations,
@@ -66,7 +66,7 @@ type NudgeProcessorSettings struct {
 	NoCallDelayDays int
 	// MatchAlertDelayDays is the minimum number of days to wait before sending a "five star matches" nudge.
 	MatchAlertDelayDays int
-	
+
 	// Trial email delay settings - days since trial start when each email should be sent
 	TrialWelcomeDelayDays      int // Day 1 (should be 1)
 	TrialExpectationsDelayDays int // Day 2 (should be 2)
@@ -143,13 +143,13 @@ var DefaultNudgeSettings = NudgeProcessorSettings{
 	NoResumeDelayDays:   2,
 	NoCallDelayDays:     3,
 	MatchAlertDelayDays: 2,
-	
+
 	// Trial email timing based on strategy document
 	TrialWelcomeDelayDays:      1, // Day 1 after trial start
 	TrialExpectationsDelayDays: 2, // Day 2 after trial start
 	TrialEngagementDelayDays:   3, // Day 3 after trial start
 	TrialConversionDelayDays:   6, // Day 6 after trial start
-	WeeklyRateLimit:     7 * 24 * time.Hour,
+	WeeklyRateLimit:            7 * 24 * time.Hour,
 	LimitOnRecentActivityPerType: LimitOnRecentActivitySettings{
 		NoResume:        false,
 		NoCall:          false,
@@ -236,12 +236,12 @@ type NudgeEmailData struct {
 
 	// For NudgeTypeFiveStarMatches
 	Matches []FiveStarMatchData
-	
+
 	// For trial email sequence types
 	TrialStartDateUser  string // Formatted for user's timezone
 	TrialEndDateUser    string // Formatted for user's timezone
 	DaysRemaining       int    // Days remaining in trial
-	HighQualityMatches  int    // Number of quality matches (4+ stars)
+	HighQualityMatches  int    // Number of quality matches (>= QualityJobRatingThreshold stars)
 	MatchVolumeCategory string // "high", "typical", "low"
 }
 
@@ -265,7 +265,7 @@ type MaxNudgesPerType struct {
 	NoCall          int
 	FiveStarMatches int
 	FollowUp        int
-	
+
 	// Trial email sequence limits (typically 1 for each)
 	TrialWelcome      int
 	TrialExpectations int
@@ -279,7 +279,7 @@ type LimitOnRecentActivitySettings struct {
 	NoCall          bool
 	FiveStarMatches bool
 	FollowUp        bool
-	
+
 	// Trial emails typically shouldn't be limited by recent activity
 	TrialWelcome      bool
 	TrialExpectations bool
@@ -372,7 +372,7 @@ func (nt NudgeType) EmailTemplatePath() string {
 		return "emails/shirely-five-star-matches.html"
 	// case NudgeTypeFollowUp:
 	// 	return "emails/shirely-follow-up-questions.html"
-	
+
 	// Trial email sequence templates
 	case NudgeTypeTrialWelcome:
 		return "emails/trial-welcome.html"

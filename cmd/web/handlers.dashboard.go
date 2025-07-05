@@ -400,6 +400,14 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 	data["CurrentStatus"] = user.Status.Description()
 	data["CurrentTime"] = time.Now()
 
+	// Add daily job evaluation statistics
+	data["LastJobEvaluationRun"] = user.LastJobEvaluationRun
+	data["LastEvaluationDate"] = user.LastEvaluationDate
+	data["TotalJobsEvaluated"] = user.TotalJobsEvaluated
+	data["NewJobsFound"] = user.NewJobsFound
+	data["RejectedJobsCount"] = user.RejectedJobsCount
+	data["QualityJobsFound"] = user.QualityJobsFound
+
 	// Convert jobs map to slice for template consumption and track filtering
 	jobsSlice := make([]JobWithDetails, 0, len(jobs))
 	hiddenJobsCount := 0
@@ -483,13 +491,13 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 
 // FeedbackDashboardData contains all data for the feedback processing dashboard
 type FeedbackDashboardData struct {
-	RecentActivity      []RecentFeedbackActivity
-	SystemMetrics       FeedbackSystemMetrics
-	UserActivity        []UserFeedbackActivity
-	ProcessingTrends    []ProcessingTrend
-	TopUsers            []TopFeedbackUser
-	ErrorSummary        []ErrorSummary
-	LastUpdateTime      time.Time
+	RecentActivity   []RecentFeedbackActivity
+	SystemMetrics    FeedbackSystemMetrics
+	UserActivity     []UserFeedbackActivity
+	ProcessingTrends []ProcessingTrend
+	TopUsers         []TopFeedbackUser
+	ErrorSummary     []ErrorSummary
+	LastUpdateTime   time.Time
 }
 
 // RecentFeedbackActivity represents recent feedback processing activity
@@ -508,16 +516,16 @@ type RecentFeedbackActivity struct {
 
 // FeedbackSystemMetrics represents overall system metrics
 type FeedbackSystemMetrics struct {
-	TotalUsers           int
-	TotalFeedbackItems   int
-	UnprocessedFeedback  int
-	AvgProcessingTime    time.Duration
-	SuccessRate          float64
-	AvgConfidenceScore   float64
-	StatementsUpdated    int
-	QueriesUpdated       int
-	ProcessingErrors     int
-	LastProcessingRun    time.Time
+	TotalUsers          int
+	TotalFeedbackItems  int
+	UnprocessedFeedback int
+	AvgProcessingTime   time.Duration
+	SuccessRate         float64
+	AvgConfidenceScore  float64
+	StatementsUpdated   int
+	QueriesUpdated      int
+	ProcessingErrors    int
+	LastProcessingRun   time.Time
 }
 
 // UserFeedbackActivity represents user-specific feedback activity
@@ -566,7 +574,7 @@ func (app *application) showFeedbackDashboard(w http.ResponseWriter, r *http.Req
 	}
 
 	data := app.newTemplateData(r)
-	
+
 	// Get date range for analysis (default to last 30 days)
 	endDate := time.Now()
 	startDate := endDate.AddDate(0, 0, -30)
@@ -773,7 +781,7 @@ func (app *application) getUserFeedbackActivity(ctx context.Context, startDate, 
 			UserName:            userName,
 			TotalFeedback:       stats.TotalFeedback,
 			UnprocessedFeedback: len(feedbacks),
-			ProcessingSuccess:   true, // Assume success for now
+			ProcessingSuccess:   true,                            // Assume success for now
 			LastProcessedAt:     time.Now().Add(-24 * time.Hour), // Estimate
 		}
 
@@ -800,7 +808,7 @@ func (app *application) getTopFeedbackUsers(ctx context.Context, limit int) ([]T
 	// Count feedback per user
 	userFeedbackCount := make(map[string]int)
 	userLastActivity := make(map[string]time.Time)
-	
+
 	for _, feedback := range unprocessedFeedback {
 		userFeedbackCount[feedback.UserID]++
 		if feedback.CreatedAt.After(userLastActivity[feedback.UserID]) {
@@ -810,16 +818,16 @@ func (app *application) getTopFeedbackUsers(ctx context.Context, limit int) ([]T
 
 	// Convert to slice and sort by feedback count
 	type userCount struct {
-		userID string
-		count  int
+		userID     string
+		count      int
 		lastActive time.Time
 	}
-	
+
 	var userCounts []userCount
 	for userID, count := range userFeedbackCount {
 		userCounts = append(userCounts, userCount{
-			userID: userID,
-			count:  count,
+			userID:     userID,
+			count:      count,
 			lastActive: userLastActivity[userID],
 		})
 	}
