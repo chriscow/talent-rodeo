@@ -38,3 +38,7 @@ tmp/
 
 testdata/
 build-errors.log
+
+# binaries
+**/bin/
+trcli

@@ -128,6 +128,63 @@ var userSubscriptionCmd = &cobra.Command{
 	},
 }
 
+var userTimezoneCmd = &cobra.Command{
+	Use:   "timezone [user-id]",
+	Short: "Manage user timezone settings",
+	Long:  `View current timezone or set a new timezone for a user`,
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := context.Background()
+		fs, err := internal.NewFirestoreClient(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to create Firestore client: %w", err)
+		}
+		defer fs.Close()
+
+		userID := args[0]
+
+		// Get the user first
+		user, found, err := internal.GetUser(ctx, fs, userID)
+		if err != nil {
+			return fmt.Errorf("failed to get user: %w", err)
+		}
+		if !found {
+			return fmt.Errorf("user not found: %s", userID)
+		}
+
+		setTimezone, _ := cmd.Flags().GetString("set")
+
+		// If --set flag is not provided, just display current timezone
+		if setTimezone == "" {
+			fmt.Printf("User: %s (%s)\n", user.Name, userID)
+			fmt.Printf("Email: %s\n", user.Email)
+			if user.Timezone != nil {
+				fmt.Printf("Timezone: %s\n", *user.Timezone)
+			} else {
+				fmt.Printf("Timezone: Not set\n")
+			}
+			return nil
+		}
+
+		// Validate timezone string by trying to load it
+		_, err = time.LoadLocation(setTimezone)
+		if err != nil {
+			return fmt.Errorf("invalid timezone '%s': %w", setTimezone, err)
+		}
+
+		// Update the user's timezone
+		err = internal.UpdateUser(ctx, fs, userID, map[string]any{
+			"Timezone": setTimezone,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to update user timezone: %w", err)
+		}
+
+		fmt.Printf("Updated timezone for user %s (%s) to: %s\n", user.Name, userID, setTimezone)
+		return nil
+	},
+}
+
 func init() {
 	// Add users command
 	RootCmd.AddCommand(usersCmd)
@@ -141,6 +198,7 @@ func init() {
 	usersCmd.AddCommand(matchUserCmd)
 	usersCmd.AddCommand(userSubscribeCmd)
 	usersCmd.AddCommand(userSubscriptionCmd)
+	usersCmd.AddCommand(userTimezoneCmd)
 
 	// Add flags
 	listUsersCmd.Flags().IntP("limit", "l", 100, "Maximum number of users to return per page")
@@ -173,6 +231,8 @@ func init() {
 	userSubscribeCmd.MarkFlagRequired("criteria")
 
 	userSubscriptionCmd.Flags().IntVar(&extendDays, "extend", 0, "Number of days to extend subscription from today (optional - shows current info if not provided)")
+
+	userTimezoneCmd.Flags().String("set", "", "Set a new timezone for the user")
 }
 
 var usersCmd = &cobra.Command{

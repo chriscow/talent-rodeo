@@ -7,18 +7,52 @@ This is it - your 7-day trial with me ends at {{.TrialEndDateUser}} (that's less
 
 I've been working around the clock for you this week, and honestly? I'm not ready to stop. Here's why you shouldn't let me stop either...
 
+{{if eq .MatchVolumeCategory "high"}}
 WHAT WE ACCOMPLISHED THIS WEEK:
-- {{.HighQualityMatches}} quality matches found - each one personally analyzed by me
-- Ongoing market monitoring - I'm tracking trends and timing for your field
-- Learning your preferences - I'm getting smarter about what you want with every interaction
-- 24/7 job hunting - while you sleep, I'm searching
+{{.HighQualityMatches}} quality matches found! You've got some fantastic opportunities in your pipeline:
+- Curated excellence: Each match was personally analyzed and scored by me
+- Strategic variety: Different companies, growth paths, and opportunities to explore
+- Momentum building: I'm getting smarter about your preferences with every interaction
+- 24/7 market monitoring: I'm tracking trends and timing for your field while you sleep
 
-HERE'S WHAT YOU NEED TO KNOW:
-Jobs are posted constantly. The perfect opportunity for you could appear tomorrow, next week, or next month. If I'm not watching for it, you might miss it completely.
+This pipeline took a week to build - don't let it go to waste!
+{{else if eq .MatchVolumeCategory "typical"}}
+WHAT WE ACCOMPLISHED THIS WEEK:
+{{.HighQualityMatches}} quality matches found - exactly the right pace for a strategic search:
+- Quality over quantity approach: Each match was personally analyzed by me
+- Market timing strategy: I'm tracking trends and timing for your field
+- Learning your preferences: I'm getting smarter about what you want with every interaction
+- 24/7 job hunting: While you sleep, I'm searching and evaluating
 
-Timing matters in job searches. The best roles get filled fast, and companies often have internal timelines you don't see. I track all of this.
+We're building momentum - don't stop now!
+{{else}}
+    {{if eq .HighQualityMatches 0}}
+WHAT WE ACCOMPLISHED THIS WEEK:
+I've been working hard behind the scenes - even though your perfect match hasn't appeared yet:
+- Market analysis complete: I've learned what's available and what's missing
+- Preference mapping: I'm understanding exactly what you're looking for
+- Timing strategy: I know when companies in your field typically post new roles
+- Pipeline building: I'm ready to pounce when the right opportunity appears
 
-I'm just getting started learning about you. The longer we work together, the better I get at finding exactly what you want.
+The groundwork is laid - your perfect opportunity could appear tomorrow!
+    {{else}}
+WHAT WE ACCOMPLISHED THIS WEEK:
+{{.HighQualityMatches}} carefully selected matches found - quality over quantity in action:
+- Selective curation: Each match was personally analyzed and met your high standards
+- Strategic patience: I'm waiting for the right opportunities, not just any opportunities
+- Learning your preferences: I'm getting smarter about your exact criteria
+- Market monitoring: I'm tracking when the best roles typically appear
+
+Great opportunities are rare - but they're coming!
+    {{end}}
+{{end}}
+
+HERE'S EXACTLY WHAT STOPS WHEN YOUR TRIAL ENDS:
+- Daily job searches stop: I won't scan for new postings that match your criteria
+- No more match analysis: New jobs won't get my personalized scoring and fit assessment
+- Learning stops: Your rating history becomes frozen - I can't get smarter about your preferences
+
+The bottom line: Your personal AI recruiter goes offline. Jobs will still be posted, but I won't be there to find and analyze them for you.
 
 THIS SERVICE ISN'T FOR SOMEONE TAKING ANY JOB
 Let's be honest - if you just needed ANY job, you'd be on Indeed or LinkedIn like everyone else. But you're here because you want the RIGHT job.
@@ -36,7 +70,7 @@ Here's the reality: Great opportunities don't wait for you to be ready. They app
 
 Don't lose the momentum we've built together. Keep your personal AI recruiter working for you.
 
-Continue with Shirely: https://talent.rodeo/subscribe
+Continue with Shirely: https://talent.rodeo/upgrade
 
 Want to see what I've found lately first?
 Check your dashboard: https://talent.rodeo
@@ -65,21 +99,66 @@ After your trial expires, I'll stop searching for new opportunities and analyzin
 
     <p>I've been working around the clock for you this week, and honestly? I'm not ready to stop. Here's why you shouldn't let me stop either...</p>
 
+    {{if eq .MatchVolumeCategory "high"}}
+    <div style="background: #e8f5e8; padding: 15px; border-radius: 6px; margin: 15px 0;">
+        <h3>🎉 What we accomplished this week:</h3>
+        <p><strong>{{.HighQualityMatches}} quality matches found!</strong> You've got some fantastic opportunities in your pipeline:</p>
+        <ul>
+            <li><strong>Curated excellence:</strong> Each match was personally analyzed and scored by me</li>
+            <li><strong>Strategic variety:</strong> Different companies, growth paths, and opportunities to explore</li>
+            <li><strong>Momentum building:</strong> I'm getting smarter about your preferences with every interaction</li>
+            <li><strong>24/7 market monitoring:</strong> I'm tracking trends and timing for your field while you sleep</li>
+        </ul>
+        <p><em>This pipeline took a week to build - don't let it go to waste!</em></p>
+    </div>
+    {{else if eq .MatchVolumeCategory "typical"}}
     <div style="background: #f3e5f5; padding: 15px; border-radius: 6px; margin: 15px 0;">
         <h3>📊 What we accomplished this week:</h3>
+        <p><strong>{{.HighQualityMatches}} quality matches found</strong> - exactly the right pace for a strategic search:</p>
         <ul>
-            <li><strong>{{.HighQualityMatches}} quality matches found</strong> - each one personally analyzed by me</li>
-            <li><strong>Ongoing market monitoring</strong> - I'm tracking trends and timing for your field</li>
-            <li><strong>Learning your preferences</strong> - I'm getting smarter about what you want with every interaction</li>
-            <li><strong>24/7 job hunting</strong> - while you sleep, I'm searching</li>
+            <li><strong>Quality over quantity approach:</strong> Each match was personally analyzed by me</li>
+            <li><strong>Market timing strategy:</strong> I'm tracking trends and timing for your field</li>
+            <li><strong>Learning your preferences:</strong> I'm getting smarter about what you want with every interaction</li>
+            <li><strong>24/7 job hunting:</strong> While you sleep, I'm searching and evaluating</li>
         </ul>
+        <p><em>We're building momentum - don't stop now!</em></p>
     </div>
+    {{else}}
+    {{if eq .HighQualityMatches 0}}
+    <div style="background: #fff3cd; padding: 15px; border-radius: 6px; margin: 15px 0;">
+        <h3>🔍 What we accomplished this week:</h3>
+        <p><strong>I've been working hard behind the scenes</strong> - even though your perfect match hasn't appeared yet:</p>
+        <ul>
+            <li><strong>Market analysis complete:</strong> I've learned what's available and what's missing</li>
+            <li><strong>Preference mapping:</strong> I'm understanding exactly what you're looking for</li>
+            <li><strong>Timing strategy:</strong> I know when companies in your field typically post new roles</li>
+            <li><strong>Pipeline building:</strong> I'm ready to pounce when the right opportunity appears</li>
+        </ul>
+        <p><em>The groundwork is laid - your perfect opportunity could appear tomorrow!</em></p>
+    </div>
+    {{else}}
+    <div style="background: #fce4ec; padding: 15px; border-radius: 6px; margin: 15px 0;">
+        <h3>💎 What we accomplished this week:</h3>
+        <p><strong>{{.HighQualityMatches}} carefully selected matches found</strong> - quality over quantity in action:</p>
+        <ul>
+            <li><strong>Selective curation:</strong> Each match was personally analyzed and met your high standards</li>
+            <li><strong>Strategic patience:</strong> I'm waiting for the right opportunities, not just any opportunities</li>
+            <li><strong>Learning your preferences:</strong> I'm getting smarter about your exact criteria</li>
+            <li><strong>Market monitoring:</strong> I'm tracking when the best roles typically appear</li>
+        </ul>
+        <p><em>Great opportunities are rare - but they're coming!</em></p>
+    </div>
+    {{end}}
+    {{end}}
 
     <div style="background: #ffebee; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f44336;">
-        <h3>⚠️ Here's what you need to know:</h3>
-        <p><strong>Jobs are posted constantly.</strong> The perfect opportunity for you could appear tomorrow, next week, or next month. If I'm not watching for it, you might miss it completely.</p>
-        <p><strong>Timing matters in job searches.</strong> The best roles get filled fast, and companies often have internal timelines you don't see. I track all of this.</p>
-        <p><strong>I'm just getting started learning about you.</strong> The longer we work together, the better I get at finding exactly what you want.</p>
+        <h3>⚠️ Here's exactly what stops when your trial ends:</h3>
+        <ul>
+            <li><strong>Daily job searches stop:</strong> I won't scan for new postings that match your criteria</li>
+            <li><strong>No more match analysis:</strong> New jobs won't get my personalized scoring and fit assessment</li>
+            <li><strong>Learning stops:</strong> Your rating history becomes frozen - I can't get smarter about your preferences</li>
+        </ul>
+        <p><strong>The bottom line:</strong> Your personal AI recruiter goes offline. Jobs will still be posted, but I won't be there to find and analyze them for you.</p>
     </div>
 
     <div style="background: #e8f5e8; padding: 20px; border-radius: 8px; margin: 20px 0;">
@@ -103,7 +182,7 @@ After your trial expires, I'll stop searching for new opportunities and analyzin
 
     <p>Don't lose the momentum we've built together. Keep your personal AI recruiter working for you.</p>
 
-    <p><a href="https://talent.rodeo/subscribe" style="background: #f44336; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; display: inline-block; margin: 20px 0; font-size: 18px; font-weight: bold;">Continue with Shirely</a></p>
+    <p><a href="https://talent.rodeo/upgrade" style="background: #f44336; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; display: inline-block; margin: 20px 0; font-size: 18px; font-weight: bold;">Continue with Shirely</a></p>
 
     <p>Want to see what I've found lately first?</p>
     <p><a href="https://talent.rodeo" style="background: #2196f3; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Check Your Dashboard</a></p>

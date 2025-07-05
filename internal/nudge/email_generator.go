@@ -232,15 +232,15 @@ func (eg *EmailGenerator) populateTrialEmailData(data *NudgeEmailData, user *int
 	if user.SubscriptionEnd != nil {
 		// Trial start is 7 days before end
 		trialStartTime := user.SubscriptionEnd.Add(-7 * 24 * time.Hour)
-		
+
 		// Format dates for user display
-		if startFormatted, err := formatTimeInUserTimezone(trialStartTime, timezone, "January 2, 2006 at 3:04 PM MST"); err == nil {
+		if startFormatted, err := formatTimeInUserTimezone(trialStartTime, timezone, "January 2, 2006"); err == nil {
 			data.TrialStartDateUser = startFormatted
 		}
-		if endFormatted, err := formatTimeInUserTimezone(*user.SubscriptionEnd, timezone, "January 2, 2006 at 11:59 PM MST"); err == nil {
+		if endFormatted, err := formatTimeInUserTimezone(*user.SubscriptionEnd, timezone, "January 2, 2006"); err == nil {
 			data.TrialEndDateUser = endFormatted
 		}
-		
+
 		// Calculate days remaining
 		data.DaysRemaining = calculateDaysRemaining(*user.SubscriptionEnd, timezone)
 	}
@@ -252,7 +252,7 @@ func (eg *EmailGenerator) populateTrialEmailData(data *NudgeEmailData, user *int
 			data.HighQualityMatches = qualityMatches
 		}
 	}
-	
+
 	// Determine match volume category
 	data.MatchVolumeCategory = determineMatchVolumeCategory(data.HighQualityMatches)
 }
@@ -271,19 +271,19 @@ func calculateDaysRemaining(endTime time.Time, timezone string) int {
 	if err != nil {
 		loc = time.UTC
 	}
-	
+
 	now := time.Now().In(loc)
 	endInTz := endTime.In(loc)
-	
+
 	// Calculate days until end date
 	diff := endInTz.Sub(now)
 	days := int(diff.Hours() / 24)
-	
+
 	// If we're on the last day but haven't reached end time, count as 1 day
 	if days == 0 && endInTz.After(now) {
 		days = 1
 	}
-	
+
 	return days
 }
 
