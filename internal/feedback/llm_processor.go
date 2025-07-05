@@ -79,7 +79,7 @@ func newLLMProcessor(store FeedbackStore, fs *internal.FirestoreClient, logger *
 // Statement updates are prioritized as the primary function.
 func (p *llmProcessor) ProcessUserFeedback(ctx context.Context, userID string) error {
 	startTime := time.Now()
-	
+
 	// Get unprocessed feedback
 	feedbacks, err := p.store.GetUnprocessedUserFeedback(ctx, userID)
 	if err != nil {
@@ -112,7 +112,7 @@ func (p *llmProcessor) ProcessUserFeedback(ctx context.Context, userID string) e
 		ProcessedAt:      time.Now(),
 		FeedbackCount:    len(feedbacks),
 		ProcessorVersion: "v1.0",
-		LLMModel:        "deepseek-chat",
+		LLMModel:         "deepseek-chat",
 	}
 
 	// Collect feedback IDs
@@ -137,7 +137,7 @@ func (p *llmProcessor) ProcessUserFeedback(ctx context.Context, userID string) e
 		processingLog.Success = (finalErr == nil)
 		processingLog.StatementUpdated = statementUpdated
 		processingLog.SteeringQueryUpdated = queryUpdated
-		
+
 		if analysis != nil {
 			processingLog.AnalysisConfidence = analysis.ConfidenceScore
 			// Extract theme names
@@ -148,7 +148,7 @@ func (p *llmProcessor) ProcessUserFeedback(ctx context.Context, userID string) e
 				processingLog.DislikedThemes = append(processingLog.DislikedThemes, theme.Theme)
 			}
 		}
-		
+
 		if finalErr != nil {
 			processingLog.ErrorMessage = finalErr.Error()
 		}
@@ -188,8 +188,8 @@ func (p *llmProcessor) ProcessUserFeedback(ctx context.Context, userID string) e
 	if err := p.store.SetUserStatement(ctx, userID, updatedStatement); err != nil {
 		// Check if this is a "user not found" error (user was deleted)
 		if strings.Contains(err.Error(), "user not found") {
-			p.logger.Warn("skipping statement update for deleted user", 
-				"user_id", userID, 
+			p.logger.Warn("skipping statement update for deleted user",
+				"user_id", userID,
 				"feedback_count", len(feedbacks),
 				"error", err)
 			// Mark feedback as processed even though user is deleted
@@ -201,7 +201,7 @@ func (p *llmProcessor) ProcessUserFeedback(ctx context.Context, userID string) e
 		return finalErr
 	}
 	statementUpdated = true
-	
+
 	// Record the updated statement for logging
 	processingLog.StatementAfter = updatedStatement
 

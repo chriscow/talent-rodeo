@@ -125,7 +125,7 @@
             <ul class="subscription-list">
                 {{range $sub := .UserSubscriptions}}
                 <li style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
-                    <span>
+                    <a href="/admin/search-criteria?id={{$sub.CriteriaID}}" style="text-decoration: none; color: inherit;">
                         {{if $sub.DisplayName}}
                             {{$sub.DisplayName}}
                         {{else}}
@@ -135,7 +135,7 @@
                                 {{$sub.CriteriaID}}
                             {{end}}
                         {{end}}
-                    </span>
+                    </a>
                     <form method="POST" style="display:inline; margin:0;">
                         <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                         <input type="hidden" name="user_id" value="{{$.SelectedUserID}}">

@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"sort"
+	"strings"
 	"talent-rodeo/assets"
 	"talent-rodeo/internal/utils"
 	"time"
@@ -20,8 +22,11 @@ import (
 )
 
 const (
-	JobDetailsCollection = "job_details"
-	JobDetailCacheTTL    = 1 * time.Hour
+	JobDetailsCollection         = "job_details"
+	JobDetailCacheTTL            = 1 * time.Hour
+	MinRatingForRelatedJobs      = 3
+	MinLinkedInJobIDLength       = 8  // Minimum length for LinkedIn job IDs
+	MaxLinkedInJobIDLength       = 20 // Maximum length for LinkedIn job IDs
 )
 
 type SearchQueue interface {
@@ -706,4 +711,69 @@ func InvalidateSemanticJobsCache(fs *FirestoreClient, userID string) {
 	// Note: In a production system, you might want to maintain a separate
 	// mapping of user IDs to cache keys for more efficient invalidation
 
+}
+
+// ExtractLinkedInJobID extracts the LinkedIn job ID from a LinkedIn job URL.
+// Example URL: https://www.linkedin.com/jobs/view/staff-linux-devops-engineer-aws-remote-at-motion-recruitment-4249241958?refId=...
+// Returns: 4249241958
+func ExtractLinkedInJobID(url string) (string, error) {
+	if url == "" {
+		return "", fmt.Errorf("URL cannot be empty")
+	}
+
+	// Check if this is a LinkedIn URL
+	if !strings.Contains(url, "linkedin.com") || !strings.Contains(url, "/jobs/view/") {
+		return "", fmt.Errorf("not a LinkedIn job URL: %s", url)
+	}
+
+	// Remove query parameters
+	parts := strings.Split(url, "?")
+	basePath := parts[0]
+
+	// Use regex to find the last sequence of digits that meets LinkedIn job ID criteria
+	// Pattern: one or more digits at the end of the path or followed by a slash
+	re := regexp.MustCompile(`(\d+)(?:/.*)?$`)
+	matches := re.FindStringSubmatch(basePath)
+	
+	if len(matches) < 2 {
+		return "", fmt.Errorf("no job ID found in URL: %s", url)
+	}
+
+	jobID := matches[1]
+	
+	// Validate job ID length
+	if len(jobID) < MinLinkedInJobIDLength || len(jobID) > MaxLinkedInJobIDLength {
+		return "", fmt.Errorf("job ID length invalid (must be %d-%d digits): %s", MinLinkedInJobIDLength, MaxLinkedInJobIDLength, jobID)
+	}
+
+	return jobID, nil
+}
+
+// ExtractRelatedJobIDs extracts all LinkedIn job IDs from SimilarJobs and PeopleAlsoViewed arrays.
+// Returns a slice of unique job IDs.
+func ExtractRelatedJobIDs(similarJobs, peopleAlsoViewed []RelatedJob) []string {
+	seen := make(map[string]bool)
+	var jobIDs []string
+
+	// Process similar jobs
+	for _, job := range similarJobs {
+		if jobID, err := ExtractLinkedInJobID(job.URL); err == nil {
+			if !seen[jobID] {
+				seen[jobID] = true
+				jobIDs = append(jobIDs, jobID)
+			}
+		}
+	}
+
+	// Process people also viewed jobs
+	for _, job := range peopleAlsoViewed {
+		if jobID, err := ExtractLinkedInJobID(job.URL); err == nil {
+			if !seen[jobID] {
+				seen[jobID] = true
+				jobIDs = append(jobIDs, jobID)
+			}
+		}
+	}
+
+	return jobIDs
 }

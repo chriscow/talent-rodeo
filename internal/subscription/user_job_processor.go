@@ -46,6 +46,10 @@ type UserJobProcessor struct {
 	onDashboard   bool
 	totalJobs     int
 	processedJobs atomic.Int32
+
+	// Search context
+	searchCriteria *internal.SearchCriteria
+	jobProvider    internal.JobProvider
 }
 
 type userJobEvaluationTask struct {
@@ -72,6 +76,12 @@ func NewUserJobProcessor(fs *internal.FirestoreClient, psh *pusher.Client, logge
 		stopCh:    make(chan struct{}),
 		stoppedCh: make(chan struct{}),
 	}
+}
+
+// SetJobProvider sets the job provider for fetching individual job details.
+// This is optional - if not set, related jobs processing will be skipped.
+func (p *UserJobProcessor) SetJobProvider(provider internal.JobProvider) {
+	p.jobProvider = provider
 }
 
 func (p *UserJobProcessor) Start() {
@@ -234,6 +244,21 @@ func (p *UserJobProcessor) evaluateJob(ctx context.Context, task userJobEvaluati
 
 	onDashboard, _ := p.checkUserOnDashboard()
 	logger.Info("successfully evaluated and saved job for user", "rating", matchAnalysis.Rating.NumericRating, "onDashboard", onDashboard)
+
+	// Process related jobs if this job is rated 3 stars or higher
+	if matchAnalysis.Rating.NumericRating >= internal.MinRatingForRelatedJobs && p.searchCriteria != nil && p.jobProvider != nil {
+		logger.Debug("processing related jobs for high-rated job", "rating", matchAnalysis.Rating.NumericRating)
+		if err := internal.ProcessRelatedJobs(ctx, p.fs, logger, p.userID, task.Job, *p.searchCriteria, p.jobProvider); err != nil {
+			logger.Error("failed to process related jobs", "error", err)
+			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+				"action": "evaluateJob: failed to process related jobs",
+				"jobID":  task.Job.ID,
+				"userID": p.userID,
+				"rating": fmt.Sprintf("%d", matchAnalysis.Rating.NumericRating),
+			})
+			// Don't return error - related job processing failure shouldn't break main flow
+		}
+	}
 
 	// Update and notify progress
 	processed := p.processedJobs.Add(1)
@@ -406,6 +431,7 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 
 	processor.userID = user.ID
 	processor.totalJobs = len(jobs)
+	processor.searchCriteria = &criteria
 
 	processor.Start()
 

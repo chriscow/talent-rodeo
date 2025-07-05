@@ -308,7 +308,7 @@ func IsRetryable400Error(body []byte) bool {
 		"temporary",
 		"temporarily unavailable",
 	}
-	
+
 	bodyLower := strings.ToLower(bodyStr)
 	for _, msg := range retryableMessages {
 		if strings.Contains(bodyLower, strings.ToLower(msg)) {

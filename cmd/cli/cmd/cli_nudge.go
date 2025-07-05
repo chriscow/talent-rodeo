@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"talent-rodeo/internal"
+	"talent-rodeo/internal/funcs"
 	"talent-rodeo/internal/nudge"
 
 	"github.com/spf13/cobra"
@@ -373,32 +374,51 @@ func predictNudgeForType(ctx context.Context, fs *internal.FirestoreClient, user
 		sendTime = eligibleTime.Add(time.Duration(delayDays-1) * 24 * time.Hour) // Day 6 = 5 days after start
 	}
 
-	// If the send time is in the past, check if we should still send
-	if sendTime.Before(now) {
-		// For trial emails, check if we're within the 24-hour window
-		if nudgeType == nudge.NudgeTypeTrialWelcome || nudgeType == nudge.NudgeTypeTrialExpectations ||
-			nudgeType == nudge.NudgeTypeTrialEngagement || nudgeType == nudge.NudgeTypeTrialConversion {
-			timeSinceTarget := now.Sub(sendTime)
-			if timeSinceTarget > 24*time.Hour {
-				return nil // Too late for trial email
-			}
+	// For trial emails, use the same precise timing logic as the processor
+	if isTrialEmail(nudgeType) {
+		// Must have timezone and subscription end date
+		if user.Timezone == nil {
+			return nil // No timezone set
 		}
-		// For other nudge types, if it's overdue, it would be sent immediately
-		sendTime = now
+		if user.SubscriptionEnd == nil {
+			return nil // No trial end date
+		}
+
+		// Must be in active trial
+		if user.SubscriptionEnd.Before(now) {
+			return nil // Trial expired
+		}
+
+		// Check if it's the right time to send this email (within 24 hours after target)
+		timeSinceTarget := now.Sub(sendTime)
+		if timeSinceTarget < 0 {
+			// Too early - keep the original send time
+			// Don't return nil, just use the future send time
+		} else if timeSinceTarget > 24*time.Hour {
+			return nil // Too late for trial email
+		} else {
+			// Within the 24-hour window after target - can send now
+			sendTime = now
+		}
+	} else {
+		// For non-trial emails, use the original logic
+		if sendTime.Before(now) {
+			// For other nudge types, if it's overdue, it would be sent immediately
+			sendTime = now
+		}
 	}
 
 	// Check rate limiting - skip for trial emails (they have their own timing logic)
 	// Trial emails are limited by per-type limits (max 1 each) and specific timing windows
-	isTrialEmail := (nudgeType == nudge.NudgeTypeTrialWelcome || nudgeType == nudge.NudgeTypeTrialExpectations ||
-		nudgeType == nudge.NudgeTypeTrialEngagement || nudgeType == nudge.NudgeTypeTrialConversion)
-
-	if !isTrialEmail && user.LastNudgeEmailSent != nil {
-		timeSinceLastNudge := now.Sub(*user.LastNudgeEmailSent)
-		if timeSinceLastNudge < settings.WeeklyRateLimit {
-			// User is rate limited, calculate when they can receive the next nudge
-			nextAllowedTime := user.LastNudgeEmailSent.Add(settings.WeeklyRateLimit)
-			if nextAllowedTime.After(sendTime) {
-				sendTime = nextAllowedTime
+	if !isTrialEmail(nudgeType) {
+		if user.LastNudgeEmailSent != nil {
+			timeSinceLastNudge := now.Sub(*user.LastNudgeEmailSent)
+			if timeSinceLastNudge < settings.WeeklyRateLimit {
+				// User is rate limited, calculate when they can receive the next nudge
+				nextAllowedTime := user.LastNudgeEmailSent.Add(settings.WeeklyRateLimit)
+				if nextAllowedTime.After(sendTime) {
+					sendTime = nextAllowedTime
+				}
 			}
 		}
 	}
@@ -513,9 +533,25 @@ func displayPredictions(predictions []PredictedNudge) {
 		}
 
 		// Format when
-		when := pred.WillBeSentAt.Format("2006-01-02 15:04")
+		when := funcs.ApproxFuture(pred.WillBeSentAt)
+
+		// Override with "Now" only for immediate sends (within next few minutes)
 		if pred.DaysUntilSent == 0 {
-			when = "Now"
+			// For trial emails, check if we're actually within the send window
+			if isTrialEmail(pred.NudgeType) {
+				// Trial email should only show "Now" if it's past the target time
+				timeSinceTarget := time.Now().Sub(pred.WillBeSentAt)
+				if timeSinceTarget >= 0 && timeSinceTarget <= 30*time.Minute {
+					when = "Now"
+				}
+				// Otherwise use the ApproxFuture result
+			} else {
+				// For non-trial emails, show "Now" if it's very soon
+				timeUntilSend := pred.WillBeSentAt.Sub(time.Now())
+				if timeUntilSend <= 5*time.Minute {
+					when = "Now"
+				}
+			}
 		}
 
 		// Format days
