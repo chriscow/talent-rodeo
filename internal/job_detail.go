@@ -22,11 +22,11 @@ import (
 )
 
 const (
-	JobDetailsCollection         = "job_details"
-	JobDetailCacheTTL            = 1 * time.Hour
-	MinRatingForRelatedJobs      = 3
-	MinLinkedInJobIDLength       = 8  // Minimum length for LinkedIn job IDs
-	MaxLinkedInJobIDLength       = 20 // Maximum length for LinkedIn job IDs
+	JobDetailsCollection    = "job_details"
+	JobDetailCacheTTL       = 1 * time.Hour
+	MinRatingForRelatedJobs = 4
+	MinLinkedInJobIDLength  = 8  // Minimum length for LinkedIn job IDs
+	MaxLinkedInJobIDLength  = 20 // Maximum length for LinkedIn job IDs
 )
 
 type SearchQueue interface {
@@ -734,13 +734,13 @@ func ExtractLinkedInJobID(url string) (string, error) {
 	// Pattern: one or more digits at the end of the path or followed by a slash
 	re := regexp.MustCompile(`(\d+)(?:/.*)?$`)
 	matches := re.FindStringSubmatch(basePath)
-	
+
 	if len(matches) < 2 {
 		return "", fmt.Errorf("no job ID found in URL: %s", url)
 	}
 
 	jobID := matches[1]
-	
+
 	// Validate job ID length
 	if len(jobID) < MinLinkedInJobIDLength || len(jobID) > MaxLinkedInJobIDLength {
 		return "", fmt.Errorf("job ID length invalid (must be %d-%d digits): %s", MinLinkedInJobIDLength, MaxLinkedInJobIDLength, jobID)
