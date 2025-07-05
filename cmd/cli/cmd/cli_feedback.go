@@ -18,87 +18,174 @@ import (
 
 var feedbackCmd = &cobra.Command{
 	Use:   "feedback",
-	Short: "Manage user feedback operations",
-	Long:  `Commands for processing and managing user feedback on job listings`,
+	Short: "Manage and analyze user feedback on job listings",
+	Long: `Manage user feedback on job listings to improve job matching accuracy.
+
+User feedback includes likes, dislikes, and ratings on job titles, companies,
+descriptions, and other job attributes. This feedback is processed to update
+user preferences and improve future job recommendations.
+
+This command group allows you to:
+- Process feedback to update user preferences
+- Analyze feedback patterns and statistics
+- Export feedback data for analysis
+- Clean up orphaned feedback records`,
 }
 
 var processFeedbackCmd = &cobra.Command{
 	Use:   "process",
-	Short: "Process unprocessed user feedback",
+	Short: "Process all unprocessed user feedback to update preferences",
 	Long: `Process all unprocessed user feedback and update SteeringQuery preferences.
-This command is designed to be run as a daily batch job.`,
+
+This command analyzes user feedback (likes/dislikes on job attributes) and
+updates each user's SteeringQuery to improve future job matching. Run this
+as a daily batch job to keep user preferences current.
+
+Examples:
+  trcli feedback process                               # Process all pending feedback`,
 	RunE: processFeedback,
 }
 
 var processFeedbackUserCmd = &cobra.Command{
-	Use:   "process-user [userID]",
-	Short: "Process feedback for a specific user",
-	Long:  `Process unprocessed feedback for a specific user and update their SteeringQuery preferences.`,
-	Args:  cobra.ExactArgs(1),
-	RunE:  processFeedbackForUser,
+	Use:   "process-user <user-id>",
+	Short: "Process feedback for a specific user to update their preferences",
+	Long: `Process unprocessed feedback for a specific user and update their SteeringQuery preferences.
+
+This command focuses on a single user's feedback to immediately update their
+job matching preferences. Useful for testing or when you want to update a
+specific user's preferences without processing all users.
+
+Examples:
+  trcli feedback process-user user123                  # Process feedback for specific user`,
+	Args: cobra.ExactArgs(1),
+	RunE: processFeedbackForUser,
 }
 
 var showFeedbackStatsCmd = &cobra.Command{
 	Use:   "stats",
-	Short: "Show feedback statistics",
-	Long:  `Display statistics about unprocessed user feedback.`,
-	RunE:  showFeedbackStats,
+	Short: "Show overview statistics about unprocessed feedback",
+	Long: `Display statistics about unprocessed user feedback across the system.
+
+Shows counts of likes vs dislikes, number of users with pending feedback,
+and identifies the most active users. Useful for monitoring feedback volume
+and identifying users who need preference updates.
+
+Examples:
+  trcli feedback stats                                 # Show feedback statistics
+  trcli feedback stats --json                         # Get statistics in JSON format`,
+	RunE: showFeedbackStats,
 }
 
 var cleanupOrphanedFeedbackCmd = &cobra.Command{
 	Use:   "cleanup-orphaned",
-	Short: "Clean up feedback for deleted users",
+	Short: "Clean up feedback records for deleted users",
 	Long: `Mark feedback as processed for users that no longer exist in the system.
-This prevents feedback processing errors and cleans up orphaned data.`,
+
+This prevents feedback processing errors when users have been deleted but
+their feedback records remain. Run this periodically to maintain data
+consistency and avoid processing errors.
+
+Examples:
+  trcli feedback cleanup-orphaned                     # Clean up orphaned feedback`,
 	RunE: cleanupOrphanedFeedback,
 }
 
 var listUserFeedbackCmd = &cobra.Command{
-	Use:   "list-user [userID]",
-	Short: "List all feedback for a specific user",
-	Long:  `Display all feedback items for a specific user, both processed and unprocessed.`,
-	Args:  cobra.ExactArgs(1),
-	RunE:  listUserFeedback,
+	Use:   "list-user <user-id>",
+	Short: "List all feedback items for a specific user",
+	Long: `Display all feedback items for a specific user, both processed and unprocessed.
+
+Shows the user's feedback history including what they liked/disliked, when
+the feedback was given, and whether it has been processed into their preferences.
+Useful for understanding a user's feedback patterns.
+
+Examples:
+  trcli feedback list-user user123                    # Show user's feedback
+  trcli feedback list-user user123 --json             # Get feedback in JSON format`,
+	Args: cobra.ExactArgs(1),
+	RunE: listUserFeedback,
 }
 
 var showFeedbackCmd = &cobra.Command{
-	Use:   "show [feedbackID]",
+	Use:   "show <feedback-id>",
 	Short: "Show detailed information about a specific feedback item",
-	Long:  `Display detailed information about a specific feedback item including all fields.`,
-	Args:  cobra.ExactArgs(1),
-	RunE:  showFeedback,
+	Long: `Display detailed information about a specific feedback item including all fields.
+
+Shows the complete feedback record including user ID, job ID, feedback type,
+text content, and processing status. Useful for debugging feedback processing
+or understanding specific feedback details.
+
+Examples:
+  trcli feedback show feedback123                     # Show feedback details
+  trcli feedback show feedback123 --json              # Get details in JSON format`,
+	Args: cobra.ExactArgs(1),
+	RunE: showFeedback,
 }
 
 var listJobFeedbackCmd = &cobra.Command{
-	Use:   "list-job [jobID]",
-	Short: "List all feedback for a specific job",
-	Long:  `Display all feedback items for a specific job across all users.`,
-	Args:  cobra.ExactArgs(1),
-	RunE:  listJobFeedback,
+	Use:   "list-job <job-id>",
+	Short: "List all feedback for a specific job across all users",
+	Long: `Display all feedback items for a specific job across all users.
+
+Shows how different users have rated or provided feedback on the same job.
+Useful for understanding job popularity, identifying problematic job listings,
+or analyzing feedback patterns for specific positions.
+
+Examples:
+  trcli feedback list-job scrapingdog:12345           # Show job feedback
+  trcli feedback list-job scrapingdog:12345 --json    # Get feedback in JSON format`,
+	Args: cobra.ExactArgs(1),
+	RunE: listJobFeedback,
 }
 
 var userStatsCmd = &cobra.Command{
-	Use:   "user-stats [userID]",
-	Short: "Show comprehensive user feedback statistics",
-	Long:  `Display detailed statistics about a user's feedback activity.`,
-	Args:  cobra.ExactArgs(1),
-	RunE:  showUserStats,
+	Use:   "user-stats <user-id>",
+	Short: "Show comprehensive feedback statistics for a user",
+	Long: `Display detailed statistics about a user's feedback activity and patterns.
+
+Shows total feedback count, like/dislike ratios, most recent activity, and
+processing status. Useful for understanding user engagement levels and
+feedback behavior patterns.
+
+Examples:
+  trcli feedback user-stats user123                   # Show user feedback stats
+  trcli feedback user-stats user123 --json            # Get stats in JSON format`,
+	Args: cobra.ExactArgs(1),
+	RunE: showUserStats,
 }
 
 var searchDateCmd = &cobra.Command{
-	Use:   "search-date [userID] [startDate] [endDate]",
-	Short: "Search feedback by date range",
-	Long:  `Search for feedback within a date range for a specific user. Dates should be in YYYY-MM-DD format.`,
-	Args:  cobra.ExactArgs(3),
-	RunE:  searchFeedbackByDate,
+	Use:   "search-date <user-id> <start-date> <end-date>",
+	Short: "Search user feedback within a specific date range",
+	Long: `Search for feedback within a date range for a specific user.
+
+Useful for analyzing feedback patterns over time, understanding how user
+preferences have changed, or finding feedback related to specific time periods.
+
+Date format: YYYY-MM-DD
+
+Examples:
+  trcli feedback search-date user123 2024-01-01 2024-01-31    # January 2024 feedback
+  trcli feedback search-date user123 2024-01-01 2024-01-31 --json`,
+	Args: cobra.ExactArgs(3),
+	RunE: searchFeedbackByDate,
 }
 
 var exportFeedbackCmd = &cobra.Command{
-	Use:   "export [userID]",
-	Short: "Export feedback data for analysis",
-	Long:  `Export feedback data in JSON or CSV format for analysis.`,
-	Args:  cobra.ExactArgs(1),
-	RunE:  exportFeedback,
+	Use:   "export <user-id> [--format json|csv]",
+	Short: "Export user feedback data for external analysis",
+	Long: `Export feedback data in JSON or CSV format for analysis in external tools.
+
+The exported data includes all feedback fields: IDs, timestamps, feedback types,
+text content, and processing status. Useful for data analysis, reporting, or
+migrating feedback data.
+
+Examples:
+  trcli feedback export user123                       # Export as JSON (default)
+  trcli feedback export user123 --format csv          # Export as CSV
+  trcli feedback export user123 --format csv > feedback.csv`,
+	Args: cobra.ExactArgs(1),
+	RunE: exportFeedback,
 }
 
 func init() {
@@ -112,7 +199,7 @@ func init() {
 	feedbackCmd.AddCommand(userStatsCmd)
 	feedbackCmd.AddCommand(searchDateCmd)
 	feedbackCmd.AddCommand(exportFeedbackCmd)
-	
+
 	// Add flags
 	exportFeedbackCmd.Flags().StringP("format", "f", "json", "Export format (json or csv)")
 	RootCmd.AddCommand(feedbackCmd)
@@ -461,7 +548,7 @@ func showUserStats(cmd *cobra.Command, args []string) error {
 		} else {
 			fmt.Printf("Last Feedback: None\n")
 		}
-		
+
 		if stats.TotalFeedback > 0 {
 			likePercentage := float64(stats.LikedItems) / float64(stats.TotalFeedback) * 100
 			fmt.Printf("Like Percentage: %.1f%%\n", likePercentage)

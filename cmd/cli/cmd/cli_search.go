@@ -94,26 +94,44 @@ func (f *jobSinkForwarder) OnAllExtractionsComplete(task internal.SearchTask, to
 func init() {
 	searchCmd := &cobra.Command{
 		Use:   "search",
-		Short: "Manage job searches",
-		Long:  `Search for jobs and manage search criteria.`,
+		Short: "Manage job searches and search execution",
+		Long: `Execute job searches and manage search operations.
+
+Job searches find new job listings based on search criteria and add them
+to users' job collections. Searches are queued and processed asynchronously
+by job search providers like ScrapingDog.
+
+This command group allows you to:
+- Queue new job searches with saved criteria
+- Monitor search progress and completion`,
 	}
 
 	queueCmd := &cobra.Command{
-		Use:   "queue",
-		Short: "Queue a new job search",
-		Long: `Queue a new job search with specified criteria and wait for completion.
-Example: cli search queue --query "golang developer" --geo-id "103644278"
+		Use:   "queue --criteria-id <criteria-id>",
+		Short: "Queue a new job search with saved search criteria",
+		Long: `Queue a new job search using previously saved search criteria.
 
-Alternatively, you can use a saved criteria:
-Example: cli search queue --criteria-id "golang-developer-103644278"
+This command starts an asynchronous job search that will find new job listings
+matching the specified criteria. The search runs in the background and adds
+found jobs to users' collections automatically.
 
-Common GeoIDs:
-- Remote/United States: 103644278
-- Greater Atlanta Area: 90000052
-- Greater Boston Area: 90000007
-- Greater Chicago Area: 90000014
-- Greater San Francisco Area: 90000084
-- Greater New York Area: 90000070`,
+The search criteria must already exist in the system. Use the 'criteria' command
+group to create and manage search criteria.
+
+Required flags:
+  --criteria-id, -c: ID of saved search criteria to use for the search
+
+Common search criteria examples:
+  golang-developer-remote    - Go developer positions, remote work
+  python-data-scientist      - Python data science roles
+  frontend-react-nyc         - Frontend React jobs in NYC area
+
+Examples:
+  # Queue search with saved criteria
+  trcli search queue --criteria-id golang-developer-remote
+  
+  # Queue search for specific location
+  trcli search queue --criteria-id "python-jobs-san-francisco"`,
 		RunE: runSearch,
 	}
 

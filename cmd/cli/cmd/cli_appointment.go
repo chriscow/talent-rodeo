@@ -85,19 +85,31 @@ func (u *jobEventHandler) OnSearchCompleted(task internal.SearchTask, totalJobs 
 }
 
 var appointmentCmd = &cobra.Command{
-	Use:     "appointment",
-	Short:   "Manage appointments",
-	Long:    `Commands for managing appointments in Talent Rodeo`,
+	Use:   "appointment",
+	Short: "Manage user appointments and call processing",
+	Long: `Manage user appointments, call processing, and transcript analysis.
+
+Appointments represent scheduled or completed calls between users and recruiters.
+This command group allows you to:
+- List and view user appointments
+- Create appointments from JSON data
+- Reprocess completed calls to update job matches
+- Send recap emails with call summaries`,
 	Aliases: []string{"appt"},
 }
 
 var latestApptCmd = &cobra.Command{
-	Use:   "latest [user-id]",
+	Use:   "latest <user-id>",
 	Short: "Get the latest appointment for a user",
-	Long: `Get the latest appointment for a user.
-	
-If the --completed flag is provided, only completed appointments are considered.
-Otherwise, all appointments are considered.`,
+	Long: `Get the latest appointment for a user, optionally filtering to completed appointments only.
+
+This is useful for checking appointment status, getting call IDs, or finding
+the most recent appointment to reprocess.
+
+Examples:
+  trcli appointment latest user123                    # Get latest appointment (any status)
+  trcli appointment latest user123 --completed        # Get latest completed appointment only
+  trcli appointment latest user123 --json             # Get full appointment details in JSON`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
@@ -140,10 +152,17 @@ Otherwise, all appointments are considered.`,
 }
 
 var listApptsCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List appointments for a user",
-	Long:  `List all appointments for a user by ID`,
-	Args:  cobra.ExactArgs(1),
+	Use:   "list <user-id>",
+	Short: "List all appointments for a user",
+	Long: `List all appointments for a user in chronological order.
+
+Shows appointment IDs, statuses, and timing information to help track
+a user's call history and appointment progression.
+
+Examples:
+  trcli appointment list user123                      # List appointment IDs
+  trcli appointment list user123 --json               # List full appointment details`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 		fs, err := internal.NewFirestoreClient(ctx)
@@ -171,11 +190,27 @@ var listApptsCmd = &cobra.Command{
 }
 
 var createApptCmd = &cobra.Command{
-	Use:   "create",
-	Short: "Create an appointment",
-	Long: `Create an appointment for a user from JSON data
+	Use:   "create <json-file> --user <user-id>",
+	Short: "Create appointments from JSON file",
+	Long: `Create one or more appointments for a user from a JSON file.
 
-The argument is a JSON file for an appointment.`,
+The JSON file should contain an array of appointment objects. This is typically
+used for importing appointment data or creating test appointments.
+
+Required flags:
+  --user, -u: User ID to create appointments for
+
+Examples:
+  trcli appointment create appointments.json --user user123
+  
+JSON file format:
+  [
+    {
+      "id": "appt-123",
+      "status": "scheduled",
+      "scheduled_time": "2024-01-15T10:00:00Z"
+    }
+  ]`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if userID == "" {
@@ -214,9 +249,32 @@ The argument is a JSON file for an appointment.`,
 }
 
 var reprocessCmd = &cobra.Command{
-	Use:   "reprocess [appointment-id]",
-	Short: "Reprocess a completed appointment",
-	Long:  `Reprocess a completed appointment by running it through the transcript processor again`,
+	Use:   "reprocess [--user <user-id>] [--appointment <appointment-id>] [--all]",
+	Short: "Reprocess completed appointments to update job matches",
+	Long: `Reprocess completed appointments by re-running transcript analysis and job matching.
+
+This command re-analyzes call transcripts to extract user preferences, update
+steering queries, and find new job matches based on the conversation. Useful
+when the job matching algorithm has been improved or when you want to refresh
+a user's job recommendations.
+
+Options:
+  --user + --appointment: Reprocess specific appointment
+  --user only: Reprocess latest completed appointment for user  
+  --all: Reprocess latest completed appointment for all users (bulk operation)
+
+Examples:
+  # Reprocess specific appointment
+  trcli appointment reprocess --user user123 --appointment appt-456
+  
+  # Reprocess latest completed appointment for user
+  trcli appointment reprocess --user user123
+  
+  # Reprocess and send recap email
+  trcli appointment reprocess --user user123 --send-recap
+  
+  # Bulk reprocess all users (use with caution)
+  trcli appointment reprocess --all`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
@@ -411,9 +469,22 @@ var reprocessCmd = &cobra.Command{
 }
 
 var sendRecapCmd = &cobra.Command{
-	Use:   "send-recap",
-	Short: "Send a recap email for a completed appointment",
-	Long:  `Send a recap email for a completed appointment using the appointment transcript`,
+	Use:   "send-recap --user <user-id> --appointment <appointment-id>",
+	Short: "Send recap email for a completed appointment",
+	Long: `Generate and send a recap email summarizing a completed appointment.
+
+The recap email includes key points from the call transcript, job recommendations
+discussed, and next steps. Requires SMTP configuration via environment variables.
+
+Required flags:
+  --user, -u: User ID for the appointment
+  --appointment, -a: Appointment ID to send recap for
+
+Required environment variables:
+  SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM
+
+Examples:
+  trcli appointment send-recap --user user123 --appointment appt-456`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 

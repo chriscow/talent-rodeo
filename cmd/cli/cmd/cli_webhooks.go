@@ -32,14 +32,47 @@ func init() {
 
 var webhooksCmd = &cobra.Command{
 	Use:   "webhooks",
-	Short: "Manage webhook data",
-	Long:  `Webhooks command allows you to manage webhook data in the system`,
+	Short: "Manage webhook data and webhook history",
+	Long: `Manage webhook data received from external services like VAPI.
+
+Webhooks are HTTP callbacks received from external services when events occur.
+The system stores webhook data for debugging, processing, and audit purposes.
+This includes call status updates, payment notifications, and other event data.
+
+This command group allows you to:
+- List webhook data for debugging and analysis
+- Delete webhook records for cleanup and maintenance`,
 }
 
 var deleteWebhooksCmd = &cobra.Command{
-	Use:   "delete",
-	Short: "Delete webhook(s)",
-	Long:  `Delete webhook(s) by ID or prefix from webhook-data/vapi/webhooks collection`,
+	Use:   "delete [--id <webhook-id> | --prefix <prefix> | --all]",
+	Short: "Delete webhook records for cleanup and maintenance",
+	Long: `Delete webhook records from the webhook storage collection.
+
+Webhooks accumulate over time and may need cleanup for maintenance or
+to remove test data. Use with caution as deleted webhook data cannot
+be recovered.
+
+Deletion options (choose one):
+  --id, -i: Delete specific webhook by ID
+  --prefix, -p: Delete all webhooks whose IDs start with prefix (BULK)
+  --all: Delete ALL webhooks in the collection (DANGEROUS)
+
+Safety options:
+  --force: Skip confirmation prompt when using --all
+
+Examples:
+  # Delete specific webhook
+  trcli webhooks delete --id webhook123
+  
+  # Delete test webhooks
+  trcli webhooks delete --prefix "test-"
+  
+  # Delete all webhooks (with confirmation)
+  trcli webhooks delete --all
+  
+  # Delete all webhooks (skip confirmation)
+  trcli webhooks delete --all --force`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		webhookID, _ := cmd.Flags().GetString("id")
 		prefix, _ := cmd.Flags().GetString("prefix")
@@ -181,9 +214,18 @@ var deleteWebhooksCmd = &cobra.Command{
 }
 
 var listWebhooksCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List webhook data",
-	Long:  `List webhook data from the webhook-data/vapi/webhooks collection`,
+	Use:   "list [--id-only]",
+	Short: "List webhook data for debugging and analysis",
+	Long: `List webhook data received from external services.
+
+Shows webhook payloads and metadata stored in the system. Useful for
+debugging webhook processing, analyzing event patterns, or investigating
+issues with external service integrations.
+
+Examples:
+  trcli webhooks list                                  # List all webhook data
+  trcli webhooks list --json                          # Pretty formatted JSON
+  trcli webhooks list --id-only                       # List webhook IDs only`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
