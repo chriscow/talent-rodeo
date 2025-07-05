@@ -275,14 +275,21 @@ func calculateDaysRemaining(endTime time.Time, timezone string) int {
 	now := time.Now().In(loc)
 	endInTz := endTime.In(loc)
 
-	// Calculate days until end date
-	diff := endInTz.Sub(now)
-	days := int(diff.Hours() / 24)
-
-	// If we're on the last day but haven't reached end time, count as 1 day
-	if days == 0 && endInTz.After(now) {
-		days = 1
+	// If trial has already ended, return 0
+	if endInTz.Before(now) || endInTz.Equal(now) {
+		return 0
 	}
+
+	// Calculate days until end date using day boundaries, not exact hours
+	// This treats any partial day as a full day remaining
+	nowDate := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	endDate := time.Date(endInTz.Year(), endInTz.Month(), endInTz.Day(), 0, 0, 0, 0, loc)
+
+	// Calculate the number of full days between start and end (inclusive of end day)
+	daysDiff := int(endDate.Sub(nowDate).Hours() / 24)
+
+	// Add 1 to include the current day as a remaining day
+	days := daysDiff + 1
 
 	return days
 }
