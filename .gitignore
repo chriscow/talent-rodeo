@@ -44,3 +44,4 @@ build-errors.log
 # binaries
 **/bin/
 trcli
+llm-golang-htmx-chat-main

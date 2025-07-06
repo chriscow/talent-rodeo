@@ -71,7 +71,7 @@ func (app *application) routes() http.Handler {
 			mux.HandleFunc("/chat", app.showChatPage, "GET")
 			mux.HandleFunc("/chat/start", app.startChat, "POST")
 			mux.HandleFunc("/chat/message", app.sendChatMessage, "POST")
-			mux.HandleFunc("/chat/stream", app.streamChatResponse, "GET")
+			mux.HandleFunc("/chat/ws", app.streamChatResponse, "GET")     // WebSocket endpoint
 			mux.HandleFunc("/chat/end", app.endChat, "POST")
 			mux.HandleFunc("/api/chat/history", app.getChatHistory, "GET")
 
