@@ -170,7 +170,7 @@ func (app *application) sendChatMessage(w http.ResponseWriter, r *http.Request) 
 	}
 
 	app.logger.Info("Chat message saved", "user_id", user.ID, "appointment_id", appointmentID)
-	
+
 	response.JSON(w, http.StatusOK, map[string]string{
 		"status": "message_saved",
 	})
@@ -253,7 +253,7 @@ func (app *application) streamChatResponse(w http.ResponseWriter, r *http.Reques
 // handleWebSocketUserMessage processes a user message and streams the AI response via WebSocket
 func (app *application) handleWebSocketUserMessage(conn *websocket.Conn, user *internal.User, appointment *internal.Appointment, userMessage string) {
 	ctx := context.Background()
-	
+
 	// Save user message to appointment
 	if err := internal.AddChatMessage(ctx, app.fs, appointment, "user", userMessage); err != nil {
 		app.logger.Error("Failed to save user message", "error", err, "user_id", user.ID)
@@ -292,7 +292,7 @@ func (app *application) streamAIResponseViaWebSocket(ctx context.Context, conn *
 		// Use the system prompt from assistant overrides
 		systemPrompt = assistantOverrides.Model.Messages[0].Content
 	}
-	
+
 	messages = append(messages, openai.ChatCompletionMessage{
 		Role:    openai.ChatMessageRoleSystem,
 		Content: systemPrompt,
@@ -343,7 +343,6 @@ func (app *application) streamAIResponseViaWebSocket(ctx context.Context, conn *
 	defer stream.Close()
 
 	var fullResponse strings.Builder
-	isFirstToken := true
 
 	// Stream the response
 	for {
@@ -369,12 +368,6 @@ func (app *application) streamAIResponseViaWebSocket(ctx context.Context, conn *
 			msg := WebSocketMessage{
 				Type:    "content",
 				Content: content,
-			}
-
-			// Add prefix for first token
-			if isFirstToken {
-				msg.Content = "AI: " + content
-				isFirstToken = false
 			}
 
 			if err := conn.WriteJSON(msg); err != nil {
@@ -477,6 +470,7 @@ func (app *application) showChatPage(w http.ResponseWriter, r *http.Request) {
 	data := app.newTemplateData(r)
 	data["AppointmentID"] = appointmentID
 	data["Appointment"] = appointment
+	data["User"] = user
 
 	err = response.Page(w, http.StatusOK, data, "pages/chat.html")
 	if err != nil {
@@ -485,7 +479,7 @@ func (app *application) showChatPage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// getChatHistory returns the chat history for an appointment  
+// getChatHistory returns the chat history for an appointment
 func (app *application) getChatHistory(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -526,7 +520,7 @@ func (app *application) getChatHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, map[string]interface{}{
-		"messages": messages,
+		"messages":       messages,
 		"appointment_id": appointmentID,
 	})
 }
