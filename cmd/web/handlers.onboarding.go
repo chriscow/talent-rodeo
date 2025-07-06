@@ -51,20 +51,20 @@ func (app *application) showOnboardingPage(w http.ResponseWriter, r *http.Reques
 		templateName := ""
 		switch currentStep {
 		case internal.OnboardingStepResumeUpload:
-			templateName = "partials/onboarding-resume-upload.html"
+			templateName = "partial:onboarding-resume-upload"
 		case internal.OnboardingStepResumeProcessing:
-			templateName = "partials/onboarding-resume-processing.html"
+			templateName = "partial:onboarding-resume-processing"
 		case internal.OnboardingStepCommunicationChoice:
-			templateName = "partials/onboarding-communication-choice.html"
+			templateName = "partial:onboarding-communication-choice"
 		case internal.OnboardingStepActiveConversation:
-			templateName = "partials/onboarding-active-conversation.html"
+			templateName = "partial:onboarding-active-conversation"
 		default:
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte("Unknown step"))
 			return
 		}
 
-		if err := response.Partial(w, http.StatusOK, data, templateName); err != nil {
+		if err := response.NamedTemplate(w, http.StatusOK, data, templateName, "partials/*.html", "shared/*.html"); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render partial %s: %w", templateName, err))
 			return
 		}
@@ -150,20 +150,20 @@ func (app *application) handleOnboardingStepRequest(w http.ResponseWriter, r *ht
 	templateName := ""
 	switch currentStep {
 	case internal.OnboardingStepResumeUpload:
-		templateName = "partials/onboarding-resume-upload.html"
+		templateName = "partial:onboarding-resume-upload"
 	case internal.OnboardingStepResumeProcessing:
-		templateName = "partials/onboarding-resume-processing.html"
+		templateName = "partial:onboarding-resume-processing"
 	case internal.OnboardingStepCommunicationChoice:
-		templateName = "partials/onboarding-communication-choice.html"
+		templateName = "partial:onboarding-communication-choice"
 	case internal.OnboardingStepActiveConversation:
-		templateName = "partials/onboarding-active-conversation.html"
+		templateName = "partial:onboarding-active-conversation"
 	default:
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Unknown step"))
 		return
 	}
 
-	if err := response.Partial(w, http.StatusOK, data, templateName); err != nil {
+	if err := response.NamedTemplate(w, http.StatusOK, data, templateName, "partials/*.html", "shared/*.html"); err != nil {
 		app.logger.Error("failed to render step content", "error", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return

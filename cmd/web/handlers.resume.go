@@ -308,7 +308,7 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 		data := app.newTemplateData(r)
 		data["User"] = user
 		
-		if err := response.Partial(w, http.StatusOK, data, "partials/onboarding-resume-processing.html"); err != nil {
+		if err := response.NamedTemplate(w, http.StatusOK, data, "partial:onboarding-resume-processing", "partials/*.html", "shared/*.html"); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render processing partial: %w", err))
 			return
 		}
