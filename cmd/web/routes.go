@@ -82,7 +82,7 @@ func (app *application) routes() http.Handler {
 			// - StepPhoneCallCompleted: profile-preferences.html
 			// - StepPreferencesExtracted: profile-job-search.html
 			// - StepJobSearchStarted/Complete: profile-jobs.html
-			mux.HandleFunc("/profile", app.showProfilePage, "GET")
+			mux.HandleFunc("/profile", app.showOnboardingPage, "GET")
 			mux.HandleFunc("/profile/onboarding/reset", app.resetOnboardingState, "POST")
 			mux.HandleFunc("/profile/resume/:resumeID", app.deleteResume, "DELETE")
 
@@ -100,6 +100,12 @@ func (app *application) routes() http.Handler {
 			mux.HandleFunc("/profile/schedule/appointment/:id", app.cancelAppointment, "DELETE")
 			mux.HandleFunc("/profile/schedule/reschedule", app.rescheduleAppointment, "POST")
 			mux.HandleFunc("/profile/schedule/call-now", app.callNow, "POST")
+
+			// New HTMX onboarding step routes
+			mux.HandleFunc("/profile/step/current", app.handleOnboardingStepRequest, "GET")
+			mux.HandleFunc("/profile/step/resume-upload", app.createResume, "POST")
+			mux.HandleFunc("/profile/step/start-voice-call", app.callNow, "POST")
+			mux.HandleFunc("/profile/step/start-chat", app.startChatFromOnboarding, "POST")
 
 			mux.HandleFunc("/account/delete", app.deleteAccount, "POST")
 

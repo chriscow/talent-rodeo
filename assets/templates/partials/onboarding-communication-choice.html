@@ -1,0 +1,50 @@
+{{define "partial:onboarding-communication-choice"}}
+<div>
+    <h2>Choose Your Communication Method</h2>
+    <p>Great! Your resume has been processed. Now, how would you like to discuss your job search with <strong>Shirely</strong>, your AI assistant?</p>
+    
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2rem;">
+        <!-- Voice Call Option -->
+        <article style="text-align: center; padding: 1.5rem; border: 1px solid var(--pico-border-color); border-radius: var(--pico-border-radius);">
+            <h3>📞 Voice Call</h3>
+            <p>Have a natural conversation with Shirely over the phone. She'll call you within minutes to discuss your background and job preferences.</p>
+            
+            <ul style="text-align: left; margin: 1rem 0;">
+                <li>Personal, conversational experience</li>
+                <li>Quick 10-15 minute call</li>
+                <li>Shirely will call you immediately</li>
+            </ul>
+            
+            <button hx-post="/profile/step/start-voice-call" 
+                    hx-target="#onboarding-content" 
+                    hx-swap="innerHTML"
+                    hx-headers='{"X-CSRF-Token": "{{.CSRFToken}}"}'>
+                📞 Call Me Now
+            </button>
+        </article>
+
+        <!-- Chat Option -->
+        <article style="text-align: center; padding: 1.5rem; border: 1px solid var(--pico-border-color); border-radius: var(--pico-border-radius);">
+            <h3>💬 Chat Conversation</h3>
+            <p>Have a text-based conversation with Shirely. Perfect if you prefer typing or are in a quiet environment.</p>
+            
+            <ul style="text-align: left; margin: 1rem 0;">
+                <li>Type at your own pace</li>
+                <li>Review and edit your responses</li>
+                <li>Start chatting immediately</li>
+            </ul>
+            
+            <button hx-post="/profile/step/start-chat" 
+                    hx-target="#onboarding-content" 
+                    hx-swap="innerHTML"
+                    hx-headers='{"X-CSRF-Token": "{{.CSRFToken}}"}'>
+                💬 Start Chat
+            </button>
+        </article>
+    </div>
+    
+    <p style="text-align: center; margin-top: 1rem;">
+        <em>Both options will help Shirely understand your preferences and start finding great job matches for you.</em>
+    </p>
+</div>
+{{end}}

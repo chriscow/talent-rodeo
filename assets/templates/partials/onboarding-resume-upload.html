@@ -1,0 +1,57 @@
+{{define "partial:onboarding-resume-upload"}}
+<div>
+    <h2>Upload Your Resume</h2>
+    <p>Let's start by uploading your resume so we can understand your background and skills.</p>
+    
+    <ul>
+        <li>AI will analyze your resume to understand your skills and experience</li>
+        <li>When you are ready, <strong>Shirely</strong>, your AI search assistant will call you to discuss your resume and your job search goals</li>
+        <li>You'll get personalized job matches based on your preferences</li>
+    </ul>
+
+    <form enctype="multipart/form-data" 
+          hx-post="/profile/step/resume-upload" 
+          hx-target="#onboarding-content" 
+          hx-swap="innerHTML"
+          hx-headers='{"X-CSRF-Token": "{{.CSRFToken}}"}'>
+        
+        <fieldset>
+            <label for="resume">
+                Resume Upload *
+                <input type="file" 
+                       id="resume" 
+                       name="resume" 
+                       accept=".pdf,.doc,.docx" 
+                       required
+                       aria-describedby="resume-help">
+                <small id="resume-help">Supported formats: PDF, DOC, DOCX (max 10MB)</small>
+            </label>
+        </fieldset>
+
+        <fieldset>
+            <label for="phone">
+                Phone Number *
+                <input type="tel" 
+                       id="phone" 
+                       name="phone" 
+                       placeholder="(555) 123-4567" 
+                       required
+                       aria-describedby="phone-help">
+                <small id="phone-help">We'll use this to call you for your conversation with Shirely</small>
+            </label>
+        </fieldset>
+
+        <fieldset>
+            <label>
+                <input type="checkbox" name="terms" value="on" required>
+                I agree to the <a href="/terms" target="_blank">Terms of Service</a> and <a href="/privacy" target="_blank">Privacy Policy</a>
+            </label>
+        </fieldset>
+
+        <button type="submit" aria-describedby="upload-help">
+            Upload Resume & Continue
+        </button>
+        <small id="upload-help">This will start processing your resume</small>
+    </form>
+</div>
+{{end}}

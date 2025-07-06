@@ -175,6 +175,7 @@ type application struct {
 	nudgeProcessor        *nudge.Processor
 	inboxProcessor        *inbox.Processor
 	stripeClient          *client.API
+	onboardingSessionMgr  *internal.OnboardingSessionManager
 }
 
 func run(logger *slog.Logger) error {
@@ -454,8 +455,9 @@ func run(logger *slog.Logger) error {
 		processor: taskProcessor,
 		// natsScheduler: scheduler,
 		// handlers:       handlers,
-		sessionManager: sessionManager,
-		stripeClient:   stripeClient,
+		sessionManager:       sessionManager,
+		onboardingSessionMgr: internal.NewOnboardingSessionManager(sessionManager),
+		stripeClient:         stripeClient,
 		// search:          searchScheduler,
 		// searchProvider:  searchProvider,
 		// searchScheduler: searchScheduler,

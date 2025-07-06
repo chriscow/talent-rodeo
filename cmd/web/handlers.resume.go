@@ -121,6 +121,13 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 			"action":  "parseMultipartForm",
 			"maxSize": "10MB",
 		})
+		
+		// Handle HTMX error response
+		if r.Header.Get("HX-Request") == "true" {
+			app.returnHTMXError(w, r, "File too large. Maximum size is 10MB")
+			return
+		}
+		
 		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
 			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
@@ -287,7 +294,28 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 		internal.SendPusherRedirect(app.pusher, user.ID, "/dashboard")
 	}()
 
-	// Show processing page
+	// Update onboarding session if this is from HTMX onboarding flow
+	if r.Header.Get("HX-Request") == "true" {
+		// Update onboarding session
+		if err := app.onboardingSessionMgr.SetResumeID(r, resume.ID); err != nil {
+			app.logger.Error("failed to set resume ID in session", "error", err)
+		}
+		if err := app.onboardingSessionMgr.UpdateStep(r, internal.OnboardingStepResumeProcessing); err != nil {
+			app.logger.Error("failed to update onboarding step", "error", err)
+		}
+
+		// Return the processing step partial for HTMX
+		data := app.newTemplateData(r)
+		data["User"] = user
+		
+		if err := response.Partial(w, http.StatusOK, data, "partials/onboarding-resume-processing.html"); err != nil {
+			app.serverError(w, r, fmt.Errorf("failed to render processing partial: %w", err))
+			return
+		}
+		return
+	}
+
+	// For non-HTMX requests, show full processing page (legacy behavior)
 	data = app.newTemplateData(r)
 	if err := response.Page(w, http.StatusOK, data, "pages/profile-resume-processing.html"); err != nil {
 		app.serverError(w, r, fmt.Errorf("failed to render processing page: %w", err))

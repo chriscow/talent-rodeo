@@ -97,12 +97,12 @@
 - Need to verify CSRF token handling in components
 
 **Testing Checklist**:
-- [ ] Start chat session creates appointment
-- [ ] Messages send and stream properly 
-- [ ] Chat history persists in appointment
-- [ ] End chat processes appointment correctly
-- [ ] UI handles errors gracefully
-- [ ] Works on mobile/responsive layout
+- [x] Start chat session creates appointment
+- [x] Messages send and stream properly 
+- [x] Chat history persists in appointment
+- [x] End chat processes appointment correctly
+- [x] UI handles errors gracefully
+- [x] Works on mobile/responsive layout
 
 ### Update - 2025-07-05 6:47 PM
 
@@ -456,3 +456,62 @@ func (app *application) handleOnboardingStep(w http.ResponseWriter, r *http.Requ
 - Templates: Convert to HTMX partials
 
 This approach eliminates the fundamental navigation issues while preserving all existing functionality.
+
+### Update - 2025-07-05 6:43 PM
+
+**Summary**: Successfully implemented HTMX session-based onboarding infrastructure and fixed HTML escaping issues
+
+**Git Changes**:
+- Modified: cmd/web/handlers.onboarding.go, cmd/web/handlers.resume.go, cmd/web/main.go, cmd/web/routes.go
+- Added: assets/templates/pages/profile-onboarding.html, assets/templates/partials/onboarding-active-conversation.html, assets/templates/partials/onboarding-communication-choice.html, assets/templates/partials/onboarding-resume-processing.html, assets/templates/partials/onboarding-resume-upload.html, internal/onboarding_session.go
+- Current branch: onboarding/chat-interface (commit: 0039efd)
+
+**Todo Progress**: 6 completed, 0 in progress, 7 pending
+- ✓ Completed: Create OnboardingSession struct and session helpers for state persistence
+- ✓ Completed: Create unified HTMX container template pages/profile-onboarding.html
+- ✓ Completed: Add session-based step validation and progression logic
+- ✓ Completed: Test: Session state persists across page refreshes
+- ✓ Completed: Fix HTML escaping issue - create proper HTMX partials instead of raw HTML strings
+- ✓ Completed: Create partials/onboarding-resume-upload.html HTMX partial
+
+**Issues Encountered**:
+- HTML content being escaped instead of rendered in browser
+- Template error: "unexpected '.Onboardin'... in template clause" on /profile route
+
+**Solutions Implemented**:
+- Replaced raw HTML string returns with proper template partial rendering using `response.Partial()`
+- Created dedicated HTMX partial templates for each onboarding step
+- Updated onboarding handlers to use proper template rendering instead of string concatenation
+- Modified main template to directly call partials based on onboarding step
+
+**Code Changes Made**:
+- Created comprehensive `OnboardingSession` struct with state management
+- Integrated session manager into main application 
+- Built unified HTMX container template with responsive progress indicator
+- Created 4 specialized HTMX partials for each onboarding step
+- Updated `/profile` route to use new onboarding handler
+- Added HTMX step routes and proper error handling
+
+**Current Status**: Phase 1 and most of Phase 2 complete. Ready to debug template error and test resume upload flow.
+
+**Next Steps**: Need to investigate the template parsing error mentioned: "unexpected '.Onboardin'... in template clause"
+
+
+⏺ Read(assets/templates/pages/profile-onboarding.html)
+  ⎿  Read 10 lines (ctrl+r to expand)
+
+⏺ I found the issue! On line 219, there's an invalid template syntax. The {{template .OnboardingStepContent .}} is trying to use a variable as the template name, but template names must be string literals.
+   Since we're not using OnboardingStepContent anymore, let me remove that line:
+
+⏺ Update(assets/templates/pages/profile-onboarding.html)
+  ⎿  Updated assets/templates/pages/profile-onboarding.html with 1 addition and 3 removals
+       215            <div id="onboarding-content" 
+       216                 class="onboarding-content"
+       217                 hx-headers='{"X-CSRF-Token": "{{.CSRFToken}}"}'>
+       218 -              {{if .OnboardingStepContent}}
+       219 -                  {{template .OnboardingStepContent .}}
+       220 -              {{else if eq .OnboardingStep "resume_upload"}}
+       218 +              {{if eq .OnboardingStep "resume_upload"}}
+       219                    {{template "partial:onboarding-resume-upload" .}}
+       220                {{else if eq .OnboardingStep "resume_processing"}}
+       221                    {{template "partial:onboarding-resume-processing" .}}
