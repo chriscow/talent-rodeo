@@ -151,7 +151,7 @@ type config struct {
 	testing    bool   // Flag to indicate if the application is running in test mode
 	gmailSetup bool   // Flag to run Gmail setup and exit
 	envFile    string // override which env file to load, e.g. ".env.prod" or ".env.dev"
-	nudgeOnly  bool   // Flag to indicate if only the nudge processor should be started
+	noServices bool   // Flag to indicate not to start any services
 }
 
 type application struct {
@@ -213,7 +213,7 @@ func run(logger *slog.Logger) error {
 	flag.StringVar(&cfg.linkedin.clientSecret, "linkedin-client-secret", "", "LinkedIn client secret")
 	flag.BoolVar(&cfg.testing, "testing", false, "enable testing mode")
 	flag.BoolVar(&cfg.gmailSetup, "gmail-setup", false, "run Gmail OAuth setup and exit")
-	flag.BoolVar(&cfg.nudgeOnly, "nudge-only", false, "only start the nudge processor, skip other services")
+	flag.BoolVar(&cfg.noServices, "no-services", false, "do not start any services (i.e. nudge, feedback, etc.)")
 	showVersion := flag.Bool("version", false, "display version and exit")
 
 	// Stripe flags
@@ -777,6 +777,8 @@ func (app *application) startCoreServices(ctx context.Context) error {
 
 	app.searchProvider = scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), app.logger, scrapingdog.WithJobEventHandler(app.jobDispatch))
 	app.searchScheduler = search.NewScheduler(app.fs, app.logger, app.searchProvider, app.mailer, app.config.notifications.email)
+	app.searchProvider = scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), app.logger, scrapingdog.WithJobEventHandler(app.jobDispatch))
+	app.searchScheduler = search.NewScheduler(app.fs, app.logger, app.searchProvider, app.mailer, app.config.notifications.email)
 
 	// Start search provider and scheduler
 	if err := app.searchProvider.Start(ctx); err != nil {
@@ -883,12 +885,12 @@ func (app *application) createInboxDispatch() (*internal.InboxDispatch, error) {
 
 	// Create inbox OpenAI client (different from feedback OpenAI client)
 	inboxOpenAIClient := inbox.NewOpenAIClient(openAIAPIKey, app.logger)
-	
+
 	// Create response components
 	responder := inbox.NewEmailResponder(inboxOpenAIClient, app.logger)
 	sender := inbox.NewResponseSender(app.mailer, app.logger)
 	escalationService := inbox.NewEscalationService(notificationEmail, app.mailer, app.logger)
-	
+
 	// Create enhanced dispatch with response capabilities
 	dispatch := internal.NewEnhancedInboxDispatch(responder, sender, escalationService, app.logger)
 
