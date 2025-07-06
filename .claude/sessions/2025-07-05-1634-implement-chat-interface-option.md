@@ -268,3 +268,191 @@ UserStatusJobSearchComplete   = 12 // Job search finished
 - Check appointment type in dashboard logic
 - Maintain backward compatibility
 - Don't disrupt existing voice call flow
+
+---
+
+## State Management Analysis & Redesign Proposal
+
+### Update - 2025-07-06 1:35 PM
+
+**Summary**: Comprehensive analysis of current state management system reveals significant architectural issues requiring redesign.
+
+### Current State Management Issues
+
+After deep analysis of the onboarding flow, identified several critical problems:
+
+#### 1. **Mixed State Management Paradigms**
+- **User Status**: Linear progression through onboarding steps
+- **Appointment Type**: Determines conversation method (voice/chat)
+- **Problem**: Two orthogonal concepts mixed into single status system
+
+#### 2. **Status Collision & Navigation Bugs**
+- Both voice calls and chat use `UserStatusCallStarted` (status 6)
+- Navigation logic assumes status always indicates specific UI state
+- Back button navigation becomes unpredictable and confusing
+
+#### 3. **Complex Decision Logic**
+- Multiple handlers need to check both status AND appointment type
+- Dashboard handler required appointment type checking (just fixed)
+- Profile handler redirects based purely on status
+- Creates maintenance burden and bug potential
+
+### Current Onboarding Flow Analysis
+
+**Voice Call Path:**
+```
+Login → UserStatusPendingResumeUpload → /profile (upload)
+     → UserStatusProcessingResume → /profile (processing)  
+     → UserStatusResumeUploaded → /profile (schedule page)
+     → "Call Me Now" → UserStatusCallScheduled → /profile → /dashboard (waiting page)
+```
+
+**Chat Path:**
+```
+Login → UserStatusPendingResumeUpload → /profile (upload)
+     → UserStatusProcessingResume → /profile (processing)
+     → UserStatusResumeUploaded → /profile (schedule page)  
+     → "Start Chat" → UserStatusCallStarted → /chat (dedicated page)
+     → Back button → /profile → /dashboard (fixed to check appointment type)
+```
+
+**Key Insight**: The fork happens at the schedule page, but current architecture treats them as linear progressions.
+
+### Proposed State Management Solutions
+
+#### Option 1: **Session-Based Routing with HTMX** (Recommended)
+
+**Concept**: Use session state to track onboarding progress, eliminate history-dependent navigation.
+
+**Architecture:**
+```javascript
+// Session state object
+{
+  step: "resume_upload" | "processing" | "communication_choice" | "active_conversation" | "completed",
+  conversation_type: "voice" | "chat" | null,
+  appointment_id: string | null,
+  resume_id: string | null
+}
+```
+
+**Benefits:**
+- No reliance on browser history
+- HTMX handles all navigation server-side
+- Clear separation of concerns
+- Back button can be disabled/handled gracefully
+- Simpler testing and debugging
+
+**Implementation:**
+- Use HTMX for all page transitions
+- Store session state in server session
+- Each step validates required data before proceeding
+- All navigation goes through single controller
+
+#### Option 2: **State Machine Pattern** (Traditional SPA)
+
+**Concept**: Implement formal state machine for onboarding progression.
+
+**States:**
+```go
+type OnboardingState int
+
+const (
+    StateInitial OnboardingState = iota
+    StateResumeUpload
+    StateResumeProcessing  
+    StateCommunicationChoice
+    StateVoiceCallActive
+    StateChatActive
+    StateConversationComplete
+    StateJobSearchSetup
+)
+```
+
+**Benefits:**
+- Explicit state transitions
+- Impossible states prevented by design
+- Clear validation at each transition
+- Easy to visualize and test
+
+**Challenges:**
+- Requires significant refactoring
+- Still need to handle browser history
+- More complex to implement initially
+
+#### Option 3: **URL-Based State Management** (React-like)
+
+**Concept**: Encode all state in URL parameters, make each URL fully self-contained.
+
+**Example URLs:**
+```
+/onboarding?step=resume&upload_id=xyz
+/onboarding?step=choice&resume_id=abc  
+/onboarding?step=voice&appointment_id=def
+/onboarding?step=chat&appointment_id=ghi
+```
+
+**Benefits:**
+- Stateless server handlers
+- Back button works naturally
+- Bookmarkable states
+- Easy debugging
+
+**Challenges:**
+- Sensitive data in URLs
+- Complex URL validation
+- Still need appointment/resume validation
+
+### Recommended Approach: **HTMX Session-Based**
+
+**Rationale:**
+1. **Simplest to implement** - leverages existing session infrastructure
+2. **No history complexity** - HTMX handles navigation server-side  
+3. **Progressive enhancement** - can add features incrementally
+4. **Familiar patterns** - builds on existing template system
+5. **Mobile friendly** - works well on all devices
+
+**Implementation Plan:**
+
+```html
+<!-- Single onboarding container -->
+<div id="onboarding-content" hx-boost="true">
+  <!-- Content swapped based on session state -->
+</div>
+```
+
+**Session Controller:**
+```go
+func (app *application) handleOnboardingStep(w http.ResponseWriter, r *http.Request) {
+    session := getOnboardingSession(r)
+    
+    switch session.Step {
+    case "resume_upload":
+        return app.renderResumeUpload(w, r, session)
+    case "communication_choice":  
+        return app.renderCommunicationChoice(w, r, session)
+    case "active_conversation":
+        return app.handleActiveConversation(w, r, session)
+    }
+}
+```
+
+**Benefits for User Experience:**
+- **Predictable navigation** - always know what back button does
+- **Progress preservation** - can't accidentally lose progress
+- **Clear mental model** - linear progression with branching
+- **Error resilience** - easy to recover from any state
+
+### Next Steps
+
+1. **Phase 1**: Implement session-based onboarding controller
+2. **Phase 2**: Migrate existing handlers to use session state
+3. **Phase 3**: Add HTMX for seamless transitions  
+4. **Phase 4**: Remove legacy status-based navigation
+
+**Files to Modify:**
+- New: `cmd/web/handlers.onboarding.go` (central controller)
+- Modify: `cmd/web/handlers.profile.go` (delegate to onboarding)
+- Modify: `cmd/web/handlers.auth.go` (initialize session)
+- Templates: Convert to HTMX partials
+
+This approach eliminates the fundamental navigation issues while preserving all existing functionality.

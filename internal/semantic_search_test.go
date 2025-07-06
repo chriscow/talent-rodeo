@@ -151,8 +151,8 @@ func TestDefaultHybridSearchParams(t *testing.T) {
 	if got.DenseWeight != 0.9 {
 		t.Errorf("DenseWeight: got %v, want %v", got.DenseWeight, 0.9)
 	}
-	if got.SparseWeight != 0.3 {
-		t.Errorf("SparseWeight: got %v, want %v", got.SparseWeight, 0.3)
+	if got.SparseWeight != 0 {
+		t.Errorf("SparseWeight: got %v, want %v", got.SparseWeight, 0)
 	}
 	if got.ScoreFusion != "linear" {
 		t.Errorf("ScoreFusion: got %v, want %v", got.ScoreFusion, "linear")

@@ -27,9 +27,9 @@ import (
 // - Process it through the LLM pipeline
 // - Display results without saving them back to Firestore
 func TestFeedbackProcessingWithRealFirestore(t *testing.T) {
-	// if testing.Short() {
-	// 	t.Skip("Skipping real Firestore test in short mode")
-	// }
+	if testing.Short() {
+		t.Skip("Skipping real Firestore test in short mode")
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()

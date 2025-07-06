@@ -209,8 +209,35 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if user.Status < internal.UserStatusCallCompleted {
-		app.showWaitingForCall(w, r, user)
-		return
+		// Check if the user has an active appointment and its type
+		appointments, err := internal.ListAppointments(r.Context(), app.fs, user.ID)
+		if err != nil {
+			app.logger.Error("showDashboard: failed to get appointments for status check", "error", err)
+			// Default to showing waiting page if we can't determine appointment type
+			app.showWaitingForCall(w, r, user)
+			return
+		}
+
+		// Find the most recent active appointment to determine type
+		var activeAppointment *internal.Appointment
+		for _, appt := range appointments {
+			if appt.Status == internal.AppointmentStatusCancelled || appt.Status == internal.AppointmentStatusFailed || appt.Status == internal.AppointmentStatusOther {
+				continue
+			}
+			if activeAppointment == nil || appt.CreatedAt.After(activeAppointment.CreatedAt) {
+				activeAppointment = appt
+			}
+		}
+
+		// If we have an active chat appointment, allow access to dashboard
+		// If we have an active voice appointment, show waiting page
+		if activeAppointment != nil && activeAppointment.Type == internal.AppointmentTypeChat {
+			// Continue to dashboard for chat appointments
+		} else {
+			// Show waiting page for voice appointments or unknown types
+			app.showWaitingForCall(w, r, user)
+			return
+		}
 	}
 
 	app.logger.Debug("showDashboard", "name", user.Name, "userID", user.ID, "status", user.Status.String())
