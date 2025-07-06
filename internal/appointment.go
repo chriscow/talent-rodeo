@@ -509,6 +509,11 @@ func ListAppointmentsNeedingProcessing(ctx context.Context, fs *FirestoreClient,
 			continue
 		}
 
+		if appointment.Type == AppointmentTypeChat {
+			// TODO: We need to handle chat appointments differently
+			continue
+		}
+
 		appointments = append(appointments, appointment)
 	}
 

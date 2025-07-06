@@ -5,7 +5,7 @@
     <article>
         <hgroup>
             <h1>Chat with Shirely</h1>
-            <p>Having a conversation about your career preferences</p>
+            <p>Tell meabout your career preferences</p>
         </hgroup>
         
         <!-- Full-page Chat Interface -->
@@ -23,10 +23,10 @@
                 <div id="chat-status" class="chat-page-status"></div>
             </div>
             
-            <div class="chat-page-actions">
+            <!-- <div class="chat-page-actions">
                 <button type="button" id="end-chat-btn" class="secondary">End Conversation</button>
                 <button type="button" id="minimize-to-widget-btn" class="outline" onclick="window.location.href='/profile'">Continue in Background</button>
-            </div>
+            </div> -->
         </div>
     </article>
 
@@ -174,6 +174,18 @@
         font-style: italic;
         border-bottom-left-radius: 8px;
         animation: pulse 1.5s infinite;
+    }
+    
+    .message.system {
+        background: var(--pico-primary-focus);
+        color: var(--pico-primary-background);
+        align-self: center;
+        border-radius: 12px;
+        font-size: 14px;
+        max-width: 90%;
+        text-align: center;
+        font-weight: 500;
+        border: 1px solid var(--pico-primary-background);
     }
     
     @keyframes pulse {
@@ -543,6 +555,11 @@ class ChatManager {
                 this.scrollToBottom();
                 break;
                 
+            case 'tool_response':
+                // Handle tool response and execute UI actions
+                this.handleToolResponse(data.tool_response);
+                break;
+                
             case 'done':
                 // Streaming complete
                 this.currentStreamingMessage = '';
@@ -664,6 +681,104 @@ class ChatManager {
     handleTyping() {
         // Future: Implement typing indicators to server
         // For now, just a placeholder for the typing detection
+    }
+    
+    /**
+     * Handle tool response from the server
+     * @param {Object} toolResponse - The tool response data
+     */
+    handleToolResponse(toolResponse) {
+        console.log('Tool response received:', toolResponse);
+        
+        // Add tool response as a system message if it has content
+        if (toolResponse.content) {
+            this.addMessageToUI('system', `🔧 ${toolResponse.content}`, false, false);
+        }
+        
+        // Execute UI actions if present
+        if (toolResponse.ui_actions && Array.isArray(toolResponse.ui_actions)) {
+            for (const action of toolResponse.ui_actions) {
+                this.executeUIAction(action);
+            }
+        }
+        
+        // Log tool execution for debugging
+        console.log(`Tool "${toolResponse.name}" executed:`, {
+            success: toolResponse.success,
+            content: toolResponse.content,
+            ui_actions: toolResponse.ui_actions
+        });
+    }
+    
+    /**
+     * Execute a UI action with optional delay
+     * @param {Object} action - The UI action to execute
+     */
+    executeUIAction(action) {
+        const delay = action.delay || 0;
+        
+        setTimeout(() => {
+            switch (action.type) {
+                case 'show_message':
+                    this.showMessage(action.data.message, action.data.type || 'info');
+                    break;
+                    
+                case 'redirect':
+                    window.location.href = action.data.url;
+                    break;
+                    
+                case 'update_status':
+                    this.updateStatus(action.data.message || '', action.data.type || '');
+                    break;
+                    
+                case 'disable_input':
+                    this.setInputState(false, action.data.message || 'Chat completed');
+                    break;
+                    
+                case 'show_completion':
+                    this.showChatCompletion(action.data);
+                    break;
+                    
+                default:
+                    console.warn('Unknown UI action type:', action.type);
+            }
+        }, delay);
+    }
+    
+    /**
+     * Show a message to the user (using browser notification or status)
+     * @param {string} message - The message to show
+     * @param {string} type - The type of message (success, error, info, warning)
+     */
+    showMessage(message, type = 'info') {
+        // For now, we'll use the status area to show messages
+        // In the future, this could use toast notifications or other UI elements
+        this.updateStatus(message, type);
+        
+        // Auto-clear the message after a few seconds
+        setTimeout(() => {
+            this.updateStatus('', '');
+        }, 5000);
+    }
+    
+    /**
+     * Show chat completion UI
+     * @param {Object} data - Completion data
+     */
+    showChatCompletion(data) {
+        // Disable input
+        this.setInputState(false, 'Chat session completed');
+        
+        // Add a completion message
+        const completionMessage = data.message || 'Thank you for chatting with me! Your preferences have been saved.';
+        this.addMessageToUI('system', `✅ ${completionMessage}`, false, false);
+        
+        // Show next steps if provided
+        if (data.next_steps) {
+            this.addMessageToUI('system', `📋 Next steps: ${data.next_steps}`, false, false);
+        }
+        
+        this.scrollToBottom();
     }
     
     async endChat() {

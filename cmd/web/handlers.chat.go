@@ -35,7 +35,343 @@ type WebSocketMessage struct {
 	Content   string `json:"content"`
 	Error     string `json:"error,omitempty"`
 	MessageID string `json:"message_id,omitempty"`
+	// Tool-related fields
+	ToolCall     *ToolCallData `json:"tool_call,omitempty"`
+	ToolResponse *ToolResponse `json:"tool_response,omitempty"`
 }
+
+// ToolCallData represents a tool call made by the LLM
+type ToolCallData struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+// ToolResponse represents the response from a tool execution
+type ToolResponse struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Content string `json:"content"`
+	Success bool   `json:"success"`
+	// Optional: UI actions to perform on the client
+	UIActions []UIAction `json:"ui_actions,omitempty"`
+}
+
+// UIAction represents an action for the client to perform
+type UIAction struct {
+	Type  string                 `json:"type"`  // "redirect", "show_message", "update_status", etc.
+	Data  map[string]interface{} `json:"data"`  // Action-specific data
+	Delay int                    `json:"delay"` // Delay in milliseconds before executing
+}
+
+// ChatTool represents a tool that can be called by the LLM
+type ChatTool struct {
+	Definition openai.Tool
+	Handler    func(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]interface{}) (*ToolResponse, error)
+}
+
+// ChatToolRegistry holds all available tools for the chat system
+type ChatToolRegistry struct {
+	tools map[string]ChatTool
+}
+
+// NewChatToolRegistry creates a new tool registry with default tools
+func NewChatToolRegistry() *ChatToolRegistry {
+	registry := &ChatToolRegistry{
+		tools: make(map[string]ChatTool),
+	}
+
+	// Register default tools
+	registry.registerDefaultTools()
+
+	return registry
+}
+
+// registerDefaultTools registers the built-in chat tools
+func (r *ChatToolRegistry) registerDefaultTools() {
+	// Tool 1: Complete Chat - Indicates the chat session is complete and user is ready for next step
+	r.RegisterTool("complete_chat", ChatTool{
+		Definition: openai.Tool{
+			Type: openai.ToolTypeFunction,
+			Function: &openai.FunctionDefinition{
+				Name:        "complete_chat",
+				Description: "Call this when the chat conversation is complete and you have gathered sufficient information about the user's career preferences. This will transition the user to the next step in their onboarding process.",
+				Parameters: map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"summary": map[string]interface{}{
+							"type":        "string",
+							"description": "A brief summary of what was learned about the user's career preferences during this chat",
+						},
+						"confidence_level": map[string]interface{}{
+							"type":        "string",
+							"enum":        []string{"low", "medium", "high"},
+							"description": "Your confidence level in the information gathered (low/medium/high)",
+						},
+						"next_step_recommendation": map[string]interface{}{
+							"type":        "string",
+							"description": "What you recommend as the next step for this user (e.g., 'schedule_call', 'review_profile', 'job_search')",
+						},
+					},
+					"required": []string{"summary", "confidence_level", "next_step_recommendation"},
+				},
+			},
+		},
+		Handler: r.handleCompleteChat,
+	})
+
+	// Tool 2: Update User Preferences - Updates user's career preferences based on chat
+	r.RegisterTool("update_user_preferences", ChatTool{
+		Definition: openai.Tool{
+			Type: openai.ToolTypeFunction,
+			Function: &openai.FunctionDefinition{
+				Name:        "update_user_preferences",
+				Description: "Update the user's career preferences based on information gathered during the chat conversation.",
+				Parameters: map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"job_titles": map[string]interface{}{
+							"type":        "array",
+							"items":       map[string]interface{}{"type": "string"},
+							"description": "Job titles the user is interested in",
+						},
+						"industries": map[string]interface{}{
+							"type":        "array",
+							"items":       map[string]interface{}{"type": "string"},
+							"description": "Industries the user wants to work in",
+						},
+						"work_location_preference": map[string]interface{}{
+							"type":        "string",
+							"enum":        []string{"remote", "hybrid", "onsite", "flexible"},
+							"description": "User's work location preference",
+						},
+						"salary_range": map[string]interface{}{
+							"type": "object",
+							"properties": map[string]interface{}{
+								"min": map[string]interface{}{"type": "number"},
+								"max": map[string]interface{}{"type": "number"},
+							},
+							"description": "Desired salary range",
+						},
+						"experience_level": map[string]interface{}{
+							"type":        "string",
+							"enum":        []string{"entry", "mid", "senior", "executive"},
+							"description": "User's experience level",
+						},
+					},
+					"required": []string{},
+				},
+			},
+		},
+		Handler: r.handleUpdateUserPreferences,
+	})
+
+	// Tool 3: Schedule Follow-up - Schedules a follow-up call or action
+	r.RegisterTool("schedule_followup", ChatTool{
+		Definition: openai.Tool{
+			Type: openai.ToolTypeFunction,
+			Function: &openai.FunctionDefinition{
+				Name:        "schedule_followup",
+				Description: "Schedule a follow-up call or action based on the user's needs identified during the chat.",
+				Parameters: map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"followup_type": map[string]interface{}{
+							"type":        "string",
+							"enum":        []string{"recruiter_call", "job_review", "resume_review", "interview_prep"},
+							"description": "Type of follow-up needed",
+						},
+						"priority": map[string]interface{}{
+							"type":        "string",
+							"enum":        []string{"low", "medium", "high", "urgent"},
+							"description": "Priority level for the follow-up",
+						},
+						"notes": map[string]interface{}{
+							"type":        "string",
+							"description": "Additional notes about what should be covered in the follow-up",
+						},
+						"suggested_timeframe": map[string]interface{}{
+							"type":        "string",
+							"description": "When this follow-up should ideally happen (e.g., 'within 24 hours', 'this week', 'next week')",
+						},
+					},
+					"required": []string{"followup_type", "priority"},
+				},
+			},
+		},
+		Handler: r.handleScheduleFollowup,
+	})
+}
+
+// RegisterTool adds a new tool to the registry
+func (r *ChatToolRegistry) RegisterTool(name string, tool ChatTool) {
+	r.tools[name] = tool
+}
+
+// GetTool retrieves a tool by name
+func (r *ChatToolRegistry) GetTool(name string) (ChatTool, bool) {
+	tool, exists := r.tools[name]
+	return tool, exists
+}
+
+// GetAllTools returns all registered tools as OpenAI tool definitions
+func (r *ChatToolRegistry) GetAllTools() []openai.Tool {
+	tools := make([]openai.Tool, 0, len(r.tools))
+	for _, tool := range r.tools {
+		tools = append(tools, tool.Definition)
+	}
+	return tools
+}
+
+// ExecuteTool executes a tool by name with the given arguments
+func (r *ChatToolRegistry) ExecuteTool(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, toolName string, args map[string]interface{}) (*ToolResponse, error) {
+	tool, exists := r.GetTool(toolName)
+	if !exists {
+		return &ToolResponse{
+			Name:    toolName,
+			Content: "Tool not found",
+			Success: false,
+		}, nil
+	}
+
+	return tool.Handler(ctx, app, user, appointment, args)
+}
+
+// Tool Handler Functions
+
+// handleCompleteChat handles the complete_chat tool call
+func (r *ChatToolRegistry) handleCompleteChat(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]interface{}) (*ToolResponse, error) {
+	app.logger.Info("Chat completion requested", "user_id", user.ID, "appointment_id", appointment.ID, "args", args)
+
+	// Extract arguments
+	summary, _ := args["summary"].(string)
+	confidenceLevel, _ := args["confidence_level"].(string)
+	nextStepRecommendation, _ := args["next_step_recommendation"].(string)
+
+	// Update appointment status to indicate chat is complete
+	if err := internal.ProcessAppointmentStarted(ctx, app.fs, user, appointment); err != nil {
+		app.logger.Error("Failed to mark appointment as complete", "error", err)
+		return &ToolResponse{
+			Name:    "complete_chat",
+			Content: "Failed to complete chat session",
+			Success: false,
+		}, err
+	}
+
+	// TODO: Update user's onboarding status in database
+	// This would typically involve updating the user's state to indicate they've completed the chat phase
+
+	// Create response with UI actions
+	response := &ToolResponse{
+		Name:    "complete_chat",
+		Content: "Chat session completed successfully. Preparing next steps...",
+		Success: true,
+		UIActions: []UIAction{
+			{
+				Type: "show_message",
+				Data: map[string]interface{}{
+					"message": "Great! I've learned about your career preferences. Let me prepare your next steps...",
+					"type":    "success",
+				},
+				Delay: 1000,
+			},
+			{
+				Type: "redirect",
+				Data: map[string]interface{}{
+					"url": "/profile",
+				},
+				Delay: 3000,
+			},
+		},
+	}
+
+	app.logger.Info("Chat completed",
+		"user_id", user.ID,
+		"summary", summary,
+		"confidence", confidenceLevel,
+		"next_step", nextStepRecommendation,
+	)
+
+	return response, nil
+}
+
+// handleUpdateUserPreferences handles the update_user_preferences tool call
+func (r *ChatToolRegistry) handleUpdateUserPreferences(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]interface{}) (*ToolResponse, error) {
+	app.logger.Info("Updating user preferences", "user_id", user.ID, "args", args)
+
+	// TODO: Implement actual user preference updates
+	// This would involve updating the user's profile in the database with the new preferences
+
+	// For now, we'll log the preferences and return success
+	if jobTitles, ok := args["job_titles"].([]interface{}); ok {
+		app.logger.Info("Job titles updated", "user_id", user.ID, "job_titles", jobTitles)
+	}
+
+	if industries, ok := args["industries"].([]interface{}); ok {
+		app.logger.Info("Industries updated", "user_id", user.ID, "industries", industries)
+	}
+
+	if workLocation, ok := args["work_location_preference"].(string); ok {
+		app.logger.Info("Work location preference updated", "user_id", user.ID, "work_location", workLocation)
+	}
+
+	if salaryRange, ok := args["salary_range"].(map[string]interface{}); ok {
+		app.logger.Info("Salary range updated", "user_id", user.ID, "salary_range", salaryRange)
+	}
+
+	if experienceLevel, ok := args["experience_level"].(string); ok {
+		app.logger.Info("Experience level updated", "user_id", user.ID, "experience_level", experienceLevel)
+	}
+
+	return &ToolResponse{
+		Name:    "update_user_preferences",
+		Content: "User preferences updated successfully",
+		Success: true,
+	}, nil
+}
+
+// handleScheduleFollowup handles the schedule_followup tool call
+func (r *ChatToolRegistry) handleScheduleFollowup(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]interface{}) (*ToolResponse, error) {
+	app.logger.Info("Scheduling follow-up", "user_id", user.ID, "args", args)
+
+	followupType, _ := args["followup_type"].(string)
+	priority, _ := args["priority"].(string)
+	notes, _ := args["notes"].(string)
+	suggestedTimeframe, _ := args["suggested_timeframe"].(string)
+
+	// TODO: Implement actual follow-up scheduling
+	// This could involve:
+	// 1. Creating a new appointment record
+	// 2. Sending notifications to relevant team members
+	// 3. Adding tasks to a task management system
+
+	app.logger.Info("Follow-up scheduled",
+		"user_id", user.ID,
+		"type", followupType,
+		"priority", priority,
+		"timeframe", suggestedTimeframe,
+		"notes", notes,
+	)
+
+	return &ToolResponse{
+		Name:    "schedule_followup",
+		Content: "Follow-up scheduled successfully",
+		Success: true,
+		UIActions: []UIAction{
+			{
+				Type: "show_message",
+				Data: map[string]interface{}{
+					"message": "I've scheduled a follow-up for you. You'll receive more details soon!",
+					"type":    "info",
+				},
+				Delay: 500,
+			},
+		},
+	}, nil
+}
+
+// Global tool registry instance
+var chatToolRegistry = NewChatToolRegistry()
 
 // chatStartRequest represents the request to start a new chat session
 type chatStartRequest struct {
@@ -163,6 +499,7 @@ func (app *application) sendChatMessage(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Add the user's message
+	app.logger.Debug("sendChatMessage -> AddChatMessage", "user_id", user.ID, "appointment_id", appointment.ID, "user_message", req.Content)
 	if err := internal.AddChatMessage(r.Context(), app.fs, appointment, "user", req.Content); err != nil {
 		app.logger.Error("Failed to add user message", "error", err, "user_id", user.ID, "appointment_id", appointmentID)
 		response.JSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save message"})
@@ -229,7 +566,7 @@ func (app *application) streamChatResponse(w http.ResponseWriter, r *http.Reques
 		err := conn.ReadJSON(&msg)
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				app.logger.Error("WebSocket unexpected close", "error", err)
+				app.logger.Warn("WebSocket unexpected close", "error", err)
 			}
 			break
 		}
@@ -255,6 +592,7 @@ func (app *application) handleWebSocketUserMessage(conn *websocket.Conn, user *i
 	ctx := context.Background()
 
 	// Save user message to appointment
+	app.logger.Debug("handleWebSocketUserMessage -> AddChatMessage", "user_id", user.ID, "appointment_id", appointment.ID, "user_message", userMessage)
 	if err := internal.AddChatMessage(ctx, app.fs, appointment, "user", userMessage); err != nil {
 		app.logger.Error("Failed to save user message", "error", err, "user_id", user.ID)
 		errorMsg := WebSocketMessage{
@@ -321,11 +659,15 @@ func (app *application) streamAIResponseViaWebSocket(ctx context.Context, conn *
 		})
 	}
 
-	// Create streaming request
+	// Create streaming request with tools
 	req := openai.ChatCompletionRequest{
-		Model:    openai.GPT4o,
+		Model:    openai.GPT4Dot1,
 		Messages: messages,
 		Stream:   true,
+		// Enable tool calling by providing available tools
+		Tools: chatToolRegistry.GetAllTools(),
+		// Allow the model to choose whether to call tools or respond normally
+		ToolChoice: "auto",
 	}
 
 	// Create OpenAI client
@@ -343,6 +685,7 @@ func (app *application) streamAIResponseViaWebSocket(ctx context.Context, conn *
 	defer stream.Close()
 
 	var fullResponse strings.Builder
+	var toolCalls []openai.ToolCall
 
 	// Stream the response
 	for {
@@ -360,27 +703,145 @@ func (app *application) streamAIResponseViaWebSocket(ctx context.Context, conn *
 			return
 		}
 
-		if len(response.Choices) > 0 && response.Choices[0].Delta.Content != "" {
-			content := response.Choices[0].Delta.Content
-			fullResponse.WriteString(content)
+		if len(response.Choices) > 0 {
+			choice := response.Choices[0]
 
-			// Send the content chunk via WebSocket
-			msg := WebSocketMessage{
-				Type:    "content",
-				Content: content,
+			// Handle regular content streaming
+			if choice.Delta.Content != "" {
+				content := choice.Delta.Content
+				fullResponse.WriteString(content)
+
+				// Send the content chunk via WebSocket
+				msg := WebSocketMessage{
+					Type:    "content",
+					Content: content,
+				}
+
+				if err := conn.WriteJSON(msg); err != nil {
+					app.logger.Error("Failed to send WebSocket message", "error", err)
+					return
+				}
 			}
 
-			if err := conn.WriteJSON(msg); err != nil {
-				app.logger.Error("Failed to send WebSocket message", "error", err)
-				return
+			// Handle tool calls
+			if choice.Delta.ToolCalls != nil {
+				for _, toolCall := range choice.Delta.ToolCalls {
+					// Initialize tool call if it's the first delta for this tool call
+					if toolCall.Index != nil && int(*toolCall.Index) >= len(toolCalls) {
+						// Extend the toolCalls slice if necessary
+						for len(toolCalls) <= int(*toolCall.Index) {
+							toolCalls = append(toolCalls, openai.ToolCall{})
+						}
+					}
+
+					if toolCall.Index != nil {
+						idx := int(*toolCall.Index)
+
+						// Accumulate tool call data
+						if toolCall.ID != "" {
+							toolCalls[idx].ID = toolCall.ID
+						}
+						if toolCall.Type != "" {
+							toolCalls[idx].Type = toolCall.Type
+						}
+						if toolCall.Function.Name != "" {
+							toolCalls[idx].Function.Name = toolCall.Function.Name
+						}
+						if toolCall.Function.Arguments != "" {
+							toolCalls[idx].Function.Arguments += toolCall.Function.Arguments
+						}
+					}
+				}
 			}
 		}
 	}
 
-	// Save the complete assistant response
+	// Save the complete assistant response if there was text content
 	if fullResponse.Len() > 0 {
 		if err := internal.AddChatMessage(ctx, app.fs, appointment, "assistant", fullResponse.String()); err != nil {
 			app.logger.Error("Failed to save assistant message", "error", err)
+		}
+	}
+
+	// Handle tool calls if any were made
+	if len(toolCalls) > 0 {
+		app.logger.Info("Processing tool calls", "count", len(toolCalls), "user_id", user.ID)
+
+		// Execute each tool call
+		for _, toolCall := range toolCalls {
+			if toolCall.Function.Name == "" {
+				app.logger.Warn("Tool call missing function name", "tool_call_id", toolCall.ID)
+				continue
+			}
+
+			// Parse the function arguments
+			var args map[string]any
+			if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
+				app.logger.Error("Failed to parse tool call arguments", "error", err, "tool_call_id", toolCall.ID)
+
+				// Send error response for this tool call
+				errorResponse := WebSocketMessage{
+					Type: "tool_response",
+					ToolResponse: &ToolResponse{
+						ID:      toolCall.ID,
+						Name:    toolCall.Function.Name,
+						Content: "Failed to parse tool arguments",
+						Success: false,
+					},
+				}
+				conn.WriteJSON(errorResponse)
+				continue
+			}
+
+			app.logger.Info("Executing tool call",
+				"tool_name", toolCall.Function.Name,
+				"tool_id", toolCall.ID,
+				"args", args,
+			)
+
+			// Execute the tool
+			toolResponse, err := chatToolRegistry.ExecuteTool(ctx, app, user, appointment, toolCall.Function.Name, args)
+			if err != nil {
+				app.logger.Error("Tool execution failed", "error", err, "tool_name", toolCall.Function.Name)
+				toolResponse = &ToolResponse{
+					ID:      toolCall.ID,
+					Name:    toolCall.Function.Name,
+					Content: "Tool execution failed: " + err.Error(),
+					Success: false,
+				}
+			}
+
+			// Set the tool call ID in the response
+			toolResponse.ID = toolCall.ID
+
+			// Send tool response via WebSocket
+			responseMsg := WebSocketMessage{
+				Type:         "tool_response",
+				ToolResponse: toolResponse,
+			}
+
+			if err := conn.WriteJSON(responseMsg); err != nil {
+				app.logger.Error("Failed to send tool response", "error", err)
+				return
+			}
+
+			// Log the tool call and response for debugging/auditing
+			toolCallLog := map[string]any{
+				"tool_name":  toolCall.Function.Name,
+				"tool_id":    toolCall.ID,
+				"arguments":  args,
+				"success":    toolResponse.Success,
+				"response":   toolResponse.Content,
+				"ui_actions": toolResponse.UIActions,
+			}
+
+			// Save tool call to chat history as a special message type
+			toolCallContent := "Tool call: " + toolCall.Function.Name + " - " + toolResponse.Content
+			if err := internal.AddChatMessage(ctx, app.fs, appointment, "tool_call", toolCallContent); err != nil {
+				app.logger.Error("Failed to save tool call message", "error", err)
+			}
+
+			app.logger.Info("Tool call completed", "tool_call", toolCallLog)
 		}
 	}
 
