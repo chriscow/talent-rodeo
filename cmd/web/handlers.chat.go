@@ -1,23 +1,42 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
 	"time"
 
 	"github.com/chriscow/vapi-go"
+	"github.com/gorilla/websocket"
 	"github.com/sashabaranov/go-openai"
 )
 
 // Helper function to create string pointers
 func stringPtr(s string) *string {
 	return &s
+}
+
+// WebSocket upgrader with CORS support
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		// Allow all origins for WebSocket connections (you may want to restrict this in production)
+		return true
+	},
+}
+
+// WebSocketMessage represents a message sent over WebSocket
+type WebSocketMessage struct {
+	Type      string `json:"type"`
+	Content   string `json:"content"`
+	Error     string `json:"error,omitempty"`
+	MessageID string `json:"message_id,omitempty"`
 }
 
 // chatStartRequest represents the request to start a new chat session
@@ -105,7 +124,8 @@ func (app *application) startChat(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// sendChatMessage handles sending a message in a chat session (POST only)
+// sendChatMessage is deprecated - now handled via WebSocket in streamChatResponse
+// Keeping for backward compatibility during transition
 func (app *application) sendChatMessage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -158,13 +178,8 @@ func (app *application) sendChatMessage(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-// streamChatResponse handles SSE streaming for chat responses (GET only)
+// streamChatResponse handles WebSocket connections for real-time chat streaming
 func (app *application) streamChatResponse(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -180,7 +195,7 @@ func (app *application) streamChatResponse(w http.ResponseWriter, r *http.Reques
 	// Get the appointment
 	appointment, err := internal.GetAppointment(r.Context(), app.fs, user.ID, appointmentID)
 	if err != nil {
-		app.logger.Error("Failed to get appointment for streaming", "error", err, "user_id", user.ID, "appointment_id", appointmentID)
+		app.logger.Error("Failed to get appointment for WebSocket", "error", err, "user_id", user.ID, "appointment_id", appointmentID)
 		http.Error(w, "Appointment not found", http.StatusNotFound)
 		return
 	}
@@ -190,34 +205,83 @@ func (app *application) streamChatResponse(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Set up SSE headers
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+	// Upgrade HTTP connection to WebSocket
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		app.logger.Error("Failed to upgrade to WebSocket", "error", err)
+		return
+	}
+	defer conn.Close()
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+	app.logger.Info("WebSocket connection established", "user_id", user.ID, "appointment_id", appointmentID)
+
+	// Send connection confirmation
+	confirmMsg := WebSocketMessage{
+		Type:    "connected",
+		Content: "WebSocket connection established",
+	}
+	if err := conn.WriteJSON(confirmMsg); err != nil {
+		app.logger.Error("Failed to send connection confirmation", "error", err)
 		return
 	}
 
-	// Send initial event to confirm connection
-	fmt.Fprintf(w, "event: connected\ndata: {\"status\": \"connected\"}\n\n")
-	flusher.Flush()
+	// Handle WebSocket messages
+	for {
+		var msg WebSocketMessage
+		err := conn.ReadJSON(&msg)
+		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				app.logger.Error("WebSocket unexpected close", "error", err)
+			}
+			break
+		}
 
-	// Generate AI response with streaming
-	app.generateAndStreamChatResponse(r.Context(), w, flusher, user, appointment)
+		app.logger.Debug("Received WebSocket message", "type", msg.Type, "user_id", user.ID)
+
+		switch msg.Type {
+		case "user_message":
+			// Save user message and generate AI response
+			go app.handleWebSocketUserMessage(conn, user, appointment, msg.Content)
+		case "ping":
+			// Respond to ping with pong
+			pong := WebSocketMessage{Type: "pong"}
+			conn.WriteJSON(pong)
+		default:
+			app.logger.Warn("Unknown WebSocket message type", "type", msg.Type, "user_id", user.ID)
+		}
+	}
 }
 
-// generateAndStreamChatResponse generates and streams the AI response
-func (app *application) generateAndStreamChatResponse(ctx context.Context, w http.ResponseWriter, flusher http.Flusher, user *internal.User, appointment *internal.Appointment) {
+// handleWebSocketUserMessage processes a user message and streams the AI response via WebSocket
+func (app *application) handleWebSocketUserMessage(conn *websocket.Conn, user *internal.User, appointment *internal.Appointment, userMessage string) {
+	ctx := context.Background()
+	
+	// Save user message to appointment
+	if err := internal.AddChatMessage(ctx, app.fs, appointment, "user", userMessage); err != nil {
+		app.logger.Error("Failed to save user message", "error", err, "user_id", user.ID)
+		errorMsg := WebSocketMessage{
+			Type:  "error",
+			Error: "Failed to save your message",
+		}
+		conn.WriteJSON(errorMsg)
+		return
+	}
+
+	// Stream AI response
+	app.streamAIResponseViaWebSocket(ctx, conn, user, appointment)
+}
+
+// streamAIResponseViaWebSocket generates and streams the AI response via WebSocket
+func (app *application) streamAIResponseViaWebSocket(ctx context.Context, conn *websocket.Conn, user *internal.User, appointment *internal.Appointment) {
 	// Build assistant overrides for personalized chat
 	assistantOverrides, err := internal.BuildAssistantOverrides(ctx, user, app.fs, app.logger)
 	if err != nil {
 		app.logger.Error("Failed to build assistant overrides", "error", err, "user_id", user.ID)
-		fmt.Fprintf(w, "event: error\ndata: {\"error\": \"Failed to prepare assistant\"}\n\n")
-		flusher.Flush()
+		errorMsg := WebSocketMessage{
+			Type:  "error",
+			Error: "Failed to prepare assistant",
+		}
+		conn.WriteJSON(errorMsg)
 		return
 	}
 
@@ -225,19 +289,26 @@ func (app *application) generateAndStreamChatResponse(ctx context.Context, w htt
 	messages := []openai.ChatCompletionMessage{}
 
 	// Add system message from assistant overrides
-	if assistantOverrides.FirstMessage != nil {
-		messages = append(messages, openai.ChatCompletionMessage{
-			Role:    openai.ChatMessageRoleSystem,
-			Content: *assistantOverrides.FirstMessage,
-		})
+	systemPrompt := "You are Shirely, an AI career assistant helping job seekers find the right opportunities."
+	if assistantOverrides.Model != nil && assistantOverrides.Model.Messages != nil && len(assistantOverrides.Model.Messages) > 0 {
+		// Use the system prompt from assistant overrides
+		systemPrompt = assistantOverrides.Model.Messages[0].Content
 	}
+	
+	messages = append(messages, openai.ChatCompletionMessage{
+		Role:    openai.ChatMessageRoleSystem,
+		Content: systemPrompt,
+	})
 
 	// Add conversation history
 	chatHistory, err := internal.GetChatHistory(appointment)
 	if err != nil {
 		app.logger.Error("Failed to get chat history", "error", err)
-		fmt.Fprintf(w, "event: error\ndata: {\"error\": \"Failed to get chat history\"}\n\n")
-		flusher.Flush()
+		errorMsg := WebSocketMessage{
+			Type:  "error",
+			Error: "Failed to get chat history",
+		}
+		conn.WriteJSON(errorMsg)
 		return
 	}
 
@@ -264,13 +335,17 @@ func (app *application) generateAndStreamChatResponse(ctx context.Context, w htt
 	stream, err := client.CreateChatCompletionStream(ctx, req)
 	if err != nil {
 		app.logger.Error("Failed to create chat completion stream", "error", err)
-		fmt.Fprintf(w, "event: error\ndata: {\"error\": \"Failed to generate response\"}\n\n")
-		flusher.Flush()
+		errorMsg := WebSocketMessage{
+			Type:  "error",
+			Error: "Failed to generate response",
+		}
+		conn.WriteJSON(errorMsg)
 		return
 	}
 	defer stream.Close()
 
-	var fullResponse string
+	var fullResponse strings.Builder
+	isFirstToken := true
 
 	// Stream the response
 	for {
@@ -280,36 +355,49 @@ func (app *application) generateAndStreamChatResponse(ctx context.Context, w htt
 				break
 			}
 			app.logger.Error("Error receiving stream", "error", err)
-			fmt.Fprintf(w, "event: error\ndata: {\"error\": \"Stream error\"}\n\n")
-			flusher.Flush()
+			errorMsg := WebSocketMessage{
+				Type:  "error",
+				Error: "Stream error",
+			}
+			conn.WriteJSON(errorMsg)
 			return
 		}
 
 		if len(response.Choices) > 0 && response.Choices[0].Delta.Content != "" {
 			content := response.Choices[0].Delta.Content
-			fullResponse += content
+			fullResponse.WriteString(content)
 
-			// Send the content chunk as SSE
-			data := map[string]string{
-				"content": content,
-				"type":    "chunk",
+			// Send the content chunk via WebSocket
+			msg := WebSocketMessage{
+				Type:    "content",
+				Content: content,
 			}
-			jsonData, _ := json.Marshal(data)
-			fmt.Fprintf(w, "event: message\ndata: %s\n\n", jsonData)
-			flusher.Flush()
+
+			// Add prefix for first token
+			if isFirstToken {
+				msg.Content = "AI: " + content
+				isFirstToken = false
+			}
+
+			if err := conn.WriteJSON(msg); err != nil {
+				app.logger.Error("Failed to send WebSocket message", "error", err)
+				return
+			}
 		}
 	}
 
 	// Save the complete assistant response
-	if fullResponse != "" {
-		if err := internal.AddChatMessage(ctx, app.fs, appointment, "assistant", fullResponse); err != nil {
+	if fullResponse.Len() > 0 {
+		if err := internal.AddChatMessage(ctx, app.fs, appointment, "assistant", fullResponse.String()); err != nil {
 			app.logger.Error("Failed to save assistant message", "error", err)
 		}
 	}
 
 	// Send completion event
-	fmt.Fprintf(w, "event: complete\ndata: {\"status\": \"complete\"}\n\n")
-	flusher.Flush()
+	doneMsg := WebSocketMessage{
+		Type: "done",
+	}
+	conn.WriteJSON(doneMsg)
 }
 
 // endChat handles ending a chat session

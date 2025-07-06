@@ -226,13 +226,316 @@ document.addEventListener('DOMContentLoaded', function() {
     const urlParams = new URLSearchParams(window.location.search);
     const appointmentId = urlParams.get('appointment_id');
     
-    if (appointmentId) {
-        // Initialize chat with existing appointment
-        window.ChatInterface.initializeChatPage(appointmentId);
-    } else {
+    if (!appointmentId) {
         // Redirect back to profile if no appointment ID
         window.location.href = '/profile';
+        return;
     }
+    
+    // Initialize chat page functionality
+    initializeChatPage(appointmentId);
 });
+
+let currentAppointmentId = null;
+let eventSource = null;
+
+function initializeChatPage(appointmentId) {
+    currentAppointmentId = appointmentId;
+    
+    // Update session info display
+    document.getElementById('session-appointment-id').textContent = appointmentId;
+    document.getElementById('chat-session-info').style.display = 'block';
+    
+    // Load existing chat history
+    loadChatHistory();
+    
+    // Enable input and set up event listeners
+    setupChatControls();
+    
+    // Add initial message from LLM if no messages exist
+    addInitialMessage();
+}
+
+async function loadChatHistory() {
+    try {
+        const response = await fetch(`/api/chat/history?appointment_id=${currentAppointmentId}`);
+        if (response.ok) {
+            const data = await response.json();
+            const messages = data.messages || [];
+            
+            // Clear existing messages
+            const messagesContainer = document.getElementById('chat-messages');
+            messagesContainer.innerHTML = '';
+            
+            // Add messages to UI
+            for (const message of messages) {
+                addMessageToUI(message.role, message.content);
+            }
+            
+            // Scroll to bottom
+            scrollToBottom();
+        } else {
+            console.error('Failed to load chat history:', response.statusText);
+            showStatus('Failed to load chat history', 'error');
+        }
+    } catch (error) {
+        console.error('Error loading chat history:', error);
+        showStatus('Error loading chat history', 'error');
+    }
+}
+
+function setupChatControls() {
+    const chatInput = document.getElementById('chat-input');
+    const sendButton = document.getElementById('send-message-btn');
+    const endChatButton = document.getElementById('end-chat-btn');
+    
+    // Enable input and send button
+    chatInput.disabled = false;
+    sendButton.disabled = false;
+    
+    // Focus on input
+    chatInput.focus();
+    
+    // Send message on Enter key
+    chatInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+    
+    // Send button click handler
+    sendButton.addEventListener('click', sendMessage);
+    
+    // End chat button handler
+    endChatButton.addEventListener('click', endChat);
+}
+
+async function addInitialMessage() {
+    // Check if we already have messages
+    const messagesContainer = document.getElementById('chat-messages');
+    if (messagesContainer.children.length > 0) {
+        return; // Already have messages, don't add initial message
+    }
+    
+    // Add welcome message from Shirely
+    const welcomeMessage = "Hi! I'm Shirely, your AI career assistant. I'm excited to learn about your career preferences and help you find great job opportunities. What kind of work environment do you prefer?";
+    addMessageToUI('assistant', welcomeMessage);
+    scrollToBottom();
+}
+
+async function sendMessage() {
+    const chatInput = document.getElementById('chat-input');
+    const message = chatInput.value.trim();
+    
+    if (!message) return;
+    
+    // Add user message to UI
+    addMessageToUI('user', message);
+    chatInput.value = '';
+    scrollToBottom();
+    
+    // Disable input while sending
+    chatInput.disabled = true;
+    document.getElementById('send-message-btn').disabled = true;
+    
+    try {
+        // Send message to backend
+        const response = await fetch(`/chat/message?appointment_id=${currentAppointmentId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': getCSRFToken()
+            },
+            body: JSON.stringify({
+                content: message,
+                csrf_token: getCSRFToken()
+            })
+        });
+        
+        if (response.ok) {
+            // Start streaming response
+            startStreaming();
+        } else {
+            console.error('Failed to send message:', response.statusText);
+            showStatus('Failed to send message', 'error');
+            // Re-enable input
+            chatInput.disabled = false;
+            document.getElementById('send-message-btn').disabled = false;
+        }
+    } catch (error) {
+        console.error('Error sending message:', error);
+        showStatus('Error sending message', 'error');
+        // Re-enable input
+        chatInput.disabled = false;
+        document.getElementById('send-message-btn').disabled = false;
+    }
+}
+
+function startStreaming() {
+    if (eventSource) {
+        eventSource.close();
+    }
+    
+    // Add typing indicator
+    const typingId = addMessageToUI('assistant', 'Shirely is typing...', true);
+    
+    eventSource = new EventSource(`/chat/stream?appointment_id=${currentAppointmentId}`);
+    
+    let currentMessage = '';
+    
+    eventSource.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'content') {
+            // Remove typing indicator if still present
+            if (typingId) {
+                const typingElement = document.getElementById(typingId);
+                if (typingElement) {
+                    typingElement.remove();
+                }
+            }
+            
+            // Update or create message with streaming content
+            currentMessage += data.content;
+            updateOrCreateStreamingMessage(currentMessage);
+        } else if (data.type === 'done') {
+            // Streaming complete
+            eventSource.close();
+            eventSource = null;
+            
+            // Re-enable input
+            document.getElementById('chat-input').disabled = false;
+            document.getElementById('send-message-btn').disabled = false;
+            document.getElementById('chat-input').focus();
+            
+            showStatus('', ''); // Clear status
+        } else if (data.type === 'error') {
+            console.error('Streaming error:', data.message);
+            showStatus('Error getting response', 'error');
+            
+            // Remove typing indicator
+            if (typingId) {
+                const typingElement = document.getElementById(typingId);
+                if (typingElement) {
+                    typingElement.remove();
+                }
+            }
+            
+            eventSource.close();
+            eventSource = null;
+            
+            // Re-enable input
+            document.getElementById('chat-input').disabled = false;
+            document.getElementById('send-message-btn').disabled = false;
+        }
+    };
+    
+    eventSource.onerror = function(event) {
+        console.error('EventSource error:', event);
+        showStatus('Connection error', 'error');
+        
+        // Remove typing indicator
+        if (typingId) {
+            const typingElement = document.getElementById(typingId);
+            if (typingElement) {
+                typingElement.remove();
+            }
+        }
+        
+        eventSource.close();
+        eventSource = null;
+        
+        // Re-enable input
+        document.getElementById('chat-input').disabled = false;
+        document.getElementById('send-message-btn').disabled = false;
+    };
+}
+
+let streamingMessageId = null;
+
+function updateOrCreateStreamingMessage(content) {
+    if (streamingMessageId) {
+        // Update existing streaming message
+        const messageElement = document.getElementById(streamingMessageId);
+        if (messageElement) {
+            messageElement.textContent = content;
+            scrollToBottom();
+            return;
+        }
+    }
+    
+    // Create new streaming message
+    streamingMessageId = addMessageToUI('assistant', content);
+    scrollToBottom();
+}
+
+function addMessageToUI(role, content, isTyping = false) {
+    const messagesContainer = document.getElementById('chat-messages');
+    const messageDiv = document.createElement('div');
+    const messageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    
+    messageDiv.id = messageId;
+    messageDiv.className = `message ${role}`;
+    if (isTyping) {
+        messageDiv.className += ' typing';
+    }
+    messageDiv.textContent = content;
+    
+    messagesContainer.appendChild(messageDiv);
+    scrollToBottom();
+    
+    return messageId;
+}
+
+function scrollToBottom() {
+    const messagesContainer = document.getElementById('chat-messages');
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+function showStatus(message, type = '') {
+    const statusElement = document.getElementById('chat-status');
+    statusElement.textContent = message;
+    statusElement.className = `chat-page-status ${type}`;
+}
+
+async function endChat() {
+    if (!currentAppointmentId) return;
+    
+    try {
+        const response = await fetch(`/chat/end?appointment_id=${currentAppointmentId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': getCSRFToken()
+            },
+            body: JSON.stringify({
+                csrf_token: getCSRFToken()
+            })
+        });
+        
+        if (response.ok) {
+            // Close any active streaming
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+            
+            // Redirect to profile
+            window.location.href = '/profile';
+        } else {
+            console.error('Failed to end chat:', response.statusText);
+            showStatus('Failed to end chat', 'error');
+        }
+    } catch (error) {
+        console.error('Error ending chat:', error);
+        showStatus('Error ending chat', 'error');
+    }
+}
+
+function getCSRFToken() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.getAttribute('content') : '';
+}
 </script>
 {{end}}
