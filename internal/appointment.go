@@ -21,6 +21,14 @@ import (
 	"google.golang.org/api/iterator"
 )
 
+// AppointmentType represents the different types of appointments
+type AppointmentType string
+
+const (
+	AppointmentTypeVoice AppointmentType = "voice"
+	AppointmentTypeChat  AppointmentType = "chat"
+)
+
 // AppointmentStatus represents the possible states of an appointment
 type AppointmentStatus string
 
@@ -38,11 +46,20 @@ const (
 	AppointmentStatusOther      AppointmentStatus = "other"
 )
 
-// Appointment represents a scheduled phone interview
+// ChatMessage represents a single message in a chat conversation
+type ChatMessage struct {
+	ID        string    `json:"id"`
+	Role      string    `json:"role"` // "user" or "assistant"
+	Content   string    `json:"content"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
+// Appointment represents a scheduled phone interview or chat session
 type Appointment struct {
 	ID            string
 	Name          string
 	UserID        string
+	Type          AppointmentType // "voice" or "chat"
 	ScheduledTime time.Time
 	Timezone      string
 	Status        AppointmentStatus
@@ -60,6 +77,9 @@ type Appointment struct {
 	CancelledAt *time.Time
 	FailedAt    *time.Time
 	Notes       *string
+
+	// Chat-specific fields
+	ChatMessages []ChatMessage `json:"chat_messages,omitempty"`
 
 	RecapSent bool // Whether the recap has been sent to the user
 }
@@ -509,4 +529,31 @@ func cleanupOrphanedProcessingRefs(ctx context.Context, fs *FirestoreClient, log
 			logger.Error("failed to clean up orphaned processing reference", "refID", refID, "error", err)
 		}
 	}
+}
+
+// AddChatMessage adds a new message to a chat appointment
+func AddChatMessage(ctx context.Context, fs *FirestoreClient, appointment *Appointment, role, content string) error {
+	if appointment.Type != AppointmentTypeChat {
+		return fmt.Errorf("appointment is not a chat type")
+	}
+
+	message := ChatMessage{
+		ID:        funcs.Slugify(fmt.Sprintf("msg-%d", time.Now().UnixNano())),
+		Role:      role,
+		Content:   content,
+		Timestamp: time.Now(),
+	}
+
+	appointment.ChatMessages = append(appointment.ChatMessages, message)
+	appointment.UpdatedAt = time.Now()
+
+	return UpdateAppointment(ctx, fs, appointment)
+}
+
+// GetChatHistory returns the chat messages for a chat appointment
+func GetChatHistory(appointment *Appointment) ([]ChatMessage, error) {
+	if appointment.Type != AppointmentTypeChat {
+		return nil, fmt.Errorf("appointment is not a chat type")
+	}
+	return appointment.ChatMessages, nil
 }

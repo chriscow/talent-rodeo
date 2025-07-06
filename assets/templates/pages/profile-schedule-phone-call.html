@@ -7,10 +7,10 @@
             <h1>Great! We've got your resume</h1>
         </header>
 
-        <h3>Let's schedule a quick AI chat</h3>
+        <h3>Let's have a quick conversation with Shirely</h3>
         <p>
             Our AI named <strong style="color: var(--secondary-color);">Shirely</strong> will have a brief conversation 
-            to understand your career preferences better.
+            to understand your career preferences better. Choose your preferred method below.
             
         </p>
         <br />
@@ -47,14 +47,39 @@
             const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
             document.getElementById('timezone').value = tz;
             document.getElementById('timezone-now').value = tz;
+            
+            // Handle chat button click
+            document.addEventListener('DOMContentLoaded', function() {
+                const startChatBtn = document.getElementById('start-chat-btn');
+                if (startChatBtn) {
+                    startChatBtn.addEventListener('click', function() {
+                        if (window.ChatInterface) {
+                            window.ChatInterface.startChat();
+                        } else {
+                            console.error('ChatInterface not available');
+                        }
+                    });
+                }
+            });
         </script>
 
-        <form method="post" action="/profile/schedule/call-now">
-            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-            <input type="hidden" name="timezone" id="timezone-now">
-            <button type="submit" class="contrast">Call Me Now!</button>
-        </form>
-        <form method="get" action="/profile/resume/upload">
+        <!-- Communication Options -->
+        <div style="text-align: center;">
+            <form method="post" action="/profile/schedule/call-now">
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                <input type="hidden" name="timezone" id="timezone-now">
+                <button type="submit" class="contrast">📞 Call Me Now!</button>
+            </form>
+            
+            <div style="margin-top: 1rem;">
+                <button type="button" id="start-chat-btn" class="outline">💬 Or Start a Chat Conversation</button>
+            </div>
+        </div>
+
+        <!-- Chat Interface (hidden by default) -->
+        {{template "chat-interface" .}}
+
+        <form method="get" action="/profile/resume/upload" style="margin-top: 2rem;">
             <button type="submit" class="secondary">Upload Different Resume</button>
         </form>
     </article>

@@ -1,0 +1,238 @@
+{{define "title"}}Chat with Shirely - Talent Rodeo{{end}}
+
+{{define "page:main"}}
+<main class="container-narrow">
+    <article>
+        <header>
+            <h1>💬 Chat with Shirely</h1>
+            <p>Having a conversation about your career preferences</p>
+        </header>
+        
+        <div id="chat-session-info" style="display: none; margin-bottom: 2rem; padding: 1rem; background: var(--card-background-color); border-radius: 0.5rem; border: 1px solid var(--muted-border-color);">
+            <p><strong>Session ID:</strong> <span id="session-appointment-id"></span></p>
+            <p><strong>Status:</strong> <span id="session-status">Active</span></p>
+        </div>
+
+        <!-- Full-page Chat Interface -->
+        <div id="chat-page-container" class="chat-page-container">
+            <div class="chat-page-window">
+                <div id="chat-messages" class="chat-page-messages">
+                    <!-- Messages will be added here -->
+                </div>
+                <div class="chat-page-input-container">
+                    <div class="chat-page-input-row">
+                        <input type="text" id="chat-input" placeholder="Type your message..." disabled>
+                        <button type="button" id="send-message-btn" class="chat-send-btn" disabled>Send</button>
+                    </div>
+                </div>
+                <div id="chat-status" class="chat-page-status"></div>
+            </div>
+            
+            <div class="chat-page-actions">
+                <button type="button" id="end-chat-btn" class="secondary">End Conversation</button>
+                <button type="button" id="minimize-to-widget-btn" class="outline" onclick="window.location.href='/profile'">Continue in Background</button>
+            </div>
+        </div>
+    </article>
+</main>
+
+<style>
+    /* Full-page Chat Styles */
+    .chat-page-container {
+        max-width: 800px;
+        margin: 0 auto;
+    }
+    
+    .chat-page-window {
+        background: var(--card-background-color);
+        border: 1px solid var(--muted-border-color);
+        border-radius: 12px;
+        height: 60vh;
+        min-height: 500px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+    
+    .chat-page-messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px;
+        background: var(--background-color);
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .chat-page-input-container {
+        padding: 20px;
+        border-top: 1px solid var(--muted-border-color);
+        background: var(--card-background-color);
+    }
+    
+    .chat-page-input-row {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        max-width: 600px;
+        margin: 0 auto;
+    }
+    
+    #chat-input {
+        flex: 1;
+        border: 1px solid var(--muted-border-color);
+        border-radius: 25px;
+        padding: 12px 20px;
+        font-size: 16px;
+        outline: none;
+        background: white;
+        color: #333;
+    }
+    
+    #chat-input:focus {
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+    }
+    
+    #chat-input:disabled {
+        background: #f8f9fa;
+        color: #6c757d;
+        cursor: not-allowed;
+    }
+    
+    .chat-send-btn {
+        background: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: 25px;
+        padding: 12px 24px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: background 0.2s ease;
+        white-space: nowrap;
+    }
+    
+    .chat-send-btn:hover:not(:disabled) {
+        background: var(--primary-hover-color, #0056b3);
+    }
+    
+    .chat-send-btn:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+    }
+    
+    /* Message Styles */
+    .message {
+        max-width: 70%;
+        padding: 12px 18px;
+        border-radius: 20px;
+        word-wrap: break-word;
+        line-height: 1.5;
+        font-size: 16px;
+        margin-bottom: 5px;
+    }
+    
+    .message.user {
+        background: var(--primary-color);
+        color: white;
+        align-self: flex-end;
+        border-bottom-right-radius: 8px;
+    }
+    
+    .message.assistant {
+        background: #f1f3f5;
+        color: var(--color);
+        align-self: flex-start;
+        border-bottom-left-radius: 8px;
+    }
+    
+    .message.typing {
+        background: #e9ecef;
+        color: #6c757d;
+        align-self: flex-start;
+        font-style: italic;
+        border-bottom-left-radius: 8px;
+    }
+    
+    .chat-page-status {
+        text-align: center;
+        font-size: 14px;
+        color: var(--muted-color);
+        padding: 10px;
+    }
+    
+    .chat-page-actions {
+        margin-top: 20px;
+        text-align: center;
+        display: flex;
+        gap: 15px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    
+    /* Scrollbar Styling */
+    .chat-page-messages::-webkit-scrollbar {
+        width: 8px;
+    }
+    
+    .chat-page-messages::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    
+    .chat-page-messages::-webkit-scrollbar-thumb {
+        background: #ccc;
+        border-radius: 4px;
+    }
+    
+    .chat-page-messages::-webkit-scrollbar-thumb:hover {
+        background: #999;
+    }
+    
+    /* Mobile Responsive */
+    @media (max-width: 768px) {
+        .chat-page-window {
+            height: 70vh;
+        }
+        
+        .message {
+            max-width: 85%;
+            font-size: 15px;
+        }
+        
+        .chat-page-input-row {
+            gap: 8px;
+        }
+        
+        #chat-input {
+            font-size: 16px; /* Prevent zoom on iOS */
+        }
+        
+        .chat-page-actions {
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .chat-page-actions button {
+            width: 100%;
+            max-width: 300px;
+        }
+    }
+</style>
+
+<script>
+// Chat page functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const appointmentId = urlParams.get('appointment_id');
+    
+    if (appointmentId) {
+        // Initialize chat with existing appointment
+        window.ChatInterface.initializeChatPage(appointmentId);
+    } else {
+        // Redirect back to profile if no appointment ID
+        window.location.href = '/profile';
+    }
+});
+</script>
+{{end}}

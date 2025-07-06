@@ -37,7 +37,7 @@ func (app *application) routes() http.Handler {
 	// VAPI webhook endpoint
 	mux.HandleFunc("/vapi/outbound-call", app.makeOutboundCall, "POST")
 	mux.HandleFunc("/webhooks/vapi", app.handleVapiWebhook, "POST")
-	
+
 	// Stripe webhook endpoint (no CSRF protection needed)
 	mux.HandleFunc("/webhooks/stripe", app.stripeWebhookPost, "POST")
 
@@ -66,6 +66,15 @@ func (app *application) routes() http.Handler {
 
 		mux.Group(func(mux *flow.Mux) {
 			mux.Use(app.requireAuthenticatedUser)
+
+			// Chat routes
+			mux.HandleFunc("/chat", app.showChatPage, "GET")
+			mux.HandleFunc("/chat/start", app.startChat, "POST")
+			mux.HandleFunc("/chat/message", app.sendChatMessage, "POST")
+			mux.HandleFunc("/chat/stream", app.streamChatResponse, "GET")
+			mux.HandleFunc("/chat/end", app.endChat, "POST")
+			mux.HandleFunc("/api/chat/history", app.getChatHistory, "GET")
+
 			// Main profile route - displays different templates based on user's onboarding state:
 			// - StepInitial: profile-resume-upload.html
 			// - StepResumeUploaded: profile-schedule-phone-call.html
