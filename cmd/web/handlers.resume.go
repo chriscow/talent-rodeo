@@ -291,7 +291,7 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 				"resumeID": resume.ID,
 			})
 		}
-		internal.SendPusherRedirect(app.pusher, user.ID, "/dashboard")
+		internal.SendPusherProcessingComplete(app.pusher, user.ID, "communication-choice", "Your resume has been analyzed!")
 	}()
 
 	// Update onboarding session if this is from HTMX onboarding flow

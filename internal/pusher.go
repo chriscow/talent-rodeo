@@ -48,6 +48,17 @@ func SendPusherProgress(psh *pusher.Client, userID string, eventName string, mes
 	return SendPusherEvent(psh, userID, eventName, data)
 }
 
+// SendPusherProcessingComplete sends a processing completion notification instead of forcing redirect
+func SendPusherProcessingComplete(psh *pusher.Client, userID string, step string, message string) error {
+	fmt.Println(Gray("SendPusherProcessingComplete"), userID, step, message)
+	data := map[string]any{
+		"step":    step,
+		"message": message,
+		"ready":   true,
+	}
+	return SendPusherEvent(psh, userID, "processing-complete", data)
+}
+
 // IsPusherUserPresent checks if a user is currently subscribed to their channel.
 func IsPusherUserPresent(psh *pusher.Client, userID string) (bool, error) {
 	if psh == nil {

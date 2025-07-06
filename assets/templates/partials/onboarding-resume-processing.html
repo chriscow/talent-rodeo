@@ -1,54 +1,498 @@
 {{define "partial:onboarding-resume-processing"}}
-<div style="text-align: center; padding: 2rem;">
-    <h2>Processing Your Resume</h2>
-    <p>We're analyzing your resume to understand your skills and experience. This usually takes just a few moments.</p>
-    
-    <div style="margin: 2rem 0;">
-        <div class="loading-spinner" style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #007bff; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+<div class="onboarding-processing-container">
+    <!-- Educational Slides Container -->
+    <div id="educational-slides" class="slides-container">
+        <!-- Slide 1: Welcome & Processing -->
+        <div class="slide active" data-slide="0">
+            <div class="slide-content">
+                <h2>🚀 Welcome to Talent Rodeo!</h2>
+                <p>While we analyze your resume, let us show you how we'll help accelerate your career.</p>
+                <div class="processing-indicator">
+                    <div class="spinner"></div>
+                    <p>Analyzing your skills and experience...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 2: How We Match -->
+        <div class="slide" data-slide="1">
+            <div class="slide-content">
+                <h2>🎯 Smart Job Matching</h2>
+                <p>Our AI analyzes your resume against thousands of job opportunities to find perfect matches based on:</p>
+                <ul class="benefit-list">
+                    <li>Your skills and experience level</li>
+                    <li>Preferred work environment</li>
+                    <li>Career growth opportunities</li>
+                    <li>Company culture fit</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Slide 3: Conversation Tips -->
+        <div class="slide" data-slide="2">
+            <div class="slide-content">
+                <h2>💬 Great Conversations</h2>
+                <p>Our AI assistant Shirely will have a friendly conversation with you to understand:</p>
+                <ul class="benefit-list">
+                    <li>Your ideal work environment</li>
+                    <li>Career goals and aspirations</li>
+                    <li>Preferred team dynamics</li>
+                    <li>Work-life balance preferences</li>
+                </ul>
+                <p><em>Tip: Be honest and specific - it helps us find better matches!</em></p>
+            </div>
+        </div>
+
+        <!-- Slide 4: What Happens Next -->
+        <div class="slide" data-slide="3">
+            <div class="slide-content">
+                <h2>🔮 What's Next</h2>
+                <p>After our conversation, we'll:</p>
+                <ul class="benefit-list">
+                    <li>Search for jobs that match your preferences</li>
+                    <li>Analyze job requirements vs your skills</li>
+                    <li>Provide personalized recommendations</li>
+                    <li>Help you prepare for applications</li>
+                </ul>
+                <p>Most users find their ideal job within 2-3 weeks!</p>
+            </div>
+        </div>
+
+        <!-- Slide 5: Privacy & Security -->
+        <div class="slide" data-slide="4">
+            <div class="slide-content">
+                <h2>🔒 Your Privacy Matters</h2>
+                <p>We take your data seriously:</p>
+                <ul class="benefit-list">
+                    <li>Your resume stays completely private</li>
+                    <li>We never share your info without permission</li>
+                    <li>You control which jobs you apply to</li>
+                    <li>Delete your data anytime</li>
+                </ul>
+                <p>Ready to find your dream job?</p>
+            </div>
+        </div>
     </div>
-    
-    <p><em>Processing...</em></p>
-    
-    <style>
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+
+    <!-- Slide Navigation -->
+    <div class="slide-navigation">
+        <div class="slide-progress">
+            <span class="progress-dot active" data-slide="0"></span>
+            <span class="progress-dot" data-slide="1"></span>
+            <span class="progress-dot" data-slide="2"></span>
+            <span class="progress-dot" data-slide="3"></span>
+            <span class="progress-dot" data-slide="4"></span>
+        </div>
+        
+        <div class="slide-controls">
+            <button id="prev-slide" class="outline secondary" disabled>Previous</button>
+            <button id="next-slide" class="primary">Next</button>
+            <button id="skip-slides" class="outline">Skip Tour</button>
+        </div>
+    </div>
+
+    <!-- Processing Status -->
+    <div id="processing-status" class="processing-status">
+        <div id="processing-complete-notice" class="completion-notice" style="display: none;">
+            <span class="success-icon">✓</span> Resume processed - continue when ready!
+        </div>
+    </div>
+
+    <!-- Final State: Ready to Continue -->
+    <div id="ready-to-continue" class="ready-state" style="display: none;">
+        <div class="completion-content">
+            <h2>🎉 All Set!</h2>
+            <p>Your resume has been processed and you've learned about our platform.</p>
+            <button id="continue-onboarding" class="primary large">Continue to Next Step</button>
+        </div>
+    </div>
+
+    <!-- Fallback Spinner (if slides completed but processing not done) -->
+    <div id="final-spinner" class="final-waiting" style="display: none;">
+        <div class="spinner-large"></div>
+        <h3>Almost Done!</h3>
+        <p>Finishing up the analysis of your resume...</p>
+    </div>
+</div>
+
+<style>
+    .onboarding-processing-container {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 2rem;
+    }
+
+    .slides-container {
+        position: relative;
+        min-height: 400px;
+        margin-bottom: 2rem;
+    }
+
+    .slide {
+        display: none;
+        opacity: 0;
+        transform: translateX(20px);
+        transition: all 0.3s ease;
+    }
+
+    .slide.active {
+        display: block;
+        opacity: 1;
+        transform: translateX(0);
+    }
+
+    .slide-content {
+        text-align: center;
+        padding: 2rem 1rem;
+    }
+
+    .slide-content h2 {
+        margin-bottom: 1rem;
+        color: var(--primary-color, #007bff);
+    }
+
+    .benefit-list {
+        text-align: left;
+        max-width: 400px;
+        margin: 1.5rem auto;
+        padding-left: 1rem;
+    }
+
+    .benefit-list li {
+        margin: 0.5rem 0;
+        padding-left: 0.5rem;
+    }
+
+    .processing-indicator {
+        margin: 2rem 0;
+    }
+
+    .spinner {
+        display: inline-block;
+        width: 30px;
+        height: 30px;
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid var(--primary-color, #007bff);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-bottom: 1rem;
+    }
+
+    .spinner-large {
+        width: 40px;
+        height: 40px;
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid var(--primary-color, #007bff);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1rem;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    .slide-navigation {
+        text-align: center;
+    }
+
+    .slide-progress {
+        margin-bottom: 1.5rem;
+    }
+
+    .progress-dot {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #ddd;
+        margin: 0 0.5rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .progress-dot.active {
+        background: var(--primary-color, #007bff);
+        transform: scale(1.2);
+    }
+
+    .slide-controls {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .slide-controls button {
+        min-width: 100px;
+    }
+
+    .processing-status {
+        text-align: center;
+        margin: 1rem 0;
+    }
+
+    .completion-notice {
+        background: rgba(40, 167, 69, 0.1);
+        color: #28a745;
+        padding: 0.75rem 1rem;
+        border-radius: 0.5rem;
+        border: 1px solid rgba(40, 167, 69, 0.2);
+        animation: slideDown 0.3s ease;
+    }
+
+    .success-icon {
+        font-weight: bold;
+        margin-right: 0.5rem;
+    }
+
+    .ready-state {
+        text-align: center;
+        padding: 2rem;
+        background: var(--card-background-color, white);
+        border-radius: 0.5rem;
+        border: 1px solid var(--muted-border-color, #ddd);
+    }
+
+    .completion-content h2 {
+        color: var(--primary-color, #007bff);
+        margin-bottom: 1rem;
+    }
+
+    .button.large {
+        padding: 1rem 2rem;
+        font-size: 1.1rem;
+    }
+
+    .final-waiting {
+        text-align: center;
+        padding: 3rem 2rem;
+    }
+
+    .final-waiting h3 {
+        color: var(--primary-color, #007bff);
+        margin: 1rem 0 0.5rem;
+    }
+
+    @keyframes slideDown {
+        from {
+            opacity: 0;
+            transform: translateY(-20px);
         }
-    </style>
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* Mobile responsiveness */
+    @media (max-width: 768px) {
+        .onboarding-processing-container {
+            padding: 1rem;
+        }
+        
+        .slide-content {
+            padding: 1.5rem 0.5rem;
+        }
+        
+        .slide-controls {
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .slide-controls button {
+            width: 100%;
+            max-width: 200px;
+        }
+    }
+</style>
+
+<script>
+class OnboardingSlideManager {
+    constructor() {
+        this.currentSlide = 0;
+        this.totalSlides = 5;
+        this.processingComplete = false;
+        this.slidesCompleted = false;
+        
+        this.initializeElements();
+        this.setupEventListeners();
+        this.setupPusherListener();
+        this.startPollingFallback();
+        
+        console.log('OnboardingSlideManager initialized');
+    }
     
-    <script>
-        // Listen for Pusher redirect when processing is complete
+    initializeElements() {
+        this.slides = document.querySelectorAll('.slide');
+        this.progressDots = document.querySelectorAll('.progress-dot');
+        this.prevBtn = document.getElementById('prev-slide');
+        this.nextBtn = document.getElementById('next-slide');
+        this.skipBtn = document.getElementById('skip-slides');
+        this.continueBtn = document.getElementById('continue-onboarding');
+        this.processingNotice = document.getElementById('processing-complete-notice');
+        this.readyState = document.getElementById('ready-to-continue');
+        this.finalSpinner = document.getElementById('final-spinner');
+        this.slidesContainer = document.getElementById('educational-slides');
+    }
+    
+    setupEventListeners() {
+        this.prevBtn?.addEventListener('click', () => this.previousSlide());
+        this.nextBtn?.addEventListener('click', () => this.nextSlide());
+        this.skipBtn?.addEventListener('click', () => this.skipToEnd());
+        this.continueBtn?.addEventListener('click', () => this.proceedToNextStep());
+        
+        // Progress dot navigation
+        this.progressDots.forEach((dot, index) => {
+            dot.addEventListener('click', () => this.goToSlide(index));
+        });
+        
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') this.previousSlide();
+            if (e.key === 'ArrowRight') this.nextSlide();
+        });
+    }
+    
+    setupPusherListener() {
         if (typeof pusher !== 'undefined') {
             const channel = pusher.subscribe('user-{{.User.ID}}');
-            channel.bind('redirect', function(data) {
-                if (data.url) {
-                    // Update the onboarding content to show next step
-                    htmx.ajax('GET', '/profile/step/current', {target: '#onboarding-content'});
-                }
+            channel.bind('processing-complete', (data) => {
+                console.log('Processing complete event received:', data);
+                this.handleProcessingComplete(data);
             });
         }
-        
-        // Fallback: poll for status updates every 3 seconds
-        const pollInterval = setInterval(function() {
-            fetch('/api/user/status')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status >= 4) { // UserStatusResumeUploaded
-                        clearInterval(pollInterval);
-                        htmx.ajax('GET', '/profile/step/current', {target: '#onboarding-content'});
-                    }
-                })
-                .catch(error => {
-                    console.log('Status check error:', error);
-                });
-        }, 3000);
-        
-        // Clean up interval when content changes
-        document.addEventListener('htmx:beforeSwap', function() {
-            if (typeof pollInterval !== 'undefined') {
-                clearInterval(pollInterval);
+    }
+    
+    startPollingFallback() {
+        this.pollInterval = setInterval(() => {
+            if (!this.processingComplete) {
+                fetch('/api/user/status')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status >= 4) { // UserStatusResumeUploaded
+                            this.handleProcessingComplete({
+                                step: 'communication-choice',
+                                message: 'Resume processing complete!',
+                                ready: true
+                            });
+                        }
+                    })
+                    .catch(error => console.log('Status check error:', error));
             }
-        });
-    </script>
-</div>
+        }, 5000); // 5 second intervals
+    }
+    
+    handleProcessingComplete(data) {
+        this.processingComplete = true;
+        
+        // Clear polling
+        if (this.pollInterval) {
+            clearInterval(this.pollInterval);
+        }
+        
+        // Show completion notice if user is still on slides
+        if (!this.slidesCompleted) {
+            this.processingNotice.style.display = 'block';
+        }
+        
+        // If user has finished slides, proceed immediately
+        if (this.slidesCompleted) {
+            this.showReadyState();
+        }
+    }
+    
+    goToSlide(slideIndex) {
+        if (slideIndex < 0 || slideIndex >= this.totalSlides) return;
+        
+        // Hide current slide
+        this.slides[this.currentSlide]?.classList.remove('active');
+        this.progressDots[this.currentSlide]?.classList.remove('active');
+        
+        // Show target slide
+        this.currentSlide = slideIndex;
+        this.slides[this.currentSlide]?.classList.add('active');
+        this.progressDots[this.currentSlide]?.classList.add('active');
+        
+        // Update button states
+        this.updateButtonStates();
+    }
+    
+    nextSlide() {
+        if (this.currentSlide < this.totalSlides - 1) {
+            this.goToSlide(this.currentSlide + 1);
+        } else {
+            this.finishSlides();
+        }
+    }
+    
+    previousSlide() {
+        if (this.currentSlide > 0) {
+            this.goToSlide(this.currentSlide - 1);
+        }
+    }
+    
+    skipToEnd() {
+        this.finishSlides();
+    }
+    
+    finishSlides() {
+        this.slidesCompleted = true;
+        this.slidesContainer.style.display = 'none';
+        document.querySelector('.slide-navigation').style.display = 'none';
+        
+        if (this.processingComplete) {
+            this.showReadyState();
+        } else {
+            this.showFinalSpinner();
+        }
+    }
+    
+    showReadyState() {
+        this.finalSpinner.style.display = 'none';
+        this.readyState.style.display = 'block';
+    }
+    
+    showFinalSpinner() {
+        this.finalSpinner.style.display = 'block';
+        
+        // Check if processing completes while showing spinner
+        const spinnerCheck = setInterval(() => {
+            if (this.processingComplete) {
+                clearInterval(spinnerCheck);
+                this.showReadyState();
+            }
+        }, 1000);
+    }
+    
+    updateButtonStates() {
+        this.prevBtn.disabled = this.currentSlide === 0;
+        this.nextBtn.textContent = this.currentSlide === this.totalSlides - 1 ? 'Finish Tour' : 'Next';
+    }
+    
+    proceedToNextStep() {
+        // Proceed to next onboarding step
+        htmx.ajax('GET', '/profile/step/current', {target: '#onboarding-content'});
+    }
+    
+    cleanup() {
+        if (this.pollInterval) {
+            clearInterval(this.pollInterval);
+        }
+    }
+}
+
+// Initialize when content loads
+document.addEventListener('DOMContentLoaded', function() {
+    window.onboardingSlides = new OnboardingSlideManager();
+});
+
+// Cleanup when content changes
+document.addEventListener('htmx:beforeSwap', function() {
+    if (window.onboardingSlides) {
+        window.onboardingSlides.cleanup();
+    }
+});
+</script>
 {{end}}
