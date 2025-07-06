@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
 
@@ -192,25 +193,38 @@ func (app *application) startChatFromOnboarding(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// Start chat conversation using existing chat handler
-	// This will create an appointment and update user status
-	app.startChat(w, r)
-	
-	// If successful, update the onboarding session
-	if w.Header().Get("HX-Redirect") != "" {
-		// Get the appointment ID from the redirect URL
-		redirectURL := w.Header().Get("HX-Redirect")
-		// Extract appointment ID from URL like /chat?appointment_id=123
-		if len(redirectURL) > 0 {
-			// Update session with conversation type and step
-			if err := app.onboardingSessionMgr.SetConversationType(r, "chat"); err != nil {
-				app.logger.Error("failed to set conversation type", "error", err)
-			}
-			if err := app.onboardingSessionMgr.UpdateStep(r, internal.OnboardingStepActiveConversation); err != nil {
-				app.logger.Error("failed to update onboarding step", "error", err)
-			}
-		}
+	// Create a new chat appointment directly (don't call startChat since it returns JSON)
+	appointment := &internal.Appointment{
+		Name:          "initial-chat",
+		Type:          internal.AppointmentTypeChat,
+		ScheduledTime: time.Now(),
+		Status:        internal.AppointmentStatusRunning,
+		ChatMessages:  []internal.ChatMessage{},
 	}
+
+	if err := internal.CreateAppointment(r.Context(), app.fs, user.ID, appointment); err != nil {
+		app.logger.Error("Failed to create chat appointment", "error", err, "user_id", user.ID)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// Update user status to indicate chat started
+	if err := internal.UpdateUserStatus(r.Context(), app.fs, user, internal.UserStatusCallStarted); err != nil {
+		app.logger.Error("Failed to update user status for chat", "error", err, "user_id", user.ID)
+		// Continue despite error - chat session is already created
+	}
+
+	// Update onboarding session
+	if err := app.onboardingSessionMgr.SetConversationType(r, "chat"); err != nil {
+		app.logger.Error("failed to set conversation type", "error", err)
+	}
+	if err := app.onboardingSessionMgr.UpdateStep(r, internal.OnboardingStepActiveConversation); err != nil {
+		app.logger.Error("failed to update onboarding step", "error", err)
+	}
+
+	// Redirect to dedicated chat page
+	w.Header().Set("HX-Redirect", fmt.Sprintf("/chat?appointment_id=%s", appointment.ID))
+	w.WriteHeader(http.StatusSeeOther)
 }
 
 // resetOnboardingState resets the user's onboarding state and session
