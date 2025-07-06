@@ -275,3 +275,22 @@ func (app *application) returnHTMXError(w http.ResponseWriter, r *http.Request, 
 	w.Write(response)
 }
 
+// getUserStatus returns the current user status as JSON
+func (app *application) getUserStatus(w http.ResponseWriter, r *http.Request) {
+	user := contextGetAuthenticatedUser(r)
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	
+	response := map[string]interface{}{
+		"status":     int(user.Status),
+		"statusName": user.Status.String(),
+		"userID":     user.ID,
+	}
+	
+	json.NewEncoder(w).Encode(response)
+}
+

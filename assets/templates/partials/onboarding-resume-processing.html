@@ -335,43 +335,110 @@ class OnboardingSlideManager {
         this.readyState = document.getElementById('ready-to-continue');
         this.finalSpinner = document.getElementById('final-spinner');
         this.slidesContainer = document.getElementById('educational-slides');
+        
+        console.log('Elements found:', {
+            slides: this.slides.length,
+            progressDots: this.progressDots.length,
+            prevBtn: !!this.prevBtn,
+            nextBtn: !!this.nextBtn,
+            skipBtn: !!this.skipBtn
+        });
     }
     
     setupEventListeners() {
-        this.prevBtn?.addEventListener('click', () => this.previousSlide());
-        this.nextBtn?.addEventListener('click', () => this.nextSlide());
-        this.skipBtn?.addEventListener('click', () => this.skipToEnd());
-        this.continueBtn?.addEventListener('click', () => this.proceedToNextStep());
+        console.log('Setting up event listeners...');
+        
+        if (this.prevBtn) {
+            this.prevBtn.addEventListener('click', () => {
+                console.log('Previous button clicked');
+                this.previousSlide();
+            });
+        }
+        
+        if (this.nextBtn) {
+            this.nextBtn.addEventListener('click', () => {
+                console.log('Next button clicked');
+                this.nextSlide();
+            });
+        }
+        
+        if (this.skipBtn) {
+            this.skipBtn.addEventListener('click', () => {
+                console.log('Skip button clicked');
+                this.skipToEnd();
+            });
+        }
+        
+        if (this.continueBtn) {
+            this.continueBtn.addEventListener('click', () => {
+                console.log('Continue button clicked');
+                this.proceedToNextStep();
+            });
+        }
         
         // Progress dot navigation
         this.progressDots.forEach((dot, index) => {
-            dot.addEventListener('click', () => this.goToSlide(index));
+            dot.addEventListener('click', () => {
+                console.log('Progress dot clicked:', index);
+                this.goToSlide(index);
+            });
         });
         
         // Keyboard navigation
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowLeft') this.previousSlide();
-            if (e.key === 'ArrowRight') this.nextSlide();
+            if (e.key === 'ArrowLeft') {
+                console.log('Left arrow pressed');
+                this.previousSlide();
+            }
+            if (e.key === 'ArrowRight') {
+                console.log('Right arrow pressed');
+                this.nextSlide();
+            }
         });
+        
+        console.log('Event listeners set up complete');
     }
     
     setupPusherListener() {
+        console.log('Setting up Pusher listener...');
+        console.log('Pusher available:', typeof pusher !== 'undefined');
+        
         if (typeof pusher !== 'undefined') {
-            const channel = pusher.subscribe('user-{{.User.ID}}');
+            const channelName = 'user-{{.User.ID}}';
+            console.log('Subscribing to channel:', channelName);
+            
+            const channel = pusher.subscribe(channelName);
+            
             channel.bind('processing-complete', (data) => {
                 console.log('Processing complete event received:', data);
                 this.handleProcessingComplete(data);
             });
+            
+            // Debug: Also bind to all events to see what we receive
+            channel.bind_global((eventName, data) => {
+                console.log('Pusher event received:', eventName, data);
+            });
+            
+            console.log('Pusher listener setup complete');
+        } else {
+            console.log('Pusher not available - using polling fallback only');
         }
     }
     
     startPollingFallback() {
+        console.log('Starting polling fallback...');
         this.pollInterval = setInterval(() => {
             if (!this.processingComplete) {
+                console.log('Polling user status...');
                 fetch('/api/user/status')
-                    .then(response => response.json())
+                    .then(response => {
+                        console.log('Status response:', response.status, response.statusText);
+                        return response.json();
+                    })
                     .then(data => {
+                        console.log('Status data received:', data);
                         if (data.status >= 4) { // UserStatusResumeUploaded
+                            console.log('Processing complete detected via polling!');
                             this.handleProcessingComplete({
                                 step: 'communication-choice',
                                 message: 'Resume processing complete!',
@@ -380,6 +447,8 @@ class OnboardingSlideManager {
                         }
                     })
                     .catch(error => console.log('Status check error:', error));
+            } else {
+                console.log('Processing already complete, stopping polls');
             }
         }, 5000); // 5 second intervals
     }
@@ -483,14 +552,14 @@ class OnboardingSlideManager {
     }
 }
 
-// Initialize when content loads
-document.addEventListener('DOMContentLoaded', function() {
-    window.onboardingSlides = new OnboardingSlideManager();
-});
+// Initialize immediately since this is loaded via HTMX
+console.log('Initializing OnboardingSlideManager...');
+window.onboardingSlides = new OnboardingSlideManager();
 
 // Cleanup when content changes
 document.addEventListener('htmx:beforeSwap', function() {
     if (window.onboardingSlides) {
+        console.log('Cleaning up OnboardingSlideManager...');
         window.onboardingSlides.cleanup();
     }
 });

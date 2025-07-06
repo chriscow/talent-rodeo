@@ -106,6 +106,9 @@ func (app *application) routes() http.Handler {
 			mux.HandleFunc("/profile/step/resume-upload", app.createResume, "POST")
 			mux.HandleFunc("/profile/step/start-voice-call", app.callNow, "POST")
 			mux.HandleFunc("/profile/step/start-chat", app.startChatFromOnboarding, "POST")
+			
+			// API endpoints
+			mux.HandleFunc("/api/user/status", app.getUserStatus, "GET")
 
 			mux.HandleFunc("/account/delete", app.deleteAccount, "POST")
 
