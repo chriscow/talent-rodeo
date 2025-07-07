@@ -1,4 +1,4 @@
-{{define "subject"}}🎯 [Talent Rodeo] I found your perfect ★★★★★ matches!{{end}}
+{{define "subject"}}🎯 I found your perfect ★★★★★ matches!{{end}}
 
 {{define "plainBody"}}
 Hi {{.FirstName}}!
@@ -34,11 +34,22 @@ Talent Rodeo AI
 {{end}}
 
 {{define "htmlBody"}}
-<!doctype html>
-<html>
-  <head>
-    <meta name="viewport" content="width=device-width" />
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px; text-align: center;">
+        <h1>Your search results are ready!</h1>
+        <p><strong>Handpicked opportunities based on our conversation</strong></p>
+    </div>
+
+    <p>Hi {{.FirstName}}!</p>
+    
+    <p>Shirely here, and I'm practically buzzing with excitement! 🤖✨</p>
+    
+    <p>Remember our conversation about your career goals? Well, I've been working around the clock (perks of being an AI - no sleep required!), and I found some absolutely <strong>stellar</strong> matches for you.</p>
+    
+    <div style="background: #e3f2fd; padding: 15px; border-radius: 6px; margin: 15px 0;">
+        <h3 style="margin-top: 0;">🌟 Here are your top picks:</h3>
+    </div>
+    
     <style>
       .job-match {
         background-color: #f8f9fa;
@@ -64,15 +75,6 @@ Talent Rodeo AI
         font-weight: 500;
       }
     </style>
-  </head>
-  <body>
-    <p>Hi {{.FirstName}}!</p>
-    
-    <p>Shirely here, and I'm practically buzzing with excitement! 🤖✨</p>
-    
-    <p>Remember our conversation about your career goals? Well, I've been working around the clock (perks of being an AI - no sleep required!), and I found some absolutely <strong>stellar</strong> matches for you.</p>
-    
-    <p><strong>Here are your top picks:</strong></p>
     
     {{range $index, $match := .Matches}}{{if lt $index 3}}
     <div class="job-match">
@@ -82,18 +84,31 @@ Talent Rodeo AI
     </div>
     {{end}}{{end}}
     
-    {{if gt (len .Matches) 3}}<p><strong>PLUS:</strong> I found {{sub (len .Matches) 3}} more ★★★★★ 5-Star opportunities waiting for you at <a href="https://talent.rodeo/dashboard">your dashboard</a> - I didn't want to overwhelm your inbox, but trust me, {{if eq (sub (len .Matches) 3) 1}}it's{{else}}they're{{end}} worth checking out!</p>{{end}}
+    {{if gt (len .Matches) 3}}
+    <div style="background: #fff3cd; padding: 15px; border-radius: 6px; margin: 15px 0; border: 2px solid #ffc107;">
+        <p><strong>PLUS:</strong> I found {{sub (len .Matches) 3}} more ★★★★★ 5-Star opportunities waiting for you at <a href="https://talent.rodeo/dashboard">your dashboard</a> - I didn't want to overwhelm your inbox, but trust me, {{if eq (sub (len .Matches) 3) 1}}it's{{else}}they're{{end}} worth checking out!</p>
+    </div>
+    {{end}}
     
-    <p>These aren't just keyword matches - these are opportunities I <em>handpicked</em> based on our conversation about what energizes you and where you want your career to go.</p>
+    <div style="background: #f0f4f8; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #2196f3;">
+        <p>These aren't just keyword matches - these are opportunities I <em>handpicked</em> based on our conversation about what energizes you and where you want your career to go.</p>
+    </div>
     
-    <p><strong>Ready to take a look?</strong> <a href="https://talent.rodeo/dashboard">Head over to your dashboard</a></p>
+    <div style="text-align: center; margin: 20px 0;">
+        <p><a href="https://talent.rodeo/dashboard" style="background: #2196f3; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">🎯 Check Your Dashboard</a></p>
+    </div>
     
     <p>Questions? Just reply - I love hearing your thoughts on my picks!</p>
-    
-    <p>Here to help you get hired,<br/>
-    Shirely<br/>
-    <em>"HIRE isn't just in my name - it's my mission"</em> 🎯<br/>
-    Talent Rodeo AI</p>
-  </body>
-</html>
+
+    <div style="margin-top: 20px; font-style: italic;">
+        <p>Here to help you get hired,<br>
+        <strong>Shirely</strong><br>
+        <em>"HIRE isn't just in my name - it's my mission"</em> 🎯<br>
+        Talent Rodeo AI</p>
+    </div>
+
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 14px; color: #666;">
+        <p>You're receiving this email because I found job matches for you on Talent Rodeo.</p>
+    </div>
+</div>
 {{end}}

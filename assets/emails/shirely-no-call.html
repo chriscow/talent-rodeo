@@ -1,15 +1,17 @@
-{{define "subject"}}[Talent Rodeo] Ready for a quick chat?{{end}}
+{{define "subject"}}📞 Ready for a quick chat?{{end}}
 
 {{define "plainBody"}}
-Hi {{.FirstName}}!  I'm Shirely from Talent Rodeo.
+Hi {{.FirstName}}!
 
-I noticed you uploaded your resume {{.LastStateChange | approxTime}}, and I'm excited to chat with you about your career goals.  
+I'm Shirely from Talent Rodeo.
+
+I noticed you uploaded your resume {{.LastStateChange | approxTime}}, and I'm excited to chat with you about your career goals.
 
 I know talking to an AI on the phone might sound a bit unusual, but trust me - I'm way more fun than your average recruiter! Our chat usually takes just 7-10 minutes, and unlike those endless forms other job sites make you fill out, I actually want to understand what energizes you, where you want your career to go, and what you're absolutely done with.
 
 You can start our call here whenever it's convenient for you - I'm available 24/7 (one of the perks of being an AI!).
 
-<a href="https://talent.rodeo/profile">Schedule a call here</a>
+Schedule a call here: https://talent.rodeo/profile
 
 Looking forward to getting to know the real you beyond your resume!
 
@@ -20,23 +22,44 @@ AI Career Specialist at Talent Rodeo
 {{end}}
 
 {{define "htmlBody"}}
-<!doctype html>
-<html>
-  <head>
-    <meta name="viewport" content="width=device-width" />
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-</head>
-<body>
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px; text-align: center;">
+        <h1>Your AI recruiter is waiting to connect</h1>
+        <p><strong>Just 7-10 minutes to understand your career goals</strong></p>
+    </div>
+
     <p>Hi {{.FirstName}}!</p>
-    <p>I'm Shirely from Talent Rodeo.</p>
+    
+    <p>I'm Shirely (yes, with <strong>HIRE</strong> in my name!) from Talent Rodeo.</p>
+    
     <p>I noticed you uploaded your resume {{.LastStateChange | approxTime}}, and I'm excited to chat with you about your career goals.</p>
-    <p>I know talking to an AI on the phone might sound a bit unusual, but trust me - I'm way more fun than your average recruiter! Our chat usually takes just 7-10 minutes, and unlike those endless forms other job sites make you fill out, I actually want to understand what energizes you, where you want your career to go, and what you're absolutely done with.</p>
-    <p>You can start our call here whenever it's convenient for you - I'm available 24/7 (one of the perks of being an AI!).</p>
-    <p><a href="https://talent.rodeo/profile">Schedule a call here</a></p>
+    
+    <div style="background: #f0f4f8; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #2196f3;">
+        <p>I know talking to an AI on the phone might sound a bit unusual, but trust me - I'm way more fun than your average recruiter! Our chat usually takes just 7-10 minutes, and unlike those endless forms other job sites make you fill out, I actually want to understand:</p>
+        <ul>
+            <li>What energizes you at work</li>
+            <li>Where you want your career to go</li>
+            <li>What you're absolutely done with</li>
+        </ul>
+    </div>
+    
+    <div style="background: #e3f2fd; padding: 15px; border-radius: 6px; margin: 15px 0; text-align: center;">
+        <p><strong>You can start our call whenever it's convenient for you</strong></p>
+        <p>I'm available 24/7 (one of the perks of being an AI!)</p>
+        <p><a href="https://talent.rodeo/profile" style="background: #2196f3; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">📞 Schedule a Call Here</a></p>
+    </div>
+    
     <p>Looking forward to getting to know the real you beyond your resume!</p>
-    <p>Talk soon,</p>
-    <p>Shirely<br/>AI Career Specialist at Talent Rodeo<br/>"HIRE is in my name for a reason" ✨</p>
-    <p><a href="https://talent.rodeo">talent.rodeo</a></p>
-</body>
-</html>
+
+    <div style="margin-top: 20px; font-style: italic;">
+        <p>Talk soon,<br>
+        <strong>Shirely</strong><br>
+        AI Career Specialist at Talent Rodeo<br>
+        <em>"HIRE is in my name for a reason"</em> ✨</p>
+    </div>
+
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 14px; color: #666;">
+        <p>You're receiving this email because you uploaded your resume to Talent Rodeo.</p>
+    </div>
+</div>
 {{end}}
