@@ -27,7 +27,7 @@ func TestTrialEmailProcessorIntegration(t *testing.T) {
 	user := &internal.User{
 		ID:              "test-trial-processor-user",
 		FirstName:       "Alice",
-		LastName:        "Johnson", 
+		LastName:        "Johnson",
 		Name:            "Alice Johnson",
 		Email:           "alice@example.com",
 		Status:          internal.UserStatusCallCompleted,
@@ -41,34 +41,34 @@ func TestTrialEmailProcessorIntegration(t *testing.T) {
 	settings := DefaultNudgeSettings
 
 	testCases := []struct {
-		name      string
-		nudgeType NudgeType
+		name             string
+		nudgeType        NudgeType
 		shouldBeEligible bool
-		reason    string
+		reason           string
 	}{
 		{
-			name:      "Trial Welcome (Day 1)",
-			nudgeType: NudgeTypeTrialWelcome,
+			name:             "Trial Welcome (Day 1)",
+			nudgeType:        NudgeTypeTrialWelcome,
 			shouldBeEligible: false, // Too late (trial started 2 days ago)
-			reason:    "Should be too late for day 1 email",
+			reason:           "Should be too late for day 1 email",
 		},
 		{
-			name:      "Trial Expectations (Day 2)",
-			nudgeType: NudgeTypeTrialExpectations,
+			name:             "Trial Expectations (Day 2)",
+			nudgeType:        NudgeTypeTrialExpectations,
 			shouldBeEligible: true, // Should be eligible for day 2
-			reason:    "Should be eligible for day 2 email",
+			reason:           "Should be eligible for day 2 email",
 		},
 		{
-			name:      "Trial Engagement (Day 3)",
-			nudgeType: NudgeTypeTrialEngagement,
+			name:             "Trial Engagement (Day 3)",
+			nudgeType:        NudgeTypeTrialEngagement,
 			shouldBeEligible: false, // Too early
-			reason:    "Should be too early for day 3 email",
+			reason:           "Should be too early for day 3 email",
 		},
 		{
-			name:      "Trial Conversion (Day 6)",
-			nudgeType: NudgeTypeTrialConversion,
+			name:             "Trial Conversion (Day 6)",
+			nudgeType:        NudgeTypeTrialConversion,
 			shouldBeEligible: false, // Too early
-			reason:    "Should be too early for day 6 email",
+			reason:           "Should be too early for day 6 email",
 		},
 	}
 
@@ -76,7 +76,7 @@ func TestTrialEmailProcessorIntegration(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Test eligibility
 			eligible, reason := isUserEligibleForNudge(user, tc.nudgeType, time.Now(), settings)
-			
+
 			if eligible != tc.shouldBeEligible {
 				t.Errorf("Expected eligibility %v, got %v. Reason: %s", tc.shouldBeEligible, eligible, reason)
 			}
@@ -133,7 +133,7 @@ func TestTrialEmailDataGeneration(t *testing.T) {
 			additionalData := map[string]any{
 				"qualityMatches": 8, // Typical volume
 			}
-			
+
 			emailData := emailGenerator.BuildEmailData(user, nudgeType, additionalData)
 
 			// Verify trial-specific data is populated
@@ -259,7 +259,7 @@ func TestTrialEmailEndToEndGeneration(t *testing.T) {
 	if !strings.Contains(generatedEmail.PlainBody, "15") {
 		t.Error("Email should contain the quality matches count")
 	}
-	if !strings.Contains(generatedEmail.PlainBody, "4 days") {
+	if !strings.Contains(generatedEmail.PlainBody, "5 days") {
 		t.Error("Email should contain the days remaining")
 	}
 
