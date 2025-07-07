@@ -547,9 +547,13 @@ func (s *SearchResultProcessor) OnJobListing(jobSearch *SearchTask, job JobListi
 	// Check if the job detail already exists in our system to avoid duplicate processing
 	exists, err := JobDetailExists(ctx, s.fs, job.ID)
 	if err != nil {
-		s.logger.Error("failed to check if job detail exists", "jobID", job.ID, "error", err)
+		if status.Code(err) == codes.NotFound {
+			return true
+		}
+
 		// We proceed, but this may result in an attempt to re-fetch a job that's already there.
 		// The transaction in saveAndLinkJobDetail should handle this gracefully.
+		s.logger.Error("failed to check if job detail exists", "jobID", job.ID, "error", err)
 		return true
 	}
 
