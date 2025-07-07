@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"talent-rodeo/internal"
+	"talent-rodeo/internal/utils"
 	"time"
 )
 
@@ -242,7 +243,7 @@ func (eg *EmailGenerator) populateTrialEmailData(data *NudgeEmailData, user *int
 		}
 
 		// Calculate days remaining
-		data.DaysRemaining = calculateDaysRemaining(*user.SubscriptionEnd, timezone)
+		data.DaysRemaining = utils.CalculateDaysRemaining(*user.SubscriptionEnd, timezone)
 	}
 
 	// Get quality matches count (from additional data or default)
@@ -264,34 +265,6 @@ func formatTimeInUserTimezone(t time.Time, timezone string, layout string) (stri
 		return "", err
 	}
 	return t.In(loc).Format(layout), nil
-}
-
-func calculateDaysRemaining(endTime time.Time, timezone string) int {
-	loc, err := time.LoadLocation(timezone)
-	if err != nil {
-		loc = time.UTC
-	}
-
-	now := time.Now().In(loc)
-	endInTz := endTime.In(loc)
-
-	// If trial has already ended, return 0
-	if endInTz.Before(now) || endInTz.Equal(now) {
-		return 0
-	}
-
-	// Calculate days until end date using day boundaries, not exact hours
-	// This treats any partial day as a full day remaining
-	nowDate := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
-	endDate := time.Date(endInTz.Year(), endInTz.Month(), endInTz.Day(), 0, 0, 0, 0, loc)
-
-	// Calculate the number of full days between start and end (inclusive of end day)
-	daysDiff := int(endDate.Sub(nowDate).Hours() / 24)
-
-	// Add 1 to include the current day as a remaining day
-	days := daysDiff + 1
-
-	return days
 }
 
 func determineMatchVolumeCategory(qualityMatches int) string {

@@ -105,7 +105,7 @@ func TestCalculateTrialEndDateInvalidTimezone(t *testing.T) {
 
 func TestFormatTimeInUserTimezone(t *testing.T) {
 	utcTime := time.Date(2025, 1, 1, 15, 30, 0, 0, time.UTC)
-	
+
 	tests := []struct {
 		name     string
 		timezone string
@@ -140,14 +140,29 @@ func TestFormatTimeInUserTimezone(t *testing.T) {
 }
 
 func TestCalculateDaysRemaining(t *testing.T) {
-	// Test with a future date 3 days from now
-	futureDate := time.Now().Add(3 * 24 * time.Hour)
-	
-	days := CalculateDaysRemaining(futureDate, "UTC")
-	if days != 3 {
-		t.Errorf("Expected 3 days remaining, got %d", days)
+	now := time.Now()
+
+	// Test with trial ending at end of today (23:59:59)
+	endOfToday := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 0, time.UTC)
+	days := CalculateDaysRemaining(endOfToday, "UTC")
+	if days != 1 {
+		t.Errorf("Expected 1 day remaining for trial ending at end of today, got %d", days)
 	}
-	
+
+	// Test with trial ending at end of tomorrow (23:59:59)
+	endOfTomorrow := time.Date(now.Year(), now.Month(), now.Day()+1, 23, 59, 59, 0, time.UTC)
+	days = CalculateDaysRemaining(endOfTomorrow, "UTC")
+	if days != 2 {
+		t.Errorf("Expected 2 days remaining for trial ending at end of tomorrow, got %d", days)
+	}
+
+	// Test with trial ending in 7 days (mimicking the 7-day trial scenario)
+	sevenDaysLater := time.Date(now.Year(), now.Month(), now.Day()+7, 23, 59, 59, 0, time.UTC)
+	days = CalculateDaysRemaining(sevenDaysLater, "UTC")
+	if days != 8 {
+		t.Errorf("Expected 8 days remaining for 7-day trial (including start day), got %d", days)
+	}
+
 	// Test with a past date
 	pastDate := time.Now().Add(-24 * time.Hour)
 	days = CalculateDaysRemaining(pastDate, "UTC")

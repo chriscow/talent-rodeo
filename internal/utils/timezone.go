@@ -43,21 +43,41 @@ func FormatTimeInUserTimezone(utcTime time.Time, timezone string, format string)
 }
 
 // CalculateDaysRemaining calculates days remaining from user's current time perspective
+// Counts partial days as full days, so if trial ends in 2.5 days, returns 3
 func CalculateDaysRemaining(trialEndUTC time.Time, userTimezone string) int {
 	loc, err := time.LoadLocation(userTimezone)
 	if err != nil {
-		// Fallback to UTC calculation
-		return int(trialEndUTC.Sub(time.Now()).Hours() / 24)
+		// Fallback to UTC calculation with ceiling
+		duration := trialEndUTC.Sub(time.Now())
+		if duration <= 0 {
+			return 0
+		}
+		days := int(duration.Hours() / 24)
+		// Add 1 if there's any partial day remaining
+		if duration.Hours() > float64(days*24) {
+			days++
+		}
+		return days
 	}
 
 	now := time.Now().In(loc)
 	trialEnd := trialEndUTC.In(loc)
 
-	duration := trialEnd.Sub(now)
-	days := int(duration.Hours() / 24)
-
-	if days < 0 {
+	// If trial has already ended, return 0
+	if trialEnd.Before(now) || trialEnd.Equal(now) {
 		return 0
 	}
+
+	// Calculate days until end date using day boundaries
+	// This treats any partial day as a full day remaining
+	nowDate := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	endDate := time.Date(trialEnd.Year(), trialEnd.Month(), trialEnd.Day(), 0, 0, 0, 0, loc)
+
+	// Calculate the number of full days between start and end (inclusive of end day)
+	daysDiff := int(endDate.Sub(nowDate).Hours() / 24)
+
+	// Add 1 to include the current day as a remaining day
+	days := daysDiff + 1
+
 	return days
 }
