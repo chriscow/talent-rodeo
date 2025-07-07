@@ -1,4 +1,4 @@
-{{define "subject"}}[Talent Rodeo] Ready to let your next job find you? I just need your resume! 🎯{{end}}
+{{define "subject"}}🎯 Ready to let your next job find you? I just need your resume!{{end}}
 
 {{define "plainBody"}}
 Hi {{.FirstName}}!
@@ -7,7 +7,7 @@ I'm Shirely - the AI behind Talent Rodeo. Thanks for signing up!
 
 Here's the thing - I'm dying to have a real conversation with you about your career goals, but first I need to see your resume so I can understand your background before we chat.
 
-Don't worry, uploading takes just a minute: <a href="https://talent.rodeo/profile">upload it here</a>
+Don't worry, uploading takes just a minute: https://talent.rodeo/profile
 
 Pro tip: Don't have a polished resume handy? No problem! Just copy and paste your LinkedIn profile into a text file - I can work with that too.
 
@@ -22,31 +22,40 @@ AI Career Specialist at Talent Rodeo
 {{end}}
 
 {{define "htmlBody"}}
-<!doctype html>
-<html>
-  <head>
-    <meta name="viewport" content="width=device-width" />
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-</head>
-<body>
-  <p>Hi {{.FirstName}}!</p>
-  
-  <p>I'm Shirely (yes, with <strong>HIRE</strong> in my name!) - the AI behind Talent Rodeo. Thanks for signing up!</p>
-  
-  <p>Here's the thing - I'm dying to have a real conversation with you about your career goals, but first I need to see your resume so I can understand your background before we chat.</p>
-  
-  <p>Don't worry, uploading takes just a minute: <a href="https://talent.rodeo/profile">upload it here</a></p>
-  
-  <p><strong>Pro tip:</strong> Don't have a polished resume handy? No problem! Just copy and paste your LinkedIn profile into a text file - I can work with that too.</p>
-  
-  <p>Once I've got your resume, I'll give you a call for a quick 7-10 minute conversation about what you <em>actually want to do</em> (not just what you've done). Then I become your personal AI recruiter working 24/7 to find opportunities that truly fit.</p>
-  
-  <p>Questions? Just reply to this email - I love hearing from people!</p>
-  
-  <p>Talk soon,<br/>
-  Shirely<br/>
-  AI Career Specialist at Talent Rodeo<br/>
-  <em>"HIRE is in my name for a reason"</em> ✨</p>
-</body>
-</html>
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px; text-align: center;">
+        <h1>Upload takes just a minute, then we can talk</h1>
+        <p><strong>Your AI recruiter is standing by for our career conversation</strong></p>
+    </div>
+
+    <p>Hi {{.FirstName}}!</p>
+    
+    <p>I'm Shirely (yes, with <strong>HIRE</strong> in my name!) - the AI behind Talent Rodeo. Thanks for signing up!</p>
+    
+    <p>Here's the thing - I'm dying to have a real conversation with you about your career goals, but first I need to see your resume so I can understand your background before we chat.</p>
+    
+    <div style="background: #e3f2fd; padding: 15px; border-radius: 6px; margin: 15px 0; text-align: center;">
+        <p><strong>Don't worry, uploading takes just a minute:</strong></p>
+        <p><a href="https://talent.rodeo/profile" style="background: #2196f3; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Upload Your Resume Here</a></p>
+    </div>
+    
+    <div style="background: #f0f4f8; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #2196f3;">
+        <p><strong>💡 Pro tip:</strong> Don't have a polished resume handy? No problem! Just copy and paste your LinkedIn profile into a text file - I can work with that too.</p>
+    </div>
+    
+    <p>Once I've got your resume, I'll give you a call for a quick 7-10 minute conversation about what you <em>actually want to do</em> (not just what you've done). Then I become your personal AI recruiter working 24/7 to find opportunities that truly fit.</p>
+    
+    <p>Questions? Just reply to this email - I love hearing from people!</p>
+
+    <div style="margin-top: 20px; font-style: italic;">
+        <p>Talk soon,<br>
+        <strong>Shirely</strong><br>
+        AI Career Specialist at Talent Rodeo<br>
+        <em>"HIRE is in my name for a reason"</em> ✨</p>
+    </div>
+
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 14px; color: #666;">
+        <p>You're receiving this email because you signed up for Talent Rodeo.</p>
+    </div>
+</div>
 {{end}}
