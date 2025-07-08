@@ -1217,6 +1217,18 @@ Your primary goal is to complete this checklist. After each user response, you M
 	if len(toolCalls) > 0 {
 		app.logger.Info("Processing tool calls", "count", len(toolCalls), "user_id", user.ID)
 
+		// Collect tool call messages to add to conversation
+		var toolMessages []openai.ChatCompletionMessage
+
+		// Add the assistant's tool call message
+		if len(toolCalls) > 0 {
+			assistantMsg := openai.ChatCompletionMessage{
+				Role:      openai.ChatMessageRoleAssistant,
+				ToolCalls: toolCalls,
+			}
+			toolMessages = append(toolMessages, assistantMsg)
+		}
+
 		// Execute each tool call
 		for _, toolCall := range toolCalls {
 			if toolCall.Function.Name == "" {
@@ -1275,6 +1287,14 @@ Your primary goal is to complete this checklist. After each user response, you M
 				return
 			}
 
+			// Add tool result to conversation messages
+			toolResultMsg := openai.ChatCompletionMessage{
+				Role:       openai.ChatMessageRoleTool,
+				Content:    toolResponse.Content,
+				ToolCallID: toolCall.ID,
+			}
+			toolMessages = append(toolMessages, toolResultMsg)
+
 			// Log the tool call and response for debugging/auditing
 			toolCallLog := map[string]any{
 				"tool_name":  toolCall.Function.Name,
@@ -1292,6 +1312,140 @@ Your primary goal is to complete this checklist. After each user response, you M
 			}
 
 			app.logger.Info("Tool call completed", "tool_call", toolCallLog)
+		}
+
+		// Generate follow-up response from AI with tool results
+		if len(toolMessages) > 0 {
+			app.logger.Info("Generating follow-up response after tool calls", "user_id", user.ID)
+
+			// Get current conversation history
+			chatHistory, err := internal.GetChatHistory(appointment)
+			if err != nil {
+				app.logger.Error("Failed to get chat history for follow-up", "error", err)
+			} else {
+				// Build messages for follow-up request
+				followUpMessages := []openai.ChatCompletionMessage{}
+
+				// Add system message
+				systemPrompt := "You are Shirely, an AI career assistant helping job seekers find the right opportunities."
+				if assistantOverrides, err := internal.BuildAssistantOverrides(ctx, user, app.fs, app.logger); err == nil {
+					if assistantOverrides.Model != nil && assistantOverrides.Model.Messages != nil && len(assistantOverrides.Model.Messages) > 0 {
+						systemPrompt = assistantOverrides.Model.Messages[0].Content
+					}
+				}
+
+				// Add checklist status to system prompt
+				if appointment.ConversationChecklist != nil {
+					checklistSummary := internal.GetChecklistSummary(appointment.ConversationChecklist)
+					systemPrompt += fmt.Sprintf(`
+
+CONVERSATION CHECKLIST STATUS:
+- Overall Status: %s
+- Completion Attempts: %d/%d
+- Message Count: %d/%d
+- Progress: %d/%d completed (%d required)
+- Can Complete: %v
+
+Continue the conversation naturally after processing the tool results.
+`,
+						checklistSummary["overall_status"],
+						checklistSummary["completion_attempts"],
+						internal.MaxCompletionAttempts,
+						checklistSummary["message_count"],
+						internal.MaxConversationLength,
+						checklistSummary["completed_items"],
+						checklistSummary["total_items"],
+						checklistSummary["required_items"],
+						checklistSummary["can_complete"],
+					)
+				}
+
+				followUpMessages = append(followUpMessages, openai.ChatCompletionMessage{
+					Role:    openai.ChatMessageRoleSystem,
+					Content: systemPrompt,
+				})
+
+				// Add conversation history
+				for _, msg := range chatHistory {
+					role := openai.ChatMessageRoleUser
+					if msg.Role == "assistant" {
+						role = openai.ChatMessageRoleAssistant
+					}
+					followUpMessages = append(followUpMessages, openai.ChatCompletionMessage{
+						Role:    role,
+						Content: msg.Content,
+					})
+				}
+
+				// Add the tool call messages
+				followUpMessages = append(followUpMessages, toolMessages...)
+
+				// Create follow-up request
+				followUpReq := openai.ChatCompletionRequest{
+					Model:      openai.GPT4Dot1,
+					Messages:   followUpMessages,
+					Stream:     true,
+					Tools:      chatToolRegistry.GetAllTools(),
+					ToolChoice: "auto",
+				}
+
+				// Stream the follow-up response
+				client := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
+				followUpStream, err := client.CreateChatCompletionStream(ctx, followUpReq)
+				if err != nil {
+					app.logger.Error("Failed to create follow-up stream", "error", err)
+					return
+				}
+				defer followUpStream.Close()
+
+				var followUpResponse strings.Builder
+
+				// Stream the follow-up response
+				for {
+					response, err := followUpStream.Recv()
+					if err != nil {
+						if err == io.EOF {
+							break
+						}
+						app.logger.Error("Error receiving follow-up stream", "error", err)
+						return
+					}
+
+					if len(response.Choices) > 0 {
+						choice := response.Choices[0]
+
+						// Handle content streaming
+						if choice.Delta.Content != "" {
+							content := choice.Delta.Content
+							followUpResponse.WriteString(content)
+
+							// Send the content chunk via WebSocket
+							msg := WebSocketMessage{
+								Type:    "content",
+								Content: content,
+							}
+
+							if err := conn.WriteJSON(msg); err != nil {
+								app.logger.Error("Failed to send follow-up WebSocket message", "error", err)
+								return
+							}
+						}
+					}
+				}
+
+				// Save the follow-up response
+				if followUpResponse.Len() > 0 {
+					if err := internal.AddChatMessage(ctx, app.fs, appointment, "assistant", followUpResponse.String()); err != nil {
+						app.logger.Error("Failed to save follow-up assistant message", "error", err)
+					} else {
+						// Increment message count for follow-up response
+						internal.IncrementMessageCount(appointment.ConversationChecklist)
+						if err := internal.UpdateAppointment(ctx, app.fs, appointment); err != nil {
+							app.logger.Error("Failed to save appointment with follow-up message count", "error", err)
+						}
+					}
+				}
+			}
 		}
 	}
 
