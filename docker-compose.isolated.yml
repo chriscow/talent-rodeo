@@ -1,0 +1,93 @@
+# docker-compose.isolated.yml - Complete isolated environment
+version: '3.8'
+
+services:
+  # Main development container
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.isolated
+      args:
+        REPO_URL: https://github.com/chriscow/tr-chat-interface.git
+        BRANCH: ${BRANCH:-main}
+        GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    ports:
+      - "2304:2304"   # Web application
+      - "8200:8200"   # Firestore emulator UI
+      - "4040:4040"   # Firestore emulator
+    env_file:
+      - ${ENV_FILE_PATH:-.env}
+    environment:
+      # Override specific values for container environment
+      - FIRESTORE_EMULATOR_HOST=localhost:8200
+      - DB_DSN=postgres://postgres:postgres@db:5432/talent_rodeo?sslmode=disable
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:-talent-rodeo}
+      - PORT=2304
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - dev-workspace:/workspace
+      - dev-go-cache:/go/pkg/mod
+    stdin_open: true
+    tty: true
+    networks:
+      - tr-isolated
+
+  # Claude development shell (for interactive work)
+  claude:
+    build:
+      context: .
+      dockerfile: Dockerfile.isolated
+      args:
+        REPO_URL: https://github.com/chriscow/tr-chat-interface.git
+        BRANCH: ${BRANCH:-main}
+        GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    env_file:
+      - ${ENV_FILE_PATH:-.env}
+    environment:
+      - FIRESTORE_EMULATOR_HOST=dev:8200
+      - DB_DSN=postgres://postgres:postgres@db:5432/talent_rodeo?sslmode=disable
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:-talent-rodeo}
+    depends_on:
+      - dev
+      - db
+    volumes:
+      - dev-workspace:/workspace
+      - dev-go-cache:/go/pkg/mod
+      # Mount prompts directory for easy access
+      - ./prompts:/workspace/prompts:ro
+    stdin_open: true
+    tty: true
+    entrypoint: ["/usr/local/bin/claude-session.sh"]
+    command: []
+    networks:
+      - tr-isolated
+
+  # PostgreSQL database
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: talent_rodeo
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tr-isolated
+
+volumes:
+  postgres-data:
+  dev-workspace:
+  dev-go-cache:
+
+networks:
+  tr-isolated:
+    name: tr-chat-isolated 

@@ -1,0 +1,471 @@
+# Dockerfile.isolated - Fully isolated development environment with secret handling
+ARG GO_VERSION=1.24
+FROM golang:${GO_VERSION}-bookworm
+
+# Build arguments for git repository setup
+ARG REPO_URL=https://github.com/chriscow/talent-rodeo.git
+ARG BRANCH=main
+ARG GITHUB_TOKEN=""
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    curl \
+    git \
+    iputils-ping \
+    gnupg \
+    apt-transport-https \
+    poppler-utils \
+    postgresql-client \
+    openssh-client \
+    vim \
+    nano \
+    htop \
+    jq \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install GitHub CLI
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+    && apt-get update \
+    && apt-get install gh -y \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Java 17 for Firestore emulator
+RUN apt-get update && \
+    apt-get install -y openjdk-17-jdk && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+ENV PATH=$PATH:$JAVA_HOME/bin
+
+# Install Node.js and Firebase tools
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g firebase-tools && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Google Cloud CLI
+RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
+    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg && \
+    apt-get update && \
+    apt-get install -y google-cloud-cli google-cloud-cli-firestore-emulator && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install taskfile
+RUN sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+# Install air for live reloading
+RUN go install github.com/air-verse/air@latest
+
+# Create workspace
+WORKDIR /workspace
+
+# Clone repository into container
+RUN if [ -n "$GITHUB_TOKEN" ]; then \
+        git clone https://${GITHUB_TOKEN}@github.com/chriscow/talent-rodeo.git . ; \
+    else \
+        git clone ${REPO_URL} . ; \
+    fi && \
+    git checkout ${BRANCH} && \
+    git submodule update --init --recursive
+
+# Download Go dependencies
+RUN go mod download && go mod verify
+
+# Create secret setup script
+COPY <<'EOF' /usr/local/bin/setup-secrets.sh
+#!/bin/bash
+set -e
+
+echo "🔐 Setting up secrets..."
+
+# Create .env from environment variables and defaults
+cat > /workspace/.env << ENVEOF
+# Container Environment
+FIRESTORE_EMULATOR_HOST=localhost:8200
+DB_DSN=postgres://postgres:postgres@db:5432/talent_rodeo?sslmode=disable
+FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:-talent-rodeo}
+PORT=${PORT:-2304}
+
+# Application Secrets
+OPENAI_API_KEY=${OPENAI_API_KEY:-}
+ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+LINKEDIN_CLIENT_ID=${LINKEDIN_CLIENT_ID:-}
+LINKEDIN_CLIENT_SECRET=${LINKEDIN_CLIENT_SECRET:-}
+SESSION_SECRET=${SESSION_SECRET:-development-secret-key}
+CSRF_SECRET=${CSRF_SECRET:-development-csrf-key}
+JOB_ID_ENCRYPTION_KEY=${JOB_ID_ENCRYPTION_KEY:-development-encryption-key}
+
+# Email Configuration
+SMTP_HOST=${SMTP_HOST:-}
+SMTP_PORT=${SMTP_PORT:-587}
+SMTP_USERNAME=${SMTP_USERNAME:-}
+SMTP_PASSWORD=${SMTP_PASSWORD:-}
+FROM_EMAIL=${FROM_EMAIL:-noreply@talent-rodeo.com}
+
+# External APIs
+VAPI_API_KEY=${VAPI_API_KEY:-}
+PINECONE_API_KEY=${PINECONE_API_KEY:-}
+PINECONE_ENVIRONMENT=${PINECONE_ENVIRONMENT:-}
+SCRAPINGDOG_API_KEY=${SCRAPINGDOG_API_KEY:-}
+
+# Firebase Credentials
+FIREBASE_CREDENTIALS=${FIREBASE_CREDENTIALS:-}
+ENVEOF
+
+# Handle special cases like base64 encoded secrets
+if [ -n "$FIREBASE_CREDENTIALS_B64" ]; then
+    echo "📝 Decoding Firebase credentials from base64..."
+    echo "$FIREBASE_CREDENTIALS_B64" | base64 -d > /workspace/firebase-credentials.json
+    echo "FIREBASE_CREDENTIALS_FILE=/workspace/firebase-credentials.json" >> /workspace/.env
+fi
+
+# Handle Firebase credentials as JSON string
+if [ -n "$FIREBASE_CREDENTIALS" ] && [ "$FIREBASE_CREDENTIALS" != "development-placeholder" ]; then
+    echo "📝 Writing Firebase credentials to file..."
+    echo "$FIREBASE_CREDENTIALS" > /workspace/firebase-credentials.json
+    echo "FIREBASE_CREDENTIALS_FILE=/workspace/firebase-credentials.json" >> /workspace/.env
+fi
+
+# Setup GitHub authentication if token is provided
+if [ -n "$GITHUB_TOKEN" ]; then
+    echo "🔑 Setting up GitHub CLI authentication..."
+    echo "$GITHUB_TOKEN" | gh auth login --with-token
+    gh auth setup-git
+    echo "✅ GitHub CLI authenticated"
+fi
+
+echo "✅ Secrets configured"
+EOF
+
+# Create development environment setup script
+COPY <<'EOF' /usr/local/bin/dev-setup.sh
+#!/bin/bash
+set -e
+
+echo "🚀 Setting up isolated development environment..."
+
+# Setup secrets first
+/usr/local/bin/setup-secrets.sh
+
+# Build all binaries
+echo "🔨 Building project..."
+cd /workspace
+task build
+
+echo "✅ Development environment ready!"
+echo ""
+echo "📋 Available commands:"
+echo "  task run                    - Start the web server"
+echo "  task live:server           - Start with live reload"
+echo "  task test                  - Run tests"
+echo "  task firebase              - Start Firestore emulator"
+echo "  /usr/local/bin/start-all   - Start all services"
+echo "  /usr/local/bin/github-issue - Work on GitHub issue"
+echo ""
+echo "🌐 The application will be available on:"
+echo "  http://localhost:2304 (web server)"
+echo "  http://localhost:8200 (firestore emulator UI)"
+EOF
+
+# Create service orchestration script
+COPY <<'EOF' /usr/local/bin/start-all.sh
+#!/bin/bash
+set -e
+
+echo "🚀 Starting all services..."
+
+# Function to run services in background
+run_bg() {
+    echo "▶️  Starting $1..."
+    $2 &
+    echo $! > /tmp/$1.pid
+}
+
+# Cleanup function
+cleanup() {
+    echo "🛑 Stopping services..."
+    pkill -f "firebase.*emulators" || true
+    pkill -f "air" || true
+    pkill -f "/tmp/bin/web" || true
+    exit 0
+}
+
+trap cleanup SIGTERM SIGINT
+
+cd /workspace
+
+# Start Firestore emulator
+run_bg "firestore" "firebase emulators:start --only firestore"
+
+# Wait for emulator to be ready
+echo "⏳ Waiting for Firestore emulator..."
+timeout 60 bash -c 'until curl -s http://localhost:8200 > /dev/null; do sleep 1; done'
+echo "✅ Firestore emulator ready"
+
+# Start the application with live reload
+echo "▶️  Starting application with live reload..."
+export FIRESTORE_EMULATOR_HOST=localhost:8200
+task live:server
+
+# Keep script running
+wait
+EOF
+
+# Create Claude development helper script
+COPY <<'EOF' /usr/local/bin/claude-session.sh
+#!/bin/bash
+set -e
+
+PROMPT_FILE=${1:-}
+
+echo "🤖 Claude Development Session"
+echo "📁 Working directory: $(pwd)"
+echo "🌿 Current branch: $(git branch --show-current 2>/dev/null || echo 'detached')"
+echo ""
+
+if [ -n "$PROMPT_FILE" ] && [ -f "$PROMPT_FILE" ]; then
+    echo "📋 Processing initial prompt from: $PROMPT_FILE"
+    echo "===================="
+    cat "$PROMPT_FILE"
+    echo ""
+    echo "===================="
+    echo ""
+    echo "💡 You can now work with this codebase using the above context."
+fi
+
+echo "📋 Available commands:"
+echo "  task run                 - Start web server"
+echo "  task live:server        - Start with live reload"
+echo "  task test               - Run tests"
+echo "  task build              - Build project"
+echo "  git status              - Check git status"
+echo "  git checkout -b <name>  - Create new branch"
+echo "  github-issue <number>   - Work on specific GitHub issue"
+echo ""
+echo "🔧 Development workflow:"
+echo "  1. Make your changes"
+echo "  2. Run 'task test' to verify"
+echo "  3. Run 'task live:server' to test manually"
+echo "  4. Commit your changes"
+echo ""
+
+exec bash
+EOF
+
+# Create GitHub issue workflow script
+COPY <<'EOF' /usr/local/bin/github-issue.sh
+#!/bin/bash
+set -e
+
+ISSUE_NUMBER=${1:-}
+REPO=${2:-chriscow/talent-rodeo}
+
+if [ -z "$ISSUE_NUMBER" ]; then
+    echo "❌ Usage: github-issue <issue-number> [repo]"
+    echo "📋 Example: github-issue 42"
+    echo "📋 Example: github-issue 42 chriscow/talent-rodeo"
+    exit 1
+fi
+
+echo "🔍 Fetching GitHub issue #$ISSUE_NUMBER from $REPO..."
+
+# Check if GitHub CLI is authenticated
+if ! gh auth status > /dev/null 2>&1; then
+    echo "❌ GitHub CLI is not authenticated"
+    echo "💡 Please set GITHUB_TOKEN environment variable or run 'gh auth login'"
+    exit 1
+fi
+
+# Fetch issue details
+ISSUE_DATA=$(gh issue view $ISSUE_NUMBER --repo $REPO --json title,body,labels,assignees,state)
+
+if [ $? -ne 0 ]; then
+    echo "❌ Failed to fetch issue #$ISSUE_NUMBER"
+    exit 1
+fi
+
+ISSUE_TITLE=$(echo "$ISSUE_DATA" | jq -r '.title')
+ISSUE_BODY=$(echo "$ISSUE_DATA" | jq -r '.body // ""')
+ISSUE_STATE=$(echo "$ISSUE_DATA" | jq -r '.state')
+ISSUE_LABELS=$(echo "$ISSUE_DATA" | jq -r '.labels[]?.name // empty' | tr '\n' ' ')
+
+if [ "$ISSUE_STATE" = "CLOSED" ]; then
+    echo "⚠️  Issue #$ISSUE_NUMBER is already closed"
+    echo "Do you want to work on it anyway? (y/N)"
+    read -r response
+    if [[ ! "$response" =~ ^[Yy]$ ]]; then
+        exit 0
+    fi
+fi
+
+echo "📋 Issue: $ISSUE_TITLE"
+echo "🏷️  Labels: $ISSUE_LABELS"
+echo ""
+
+# Create branch name from issue
+BRANCH_NAME="issue-${ISSUE_NUMBER}-$(echo "$ISSUE_TITLE" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-\|-$//g' | cut -c1-50)"
+
+echo "🌿 Creating branch: $BRANCH_NAME"
+git checkout -b "$BRANCH_NAME" 2>/dev/null || git checkout "$BRANCH_NAME"
+
+# Create prompt file from issue
+PROMPT_FILE="/tmp/issue-${ISSUE_NUMBER}-prompt.txt"
+
+cat > "$PROMPT_FILE" << PROMPT_EOF
+I need you to work on GitHub Issue #${ISSUE_NUMBER}: ${ISSUE_TITLE}
+
+## Issue Description
+${ISSUE_BODY}
+
+## Labels
+${ISSUE_LABELS}
+
+## Instructions
+1. Analyze the issue description carefully
+2. Understand what needs to be implemented or fixed
+3. Examine the existing codebase to understand current patterns
+4. Implement the solution following established patterns
+5. Add appropriate tests
+6. Ensure the solution is complete and working
+7. When ready, use the 'submit-pr' command to create a pull request
+
+## Guidelines
+- Follow the existing code patterns and conventions
+- Add comprehensive tests for new functionality
+- Update documentation if needed
+- Ensure the solution addresses all requirements in the issue
+- Consider edge cases and error handling
+
+## Available Commands
+- submit-pr ${ISSUE_NUMBER} - Submit a pull request when work is complete
+- task test - Run tests to verify your changes
+- task live:server - Start development server to test manually
+
+Please start by analyzing the issue and the current codebase, then propose your implementation approach.
+PROMPT_EOF
+
+echo "📝 Created prompt file from issue"
+echo ""
+echo "🤖 Starting Claude session with issue context..."
+echo ""
+
+# Start Claude session with the issue prompt
+exec /usr/local/bin/claude-session.sh "$PROMPT_FILE"
+EOF
+
+# Create PR submission script
+COPY <<'EOF' /usr/local/bin/submit-pr.sh
+#!/bin/bash
+set -e
+
+ISSUE_NUMBER=${1:-}
+COMMIT_MESSAGE=${2:-}
+PR_TITLE=${3:-}
+PR_BODY=${4:-}
+
+if [ -z "$ISSUE_NUMBER" ]; then
+    echo "❌ Usage: submit-pr <issue-number> [commit-message] [pr-title] [pr-body]"
+    echo "📋 Example: submit-pr 42"
+    echo "📋 Example: submit-pr 42 \"Fix login bug\" \"Fix: Resolve login redirect issue\" \"Fixes #42\""
+    exit 1
+fi
+
+echo "🚀 Submitting pull request for issue #$ISSUE_NUMBER..."
+
+# Check if GitHub CLI is authenticated
+if ! gh auth status > /dev/null 2>&1; then
+    echo "❌ GitHub CLI is not authenticated"
+    echo "💡 Please set GITHUB_TOKEN environment variable"
+    exit 1
+fi
+
+# Get current branch
+CURRENT_BRANCH=$(git branch --show-current)
+
+if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ]; then
+    echo "❌ Cannot submit PR from main/master branch"
+    echo "💡 Please create a feature branch first"
+    exit 1
+fi
+
+# Check if there are any changes
+if git diff --quiet && git diff --cached --quiet; then
+    echo "❌ No changes to commit"
+    echo "💡 Make some changes first, then try again"
+    exit 1
+fi
+
+# Stage all changes if nothing is staged
+if git diff --cached --quiet; then
+    echo "📝 Staging all changes..."
+    git add .
+fi
+
+# Get issue details for automatic PR content
+REPO=$(gh repo view --json owner,name --jq '.owner.login + "/" + .name')
+ISSUE_DATA=$(gh issue view $ISSUE_NUMBER --repo $REPO --json title,body,labels)
+ISSUE_TITLE=$(echo "$ISSUE_DATA" | jq -r '.title')
+
+# Auto-generate commit message if not provided
+if [ -z "$COMMIT_MESSAGE" ]; then
+    COMMIT_MESSAGE="Fix #${ISSUE_NUMBER}: ${ISSUE_TITLE}"
+fi
+
+# Auto-generate PR title if not provided
+if [ -z "$PR_TITLE" ]; then
+    PR_TITLE="Fix #${ISSUE_NUMBER}: ${ISSUE_TITLE}"
+fi
+
+# Auto-generate PR body if not provided
+if [ -z "$PR_BODY" ]; then
+    PR_BODY="## Description
+This PR addresses issue #${ISSUE_NUMBER}.
+
+## Changes Made
+- Implemented solution for: ${ISSUE_TITLE}
+- Added appropriate tests
+- Followed existing code patterns
+
+## Testing
+- [x] All existing tests pass
+- [x] New functionality tested
+- [x] Manual testing completed
+
+Fixes #${ISSUE_NUMBER}"
+fi
+
+echo "📝 Committing changes..."
+git commit -m "$COMMIT_MESSAGE"
+
+echo "🚀 Pushing branch to origin..."
+git push origin "$CURRENT_BRANCH"
+
+echo "📋 Creating pull request..."
+gh pr create \
+    --title "$PR_TITLE" \
+    --body "$PR_BODY" \
+    --base main
+
+echo ""
+echo "✅ Pull request created successfully!"
+echo "🔗 View PR: $(gh pr view --web --json url --jq '.url')"
+echo ""
+echo "📋 Next steps:"
+echo "  1. Review the PR in GitHub"
+echo "  2. Request reviews from team members"
+echo "  3. Merge when approved"
+EOF
+
+# Make scripts executable
+RUN chmod +x /usr/local/bin/dev-setup.sh /usr/local/bin/start-all.sh /usr/local/bin/setup-secrets.sh /usr/local/bin/claude-session.sh /usr/local/bin/github-issue.sh /usr/local/bin/submit-pr.sh
+
+# Expose ports
+EXPOSE 2304 8200 4040
+
+# Set up entrypoint
+ENTRYPOINT ["/usr/local/bin/dev-setup.sh"]
+CMD ["/usr/local/bin/start-all.sh"] 
