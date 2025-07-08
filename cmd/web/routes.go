@@ -75,37 +75,37 @@ func (app *application) routes() http.Handler {
 			mux.HandleFunc("/chat/end", app.endChat, "POST")
 			mux.HandleFunc("/api/chat/history", app.getChatHistory, "GET")
 
-			// Main profile route - displays different templates based on user's onboarding state:
-			// - StepInitial: profile-resume-upload.html
-			// - StepResumeUploaded: profile-schedule-phone-call.html
-			// - StepPhoneCallScheduled: profile-waiting-call.html
-			// - StepPhoneCallCompleted: profile-preferences.html
-			// - StepPreferencesExtracted: profile-job-search.html
-			// - StepJobSearchStarted/Complete: profile-jobs.html
-			mux.HandleFunc("/profile", app.showOnboardingPage, "GET")
-			mux.HandleFunc("/profile/onboarding/reset", app.resetOnboardingState, "POST")
-			mux.HandleFunc("/profile/resume/:resumeID", app.deleteResume, "DELETE")
+			// Main onboarding route - displays different templates based on user's onboarding state:
+			// - StepInitial: onboarding-resume-upload.html
+			// - StepResumeUploaded: onboarding-schedule-phone-call.html
+			// - StepPhoneCallScheduled: onboarding-waiting-call.html
+			// - StepPhoneCallCompleted: onboarding-preferences.html
+			// - StepPreferencesExtracted: onboarding-job-search.html
+			// - StepJobSearchStarted/Complete: onboarding-jobs.html
+			mux.HandleFunc("/onboarding", app.showOnboardingPage, "GET")
+			mux.HandleFunc("/onboarding/reset", app.resetOnboardingState, "POST")
+			mux.HandleFunc("/onboarding/resume/:resumeID", app.deleteResume, "DELETE")
 
 			// Direct resume upload route - always shows the resume upload form regardless of onboarding state
 			// Used for:
 			// - Direct access to resume upload
 			// - Uploading a different resume
 			// - Resetting onboarding process
-			mux.HandleFunc("/profile/resume/upload", app.showUploadPage, "GET")
-			mux.HandleFunc("/profile/resume/upload", app.createResume, "POST")
+			mux.HandleFunc("/onboarding/resume/upload", app.showUploadPage, "GET")
+			mux.HandleFunc("/onboarding/resume/upload", app.createResume, "POST")
 
-			mux.HandleFunc("/profile/schedule", app.showSchedulePage, "GET")
+			mux.HandleFunc("/onboarding/schedule", app.showSchedulePage, "GET")
 
-			mux.HandleFunc("/profile/schedule/appointment", app.createAppointment, "POST")
-			mux.HandleFunc("/profile/schedule/appointment/:id", app.cancelAppointment, "DELETE")
-			mux.HandleFunc("/profile/schedule/reschedule", app.rescheduleAppointment, "POST")
-			mux.HandleFunc("/profile/schedule/call-now", app.callNow, "POST")
+			mux.HandleFunc("/onboarding/schedule/appointment", app.createAppointment, "POST")
+			mux.HandleFunc("/onboarding/schedule/appointment/:id", app.cancelAppointment, "DELETE")
+			mux.HandleFunc("/onboarding/schedule/reschedule", app.rescheduleAppointment, "POST")
+			mux.HandleFunc("/onboarding/schedule/call-now", app.callNow, "POST")
 
 			// New HTMX onboarding step routes
-			mux.HandleFunc("/profile/step/current", app.handleOnboardingStepRequest, "GET")
-			mux.HandleFunc("/profile/step/resume-upload", app.createResume, "POST")
-			mux.HandleFunc("/profile/step/start-voice-call", app.callNow, "POST")
-			mux.HandleFunc("/profile/step/start-chat", app.startChatFromOnboarding, "POST")
+			mux.HandleFunc("/onboarding/step/current", app.handleOnboardingStepRequest, "GET")
+			mux.HandleFunc("/onboarding/step/resume-upload", app.createResume, "POST")
+			mux.HandleFunc("/onboarding/step/start-voice-call", app.callNow, "POST")
+			mux.HandleFunc("/onboarding/step/start-chat", app.startChatFromOnboarding, "POST")
 			
 			// API endpoints
 			mux.HandleFunc("/api/user/status", app.getUserStatus, "GET")

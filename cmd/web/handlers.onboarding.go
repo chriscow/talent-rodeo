@@ -73,7 +73,7 @@ func (app *application) showOnboardingPage(w http.ResponseWriter, r *http.Reques
 
 	// For non-HTMX requests, don't set OnboardingStepContent - let the template handle it directly based on step
 
-	if err := response.Page(w, http.StatusOK, data, "pages/profile-onboarding.html"); err != nil {
+	if err := response.Page(w, http.StatusOK, data, "pages/onboarding-main.html"); err != nil {
 		app.serverError(w, r, err)
 		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
 			"action":   "render_template",
@@ -131,7 +131,7 @@ func (app *application) handleOnboardingStepRequest(w http.ResponseWriter, r *ht
 
 	if session == nil {
 		// No session, redirect to main onboarding page
-		w.Header().Set("HX-Redirect", "/profile")
+		w.Header().Set("HX-Redirect", "/onboarding")
 		w.WriteHeader(http.StatusSeeOther)
 		return
 	}
@@ -188,7 +188,7 @@ func (app *application) startChatFromOnboarding(w http.ResponseWriter, r *http.R
 
 	if session == nil {
 		// No session, redirect to main onboarding page
-		w.Header().Set("HX-Redirect", "/profile")
+		w.Header().Set("HX-Redirect", "/onboarding")
 		w.WriteHeader(http.StatusSeeOther)
 		return
 	}
@@ -259,7 +259,7 @@ func (app *application) resetOnboardingState(w http.ResponseWriter, r *http.Requ
 	app.sessionManager.Put(r.Context(), "flash", "Your onboarding has been reset. You can start over.")
 
 	// Redirect to profile (which will show the onboarding flow)
-	http.Redirect(w, r, "/profile", http.StatusSeeOther)
+	http.Redirect(w, r, "/onboarding", http.StatusSeeOther)
 }
 
 // returnHTMXError returns an error response for HTMX requests

@@ -1,4 +1,4 @@
-{{define "title"}}Schedule Call - Profile{{end}}
+{{define "title"}}Schedule Call - Onboarding{{end}}
 
 {{define "page:main"}}
 <main class="container-narrow">
@@ -29,7 +29,7 @@
             {{end}}
 
             <div class="grid">
-                <form method="post" action="/profile/schedule/appointment">
+                <form method="post" action="/onboarding/schedule/appointment">
                     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                     <input type="hidden" name="timezone" id="timezone">
                     <label for="datetime">
@@ -65,7 +65,7 @@
 
         <!-- Communication Options -->
         <div style="text-align: center;">
-            <form method="post" action="/profile/schedule/call-now">
+            <form method="post" action="/onboarding/schedule/call-now">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                 <input type="hidden" name="timezone" id="timezone-now">
                 <button type="submit" class="contrast">📞 Call Me Now!</button>
@@ -79,7 +79,7 @@
         <!-- Chat Interface (hidden by default) -->
         {{template "chat-interface" .}}
 
-        <form method="get" action="/profile/resume/upload" style="margin-top: 2rem;">
+        <form method="get" action="/onboarding/resume/upload" style="margin-top: 2rem;">
             <button type="submit" class="secondary">Upload Different Resume</button>
         </form>
     </article>

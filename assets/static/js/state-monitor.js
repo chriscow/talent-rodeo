@@ -50,7 +50,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
       // Redirect after a delay
       setTimeout(() => {
-        window.location.href = '/profile/resume/upload';
+        window.location.href = '/onboarding/resume/upload';
       }, 5000);
     }
     
@@ -69,7 +69,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
       // Redirect to profile page
       setTimeout(() => {
-        window.location.href = '/profile';
+        window.location.href = '/onboarding';
       }, 3000);
     }
   });
