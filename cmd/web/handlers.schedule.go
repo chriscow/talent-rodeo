@@ -25,7 +25,7 @@ import (
 //  4. Handles websocket connection for voice if on voice route
 //
 // Routes:
-//   - GET /profile/schedule
+//   - GET /onboarding/schedule
 //   - GET /schedule/voice (websocket endpoint)
 //
 // Templates:
@@ -64,10 +64,10 @@ func (app *application) showSchedulePage(w http.ResponseWriter, r *http.Request)
 	now := time.Now().UTC()
 	data["MinDateTime"] = now.Format("2006-01-02T15:04")
 
-	if err := response.Page(w, http.StatusOK, data, "pages/profile-schedule-phone-call.html"); err != nil {
+	if err := response.Page(w, http.StatusOK, data, "pages/onboarding-schedule-phone-call.html"); err != nil {
 		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
 			"action":   "render_template",
-			"template": "pages/profile-schedule-phone-call.html",
+			"template": "pages/onboarding-schedule-phone-call.html",
 			"userID":   user.ID,
 		})
 		app.serverError(w, r, fmt.Errorf("failed to render schedule page: %w", err))
@@ -87,7 +87,7 @@ func (app *application) showSchedulePage(w http.ResponseWriter, r *http.Request)
 //  6. Returns appropriate view based on request type
 //
 // Routes:
-//   - POST /profile/schedule/appointment
+//   - POST /onboarding/schedule/appointment
 //
 // Templates:
 //   - partials/waiting-for-call.html (HTMX request)
@@ -238,7 +238,7 @@ func (app *application) createAppointment(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Always redirect to /profile on success
+	// Always redirect to /onboarding on success
 	http.Redirect(w, r, "/onboarding", http.StatusSeeOther)
 }
 
@@ -266,10 +266,10 @@ func buildWebhookURL(callPath string) string {
 //  3. Shows scheduling page for new appointment
 //
 // Routes:
-//   - POST /profile/schedule/reschedule
+//   - POST /onboarding/schedule/reschedule
 //
 // Templates:
-//   - pages/profile-schedule-phone-call.html
+//   - pages/onboarding-schedule-phone-call.html
 //
 // State Transitions:
 //   - StepPhoneCallScheduled → StepResumeUploaded
@@ -300,10 +300,10 @@ func (app *application) rescheduleAppointment(w http.ResponseWriter, r *http.Req
 	}
 
 	data := app.newTemplateData(r)
-	if err := response.Page(w, http.StatusOK, data, "pages/profile-schedule-phone-call.html"); err != nil {
+	if err := response.Page(w, http.StatusOK, data, "pages/onboarding-schedule-phone-call.html"); err != nil {
 		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
 			"action":   "render_template_reschedule",
-			"template": "pages/profile-schedule-phone-call.html",
+			"template": "pages/onboarding-schedule-phone-call.html",
 			"userID":   user.ID,
 		})
 		app.serverError(w, r, fmt.Errorf("failed to render schedule page: %w", err))
@@ -318,7 +318,7 @@ func (app *application) rescheduleAppointment(w http.ResponseWriter, r *http.Req
 //  2. Updates appointment status to cancelled
 //
 // Routes:
-//   - DELETE /profile/schedule/appointment/:id
+//   - DELETE /onboarding/schedule/appointment/:id
 //
 // State:
 //   - Does not modify onboarding state
@@ -359,7 +359,7 @@ func (app *application) cancelAppointment(w http.ResponseWriter, r *http.Request
 //  5. Returns appropriate view based on request type
 //
 // Routes:
-//   - POST /profile/schedule/call-now
+//   - POST /onboarding/schedule/call-now
 //
 // Templates:
 //   - partials/waiting-for-call.html (HTMX request)
@@ -466,7 +466,7 @@ func (app *application) callNow(w http.ResponseWriter, r *http.Request) {
 		// Don't return error here since the call is already scheduled
 	}
 
-	app.logger.Debug("Redirecting to profile",
+	app.logger.Debug("Redirecting to onboarding",
 		"user_id", user.ID)
 
 	http.Redirect(w, r, "/onboarding", http.StatusSeeOther)

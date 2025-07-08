@@ -960,8 +960,6 @@ func (app *application) streamChatResponse(w http.ResponseWriter, r *http.Reques
 			break
 		}
 
-		app.logger.Debug("received websocket message", "type", msg.Type, "user_id", user.ID)
-
 		switch msg.Type {
 		case "user_message":
 			// Save user message and generate AI response
@@ -981,7 +979,7 @@ func (app *application) handleWebSocketUserMessage(conn *websocket.Conn, user *i
 	ctx := context.Background()
 
 	// Save user message to appointment
-	app.logger.Debug("handleWebSocketUserMessage -> AddChatMessage", "name", user.Name, "user_id", user.ID, "appointment_id", appointment.ID, "user_message", userMessage)
+	app.logger.Debug("handleWebSocketUserMessage -> AddChatMessage", "name", user.Name, "user_message", userMessage, "user_id", user.ID, "appointment_id", appointment.ID)
 	if err := internal.AddChatMessage(ctx, app.fs, appointment, "user", userMessage); err != nil {
 		app.logger.Error("Failed to save user message", "error", err, "user_id", user.ID)
 		errorMsg := WebSocketMessage{
@@ -1343,18 +1341,37 @@ func (app *application) showChatPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appointmentID := r.URL.Query().Get("appointment_id")
-	if appointmentID == "" {
-		app.logger.Error("No appointment ID provided for chat page")
-		http.Redirect(w, r, "/onboarding", http.StatusSeeOther)
-		return
-	}
+	var appointment *internal.Appointment
+	var err error
 
-	// Verify the appointment exists and belongs to this user
-	appointment, err := internal.GetAppointment(r.Context(), app.fs, user.ID, appointmentID)
-	if err != nil {
-		app.logger.Error("Failed to get appointment for chat page", "error", err, "user_id", user.ID, "appointment_id", appointmentID)
-		http.Redirect(w, r, "/onboarding", http.StatusSeeOther)
-		return
+	if appointmentID == "" {
+		// No appointment ID provided, try to find the latest running chat appointment
+		app.logger.Debug("No appointment ID provided, looking for latest running chat appointment", "user_id", user.ID)
+
+		var found bool
+		appointment, found, err = internal.GetLatestRunningChatAppointment(r.Context(), app.fs, user.ID)
+		if err != nil {
+			app.logger.Error("Failed to get latest running chat appointment", "error", err, "user_id", user.ID)
+			http.Redirect(w, r, "/onboarding", http.StatusSeeOther)
+			return
+		}
+
+		if !found {
+			app.logger.Info("No running chat appointment found for user", "user_id", user.ID)
+			http.Redirect(w, r, "/onboarding", http.StatusSeeOther)
+			return
+		}
+
+		appointmentID = appointment.ID
+		app.logger.Info("Found running chat appointment", "user_id", user.ID, "appointment_id", appointmentID)
+	} else {
+		// Verify the appointment exists and belongs to this user
+		appointment, err = internal.GetAppointment(r.Context(), app.fs, user.ID, appointmentID)
+		if err != nil {
+			app.logger.Error("Failed to get appointment for chat page", "error", err, "user_id", user.ID, "appointment_id", appointmentID)
+			http.Redirect(w, r, "/onboarding", http.StatusSeeOther)
+			return
+		}
 	}
 
 	if appointment.Type != internal.AppointmentTypeChat {

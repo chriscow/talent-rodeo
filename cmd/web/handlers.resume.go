@@ -35,7 +35,7 @@ func isValidFileType(filename string) bool {
 	return ext == ".pdf" || ext == ".docx" || ext == ".txt"
 }
 
-// deleteResume handles DELETE requests to /profile/resume.
+// deleteResume handles DELETE requests to /onboarding/resume.
 // It removes the user's resume and resets their onboarding state to initial.
 // After successful deletion, redirects to the resume upload page.
 // Requires: Authenticated user
@@ -73,26 +73,26 @@ func (app *application) deleteResume(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/onboarding/resume/upload", http.StatusSeeOther)
 }
 
-// showUploadPage handles GET requests to /profile/resume/upload.
+// showUploadPage handles GET requests to /onboarding/resume/upload.
 // Displays the resume upload form page.
-// Template: pages/profile-resume-upload.html
+// Template: pages/onboarding-resume-upload.html
 // Requires: Authenticated user
 func (app *application) showUploadPage(w http.ResponseWriter, r *http.Request) {
 	app.logger.Info("showUploadPage", "method", r.Method, "url", r.URL.String())
 
 	data := app.newTemplateData(r)
-	if err := response.Page(w, http.StatusOK, data, "pages/profile-resume-upload.html"); err != nil {
+	if err := response.Page(w, http.StatusOK, data, "pages/onboarding-resume-upload.html"); err != nil {
 		app.logger.Error("Failed to render resume upload page", "error", err)
 		app.serverError(w, r, fmt.Errorf("failed to render resume upload page: %w", err))
 		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-			"template": "pages/profile-resume-upload.html",
+			"template": "pages/onboarding-resume-upload.html",
 			"action":   "response.Page",
 			"method":   r.Method,
 		})
 	}
 }
 
-// createResume handles POST requests to /profile/resume/upload.
+// createResume handles POST requests to /onboarding/resume/upload.
 // Processes resume file upload and phone number submission.
 // Flow:
 //  1. Validates file type and size
@@ -101,7 +101,7 @@ func (app *application) showUploadPage(w http.ResponseWriter, r *http.Request) {
 //  4. Updates onboarding state
 //  5. Redirects to scheduling page on success
 //
-// Template: pages/profile-schedule-phone-call.html (on success)
+// Template: pages/onboarding-schedule-phone-call.html (on success)
 //
 //	partials/resume-form.html (on validation error)
 //
@@ -128,10 +128,10 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		
-		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
+		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/onboarding-resume-upload.html"); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
 			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-				"template": "pages/profile-resume-upload.html",
+				"template": "pages/onboarding-resume-upload.html",
 				"action":   "response.Page",
 			})
 		}
@@ -150,10 +150,10 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 			"action":    "getFormFile",
 			"fieldName": "resume",
 		})
-		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
+		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/onboarding-resume-upload.html"); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
 			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-				"template": "pages/profile-resume-upload.html",
+				"template": "pages/onboarding-resume-upload.html",
 				"action":   "response.Page",
 			})
 		}
@@ -175,10 +175,10 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 	form.Validator.CheckField(isValidFileType(header.Filename), "resume", "Invalid file type. Please upload a DOCX, PDF, or TXT file.")
 
 	if form.Validator.HasErrors() {
-		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
+		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/onboarding-resume-upload.html"); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
 			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-				"template": "pages/profile-resume-upload.html",
+				"template": "pages/onboarding-resume-upload.html",
 				"action":   "response.Page",
 			})
 		}
@@ -194,10 +194,10 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 			"action":   "os.CreateTemp",
 			"filename": header.Filename,
 		})
-		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
+		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/onboarding-resume-upload.html"); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
 			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-				"template": "pages/profile-resume-upload.html",
+				"template": "pages/onboarding-resume-upload.html",
 				"action":   "response.Page",
 			})
 		}
@@ -212,10 +212,10 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 			"action":   "copyFileToTemp",
 			"filename": header.Filename,
 		})
-		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
+		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/onboarding-resume-upload.html"); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
 			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-				"template": "pages/profile-resume-upload.html",
+				"template": "pages/onboarding-resume-upload.html",
 				"action":   "renderTemplate",
 			})
 		}
@@ -230,10 +230,10 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 			"filename": header.Filename,
 			"fileType": strings.ToLower(filepath.Ext(header.Filename)),
 		})
-		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
+		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/onboarding-resume-upload.html"); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
 			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-				"template": "pages/profile-resume-upload.html",
+				"template": "pages/onboarding-resume-upload.html",
 				"action":   "renderTemplate",
 			})
 		}
@@ -251,10 +251,10 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 			"userID":   user.ID,
 			"filename": header.Filename,
 		})
-		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
+		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/onboarding-resume-upload.html"); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
 			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-				"template": "pages/profile-resume-upload.html",
+				"template": "pages/onboarding-resume-upload.html",
 				"action":   "renderTemplate",
 			})
 		}
@@ -317,10 +317,10 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 
 	// For non-HTMX requests, show full processing page (legacy behavior)
 	data = app.newTemplateData(r)
-	if err := response.Page(w, http.StatusOK, data, "pages/profile-resume-processing.html"); err != nil {
+	if err := response.Page(w, http.StatusOK, data, "pages/onboarding-resume-processing.html"); err != nil {
 		app.serverError(w, r, fmt.Errorf("failed to render processing page: %w", err))
 		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-			"template": "pages/profile-resume-processing.html",
+			"template": "pages/onboarding-resume-processing.html",
 			"action":   "renderTemplate",
 		})
 	}

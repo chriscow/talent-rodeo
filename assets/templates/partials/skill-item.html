@@ -7,7 +7,7 @@
     <td>{{.Skill.Name}}</td>
     <td colspan="2">
         <div class="grid" style="grid-template-columns: 1fr; gap: 0.5rem;">
-            <select hx-put="/profile/skills/{{.Skill.ID}}"
+            <select hx-put="/onboarding/skills/{{.Skill.ID}}"
                     hx-trigger="change"
                     hx-target="closest tr"
                     hx-swap="outerHTML"
@@ -36,7 +36,7 @@
     <td>
         <button class="outline" 
                 aria-label="Delete skill"
-                hx-delete="/profile/skills/{{.Skill.ID}}"
+                hx-delete="/onboarding/skills/{{.Skill.ID}}"
                 hx-target="closest tr"
                 hx-swap="outerHTML swap:1s">
             <i data-feather="trash-2"></i>

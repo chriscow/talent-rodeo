@@ -5,7 +5,7 @@
     <article>
         <hgroup>
             <h1>Chat with Shirely</h1>
-            <p>Tell meabout your career preferences</p>
+            <p>Tell me about your career preferences</p>
         </hgroup>
         
         <!-- Full-page Chat Interface -->
@@ -25,7 +25,7 @@
             
             <!-- <div class="chat-page-actions">
                 <button type="button" id="end-chat-btn" class="secondary">End Conversation</button>
-                <button type="button" id="minimize-to-widget-btn" class="outline" onclick="window.location.href='/profile'">Continue in Background</button>
+                <button type="button" id="minimize-to-widget-btn" class="outline" onclick="window.location.href='/onboarding'">Continue in Background</button>
             </div> -->
         </div>
     </article>
@@ -337,7 +337,7 @@ class ChatManager {
         this.appointmentId = urlParams.get('appointment_id');
         
         if (!this.appointmentId) {
-            window.location.href = '/profile';
+            window.location.href = '/onboarding';
             return;
         }
         
@@ -800,7 +800,7 @@ class ChatManager {
             });
             
             if (response.ok) {
-                window.location.href = '/profile';
+                window.location.href = '/onboarding';
             } else {
                 console.error('Failed to end chat:', response.statusText);
                 this.updateStatus('Failed to end chat', 'error');

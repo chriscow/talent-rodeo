@@ -1,95 +1,15 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
-	"talent-rodeo/internal"
-	"talent-rodeo/internal/response"
-
-	"github.com/getsentry/sentry-go"
 )
 
-// showProfilePage handles GET requests to /profile.
-// It displays different templates based on the user's onboarding state:
-//   - StepInitial: profile-resume-upload.html
-//   - StepResumeUploaded: profile-schedule-phone-call.html
-//   - StepPhoneCallScheduled: profile-waiting-call.html
-//   - StepPhoneCallCompleted: profile-preferences.html
-//   - StepPreferencesExtracted: profile-job-search.html
-//   - StepJobSearchStarted/Complete: profile-jobs.html
-//   - Default: profile.html
-//
-// Requires: Authenticated user
+// showProfilePage handles GET requests to /profile - TODO: Remove this handler once all routes are migrated to /onboarding
 func (app *application) showProfilePage(w http.ResponseWriter, r *http.Request) {
 	user := contextGetAuthenticatedUser(r)
 
-	app.logger.Debug("showProfilePage", "name", user.Name, "userID", user.ID, "status", user.Status)
+	app.logger.Debug("showProfilePage [TODO] - redirecting to /onboarding", "name", user.Name, "userID", user.ID, "status", user.Status)
 
-	if user.Status >= internal.UserStatusCallScheduled {
-		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
-		return
-	}
-
-	// Show appropriate view based on onboarding state
-	switch user.Status {
-	case internal.UserStatusPendingResumeUpload:
-		app.showUploadPage(w, r)
-	case internal.UserStatusProcessingResume:
-		data := app.newTemplateData(r)
-		if err := response.Page(w, http.StatusOK, data, "pages/profile-resume-processing.html"); err != nil {
-			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-				"action":   "render_template",
-				"template": "pages/profile-resume-processing.html",
-				"userID":   user.ID,
-			})
-			app.serverError(w, r, fmt.Errorf("failed to render resume processing page: %w", err))
-		}
-	case internal.UserStatusResumeUploaded:
-		app.showSchedulePage(w, r)
-
-	case internal.UserStatusError:
-		// Get error message before resetting state
-		data := app.newTemplateData(r)
-		errorMsg := ""
-		if user.Error != nil {
-			errorMsg = *user.Error
-		}
-
-		// Reset state to pending resume upload
-		if err := internal.UpdateUserStatus(r.Context(), app.fs, user, internal.UserStatusPendingResumeUpload); err != nil {
-			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-				"action":      "update_user_status",
-				"userID":      user.ID,
-				"from_status": user.Status.String(),
-				"to_status":   internal.UserStatusPendingResumeUpload.String(),
-			})
-			app.serverError(w, r, fmt.Errorf("failed to reset user state: %w", err))
-			return
-		}
-
-		// Add error message to template data for toast notification
-		data["Error"] = errorMsg
-		if err := response.Page(w, http.StatusOK, data, "pages/profile-resume-upload.html"); err != nil {
-			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-				"action":   "render_template",
-				"template": "pages/profile-resume-upload.html",
-				"userID":   user.ID,
-			})
-			app.serverError(w, r, fmt.Errorf("failed to render resume upload page: %w", err))
-		}
-	default:
-		app.logger.Warn("unknown onboarding step", "step", user.Status)
-		// Reset to initial state for unknown states
-		if err := internal.UpdateUserStatus(r.Context(), app.fs, user, internal.UserStatusPendingResumeUpload); err != nil {
-			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-				"action":      "reset_user_status",
-				"userID":      user.ID,
-				"from_status": user.Status.String(),
-				"to_status":   internal.UserStatusPendingResumeUpload.String(),
-			})
-			app.serverError(w, r, fmt.Errorf("failed to reset user state: %w", err))
-			return
-		}
-		app.showUploadPage(w, r)
-	}
+	// Redirect to the new onboarding flow
+	http.Redirect(w, r, "/onboarding", http.StatusSeeOther)
 }

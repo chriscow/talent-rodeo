@@ -7,7 +7,7 @@
     
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2rem;">
         <!-- Voice Call Option -->
-        <article>
+        <article style="display: flex; flex-direction: column; gap: 1rem;">
             <h3>Voice Call</h3>
             <p>Have a natural conversation with Shirely over the phone. She'll call you within minutes to discuss your background and job preferences.</p>
             
@@ -17,7 +17,7 @@
                 <li>Shirely will call you immediately</li>
             </ul>
             
-            <button hx-post="/profile/step/start-voice-call" 
+            <button hx-post="/onboarding/step/start-voice-call" 
                     hx-target="#onboarding-content" 
                     hx-swap="innerHTML"
                     hx-headers='{"X-CSRF-Token": "{{.CSRFToken}}"}'>
@@ -26,7 +26,7 @@
         </article>
 
         <!-- Chat Option -->
-        <article>
+        <article style="display: flex; flex-direction: column; gap: 1rem;">
             <h3>Chat Conversation</h3>
             <p>Have a text-based conversation with Shirely. Perfect if you prefer typing or are in a quiet environment.</p>
             
@@ -36,7 +36,7 @@
                 <li>Start chatting immediately</li>
             </ul>
             
-            <button hx-post="/profile/step/start-chat" 
+            <button hx-post="/onboarding/step/start-chat" 
                     hx-target="#onboarding-content" 
                     hx-swap="innerHTML"
                     hx-headers='{"X-CSRF-Token": "{{.CSRFToken}}"}'>

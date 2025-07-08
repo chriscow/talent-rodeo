@@ -542,7 +542,7 @@ class OnboardingSlideManager {
     
     proceedToNextStep() {
         // Proceed to next onboarding step
-        htmx.ajax('GET', '/profile/step/current', {target: '#onboarding-content'});
+        htmx.ajax('GET', '/onboarding/step/current', {target: '#onboarding-content'});
     }
     
     cleanup() {

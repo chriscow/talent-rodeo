@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestProfilePage verifies that authenticated users are redirected to the profile page
-func TestProfilePage(t *testing.T) {
+// TestOnboardingPage verifies that authenticated users are redirected to the onboarding page
+func TestOnboardingPage(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode")
 	}
@@ -28,25 +28,25 @@ func TestProfilePage(t *testing.T) {
 	// Authenticate the test user
 	it.Authenticate()
 
-	// Navigate to profile page
-	it.NavigateTo("/profile")
+	// Navigate to onboarding page
+	it.NavigateTo("/onboarding")
 
-	// Verify we're on the profile page
+	// Verify we're on the onboarding page
 	currentURL := it.Page.URL()
-	require.Contains(t, currentURL, "/profile", "Should be on profile page")
+	require.Contains(t, currentURL, "/onboarding", "Should be on onboarding page")
 
 	// Verify page title
 	title := it.GetTitle()
 	require.Contains(t, title, "Upload Resume", "Page title should contain 'Upload Resume'")
 
 	// Verify welcome message
-	require.True(t, it.IsVisible("Welcome to Talent Rodeo"), "Welcome message should be visible on profile page")
+	require.True(t, it.IsVisible("Welcome to Talent Rodeo"), "Welcome message should be visible on onboarding page")
 
 	// Print page content for debugging
 	content := it.GetContent()
 	t.Logf("Page content: %s", content)
 
-	// Verify profile page elements
+	// Verify onboarding page elements
 	elements := []string{
 		"Resume (PDF, DOCX, or TXT)",
 		"Phone Number",
@@ -54,6 +54,6 @@ func TestProfilePage(t *testing.T) {
 	}
 
 	for _, text := range elements {
-		require.True(t, it.IsVisible(text), "%s should be visible on profile page", text)
+		require.True(t, it.IsVisible(text), "%s should be visible on onboarding page", text)
 	}
 }

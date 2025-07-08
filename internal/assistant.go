@@ -45,7 +45,7 @@ func BuildAssistantOverrides(ctx context.Context, user *User, fs *FirestoreClien
 		return nil, fmt.Errorf("VAPI_WEBHOOK_URL is not set")
 	}
 
-	assistantID := GetAssistantID(user.ID)
+	// assistantID := GetAssistantID(user.ID)
 
 	// Create template and data structure
 	tmpl, err := GetAssistantPromptTemplate(user.ID)
@@ -130,13 +130,6 @@ func BuildAssistantOverrides(ctx context.Context, user *User, fs *FirestoreClien
 	} else {
 		firstMessage = "Hey! Hi there! I'm Shirley from Talent Rodeo. Am I speaking with " + user.FirstName + "?"
 	}
-
-	logger.Debug("built assistant overrides",
-		"userID", user.ID,
-		"assistantId", assistantID,
-		"firstMessage", firstMessage,
-		"webhookURL", os.Getenv("VAPI_WEBHOOK_URL"),
-	)
 
 	return &vapi.Assistant{
 		FirstMessage: &firstMessage,

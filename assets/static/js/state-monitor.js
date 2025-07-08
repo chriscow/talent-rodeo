@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', function() {
         background: '#28a745'  // Bootstrap success color
       });
 
-      // Redirect to profile page
+      // Redirect to onboarding page
       setTimeout(() => {
         window.location.href = '/onboarding';
       }, 3000);

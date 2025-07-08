@@ -166,7 +166,7 @@ func (app *application) showWaitingForCall(w http.ResponseWriter, r *http.Reques
 	}
 
 	if activeAppointment == nil {
-		// redirect to the profile page
+		// redirect to the onboarding page
 		http.Redirect(w, r, "/onboarding", http.StatusSeeOther)
 		return
 	}

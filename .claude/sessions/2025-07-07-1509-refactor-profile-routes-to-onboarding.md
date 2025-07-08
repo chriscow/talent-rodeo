@@ -232,5 +232,99 @@ The refactoring is now functionally complete with proper test coverage. Remainin
 5. **Handler Redirects**: Always update handler redirects when changing route structure
 6. **Content Evolution**: Expect some test content changes when migrating between different UI systems (profile → onboarding)
 
+---
+
+## ⚠️ ADDITIONAL WORK DISCOVERED - 2025-07-08 15:09
+
+**Status**: Previous work was **INCOMPLETE** - comprehensive search revealed extensive remaining `/profile` references
+
+### 🔍 Complete Inventory of Remaining Profile References
+
+#### **1. CRITICAL - Handler Files (Core Functionality)**
+- **`cmd/web/handlers.profile.go`** - Entire file needs renaming/integration
+  - Lines 12, 23, 39, 72: Function definitions and template references
+  - Status: **NEEDS COMPLETE REFACTOR**
+
+- **`cmd/web/handlers.schedule.go`** - 8 profile references
+  - Lines 28, 67, 90, 269, 272, 303, 321, 362: Comments and template paths
+  - Status: **NEEDS UPDATES**
+
+- **`cmd/web/handlers.resume.go`** - Multiple profile references
+  - Lines 38, 76, 78, 95: Comments and template paths
+  - Status: **NEEDS UPDATES**
+
+#### **2. HIGH PRIORITY - Template Files (User-Facing)**
+- **`assets/templates/pages/chat.html`** - 3 references
+  - Lines 28, 340, 803: JavaScript redirects to `/profile`
+  
+- **`assets/templates/pages/home.html`** - 2 references
+  - Lines 144, 196: Dashboard links to `/profile`
+  
+- **`assets/templates/partials/chat-interface.html`** - 2 references
+  - Lines 529, 665: JavaScript redirects to `/profile`
+  
+- **`assets/templates/partials/onboarding-active-conversation.html`** - 1 reference
+  - Line 35: Form action to `/profile/onboarding/reset`
+  
+- **`assets/templates/partials/skills.html`** - 1 reference
+  - Line 21: HTMX form action to `/profile/skills/add`
+  
+- **`assets/templates/partials/skill-item.html`** - 2 references
+  - Lines 10, 39: HTMX endpoints for skills management
+  
+- **`assets/templates/partials/resume-form.html`** - 1 reference
+  - Line 10: Form action to `/profile/resume/upload`
+
+#### **3. TEMPLATE FILES TO RENAME**
+- `assets/templates/pages/profile-schedule-phone-call.html`
+- `assets/templates/pages/profile-resume-processing.html` 
+- `assets/templates/pages/profile-resume-upload.html`
+
+#### **4. EXTERNAL COMMUNICATIONS - Email Templates**
+- **`assets/emails/shirely-no-resume.html`** - 2 references
+  - Lines 10, 39: External URLs to `https://talent.rodeo/profile`
+  
+- **`assets/emails/shirely-no-call.html`** - 2 references
+  - Lines 14, 49: External URLs to `https://talent.rodeo/profile`
+
+#### **5. INTEGRATION TESTS - Test Suite**
+- **`internal/integration/resume_upload_test.go`** - Multiple `/profile/` URLs
+- **`internal/integration/home_page_test.go`** - `/profile` navigation tests
+- **`internal/integration/dashboard_test.go`** - Expected redirects to `/profile`
+
+#### **6. COMMENTS & DOCUMENTATION (Lower Priority)**
+- `cmd/web/handlers.go` - Line 33: Comment about redirect to profile
+- `cmd/web/handlers.auth.go` - Line 123: Comment about redirect to profile  
+- `cmd/web/handlers.testing.go` - Line 37: Comment about redirect to profile
+- `cmd/web/handlers.dashboard.go` - Line 169: Comment about redirect to profile
+- `assets/static/js/state-monitor.js` - Line 70: Comment about redirect to profile
+
+### 📊 Work Scope Summary
+| Category | Count | Priority | Status |
+|----------|--------|----------|--------|
+| Handler Files | 3 files | 🔴 CRITICAL | Not Started |
+| Template Files | 7 files | 🔴 HIGH | Not Started |
+| Template Renames | 3 files | 🔴 HIGH | Not Started |
+| Email Templates | 2 files | 🟡 MEDIUM | Not Started |
+| Integration Tests | 3 files | 🟡 MEDIUM | Not Started |
+| Comments/Docs | 5 files | 🟢 LOW | Not Started |
+| **TOTAL** | **23 files** | - | **0% Complete** |
+
+### 🚨 Critical Discovery
+**Routes Disconnect**: The `routes.go` file has **NO** `/profile` routes defined, but handlers still expect them. This means the application may have broken functionality where handlers reference non-existent routes.
+
+### 📋 Required Work Plan
+1. **Handler Integration**: Merge `handlers.profile.go` into existing onboarding handler
+2. **Template Updates**: Update all `/profile` URLs to `/onboarding` in templates  
+3. **Template Renames**: Rename remaining `profile-*.html` files
+4. **HTMX Endpoints**: Update skill management and other HTMX endpoints
+5. **Form Actions**: Update form submission URLs in partials
+6. **Email Templates**: Update external URLs for user communications
+7. **Integration Tests**: Update all test URLs and expectations
+8. **Documentation**: Update comments to reflect new routes
+
+### 🎯 Next Steps
+**RECOMMENDATION**: Create detailed todo list and systematically work through all 23 files, starting with critical handler files, then high-priority templates, then supporting files.
+
 ### 🎉 Final Status
-**✅ COMPLETE**: Profile to onboarding refactoring successfully completed with functional route migration, proper test coverage, and successful build verification. The application now uses consistent `/onboarding/*` URLs throughout the user onboarding flow.
+**❌ INCOMPLETE**: Previous assessment was incorrect - significant work remains to complete the profile-to-onboarding refactoring across 23 files with broken route references.

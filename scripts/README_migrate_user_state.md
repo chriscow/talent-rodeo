@@ -109,6 +109,6 @@ This migration removes the `State` field, so rollback would require:
 The following templates have been updated to use the new structure:
 - `assets/templates/pages/admin/subscriptions.html`
 - `assets/templates/pages/admin/user-dashboard.html` 
-- `assets/templates/pages/profile-resume-processing.html`
+- `assets/templates/pages/onboarding-resume-processing.html`
 
 All references to `{{.State.Status.String}}` have been changed to `{{.Status.String}}`, etc. 

@@ -32,7 +32,7 @@
         <summary>Want to start over?</summary>
         <div style="margin-top: 1rem;">
             <p>If you'd like to reset your onboarding and start fresh, you can do so below.</p>
-            <form action="/profile/onboarding/reset" method="POST" style="margin-top: 1rem;">
+            <form action="/onboarding/reset" method="POST" style="margin-top: 1rem;">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                 <button type="submit" class="secondary" onclick="return confirm('Are you sure you want to reset your onboarding? This will clear your current progress.')">
                     Reset Onboarding

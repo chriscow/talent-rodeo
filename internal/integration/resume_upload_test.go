@@ -19,7 +19,7 @@ func TestResumeUploadSuccess(t *testing.T) {
 	// Authenticate the test user
 	it.Authenticate()
 
-	it.NavigateTo("/profile/resume/upload")
+	it.NavigateTo("/onboarding/resume/upload")
 
 	// Upload resume
 	fileChooser, err := it.Page.ExpectFileChooser(func() error {
@@ -57,7 +57,7 @@ func TestResumeUploadSuccess(t *testing.T) {
 	it.requireNoError(err, "Failed to see resume analysis message")
 
 	// Wait for navigation to schedule page (with a longer timeout)
-	err = it.Page.WaitForURL("**/profile/schedule", playwright.PageWaitForURLOptions{
+	err = it.Page.WaitForURL("**/onboarding/schedule", playwright.PageWaitForURLOptions{
 		WaitUntil: playwright.WaitUntilStateNetworkidle,
 		Timeout:   playwright.Float(10000), // 10 seconds timeout
 	})
@@ -65,7 +65,7 @@ func TestResumeUploadSuccess(t *testing.T) {
 
 	// Verify we're on the schedule page
 	currentURL := it.Page.URL()
-	assert.Contains(t, currentURL, "/profile/schedule", "Should be redirected to schedule page")
+	assert.Contains(t, currentURL, "/onboarding/schedule", "Should be redirected to schedule page")
 
 	// Wait for schedule page content
 	err = it.Page.Locator("text=Great! We've got your resume").WaitFor(playwright.LocatorWaitForOptions{
@@ -87,7 +87,7 @@ func TestResumeUploadNoPhone(t *testing.T) {
 	// Authenticate the test user
 	it.Authenticate()
 
-	it.NavigateTo("/profile/resume/upload")
+	it.NavigateTo("/onboarding/resume/upload")
 
 	// Upload resume
 	fileChooser, err := it.Page.ExpectFileChooser(func() error {
@@ -114,7 +114,7 @@ func TestResumeUploadNoPhone(t *testing.T) {
 
 	// Verify the form wasn't submitted by checking we're still on the same page
 	currentURL := it.Page.URL()
-	assert.Contains(t, currentURL, "/profile/resume/upload", "Should still be on the resume upload page")
+	assert.Contains(t, currentURL, "/onboarding/resume/upload", "Should still be on the resume upload page")
 }
 
 // TestResumeUploadNoTerms tests the validation when terms are not accepted
@@ -129,7 +129,7 @@ func TestResumeUploadNoTerms(t *testing.T) {
 	// Authenticate the test user
 	it.Authenticate()
 
-	it.NavigateTo("/profile/resume/upload")
+	it.NavigateTo("/onboarding/resume/upload")
 
 	// Upload resume
 	fileChooser, err := it.Page.ExpectFileChooser(func() error {
@@ -195,7 +195,7 @@ func TestResumeUploadNoFile(t *testing.T) {
 	// Authenticate the test user
 	it.Authenticate()
 
-	it.NavigateTo("/profile/resume/upload")
+	it.NavigateTo("/onboarding/resume/upload")
 
 	// Enter phone and accept terms but don't upload resume
 	err := it.Page.Locator("#phone").Fill("+15555555555")
@@ -255,7 +255,7 @@ func TestResumeUploadInvalidFileType(t *testing.T) {
 	// Authenticate the test user
 	it.Authenticate()
 
-	it.NavigateTo("/profile/resume/upload")
+	it.NavigateTo("/onboarding/resume/upload")
 
 	// Create and upload an invalid file
 	invalidFilePath := "../../testdata/invalid.xyz"

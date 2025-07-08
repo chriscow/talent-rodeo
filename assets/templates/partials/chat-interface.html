@@ -525,8 +525,8 @@ window.ChatInterface = (function() {
 
             // Check if we're on the chat page
             if (window.location.pathname === '/chat') {
-                // Redirect to profile with success message
-                window.location.href = '/profile?chat_ended=true';
+                // Redirect to onboarding with success message
+                window.location.href = '/onboarding?chat_ended=true';
             } else {
                 hideChatWindow();
                 
@@ -660,9 +660,9 @@ window.ChatInterface = (function() {
         }
     }
 
-    // Navigate back to profile page
+    // Navigate back to onboarding page
     function navigateToProfile() {
-        window.location.href = '/profile';
+        window.location.href = '/onboarding';
     }
 
     // Public API

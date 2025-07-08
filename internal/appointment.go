@@ -68,12 +68,12 @@ type ChecklistItem struct {
 	ID              string                 `json:"id"`
 	Topic           string                 `json:"topic"`
 	Description     string                 `json:"description"`
-	Status          string                 `json:"status"`          // "pending", "in_progress", "completed"
-	Quality         string                 `json:"quality"`         // "low", "medium", "high"
-	RequiredInfo    []string               `json:"required_info"`   // What specific information is needed
-	ExtractedInfo   map[string]interface{} `json:"extracted_info"`  // What was actually gathered
+	Status          string                 `json:"status"`           // "pending", "in_progress", "completed"
+	Quality         string                 `json:"quality"`          // "low", "medium", "high"
+	RequiredInfo    []string               `json:"required_info"`    // What specific information is needed
+	ExtractedInfo   map[string]interface{} `json:"extracted_info"`   // What was actually gathered
 	ValidationNotes string                 `json:"validation_notes"` // Notes about information quality
-	Required        bool                   `json:"required"`        // Whether this item is required for completion
+	Required        bool                   `json:"required"`         // Whether this item is required for completion
 	LastUpdated     time.Time              `json:"last_updated"`
 }
 
@@ -103,7 +103,7 @@ type Appointment struct {
 
 	// Chat-specific fields
 	ChatMessages []ChatMessage `json:"chat_messages,omitempty"`
-	
+
 	// Conversation checklist for chat appointments
 	ConversationChecklist *ConversationChecklist `json:"conversation_checklist,omitempty"`
 
@@ -178,6 +178,31 @@ func GetLatestCompletedAppointment(ctx context.Context, fs *FirestoreClient, use
 			return nil, false, nil
 		}
 		return nil, false, fmt.Errorf("failed to get latest completed appointment: %w", err)
+	}
+
+	var appt Appointment
+	if err := doc.DataTo(&appt); err != nil {
+		return nil, false, fmt.Errorf("failed to unmarshal appointment data: %w", err)
+	}
+
+	return &appt, true, nil
+}
+
+// GetLatestRunningChatAppointment retrieves the latest running chat appointment for a user
+func GetLatestRunningChatAppointment(ctx context.Context, fs *FirestoreClient, userID string) (*Appointment, bool, error) {
+	iter := fs.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).
+		Where("Status", "==", AppointmentStatusRunning).
+		Where("Type", "==", AppointmentTypeChat).
+		OrderBy("CreatedAt", firestore.Desc).
+		Limit(1).
+		Documents(ctx)
+
+	doc, err := iter.Next()
+	if err != nil {
+		if err == iterator.Done {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("failed to get latest running chat appointment: %w", err)
 	}
 
 	var appt Appointment
@@ -591,18 +616,18 @@ func GetChatHistory(appointment *Appointment) ([]ChatMessage, error) {
 
 // Constants for checklist management
 const (
-	ChecklistStatusInProgress        = "in_progress"
+	ChecklistStatusInProgress         = "in_progress"
 	ChecklistStatusReadyForCompletion = "ready_for_completion"
-	ChecklistStatusCompleted         = "completed"
-	
-	ChecklistItemStatusPending     = "pending"
-	ChecklistItemStatusInProgress  = "in_progress"
-	ChecklistItemStatusCompleted   = "completed"
-	
+	ChecklistStatusCompleted          = "completed"
+
+	ChecklistItemStatusPending    = "pending"
+	ChecklistItemStatusInProgress = "in_progress"
+	ChecklistItemStatusCompleted  = "completed"
+
 	ChecklistItemQualityLow    = "low"
 	ChecklistItemQualityMedium = "medium"
 	ChecklistItemQualityHigh   = "high"
-	
+
 	MaxConversationLength = 50
 	MaxCompletionAttempts = 3
 )
@@ -610,98 +635,98 @@ const (
 // InitializeConversationChecklist creates a new checklist for a chat appointment
 func InitializeConversationChecklist() *ConversationChecklist {
 	now := time.Now()
-	
+
 	items := []ChecklistItem{
 		{
-			ID:          "introduction",
-			Topic:       "Introduction and Verification",
-			Description: "Basic introduction and verification of caller identity",
-			Status:      ChecklistItemStatusPending,
-			Quality:     ChecklistItemQualityLow,
-			RequiredInfo: []string{"name_confirmed", "good_time_to_chat"},
+			ID:            "introduction",
+			Topic:         "Introduction and Verification",
+			Description:   "Basic introduction and verification of caller identity",
+			Status:        ChecklistItemStatusPending,
+			Quality:       ChecklistItemQualityLow,
+			RequiredInfo:  []string{"name_confirmed", "good_time_to_chat"},
 			ExtractedInfo: make(map[string]interface{}),
-			Required:    true,
-			LastUpdated: now,
+			Required:      true,
+			LastUpdated:   now,
 		},
 		{
-			ID:          "warm_up",
-			Topic:       "Warm-Up and Resume Acknowledgment",
-			Description: "Personal background exploration and resume discussion",
-			Status:      ChecklistItemStatusPending,
-			Quality:     ChecklistItemQualityLow,
-			RequiredInfo: []string{"career_background", "personal_insights", "achievements"},
+			ID:            "warm_up",
+			Topic:         "Warm-Up and Resume Acknowledgment",
+			Description:   "Personal background exploration and resume discussion",
+			Status:        ChecklistItemStatusPending,
+			Quality:       ChecklistItemQualityLow,
+			RequiredInfo:  []string{"career_background", "personal_insights", "achievements"},
 			ExtractedInfo: make(map[string]interface{}),
-			Required:    true,
-			LastUpdated: now,
+			Required:      true,
+			LastUpdated:   now,
 		},
 		{
-			ID:          "deal_breakers",
-			Topic:       "Identifying What They Want to Avoid",
-			Description: "Understanding work experiences and environments to avoid",
-			Status:      ChecklistItemStatusPending,
-			Quality:     ChecklistItemQualityLow,
-			RequiredInfo: []string{"work_dislikes", "management_style_dislikes", "company_culture_dislikes"},
+			ID:            "deal_breakers",
+			Topic:         "Identifying What They Want to Avoid",
+			Description:   "Understanding work experiences and environments to avoid",
+			Status:        ChecklistItemStatusPending,
+			Quality:       ChecklistItemQualityLow,
+			RequiredInfo:  []string{"work_dislikes", "management_style_dislikes", "company_culture_dislikes"},
 			ExtractedInfo: make(map[string]interface{}),
-			Required:    true,
-			LastUpdated: now,
+			Required:      true,
+			LastUpdated:   now,
 		},
 		{
-			ID:          "search_strategy",
-			Topic:       "Determine Search Strategy",
-			Description: "Primary search terms, skills, and job focus areas",
-			Status:      ChecklistItemStatusPending,
-			Quality:     ChecklistItemQualityLow,
-			RequiredInfo: []string{"primary_search_terms", "additional_skills", "things_to_avoid"},
+			ID:            "search_strategy",
+			Topic:         "Determine Search Strategy",
+			Description:   "Primary search terms, skills, and job focus areas",
+			Status:        ChecklistItemStatusPending,
+			Quality:       ChecklistItemQualityLow,
+			RequiredInfo:  []string{"primary_search_terms", "additional_skills", "things_to_avoid"},
 			ExtractedInfo: make(map[string]interface{}),
-			Required:    true,
-			LastUpdated: now,
+			Required:      true,
+			LastUpdated:   now,
 		},
 		{
-			ID:          "work_environment",
-			Topic:       "Work Environment Preferences",
-			Description: "Company type, work motivation, and collaboration style",
-			Status:      ChecklistItemStatusPending,
-			Quality:     ChecklistItemQualityLow,
-			RequiredInfo: []string{"company_type_preference", "work_motivation", "collaboration_style"},
+			ID:            "work_environment",
+			Topic:         "Work Environment Preferences",
+			Description:   "Company type, work motivation, and collaboration style",
+			Status:        ChecklistItemStatusPending,
+			Quality:       ChecklistItemQualityLow,
+			RequiredInfo:  []string{"company_type_preference", "work_motivation", "collaboration_style"},
 			ExtractedInfo: make(map[string]interface{}),
-			Required:    true,
-			LastUpdated: now,
+			Required:      true,
+			LastUpdated:   now,
 		},
 		{
-			ID:          "location_preferences",
-			Topic:       "Preferred Work Location",
-			Description: "Geographic location and remote/hybrid preferences",
-			Status:      ChecklistItemStatusPending,
-			Quality:     ChecklistItemQualityLow,
-			RequiredInfo: []string{"current_location", "work_location_preference", "flexibility"},
+			ID:            "location_preferences",
+			Topic:         "Preferred Work Location",
+			Description:   "Geographic location and remote/hybrid preferences",
+			Status:        ChecklistItemStatusPending,
+			Quality:       ChecklistItemQualityLow,
+			RequiredInfo:  []string{"current_location", "work_location_preference", "flexibility"},
 			ExtractedInfo: make(map[string]interface{}),
-			Required:    true,
-			LastUpdated: now,
+			Required:      true,
+			LastUpdated:   now,
 		},
 		{
-			ID:          "validation",
-			Topic:       "Clarifying and Validating Statements",
-			Description: "Clarification of vague or inconsistent responses",
-			Status:      ChecklistItemStatusPending,
-			Quality:     ChecklistItemQualityLow,
-			RequiredInfo: []string{"clarifications_complete", "consistency_verified"},
+			ID:            "validation",
+			Topic:         "Clarifying and Validating Statements",
+			Description:   "Clarification of vague or inconsistent responses",
+			Status:        ChecklistItemStatusPending,
+			Quality:       ChecklistItemQualityLow,
+			RequiredInfo:  []string{"clarifications_complete", "consistency_verified"},
 			ExtractedInfo: make(map[string]interface{}),
-			Required:    false, // Optional - depends on conversation quality
-			LastUpdated: now,
+			Required:      false, // Optional - depends on conversation quality
+			LastUpdated:   now,
 		},
 		{
-			ID:          "final_confirmation",
-			Topic:       "Closing and Confirming Understanding",
-			Description: "Final validation of all gathered information",
-			Status:      ChecklistItemStatusPending,
-			Quality:     ChecklistItemQualityLow,
-			RequiredInfo: []string{"summary_confirmed", "additional_info_requested"},
+			ID:            "final_confirmation",
+			Topic:         "Closing and Confirming Understanding",
+			Description:   "Final validation of all gathered information",
+			Status:        ChecklistItemStatusPending,
+			Quality:       ChecklistItemQualityLow,
+			RequiredInfo:  []string{"summary_confirmed", "additional_info_requested"},
 			ExtractedInfo: make(map[string]interface{}),
-			Required:    true,
-			LastUpdated: now,
+			Required:      true,
+			LastUpdated:   now,
 		},
 	}
-	
+
 	return &ConversationChecklist{
 		Items:              items,
 		OverallStatus:      ChecklistStatusInProgress,
@@ -719,14 +744,14 @@ func UpdateChecklistItem(checklist *ConversationChecklist, itemID string, status
 			checklist.Items[i].Quality = quality
 			checklist.Items[i].ValidationNotes = notes
 			checklist.Items[i].LastUpdated = time.Now()
-			
+
 			// Merge extracted info
 			if extractedInfo != nil {
 				for key, value := range extractedInfo {
 					checklist.Items[i].ExtractedInfo[key] = value
 				}
 			}
-			
+
 			checklist.LastUpdated = time.Now()
 			return nil
 		}
@@ -749,21 +774,21 @@ func ValidateChecklistCompletion(checklist *ConversationChecklist) (bool, []stri
 	if checklist == nil {
 		return false, []string{"checklist not initialized"}, nil
 	}
-	
+
 	var missingItems []string
 	var qualityIssues []string
-	
+
 	// Check if we've exceeded maximum attempts
 	if checklist.CompletionAttempts >= MaxCompletionAttempts {
 		// Allow completion with lower quality after max attempts
 		return ValidateChecklistCompletionWithLowerThreshold(checklist)
 	}
-	
+
 	// Check if conversation is too long
 	if checklist.MessageCount >= MaxConversationLength {
 		return ValidateChecklistCompletionWithLowerThreshold(checklist)
 	}
-	
+
 	// Check required items
 	for _, item := range checklist.Items {
 		if item.Required {
@@ -774,32 +799,32 @@ func ValidateChecklistCompletion(checklist *ConversationChecklist) (bool, []stri
 			}
 		}
 	}
-	
+
 	if len(missingItems) > 0 || len(qualityIssues) > 0 {
 		var allIssues []string
 		allIssues = append(allIssues, missingItems...)
 		allIssues = append(allIssues, qualityIssues...)
 		return false, allIssues, nil
 	}
-	
+
 	return true, nil, nil
 }
 
 // ValidateChecklistCompletionWithLowerThreshold allows completion with lower quality thresholds
 func ValidateChecklistCompletionWithLowerThreshold(checklist *ConversationChecklist) (bool, []string, error) {
 	var missingItems []string
-	
+
 	// Only check that required items are at least started
 	for _, item := range checklist.Items {
 		if item.Required && item.Status == ChecklistItemStatusPending {
 			missingItems = append(missingItems, fmt.Sprintf("%s: %s", item.Topic, "not started"))
 		}
 	}
-	
+
 	if len(missingItems) > 0 {
 		return false, missingItems, nil
 	}
-	
+
 	return true, nil, nil
 }
 
@@ -822,11 +847,11 @@ func GetChecklistSummary(checklist *ConversationChecklist) map[string]interface{
 			"error": "checklist not initialized",
 		}
 	}
-	
+
 	completedCount := 0
 	highQualityCount := 0
 	requiredCount := 0
-	
+
 	for _, item := range checklist.Items {
 		if item.Required {
 			requiredCount++
@@ -838,20 +863,20 @@ func GetChecklistSummary(checklist *ConversationChecklist) map[string]interface{
 			highQualityCount++
 		}
 	}
-	
+
 	canComplete, issues, _ := ValidateChecklistCompletion(checklist)
-	
+
 	return map[string]interface{}{
-		"overall_status":       checklist.OverallStatus,
-		"completion_attempts":  checklist.CompletionAttempts,
-		"message_count":        checklist.MessageCount,
-		"total_items":          len(checklist.Items),
-		"required_items":       requiredCount,
-		"completed_items":      completedCount,
-		"high_quality_items":   highQualityCount,
-		"can_complete":         canComplete,
-		"issues":               issues,
-		"items":                checklist.Items,
-		"last_updated":         checklist.LastUpdated,
+		"overall_status":      checklist.OverallStatus,
+		"completion_attempts": checklist.CompletionAttempts,
+		"message_count":       checklist.MessageCount,
+		"total_items":         len(checklist.Items),
+		"required_items":      requiredCount,
+		"completed_items":     completedCount,
+		"high_quality_items":  highQualityCount,
+		"can_complete":        canComplete,
+		"issues":              issues,
+		"items":               checklist.Items,
+		"last_updated":        checklist.LastUpdated,
 	}
 }

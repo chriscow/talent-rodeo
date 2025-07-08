@@ -43,21 +43,21 @@ func TestDashboardUserStateRedirects(t *testing.T) {
 		expectedContent  string
 	}{
 		{
-			name:             "new user redirected to profile",
+			name:             "new user redirected to onboarding",
 			userStatus:       internal.UserStatusPendingResumeUpload,
-			expectedRedirect: "/profile",
+			expectedRedirect: "/onboarding",
 			expectedContent:  "Upload Resume",
 		},
 		{
-			name:             "resume uploaded user redirected to profile",
+			name:             "resume uploaded user redirected to onboarding",
 			userStatus:       internal.UserStatusResumeUploaded,
-			expectedRedirect: "/profile",
+			expectedRedirect: "/onboarding",
 			expectedContent:  "Upload Resume",
 		},
 		{
-			name:             "processing resume user redirected to profile",
+			name:             "processing resume user redirected to onboarding",
 			userStatus:       internal.UserStatusProcessingResume,
-			expectedRedirect: "/profile",
+			expectedRedirect: "/onboarding",
 			expectedContent:  "Upload Resume",
 		},
 	}

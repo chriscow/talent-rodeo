@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
+	"time"
 
 	"github.com/getsentry/sentry-go"
 )
@@ -21,6 +21,14 @@ func (app *application) showOnboardingPage(w http.ResponseWriter, r *http.Reques
 
 	app.logger.Debug("showOnboardingPage", "userID", user.ID, "userStatus", user.Status)
 
+	// Check if there's a running chat appointment - if so, redirect to chat page
+	// This ensures users are always redirected back to their active chat session
+	if appointment, found, err := internal.GetLatestRunningChatAppointment(r.Context(), app.fs, user.ID); err == nil && found {
+		app.logger.Info("Found running chat appointment, redirecting to chat page", "user_id", user.ID, "appointment_id", appointment.ID)
+		http.Redirect(w, r, fmt.Sprintf("/chat?appointment_id=%s", appointment.ID), http.StatusSeeOther)
+		return
+	}
+
 	// Get or create onboarding session
 	session, err := app.onboardingSessionMgr.GetOrCreateSession(r, user.ID)
 	if err != nil {
@@ -30,7 +38,7 @@ func (app *application) showOnboardingPage(w http.ResponseWriter, r *http.Reques
 
 	// Determine current step based on user status and session
 	currentStep := app.determineOnboardingStep(user, session)
-	
+
 	// Update session step if it's different
 	if session.Step != currentStep {
 		session.Step = currentStep
@@ -44,7 +52,7 @@ func (app *application) showOnboardingPage(w http.ResponseWriter, r *http.Reques
 	data["OnboardingStep"] = string(currentStep)
 	data["OnboardingStepCompleted"] = app.buildStepCompletionStatus(user, session)
 	data["OnboardingSession"] = session
-	
+
 	// Check if this is an HTMX request for specific content
 	if r.Header.Get("HX-Request") == "true" {
 		// Return the appropriate partial template for HTMX
@@ -108,16 +116,23 @@ func (app *application) buildStepCompletionStatus(user *internal.User, session *
 		"CommunicationChoice": user.Status >= internal.UserStatusCallScheduled,
 		"Conversation":        user.Status >= internal.UserStatusCallCompleted,
 	}
-	
+
 	return status
 }
-
 
 // handleOnboardingStepRequest handles HTMX requests for specific onboarding steps
 func (app *application) handleOnboardingStepRequest(w http.ResponseWriter, r *http.Request) {
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
 		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	// Check if there's a running chat appointment - if so, redirect to chat page
+	if appointment, found, err := internal.GetLatestRunningChatAppointment(r.Context(), app.fs, user.ID); err == nil && found {
+		app.logger.Info("Found running chat appointment in HTMX request, redirecting to chat page", "user_id", user.ID, "appointment_id", appointment.ID)
+		w.Header().Set("HX-Redirect", fmt.Sprintf("/chat?appointment_id=%s", appointment.ID))
+		w.WriteHeader(http.StatusSeeOther)
 		return
 	}
 
@@ -138,14 +153,14 @@ func (app *application) handleOnboardingStepRequest(w http.ResponseWriter, r *ht
 
 	// Determine current step
 	currentStep := app.determineOnboardingStep(user, session)
-	
+
 	// Build template data
 	data := app.newTemplateData(r)
 	data["User"] = user
 	data["OnboardingSession"] = session
 	data["OnboardingStep"] = string(currentStep)
 	data["OnboardingStepCompleted"] = app.buildStepCompletionStatus(user, session)
-	
+
 	// Return the appropriate partial template for HTMX
 	templateName := ""
 	switch currentStep {
@@ -258,7 +273,7 @@ func (app *application) resetOnboardingState(w http.ResponseWriter, r *http.Requ
 	// Set success message
 	app.sessionManager.Put(r.Context(), "flash", "Your onboarding has been reset. You can start over.")
 
-	// Redirect to profile (which will show the onboarding flow)
+	// Redirect to onboarding (which will show the onboarding flow)
 	http.Redirect(w, r, "/onboarding", http.StatusSeeOther)
 }
 
@@ -266,11 +281,11 @@ func (app *application) resetOnboardingState(w http.ResponseWriter, r *http.Requ
 func (app *application) returnHTMXError(w http.ResponseWriter, r *http.Request, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnprocessableEntity)
-	
+
 	errorResponse := map[string]string{
 		"message": message,
 	}
-	
+
 	response, _ := json.Marshal(errorResponse)
 	w.Write(response)
 }
@@ -284,13 +299,12 @@ func (app *application) getUserStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	
+
 	response := map[string]interface{}{
 		"status":     int(user.Status),
 		"statusName": user.Status.String(),
 		"userID":     user.ID,
 	}
-	
+
 	json.NewEncoder(w).Encode(response)
 }
-
