@@ -16,11 +16,15 @@
                 </div>
                 <div class="chat-page-input-container">
                     <div class="chat-page-input-row">
-                        <input type="text" id="chat-input" placeholder="Type your message..." disabled>
+                        <div class="input-with-status">
+                            <input type="text" id="chat-input" placeholder="Type your message..." disabled>
+                            <div id="chat-status-icon" class="chat-status-icon" title=""></div>
+                        </div>
                         <button type="button" id="send-message-btn" class="chat-send-btn" disabled>Send</button>
                     </div>
+                    <!-- Keep original status div hidden for fallback -->
+                    <div id="chat-status" class="chat-page-status" style="display: none;"></div>
                 </div>
-                <div id="chat-status" class="chat-page-status"></div>
             </div>
             
             <!-- <div class="chat-page-actions">
@@ -41,7 +45,7 @@
 <style>
     /* Full-page Chat Styles */
     .chat-page-container {
-        max-width: 800px;
+        width: 100%;
         margin: 0 auto;
     }
     
@@ -81,16 +85,79 @@
         margin: 0 auto;
     }
     
+    .input-with-status {
+        flex: 1;
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+    
     #chat-input {
         flex: 1;
         border: 1px solid var(--pico-muted-border-color);
         border-radius: 25px;
-        padding: 12px 20px;
+        padding: 12px 50px 12px 20px; /* Add right padding for icon */
         font-size: 16px;
         outline: none;
         background: var(--pico-background-color);
         color: var(--pico-color);
         transition: all 0.2s ease;
+    }
+    
+    .chat-status-icon {
+        position: absolute;
+        right: 15px;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        transition: all 0.3s ease;
+        cursor: help;
+        display: none; /* Hidden by default */
+    }
+    
+    .chat-status-icon.connected {
+        background: var(--pico-ins-color);
+        display: block;
+        animation: pulse-success 2s infinite;
+    }
+    
+    .chat-status-icon.connecting {
+        background: var(--pico-primary-background);
+        display: block;
+        animation: pulse-info 1.5s infinite;
+    }
+    
+    .chat-status-icon.error {
+        background: var(--pico-del-color);
+        display: block;
+        animation: pulse-error 1s infinite;
+    }
+    
+    .chat-status-icon.sending {
+        background: var(--pico-primary-background);
+        display: block;
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes pulse-success {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.7; transform: scale(0.9); }
+    }
+    
+    @keyframes pulse-info {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.6; transform: scale(0.95); }
+    }
+    
+    @keyframes pulse-error {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        25%, 75% { opacity: 0.8; transform: scale(1.1); }
+        50% { opacity: 0.6; transform: scale(0.9); }
+    }
+    
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
     }
     
     #chat-input:focus {
@@ -264,7 +331,13 @@
         
         #chat-input {
             font-size: 16px; /* Prevent zoom on iOS */
-            padding: 10px 16px;
+            padding: 10px 40px 10px 16px; /* Add right padding for icon */
+        }
+        
+        .chat-status-icon {
+            right: 12px;
+            width: 16px;
+            height: 16px;
         }
         
         .chat-send-btn {
@@ -367,12 +440,13 @@ class ChatManager {
             endChatButton: document.getElementById('end-chat-btn'),
             messagesContainer: document.getElementById('chat-messages'),
             statusElement: document.getElementById('chat-status'),
+            statusIcon: document.getElementById('chat-status-icon'),
             sessionInfo: document.getElementById('chat-session-info'),
             sessionId: document.getElementById('session-appointment-id')
         };
         
         // Validate required elements
-        const requiredElements = ['chatInput', 'sendButton', 'messagesContainer'];
+        const requiredElements = ['chatInput', 'sendButton', 'messagesContainer', 'statusIcon'];
         for (const key of requiredElements) {
             if (!this.elements[key]) {
                 console.error(`Required element '${key}' not found`);
@@ -487,7 +561,7 @@ class ChatManager {
             if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
                 this.reconnectAttempts++;
                 const delay = this.reconnectInterval * this.reconnectAttempts;
-                this.updateStatus(`Reconnecting in ${delay/1000}s... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`, 'info');
+                this.updateStatus(`Reconnecting... (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`, 'info');
                 
                 setTimeout(() => {
                     console.log(`Reconnect attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
@@ -660,9 +734,57 @@ class ChatManager {
     }
     
     updateStatus(message, type = '') {
+        // Update the hidden text status element for fallback
         if (this.elements.statusElement) {
             this.elements.statusElement.textContent = message;
             this.elements.statusElement.className = `chat-page-status ${type}`;
+        }
+        
+        // Update the status icon
+        if (this.elements.statusIcon) {
+            // Remove all status classes
+            this.elements.statusIcon.className = 'chat-status-icon';
+            
+            // Map status types to icon classes and set tooltip
+            let iconClass = '';
+            let tooltip = message;
+            
+            switch (type) {
+                case 'success':
+                    if (message.includes('Connected') || message.includes('Ready')) {
+                        iconClass = 'connected';
+                        tooltip = 'Connected and ready';
+                    }
+                    break;
+                case 'info':
+                    if (message.includes('Connecting')) {
+                        iconClass = 'connecting';
+                        tooltip = 'Connecting...';
+                    } else if (message.includes('Sending')) {
+                        iconClass = 'sending';
+                        tooltip = 'Sending message...';
+                    } else if (message.includes('Reconnecting')) {
+                        iconClass = 'connecting';
+                        tooltip = message;
+                    }
+                    break;
+                case 'error':
+                    iconClass = 'error';
+                    tooltip = message || 'Connection error';
+                    break;
+                default:
+                    // Hide icon for empty or unknown status
+                    if (!message) {
+                        iconClass = '';
+                        tooltip = '';
+                    }
+            }
+            
+            if (iconClass) {
+                this.elements.statusIcon.className = `chat-status-icon ${iconClass}`;
+            }
+            
+            this.elements.statusIcon.setAttribute('data-tooltip', tooltip);
         }
     }
     

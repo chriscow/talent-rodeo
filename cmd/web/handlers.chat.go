@@ -978,6 +978,16 @@ func (app *application) streamChatResponse(w http.ResponseWriter, r *http.Reques
 func (app *application) handleWebSocketUserMessage(conn *websocket.Conn, user *internal.User, appointment *internal.Appointment, userMessage string) {
 	ctx := context.Background()
 
+	// Ensure checklist is initialized
+	if appointment.ConversationChecklist == nil {
+		app.logger.Warn("Chat appointment missing checklist, initializing", "user_id", user.ID, "appointment_id", appointment.ID)
+		appointment.ConversationChecklist = internal.InitializeConversationChecklist()
+		// Save the appointment with the new checklist
+		if err := internal.UpdateAppointment(ctx, app.fs, appointment); err != nil {
+			app.logger.Error("Failed to save appointment with initialized checklist", "error", err)
+		}
+	}
+
 	// Save user message to appointment
 	app.logger.Debug("handleWebSocketUserMessage -> AddChatMessage", "name", user.Name, "user_message", userMessage, "user_id", user.ID, "appointment_id", appointment.ID)
 	if err := internal.AddChatMessage(ctx, app.fs, appointment, "user", userMessage); err != nil {
@@ -991,17 +1001,15 @@ func (app *application) handleWebSocketUserMessage(conn *websocket.Conn, user *i
 	}
 
 	// Increment message count in checklist
-	if appointment.ConversationChecklist != nil {
-		internal.IncrementMessageCount(appointment.ConversationChecklist)
+	internal.IncrementMessageCount(appointment.ConversationChecklist)
 
-		// Check if conversation is getting too long and warn user
-		if appointment.ConversationChecklist.MessageCount >= internal.MaxConversationLength-10 {
-			warningMsg := WebSocketMessage{
-				Type:    "warning",
-				Content: fmt.Sprintf("This conversation is getting quite long (%d/%d messages). Consider wrapping up soon.", appointment.ConversationChecklist.MessageCount, internal.MaxConversationLength),
-			}
-			conn.WriteJSON(warningMsg)
+	// Check if conversation is getting too long and warn user
+	if appointment.ConversationChecklist.MessageCount >= internal.MaxConversationLength-10 {
+		warningMsg := WebSocketMessage{
+			Type:    "warning",
+			Content: fmt.Sprintf("This conversation is getting quite long (%d/%d messages). Consider wrapping up soon.", appointment.ConversationChecklist.MessageCount, internal.MaxConversationLength),
 		}
+		conn.WriteJSON(warningMsg)
 	}
 
 	// Stream AI response
@@ -1189,9 +1197,18 @@ Your primary goal is to complete this checklist. After each user response, you M
 		if err := internal.AddChatMessage(ctx, app.fs, appointment, "assistant", fullResponse.String()); err != nil {
 			app.logger.Error("Failed to save assistant message", "error", err)
 		} else {
+			// Ensure checklist is initialized
+			if appointment.ConversationChecklist == nil {
+				app.logger.Warn("Chat appointment missing checklist during AI response, initializing", "user_id", user.ID, "appointment_id", appointment.ID)
+				appointment.ConversationChecklist = internal.InitializeConversationChecklist()
+			}
+
 			// Increment message count in checklist
-			if appointment.ConversationChecklist != nil {
-				internal.IncrementMessageCount(appointment.ConversationChecklist)
+			internal.IncrementMessageCount(appointment.ConversationChecklist)
+
+			// Save the updated appointment with incremented message count
+			if err := internal.UpdateAppointment(ctx, app.fs, appointment); err != nil {
+				app.logger.Error("Failed to save appointment with updated message count", "error", err)
 			}
 		}
 	}

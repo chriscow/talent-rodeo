@@ -102,10 +102,10 @@ type Appointment struct {
 	Notes       *string
 
 	// Chat-specific fields
-	ChatMessages []ChatMessage `json:"chat_messages,omitempty"`
+	ChatMessages []ChatMessage
 
 	// Conversation checklist for chat appointments
-	ConversationChecklist *ConversationChecklist `json:"conversation_checklist,omitempty"`
+	ConversationChecklist *ConversationChecklist
 
 	RecapSent bool // Whether the recap has been sent to the user
 }
