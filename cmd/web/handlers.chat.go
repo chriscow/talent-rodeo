@@ -278,7 +278,7 @@ func (r *ChatToolRegistry) handleCompleteChat(ctx context.Context, app *applicat
 			{
 				Type: "redirect",
 				Data: map[string]interface{}{
-					"url": "/profile",
+					"url": "/onboarding",
 				},
 				Delay: 3000,
 			},
@@ -910,7 +910,7 @@ func (app *application) showChatPage(w http.ResponseWriter, r *http.Request) {
 	appointmentID := r.URL.Query().Get("appointment_id")
 	if appointmentID == "" {
 		app.logger.Error("No appointment ID provided for chat page")
-		http.Redirect(w, r, "/profile", http.StatusSeeOther)
+		http.Redirect(w, r, "/onboarding", http.StatusSeeOther)
 		return
 	}
 
@@ -918,13 +918,13 @@ func (app *application) showChatPage(w http.ResponseWriter, r *http.Request) {
 	appointment, err := internal.GetAppointment(r.Context(), app.fs, user.ID, appointmentID)
 	if err != nil {
 		app.logger.Error("Failed to get appointment for chat page", "error", err, "user_id", user.ID, "appointment_id", appointmentID)
-		http.Redirect(w, r, "/profile", http.StatusSeeOther)
+		http.Redirect(w, r, "/onboarding", http.StatusSeeOther)
 		return
 	}
 
 	if appointment.Type != internal.AppointmentTypeChat {
 		app.logger.Error("Appointment is not a chat type", "user_id", user.ID, "appointment_id", appointmentID, "type", appointment.Type)
-		http.Redirect(w, r, "/profile", http.StatusSeeOther)
+		http.Redirect(w, r, "/onboarding", http.StatusSeeOther)
 		return
 	}
 

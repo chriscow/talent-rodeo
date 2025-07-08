@@ -13,7 +13,7 @@ func TestAuthFlow(t *testing.T) {
 	defer ts.Cleanup()
 
 	t.Run("Unauthenticated user is redirected to login", func(t *testing.T) {
-		code, headers, _ := ts.get(t, "/profile")
+		code, headers, _ := ts.get(t, "/onboarding")
 
 		if code != http.StatusSeeOther {
 			t.Errorf("want %d; got %d", http.StatusSeeOther, code)
@@ -28,7 +28,7 @@ func TestAuthFlow(t *testing.T) {
 		user := internal.CreateTestUser(t, ts.app.fs, "Test User", "test@example.com", "+14251234567", false)
 		defer internal.DeleteTestData(t, ts.app.fs, "test-user-")
 
-		req := ts.authenticatedRequest(t, "GET", "/profile", user, nil)
+		req := ts.authenticatedRequest(t, "GET", "/onboarding", user, nil)
 		w := httptest.NewRecorder()
 		ts.app.routes().ServeHTTP(w, req)
 

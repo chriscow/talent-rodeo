@@ -70,7 +70,7 @@ func (app *application) deleteResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, "/profile/resume/upload", http.StatusSeeOther)
+	http.Redirect(w, r, "/onboarding/resume/upload", http.StatusSeeOther)
 }
 
 // showUploadPage handles GET requests to /profile/resume/upload.

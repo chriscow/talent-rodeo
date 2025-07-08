@@ -39,7 +39,7 @@ func TestScheduling(t *testing.T) {
 		form.Add("timezone", "America/New_York")
 		form.Add("csrf_token", "test-csrf-token")
 
-		code, _, body := ts.authenticatedPostForm(t, ts.user1, "/profile/schedule/appointment", form)
+		code, _, body := ts.authenticatedPostForm(t, ts.user1, "/onboarding/schedule/appointment", form)
 
 		if code != http.StatusOK {
 			t.Errorf("want %d; got %d", http.StatusOK, code)
@@ -53,7 +53,7 @@ func TestScheduling(t *testing.T) {
 
 	t.Run("Unauthenticated user cannot access scheduling", func(t *testing.T) {
 		// Use get() instead of authenticatedGet() to test unauthenticated access
-		code, headers, _ := ts.get(t, "/profile/schedule")
+		code, headers, _ := ts.get(t, "/onboarding/schedule")
 
 		if code != http.StatusSeeOther {
 			t.Errorf("want %d; got %d", http.StatusSeeOther, code)
@@ -65,17 +65,17 @@ func TestScheduling(t *testing.T) {
 	})
 
 	t.Run("Authenticated user can access scheduling page", func(t *testing.T) {
-		code, _, body := ts.authenticatedGet(t, "/profile/schedule")
+		code, _, body := ts.authenticatedGet(t, "/onboarding/schedule")
 
 		if code != http.StatusOK {
 			t.Errorf("want %d; got %d", http.StatusOK, code)
 		}
 
 		// Check that the page contains the expected form elements with exact matches
-		if !strings.Contains(body, `<form method="post" action="/profile/schedule/appointment">`) {
+		if !strings.Contains(body, `<form method="post" action="/onboarding/schedule/appointment">`) {
 			t.Error("schedule appointment form not found in response")
 		}
-		if !strings.Contains(body, `<form method="post" action="/profile/schedule/call-now">`) {
+		if !strings.Contains(body, `<form method="post" action="/onboarding/schedule/call-now">`) {
 			t.Error("call now form not found in response")
 		}
 	})
@@ -90,14 +90,14 @@ func TestScheduling(t *testing.T) {
 		form.Add("timezone", "America/New_York")
 		form.Add("csrf_token", "test-csrf-token") // Added because we're using CSRF protection
 
-		code, headers, _ := ts.authenticatedPostForm(t, ts.user1, "/profile/schedule/appointment", form)
+		code, headers, _ := ts.authenticatedPostForm(t, ts.user1, "/onboarding/schedule/appointment", form)
 
 		if code != http.StatusSeeOther {
 			t.Errorf("want %d; got %d", http.StatusSeeOther, code)
 		}
 
-		if headers.Get("Location") != "/profile" {
-			t.Errorf("want %s; got %s", "/profile", headers.Get("Location"))
+		if headers.Get("Location") != "/onboarding" {
+			t.Errorf("want %s; got %s", "/onboarding", headers.Get("Location"))
 		}
 	})
 
@@ -107,7 +107,7 @@ func TestScheduling(t *testing.T) {
 		form.Add("timezone", "America/New_York")
 		form.Add("csrf_token", "test-csrf-token")
 
-		code, _, _ := ts.authenticatedPostForm(t, ts.user1, "/profile/schedule/appointment", form)
+		code, _, _ := ts.authenticatedPostForm(t, ts.user1, "/onboarding/schedule/appointment", form)
 
 		if code != http.StatusBadRequest {
 			t.Errorf("want %d; got %d", http.StatusBadRequest, code)
@@ -121,7 +121,7 @@ func TestScheduling(t *testing.T) {
 		form.Add("timezone", "America/New_York")
 		form.Add("csrf_token", "test-csrf-token")
 
-		code, _, _ := ts.authenticatedPostForm(t, ts.user1, "/profile/schedule/appointment", form)
+		code, _, _ := ts.authenticatedPostForm(t, ts.user1, "/onboarding/schedule/appointment", form)
 
 		if code != http.StatusBadRequest {
 			t.Errorf("want %d; got %d", http.StatusBadRequest, code)
@@ -134,7 +134,7 @@ func TestScheduling(t *testing.T) {
 		form.Add("datetime", tomorrow.Format("2006-01-02T15:04"))
 		form.Add("csrf_token", "test-csrf-token")
 
-		code, _, _ := ts.authenticatedPostForm(t, ts.user1, "/profile/schedule/appointment", form)
+		code, _, _ := ts.authenticatedPostForm(t, ts.user1, "/onboarding/schedule/appointment", form)
 
 		if code != http.StatusBadRequest {
 			t.Errorf("want %d; got %d", http.StatusBadRequest, code)
@@ -146,14 +146,14 @@ func TestScheduling(t *testing.T) {
 		form.Add("timezone", "America/New_York")
 		form.Add("csrf_token", "test-csrf-token")
 
-		code, headers, _ := ts.authenticatedPostForm(t, ts.user1, "/profile/schedule/call-now", form)
+		code, headers, _ := ts.authenticatedPostForm(t, ts.user1, "/onboarding/schedule/call-now", form)
 
 		if code != http.StatusSeeOther {
 			t.Errorf("want %d; got %d", http.StatusSeeOther, code)
 		}
 
-		if headers.Get("Location") != "/profile" {
-			t.Errorf("want %s; got %s", "/profile", headers.Get("Location"))
+		if headers.Get("Location") != "/onboarding" {
+			t.Errorf("want %s; got %s", "/onboarding", headers.Get("Location"))
 		}
 	})
 
@@ -161,14 +161,14 @@ func TestScheduling(t *testing.T) {
 		form := url.Values{}
 		form.Add("csrf_token", "test-csrf-token")
 
-		code, headers, _ := ts.authenticatedPostForm(t, ts.user1, "/profile/schedule/call-now", form)
+		code, headers, _ := ts.authenticatedPostForm(t, ts.user1, "/onboarding/schedule/call-now", form)
 
 		if code != http.StatusSeeOther {
 			t.Errorf("want %d; got %d", http.StatusSeeOther, code)
 		}
 
-		if headers.Get("Location") != "/profile" {
-			t.Errorf("want %s; got %s", "/profile", headers.Get("Location"))
+		if headers.Get("Location") != "/onboarding" {
+			t.Errorf("want %s; got %s", "/onboarding", headers.Get("Location"))
 		}
 	})
 }

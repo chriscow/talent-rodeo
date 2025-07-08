@@ -54,7 +54,7 @@ func (app *application) showSchedulePage(w http.ResponseWriter, r *http.Request)
 		// Add flash message
 		app.sessionManager.Put(r.Context(), "flash", errorMsg)
 
-		http.Redirect(w, r, "/profile/resume/upload", http.StatusSeeOther)
+		http.Redirect(w, r, "/onboarding/resume/upload", http.StatusSeeOther)
 		return
 	}
 
@@ -239,7 +239,7 @@ func (app *application) createAppointment(w http.ResponseWriter, r *http.Request
 	}
 
 	// Always redirect to /profile on success
-	http.Redirect(w, r, "/profile", http.StatusSeeOther)
+	http.Redirect(w, r, "/onboarding", http.StatusSeeOther)
 }
 
 func buildWebhookURL(callPath string) string {
@@ -344,7 +344,7 @@ func (app *application) cancelAppointment(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	http.Redirect(w, r, "/profile", http.StatusSeeOther)
+	http.Redirect(w, r, "/onboarding", http.StatusSeeOther)
 }
 
 // callNow handles POST requests to initiate an immediate call.
@@ -382,7 +382,7 @@ func (app *application) callNow(w http.ResponseWriter, r *http.Request) {
 	if user.Phone == nil {
 		app.logger.Error("User has no phone number", "user_id", user.ID)
 		app.reportServerError(r, fmt.Errorf("user has no phone number"))
-		http.Redirect(w, r, "/profile", http.StatusSeeOther)
+		http.Redirect(w, r, "/onboarding", http.StatusSeeOther)
 		return
 	}
 
@@ -469,5 +469,5 @@ func (app *application) callNow(w http.ResponseWriter, r *http.Request) {
 	app.logger.Debug("Redirecting to profile",
 		"user_id", user.ID)
 
-	http.Redirect(w, r, "/profile", http.StatusSeeOther)
+	http.Redirect(w, r, "/onboarding", http.StatusSeeOther)
 }

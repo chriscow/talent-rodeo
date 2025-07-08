@@ -139,7 +139,7 @@ func (app *application) completeSocialAuth(w http.ResponseWriter, r *http.Reques
 	// If onboarding is not complete, redirect to profile
 	redirectPath := "/"
 	if u.Status < internal.UserStatusCallScheduled {
-		redirectPath = "/profile"
+		redirectPath = "/onboarding"
 	}
 
 	http.Redirect(w, r, redirectPath, http.StatusSeeOther)

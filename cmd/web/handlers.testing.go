@@ -35,7 +35,7 @@ func (app *application) handleTestingResetUserState(w http.ResponseWriter, r *ht
 		"new_status", internal.UserStatusPendingResumeUpload)
 
 	// Redirect back to profile
-	http.Redirect(w, r, "/profile", http.StatusSeeOther)
+	http.Redirect(w, r, "/onboarding", http.StatusSeeOther)
 }
 
 // handleTestingAuthenticate sets up authentication for a specific test user.

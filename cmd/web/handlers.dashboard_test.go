@@ -64,7 +64,7 @@ func TestShowDashboard(t *testing.T) {
 				}
 			},
 			wantStatus:   http.StatusSeeOther,
-			wantRedirect: "/profile",
+			wantRedirect: "/onboarding",
 		},
 		{
 			name: "call scheduled user with no jobs shows appointment",

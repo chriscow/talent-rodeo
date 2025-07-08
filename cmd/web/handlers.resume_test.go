@@ -17,7 +17,7 @@ func TestResumeUpload(t *testing.T) {
 	ts := newTestServer(t, "test resume upload")
 
 	t.Run("Unauthenticated user cannot upload resume", func(t *testing.T) {
-		code, headers, _ := ts.get(t, "/profile/resume/upload")
+		code, headers, _ := ts.get(t, "/onboarding/resume/upload")
 
 		if code != http.StatusSeeOther {
 			t.Errorf("want %d; got %d", http.StatusSeeOther, code)
@@ -62,7 +62,7 @@ func TestResumeUpload(t *testing.T) {
 			Email:     "test@example.com",
 			CreatedAt: now,
 		}
-		req := ts.authenticatedRequest(t, "POST", "/profile/resume/upload", user, body)
+		req := ts.authenticatedRequest(t, "POST", "/onboarding/resume/upload", user, body)
 		req.Header.Set("Content-Type", writer.FormDataContentType())
 		w := httptest.NewRecorder()
 
@@ -70,7 +70,7 @@ func TestResumeUpload(t *testing.T) {
 		ts.app.sessionManager.Put(req.Context(), "UserID", "1")
 
 		// Create a new request with the session cookie and CSRF token
-		req = httptest.NewRequest("POST", "/profile/resume/upload", body)
+		req = httptest.NewRequest("POST", "/onboarding/resume/upload", body)
 		req.Header.Set("Content-Type", writer.FormDataContentType())
 		req.Header.Add("Cookie", w.Header().Get("Set-Cookie"))
 		req.Header.Add("X-CSRF-Token", "test-token")
@@ -86,8 +86,8 @@ func TestResumeUpload(t *testing.T) {
 			t.Errorf("want %d; got %d", http.StatusSeeOther, w.Code)
 		}
 
-		if w.Header().Get("Location") != "/profile" {
-			t.Errorf("want %s; got %s", "/profile", w.Header().Get("Location"))
+		if w.Header().Get("Location") != "/onboarding" {
+			t.Errorf("want %s; got %s", "/onboarding", w.Header().Get("Location"))
 		}
 	})
 
@@ -126,7 +126,7 @@ func TestResumeUpload(t *testing.T) {
 			Email:     "test@example.com",
 			CreatedAt: now,
 		}
-		req := ts.authenticatedRequest(t, "POST", "/profile/resume/upload", user, body)
+		req := ts.authenticatedRequest(t, "POST", "/onboarding/resume/upload", user, body)
 		req.Header.Set("Content-Type", writer.FormDataContentType())
 		w := httptest.NewRecorder()
 
@@ -134,7 +134,7 @@ func TestResumeUpload(t *testing.T) {
 		ts.app.sessionManager.Put(req.Context(), "UserID", "1")
 
 		// Create a new request with the session cookie and CSRF token
-		req = httptest.NewRequest("POST", "/profile/resume/upload", body)
+		req = httptest.NewRequest("POST", "/onboarding/resume/upload", body)
 		req.Header.Set("Content-Type", writer.FormDataContentType())
 		req.Header.Add("Cookie", w.Header().Get("Set-Cookie"))
 		req.Header.Add("X-CSRF-Token", "test-token")
@@ -180,7 +180,7 @@ func TestResumeUpload(t *testing.T) {
 			Email:     "test@example.com",
 			CreatedAt: now,
 		}
-		req := ts.authenticatedRequest(t, "POST", "/profile/resume/upload", user, body)
+		req := ts.authenticatedRequest(t, "POST", "/onboarding/resume/upload", user, body)
 		req.Header.Set("Content-Type", writer.FormDataContentType())
 		w := httptest.NewRecorder()
 
@@ -188,7 +188,7 @@ func TestResumeUpload(t *testing.T) {
 		ts.app.sessionManager.Put(req.Context(), "UserID", "1")
 
 		// Create a new request with the session cookie and CSRF token
-		req = httptest.NewRequest("POST", "/profile/resume/upload", body)
+		req = httptest.NewRequest("POST", "/onboarding/resume/upload", body)
 		req.Header.Set("Content-Type", writer.FormDataContentType())
 		req.Header.Add("Cookie", w.Header().Get("Set-Cookie"))
 		req.Header.Add("X-CSRF-Token", "test-token")
@@ -217,19 +217,19 @@ func TestExtractPDF(t *testing.T) {
 			name:     "Valid PDF Resume 1",
 			filename: "../../testdata/sample-resumes/sample-resume.pdf", // placeholder, replace as needed
 			wantErr:  false,
-			wantSub:  "\nC\nHRIS\nC\nOWHERD\n425-829-5443\nhttps",
+			wantSub:  "Extensive experience in a technical leadership role",
 		},
 		{
 			name:     "Valid PDF Resume 2",
 			filename: "../../testdata/sample-resumes/Nick Beaver 2024.pdf", // placeholder, replace as needed
 			wantErr:  false,
-			wantSub:  "\n \nNICHOLAS BEAVER \n \nnicholasjbeaver@gmail.com \nwww.linkedin.com/in/nicholas-beaver/\n  \n425-241-708", // placeholder, replace as needed
+			wantSub:  "A passionate student of materials and data science looking to solve complex and cutting-edge engineering problems", // placeholder, replace as needed
 		},
 		{
 			name:     "Valid PDF Resume 3",
 			filename: "../../testdata/sample-resumes/Marco Mindemann May 2025.pdf", // placeholder, replace as needed
 			wantErr:  false,
-			wantSub:  "Marco Mindemann",
+			wantSub:  "performing team of risk managers who are subject matter experts",
 		},
 		// {
 		// 	name:     "Corrupt or Not a PDF",

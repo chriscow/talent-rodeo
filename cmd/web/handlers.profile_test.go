@@ -94,9 +94,9 @@ func TestShowProfilePage(t *testing.T) {
 				if tt.setupUser != nil {
 					tt.setupUser(ts.user1)
 				}
-				code, _, body = ts.authenticatedGet(t, "/profile")
+				code, _, body = ts.authenticatedGet(t, "/onboarding")
 			} else {
-				code, _, body = ts.get(t, "/profile")
+				code, _, body = ts.get(t, "/onboarding")
 			}
 
 			if code != tt.wantCode {
@@ -142,7 +142,7 @@ func TestShowWaitingCallPage(t *testing.T) {
 				// Don't create an appointment
 			},
 			wantCode:     http.StatusSeeOther,
-			wantRedirect: "/profile",
+			wantRedirect: "/onboarding",
 		},
 	}
 
@@ -159,7 +159,7 @@ func TestShowWaitingCallPage(t *testing.T) {
 				tt.setupUser(ts.user1)
 			}
 			// First get the profile page which should redirect to dashboard
-			code, headers, _ = ts.authenticatedGet(t, "/profile")
+			code, headers, _ = ts.authenticatedGet(t, "/onboarding")
 			if code != http.StatusSeeOther {
 				t.Errorf("want redirect %d; got %d", http.StatusSeeOther, code)
 			}
