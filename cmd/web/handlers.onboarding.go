@@ -77,7 +77,7 @@ func (app *application) showOnboardingPage(w http.ResponseWriter, r *http.Reques
 		app.serverError(w, r, err)
 		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
 			"action":   "render_template",
-			"template": "pages/profile-onboarding.html",
+			"template": "pages/onboarding-main.html",
 			"userID":   user.ID,
 		})
 	}

@@ -1,0 +1,77 @@
+{{define "title"}}Upload Resume - Profile{{end}}
+
+{{define "page:styles"}}
+<style>
+    /* Hero section */
+    .hero {
+        padding: 2rem 0;
+        text-align: center;
+        background: linear-gradient(135deg, var(--pico-primary-background), var(--pico-card-background));
+        border-radius: var(--pico-border-radius);
+        margin-bottom: .5rem;
+    }
+
+    .hero h1 {
+        font-size: 2.5rem;
+        margin-bottom: .5rem;
+    }
+
+    .hero p {
+        font-size: 1.25rem;
+        max-width: 800px;
+        margin: 0 auto .5rem;
+    }
+</style>
+{{end}}
+
+{{define "page:main"}}
+<main class="container-narrow">
+    {{if .Error}}
+    <div id="error-data" data-error="{{.Error}}" hidden></div>
+    {{end}}
+    <article>
+        <header class="hero">
+            <h1>Welcome to Talent Rodeo</h1>
+            <p>Start Your Search with Your Resume</p>
+        </header>
+
+        <p>
+            Here's what happens:
+        </p>
+        
+        <ul>
+            <li>AI will analyze your resume to understand your skills and experience</li>
+            <li>When you are ready, S<strong>hire</strong>ly, your AI search assistant will call you to discuss your resume and your job search goals</li>
+            <li>You'll get personalized job matches based on your preferences</li>
+            <ul>&nbsp;</ul>
+        </ul>
+
+        {{template "partial:resume-form" .}}
+    </article>
+    <p>
+        <em><small>Your information is secure and will only be used to help match you. We don't store your resume, it is only used for discussion with Shirely. See our simple <a href="/privacy#data-retention">Privacy Policy</a> for details.</small></em>
+    </p>
+</main>
+{{end}}
+
+{{define "page:scripts"}}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const errorData = document.getElementById('error-data');
+        if (errorData) {
+            // Initialize Notyf
+            const notyf = new Notyf({
+                duration: 0,
+                dismissible: true,
+                ripple: true,
+                position: { x: 'center', y: 'top' }
+            });
+            
+            // Show error toast after a 1-second delay
+            setTimeout(() => {
+                notyf.error(errorData.dataset.error);
+            }, 500);
+        }
+    });
+</script>
+{{end}}
