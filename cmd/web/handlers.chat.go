@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -201,6 +202,134 @@ func (r *ChatToolRegistry) registerDefaultTools() {
 		},
 		Handler: r.handleScheduleFollowup,
 	})
+
+	// Tool 4: Get Checklist Status - Shows current conversation progress
+	r.RegisterTool("get_checklist_status", ChatTool{
+		Definition: openai.Tool{
+			Type: openai.ToolTypeFunction,
+			Function: &openai.FunctionDefinition{
+				Name:        "get_checklist_status",
+				Description: "Get the current status of the conversation checklist to see what topics have been covered and what information is still needed.",
+				Parameters: map[string]interface{}{
+					"type":       "object",
+					"properties": map[string]interface{}{},
+					"required":   []string{},
+				},
+			},
+		},
+		Handler: r.handleGetChecklistStatus,
+	})
+
+	// Tool 5: Mark Topic Progress - Updates progress on a conversation topic
+	r.RegisterTool("mark_topic_progress", ChatTool{
+		Definition: openai.Tool{
+			Type: openai.ToolTypeFunction,
+			Function: &openai.FunctionDefinition{
+				Name:        "mark_topic_progress",
+				Description: "Mark progress on a specific conversation topic and record the quality of information gathered.",
+				Parameters: map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"topic_id": map[string]interface{}{
+							"type":        "string",
+							"enum":        []string{"introduction", "warm_up", "deal_breakers", "search_strategy", "work_environment", "location_preferences", "validation", "final_confirmation"},
+							"description": "The ID of the topic to update",
+						},
+						"status": map[string]interface{}{
+							"type":        "string",
+							"enum":        []string{"pending", "in_progress", "completed"},
+							"description": "Current status of the topic",
+						},
+						"quality": map[string]interface{}{
+							"type":        "string",
+							"enum":        []string{"low", "medium", "high"},
+							"description": "Quality level of the information gathered",
+						},
+						"extracted_info": map[string]interface{}{
+							"type":        "object",
+							"description": "Key information extracted from the conversation about this topic",
+						},
+						"notes": map[string]interface{}{
+							"type":        "string",
+							"description": "Additional notes about the information quality or any concerns",
+						},
+					},
+					"required": []string{"topic_id", "status", "quality"},
+				},
+			},
+		},
+		Handler: r.handleMarkTopicProgress,
+	})
+
+	// Tool 6: Validate Information Quality - Assesses the quality of gathered information
+	r.RegisterTool("validate_information_quality", ChatTool{
+		Definition: openai.Tool{
+			Type: openai.ToolTypeFunction,
+			Function: &openai.FunctionDefinition{
+				Name:        "validate_information_quality",
+				Description: "Validate the quality and completeness of information gathered for job matching purposes.",
+				Parameters: map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"topic_id": map[string]interface{}{
+							"type":        "string",
+							"enum":        []string{"introduction", "warm_up", "deal_breakers", "search_strategy", "work_environment", "location_preferences", "validation", "final_confirmation"},
+							"description": "The topic to validate",
+						},
+						"validation_notes": map[string]interface{}{
+							"type":        "string",
+							"description": "Notes about the validation results and any concerns",
+						},
+					},
+					"required": []string{"topic_id", "validation_notes"},
+				},
+			},
+		},
+		Handler: r.handleValidateInformationQuality,
+	})
+
+	// Tool 7: Check Completion Readiness - Validates if chat is ready for completion
+	r.RegisterTool("check_completion_readiness", ChatTool{
+		Definition: openai.Tool{
+			Type: openai.ToolTypeFunction,
+			Function: &openai.FunctionDefinition{
+				Name:        "check_completion_readiness",
+				Description: "Check if the conversation has gathered sufficient information to complete the chat session.",
+				Parameters: map[string]interface{}{
+					"type":       "object",
+					"properties": map[string]interface{}{},
+					"required":   []string{},
+				},
+			},
+		},
+		Handler: r.handleCheckCompletionReadiness,
+	})
+
+	// Tool 8: Override Completion - Emergency completion with reason logging
+	r.RegisterTool("override_completion", ChatTool{
+		Definition: openai.Tool{
+			Type: openai.ToolTypeFunction,
+			Function: &openai.FunctionDefinition{
+				Name:        "override_completion",
+				Description: "Override completion requirements in emergency situations or when user needs to end the conversation.",
+				Parameters: map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"reason": map[string]interface{}{
+							"type":        "string",
+							"description": "Reason for overriding completion requirements",
+						},
+						"summary": map[string]interface{}{
+							"type":        "string",
+							"description": "Summary of information gathered despite incomplete checklist",
+						},
+					},
+					"required": []string{"reason", "summary"},
+				},
+			},
+		},
+		Handler: r.handleOverrideCompletion,
+	})
 }
 
 // RegisterTool adds a new tool to the registry
@@ -248,6 +377,48 @@ func (r *ChatToolRegistry) handleCompleteChat(ctx context.Context, app *applicat
 	confidenceLevel, _ := args["confidence_level"].(string)
 	nextStepRecommendation, _ := args["next_step_recommendation"].(string)
 
+	// Ensure checklist exists
+	if appointment.ConversationChecklist == nil {
+		appointment.ConversationChecklist = internal.InitializeConversationChecklist()
+	}
+
+	// Increment completion attempt counter
+	internal.IncrementCompletionAttempt(appointment.ConversationChecklist)
+
+	// Validate checklist completion
+	canComplete, issues, err := internal.ValidateChecklistCompletion(appointment.ConversationChecklist)
+	if err != nil {
+		app.logger.Error("Failed to validate checklist completion", "error", err)
+		return &ToolResponse{
+			Name:    "complete_chat",
+			Content: "Failed to validate completion requirements",
+			Success: false,
+		}, err
+	}
+
+	if !canComplete {
+		app.logger.Info("Chat completion denied due to incomplete checklist", 
+			"user_id", user.ID, 
+			"issues", issues,
+			"completion_attempts", appointment.ConversationChecklist.CompletionAttempts,
+		)
+		
+		// Save the updated appointment with incremented attempt counter
+		if err := internal.UpdateAppointment(ctx, app.fs, appointment); err != nil {
+			app.logger.Error("Failed to save appointment with completion attempt", "error", err)
+		}
+		
+		return &ToolResponse{
+			Name:    "complete_chat",
+			Content: fmt.Sprintf("Cannot complete chat yet. Please address these issues first: %s", strings.Join(issues, ", ")),
+			Success: false,
+		}, nil
+	}
+
+	// Mark checklist as completed
+	appointment.ConversationChecklist.OverallStatus = internal.ChecklistStatusCompleted
+	appointment.ConversationChecklist.LastUpdated = time.Now()
+
 	// Update appointment status to indicate chat is complete
 	if err := internal.ProcessAppointmentStarted(ctx, app.fs, user, appointment); err != nil {
 		app.logger.Error("Failed to mark appointment as complete", "error", err)
@@ -257,9 +428,6 @@ func (r *ChatToolRegistry) handleCompleteChat(ctx context.Context, app *applicat
 			Success: false,
 		}, err
 	}
-
-	// TODO: Update user's onboarding status in database
-	// This would typically involve updating the user's state to indicate they've completed the chat phase
 
 	// Create response with UI actions
 	response := &ToolResponse{
@@ -285,11 +453,12 @@ func (r *ChatToolRegistry) handleCompleteChat(ctx context.Context, app *applicat
 		},
 	}
 
-	app.logger.Info("Chat completed",
+	app.logger.Info("Chat completed successfully",
 		"user_id", user.ID,
 		"summary", summary,
 		"confidence", confidenceLevel,
 		"next_step", nextStepRecommendation,
+		"completion_attempts", appointment.ConversationChecklist.CompletionAttempts,
 	)
 
 	return response, nil
@@ -370,6 +539,230 @@ func (r *ChatToolRegistry) handleScheduleFollowup(ctx context.Context, app *appl
 	}, nil
 }
 
+// handleGetChecklistStatus retrieves the current checklist status
+func (r *ChatToolRegistry) handleGetChecklistStatus(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]interface{}) (*ToolResponse, error) {
+	app.logger.Info("Getting checklist status", "user_id", user.ID, "appointment_id", appointment.ID)
+
+	// Ensure checklist exists
+	if appointment.ConversationChecklist == nil {
+		appointment.ConversationChecklist = internal.InitializeConversationChecklist()
+		if err := internal.UpdateAppointment(ctx, app.fs, appointment); err != nil {
+			app.logger.Error("Failed to initialize checklist", "error", err)
+			return &ToolResponse{
+				Name:    "get_checklist_status",
+				Content: "Failed to initialize checklist",
+				Success: false,
+			}, err
+		}
+	}
+
+	summary := internal.GetChecklistSummary(appointment.ConversationChecklist)
+	
+	// Create a readable summary for the LLM
+	contentParts := []string{
+		fmt.Sprintf("Checklist Status: %s", summary["overall_status"]),
+		fmt.Sprintf("Completion Attempts: %d/%d", summary["completion_attempts"], internal.MaxCompletionAttempts),
+		fmt.Sprintf("Message Count: %d/%d", summary["message_count"], internal.MaxConversationLength),
+		fmt.Sprintf("Progress: %d/%d completed (%d required)", summary["completed_items"], summary["total_items"], summary["required_items"]),
+		fmt.Sprintf("High Quality Items: %d", summary["high_quality_items"]),
+		fmt.Sprintf("Can Complete: %v", summary["can_complete"]),
+	}
+	
+	if issues, ok := summary["issues"].([]string); ok && len(issues) > 0 {
+		contentParts = append(contentParts, fmt.Sprintf("Issues: %s", strings.Join(issues, ", ")))
+	}
+	
+	return &ToolResponse{
+		Name:    "get_checklist_status",
+		Content: strings.Join(contentParts, "\n"),
+		Success: true,
+	}, nil
+}
+
+// handleMarkTopicProgress updates progress on a conversation topic
+func (r *ChatToolRegistry) handleMarkTopicProgress(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]interface{}) (*ToolResponse, error) {
+	topicID, _ := args["topic_id"].(string)
+	status, _ := args["status"].(string)
+	quality, _ := args["quality"].(string)
+	notes, _ := args["notes"].(string)
+
+	app.logger.Info("Marking topic progress", "user_id", user.ID, "topic_id", topicID, "status", status, "quality", quality)
+
+	// Ensure checklist exists
+	if appointment.ConversationChecklist == nil {
+		appointment.ConversationChecklist = internal.InitializeConversationChecklist()
+	}
+
+	// Extract info from args
+	var extractedInfo map[string]interface{}
+	if info, ok := args["extracted_info"].(map[string]interface{}); ok {
+		extractedInfo = info
+	}
+
+	// Update the checklist item
+	err := internal.UpdateChecklistItem(appointment.ConversationChecklist, topicID, status, quality, extractedInfo, notes)
+	if err != nil {
+		app.logger.Error("Failed to update checklist item", "error", err, "topic_id", topicID)
+		return &ToolResponse{
+			Name:    "mark_topic_progress",
+			Content: fmt.Sprintf("Failed to update topic %s: %s", topicID, err.Error()),
+			Success: false,
+		}, err
+	}
+
+	// Save the updated appointment
+	if err := internal.UpdateAppointment(ctx, app.fs, appointment); err != nil {
+		app.logger.Error("Failed to save appointment with updated checklist", "error", err)
+		return &ToolResponse{
+			Name:    "mark_topic_progress",
+			Content: "Failed to save progress",
+			Success: false,
+		}, err
+	}
+
+	return &ToolResponse{
+		Name:    "mark_topic_progress",
+		Content: fmt.Sprintf("Successfully updated topic '%s' to status '%s' with quality '%s'", topicID, status, quality),
+		Success: true,
+	}, nil
+}
+
+// handleValidateInformationQuality validates the quality of gathered information
+func (r *ChatToolRegistry) handleValidateInformationQuality(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]interface{}) (*ToolResponse, error) {
+	topicID, _ := args["topic_id"].(string)
+	validationNotes, _ := args["validation_notes"].(string)
+
+	app.logger.Info("Validating information quality", "user_id", user.ID, "topic_id", topicID)
+
+	// Ensure checklist exists
+	if appointment.ConversationChecklist == nil {
+		appointment.ConversationChecklist = internal.InitializeConversationChecklist()
+	}
+
+	// Get the checklist item
+	item, err := internal.GetChecklistItem(appointment.ConversationChecklist, topicID)
+	if err != nil {
+		return &ToolResponse{
+			Name:    "validate_information_quality",
+			Content: fmt.Sprintf("Topic %s not found", topicID),
+			Success: false,
+		}, err
+	}
+
+	// Update validation notes
+	item.ValidationNotes = validationNotes
+	item.LastUpdated = time.Now()
+	appointment.ConversationChecklist.LastUpdated = time.Now()
+
+	// Save the updated appointment
+	if err := internal.UpdateAppointment(ctx, app.fs, appointment); err != nil {
+		app.logger.Error("Failed to save appointment with validation notes", "error", err)
+		return &ToolResponse{
+			Name:    "validate_information_quality",
+			Content: "Failed to save validation notes",
+			Success: false,
+		}, err
+	}
+
+	return &ToolResponse{
+		Name:    "validate_information_quality",
+		Content: fmt.Sprintf("Validation notes updated for topic '%s'. Current status: %s, Quality: %s", topicID, item.Status, item.Quality),
+		Success: true,
+	}, nil
+}
+
+// handleCheckCompletionReadiness checks if the conversation is ready for completion
+func (r *ChatToolRegistry) handleCheckCompletionReadiness(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]interface{}) (*ToolResponse, error) {
+	app.logger.Info("Checking completion readiness", "user_id", user.ID, "appointment_id", appointment.ID)
+
+	// Ensure checklist exists
+	if appointment.ConversationChecklist == nil {
+		appointment.ConversationChecklist = internal.InitializeConversationChecklist()
+	}
+
+	// Validate completion readiness
+	canComplete, issues, err := internal.ValidateChecklistCompletion(appointment.ConversationChecklist)
+	if err != nil {
+		app.logger.Error("Failed to validate checklist completion", "error", err)
+		return &ToolResponse{
+			Name:    "check_completion_readiness",
+			Content: "Failed to validate completion readiness",
+			Success: false,
+		}, err
+	}
+
+	var responseContent string
+	if canComplete {
+		responseContent = "✅ Conversation is ready for completion. All required information has been gathered with sufficient quality."
+	} else {
+		responseContent = fmt.Sprintf("❌ Conversation is not ready for completion. Issues: %s", strings.Join(issues, ", "))
+	}
+
+	return &ToolResponse{
+		Name:    "check_completion_readiness",
+		Content: responseContent,
+		Success: canComplete,
+	}, nil
+}
+
+// handleOverrideCompletion handles emergency completion override
+func (r *ChatToolRegistry) handleOverrideCompletion(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]interface{}) (*ToolResponse, error) {
+	reason, _ := args["reason"].(string)
+	summary, _ := args["summary"].(string)
+
+	app.logger.Warn("Chat completion override requested", "user_id", user.ID, "appointment_id", appointment.ID, "reason", reason)
+
+	// Ensure checklist exists
+	if appointment.ConversationChecklist == nil {
+		appointment.ConversationChecklist = internal.InitializeConversationChecklist()
+	}
+
+	// Mark as completed with override status
+	appointment.ConversationChecklist.OverallStatus = internal.ChecklistStatusCompleted
+	appointment.ConversationChecklist.LastUpdated = time.Now()
+
+	// Process appointment completion
+	if err := internal.ProcessAppointmentStarted(ctx, app.fs, user, appointment); err != nil {
+		app.logger.Error("Failed to process appointment completion", "error", err)
+		return &ToolResponse{
+			Name:    "override_completion",
+			Content: "Failed to complete chat session",
+			Success: false,
+		}, err
+	}
+
+	// Log the override for audit purposes
+	app.logger.Info("Chat completion override applied",
+		"user_id", user.ID,
+		"appointment_id", appointment.ID,
+		"reason", reason,
+		"summary", summary,
+	)
+
+	return &ToolResponse{
+		Name:    "override_completion",
+		Content: "Chat session completed with override. Thank you for your time!",
+		Success: true,
+		UIActions: []UIAction{
+			{
+				Type: "show_message",
+				Data: map[string]interface{}{
+					"message": "Chat session completed. You'll be redirected to the next step shortly.",
+					"type":    "success",
+				},
+				Delay: 1000,
+			},
+			{
+				Type: "redirect",
+				Data: map[string]interface{}{
+					"url": "/onboarding",
+				},
+				Delay: 3000,
+			},
+		},
+	}, nil
+}
+
 // Global tool registry instance
 var chatToolRegistry = NewChatToolRegistry()
 
@@ -420,6 +813,7 @@ func (app *application) startChat(w http.ResponseWriter, r *http.Request) {
 		Timezone:      req.Timezone,
 		Status:        internal.AppointmentStatusRunning,
 		ChatMessages:  []internal.ChatMessage{},
+		ConversationChecklist: internal.InitializeConversationChecklist(),
 	}
 
 	if err := internal.CreateAppointment(r.Context(), app.fs, user.ID, appointment); err != nil {
@@ -548,7 +942,7 @@ func (app *application) streamChatResponse(w http.ResponseWriter, r *http.Reques
 	}
 	defer conn.Close()
 
-	app.logger.Info("WebSocket connection established", "user_id", user.ID, "appointment_id", appointmentID)
+	app.logger.Info("webSocket connection established", "user_id", user.ID, "appointment_id", appointmentID)
 
 	// Send connection confirmation
 	confirmMsg := WebSocketMessage{
@@ -571,7 +965,7 @@ func (app *application) streamChatResponse(w http.ResponseWriter, r *http.Reques
 			break
 		}
 
-		app.logger.Debug("Received WebSocket message", "type", msg.Type, "user_id", user.ID)
+		app.logger.Debug("received websocket message", "type", msg.Type, "user_id", user.ID)
 
 		switch msg.Type {
 		case "user_message":
@@ -592,7 +986,7 @@ func (app *application) handleWebSocketUserMessage(conn *websocket.Conn, user *i
 	ctx := context.Background()
 
 	// Save user message to appointment
-	app.logger.Debug("handleWebSocketUserMessage -> AddChatMessage", "user_id", user.ID, "appointment_id", appointment.ID, "user_message", userMessage)
+	app.logger.Debug("handleWebSocketUserMessage -> AddChatMessage", "name", user.Name, "user_id", user.ID, "appointment_id", appointment.ID, "user_message", userMessage)
 	if err := internal.AddChatMessage(ctx, app.fs, appointment, "user", userMessage); err != nil {
 		app.logger.Error("Failed to save user message", "error", err, "user_id", user.ID)
 		errorMsg := WebSocketMessage{
@@ -601,6 +995,20 @@ func (app *application) handleWebSocketUserMessage(conn *websocket.Conn, user *i
 		}
 		conn.WriteJSON(errorMsg)
 		return
+	}
+
+	// Increment message count in checklist
+	if appointment.ConversationChecklist != nil {
+		internal.IncrementMessageCount(appointment.ConversationChecklist)
+		
+		// Check if conversation is getting too long and warn user
+		if appointment.ConversationChecklist.MessageCount >= internal.MaxConversationLength-10 {
+			warningMsg := WebSocketMessage{
+				Type:    "warning",
+				Content: fmt.Sprintf("This conversation is getting quite long (%d/%d messages). Consider wrapping up soon.", appointment.ConversationChecklist.MessageCount, internal.MaxConversationLength),
+			}
+			conn.WriteJSON(warningMsg)
+		}
 	}
 
 	// Stream AI response
@@ -629,6 +1037,39 @@ func (app *application) streamAIResponseViaWebSocket(ctx context.Context, conn *
 	if assistantOverrides.Model != nil && assistantOverrides.Model.Messages != nil && len(assistantOverrides.Model.Messages) > 0 {
 		// Use the system prompt from assistant overrides
 		systemPrompt = assistantOverrides.Model.Messages[0].Content
+	}
+
+	// Add checklist status awareness to system prompt
+	if appointment.ConversationChecklist != nil {
+		checklistSummary := internal.GetChecklistSummary(appointment.ConversationChecklist)
+		systemPrompt += fmt.Sprintf(`
+
+CONVERSATION CHECKLIST STATUS:
+- Overall Status: %s
+- Completion Attempts: %d/%d
+- Message Count: %d/%d
+- Progress: %d/%d completed (%d required)
+- Can Complete: %v
+
+IMPORTANT: You have access to checklist management tools:
+- get_checklist_status: Check current progress
+- mark_topic_progress: Update topic status and quality
+- validate_information_quality: Assess information quality
+- check_completion_readiness: Verify completion requirements
+- complete_chat: Complete the conversation (only if requirements are met)
+- override_completion: Emergency completion (use only if user must leave)
+
+Use these tools to track your progress through the conversation and ensure you gather all required information before attempting to complete the chat.`, 
+			checklistSummary["overall_status"], 
+			checklistSummary["completion_attempts"], 
+			internal.MaxCompletionAttempts,
+			checklistSummary["message_count"], 
+			internal.MaxConversationLength,
+			checklistSummary["completed_items"], 
+			checklistSummary["total_items"], 
+			checklistSummary["required_items"],
+			checklistSummary["can_complete"],
+		)
 	}
 
 	messages = append(messages, openai.ChatCompletionMessage{
@@ -760,6 +1201,11 @@ func (app *application) streamAIResponseViaWebSocket(ctx context.Context, conn *
 	if fullResponse.Len() > 0 {
 		if err := internal.AddChatMessage(ctx, app.fs, appointment, "assistant", fullResponse.String()); err != nil {
 			app.logger.Error("Failed to save assistant message", "error", err)
+		} else {
+			// Increment message count in checklist
+			if appointment.ConversationChecklist != nil {
+				internal.IncrementMessageCount(appointment.ConversationChecklist)
+			}
 		}
 	}
 

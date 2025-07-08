@@ -10,7 +10,7 @@
       "Bash(ls:*)",
       "Bash(cp:*)",
       "Bash(go:*)",
-      "Bash(FIRESTORE_EMULATOR_HOST=localhost:8200 go test ./cmd/web -run *)",
+      "Bash(FIRESTORE_EMULATOR_HOST=localhost:8200 go test:*)",
       "Write",
       "Edit",
       "Bash(chmod:*)",

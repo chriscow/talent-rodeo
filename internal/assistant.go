@@ -131,7 +131,7 @@ func BuildAssistantOverrides(ctx context.Context, user *User, fs *FirestoreClien
 		firstMessage = "Hey! Hi there! I'm Shirley from Talent Rodeo. Am I speaking with " + user.FirstName + "?"
 	}
 
-	logger.Info("built assistant overrides",
+	logger.Debug("built assistant overrides",
 		"userID", user.ID,
 		"assistantId", assistantID,
 		"firstMessage", firstMessage,
