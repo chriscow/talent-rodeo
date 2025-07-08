@@ -279,8 +279,10 @@ func run(logger *slog.Logger) error {
 		return fmt.Errorf("GOOGLE_AUTH_CLIENT_ID and GOOGLE_AUTH_CLIENT_SECRET environment variables are required")
 	}
 
+	// Set testing mode environment variable for components that can't access the flag
 	if cfg.testing {
-		logger.Info("running in testing mode")
+		logger.Warn(internal.BGYellow("===== running in testing mode ====="))
+		os.Setenv("TESTING_MODE", "true")
 	}
 
 	if cfg.stripe.secretKey == "" {
@@ -314,12 +316,6 @@ func run(logger *slog.Logger) error {
 	// Handle Gmail setup mode
 	if cfg.gmailSetup {
 		return runGmailSetup(logger)
-	}
-
-	// Set testing mode environment variable for components that can't access the flag
-	if cfg.testing {
-		logger.Warn(internal.BGYellow("===== running in testing mode ====="))
-		os.Setenv("TESTING_MODE", "true")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

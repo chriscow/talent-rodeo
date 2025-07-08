@@ -1301,6 +1301,160 @@ The application handles Gmail integration gracefully:
 - Application creates token file from environment on startup
 - Monitor via `/health/gmail` endpoint
 
+# Testing Mode and Authentication
+
+The application includes special testing features to facilitate automated testing and UI automation without requiring the full LinkedIn OAuth flow.
+
+## Testing Mode Overview
+
+When the application runs with the `--testing` flag, it enables several testing-specific features:
+
+- **Automatic Authentication**: The authentication middleware automatically authenticates users without requiring login
+- **CSRF Protection Bypass**: CSRF protection is disabled for easier automated testing
+- **Testing Endpoints**: Special endpoints become available for test automation
+- **Test Token Acceptance**: Accepts the special `test-csrf-token` for CSRF validation
+
+## Environment Variables for Testing
+
+| Variable | Required | Purpose | Example |
+|----------|----------|---------|---------|
+| `TESTING_MODE` | Auto-set | Set to "true" when `--testing` flag is used | `true` |
+| `LINKEDIN_USERNAME` | Required for auto-auth | Email/username of test user to authenticate | `test@example.com` |
+
+## Automatic Authentication in Testing Mode
+
+When `TESTING_MODE=true` and `LINKEDIN_USERNAME` is set, the authentication middleware will:
+
+1. **Check for existing session**: If user is already authenticated, proceed normally
+2. **Auto-authenticate test user**: If no session exists, automatically load and authenticate the user specified by `LINKEDIN_USERNAME`
+3. **Set session**: Create a session for the test user so subsequent requests are authenticated
+4. **Continue to protected routes**: Test user can access all authenticated routes without manual login
+
+**Example:**
+```bash
+# Start application in testing mode
+go run ./cmd/web --testing
+
+# The app will automatically authenticate any user matching LINKEDIN_USERNAME
+export LINKEDIN_USERNAME="test@example.com"
+```
+
+## Manual Testing Authentication Endpoint
+
+For more granular control, testing mode also exposes manual authentication endpoints:
+
+### POST /testing/authenticate
+
+Manually authenticate as a specific user during testing.
+
+**Headers:**
+- `X-Test-User-ID`: The user ID to authenticate as
+
+**Example:**
+```bash
+curl -X POST http://localhost:2304/testing/authenticate \
+  -H "X-Test-User-ID: specific-user-id-123"
+```
+
+**Response:**
+- `200 OK`: User successfully authenticated
+- `404 Not Found`: User with specified ID doesn't exist
+- `403 Forbidden`: Not in testing mode
+
+### POST /testing/reset
+
+Reset user's onboarding state back to initial state.
+
+**Example:**
+```bash
+curl -X POST http://localhost:2304/testing/reset
+```
+
+## Testing Mode Setup
+
+### Method 1: Command Line Flag (Recommended)
+
+```bash
+# Set test user
+export LINKEDIN_USERNAME="test@example.com"
+
+# Start in testing mode (auto-sets TESTING_MODE=true)
+go run ./cmd/web --testing
+```
+
+### Method 2: Environment Variable
+
+```bash
+# Manually set testing mode
+export TESTING_MODE="true"
+export LINKEDIN_USERNAME="test@example.com"
+
+# Start application
+go run ./cmd/web
+```
+
+## Testing Routes Available
+
+When `TESTING_MODE=true`, additional routes become available:
+
+- `POST /testing/authenticate` - Manual user authentication
+- `POST /testing/reset` - Reset user onboarding state  
+- `GET /testing/pusher` - Pusher testing interface
+- `POST /testing/pusher/trigger` - Trigger Pusher events
+
+## UI Automation with Testing Mode
+
+Testing mode is specifically designed to make UI automation easier:
+
+**Selenium/Playwright Example:**
+```python
+# No need to handle LinkedIn OAuth flow
+driver.get("http://localhost:2304/profile")
+
+# User is automatically authenticated and can access protected pages
+assert "Welcome" in driver.page_source
+
+# Can test full user flows without manual authentication
+driver.find_element_by_id("upload-resume").click()
+```
+
+**API Testing Example:**
+```bash
+# Test authenticated endpoints directly
+curl http://localhost:2304/api/user/status
+# Returns user status without requiring login cookies
+
+# Test form submissions with test CSRF token
+curl -X POST http://localhost:2304/profile/resume/upload \
+  -H "X-CSRF-Token: test-csrf-token" \
+  -F "resume=@test-resume.pdf"
+```
+
+## Security Notes
+
+⚠️ **Important**: Testing mode should NEVER be enabled in production environments.
+
+- Testing endpoints are only available when `TESTING_MODE=true`
+- All testing features are automatically disabled in production
+- The application logs warnings when running in testing mode
+- CSRF protection is disabled, making the application vulnerable if exposed
+
+## Troubleshooting Testing Authentication
+
+**"No test user ID specified"**
+- Set `LINKEDIN_USERNAME` environment variable to a valid user email
+- Ensure the user exists in your Firestore database
+
+**"Test user not found"**
+- Verify the user email in `LINKEDIN_USERNAME` exists in the database
+- Check Firestore for the user document
+- Use the admin interface to create test users if needed
+
+**"Testing routes not available"**  
+- Ensure `TESTING_MODE=true` or use `--testing` flag
+- Check application logs for testing mode confirmation
+- Restart the application after setting environment variables
+
 # Claude Code
 
 ## MCP Servers

@@ -216,6 +216,34 @@ set -a; source .env; set +a; FIRESTORE_EMULATOR_HOST=localhost:8200 go test -run
 - Check session storage (Firestore-based)
 - Use `--testing` flag to bypass auth in development
 
+## Testing Mode and Authentication
+
+**Testing Mode Setup:**
+```bash
+# Method 1: Command line flag (recommended)
+export LINKEDIN_USERNAME="test@example.com"
+go run ./cmd/web --testing
+
+# Method 2: Environment variable
+export TESTING_MODE="true"
+export LINKEDIN_USERNAME="test@example.com"
+go run ./cmd/web
+```
+
+**Testing Mode Features:**
+- **Automatic Authentication**: When `TESTING_MODE=true` and `LINKEDIN_USERNAME` is set, the authentication middleware automatically authenticates the specified user without requiring LinkedIn OAuth
+- **CSRF Protection Bypass**: CSRF protection is disabled and accepts the special `test-csrf-token` for easier automated testing
+- **Testing Endpoints**: Special endpoints become available:
+  - `POST /testing/authenticate` - Manual user authentication with `X-Test-User-ID` header
+  - `POST /testing/reset` - Reset user onboarding state
+  - `GET /testing/pusher` - Pusher testing interface
+  - `POST /testing/pusher/trigger` - Trigger Pusher events
+
+**Security Notes:**
+- Testing mode should NEVER be enabled in production
+- Application logs warnings when running in testing mode
+- All testing features are automatically disabled in production
+
 **Task Processing Issues:**
 - Check task status in Firestore `tasks` collection
 - Review webhook endpoint availability and authentication
@@ -259,3 +287,7 @@ set -a; source .env; set +a; FIRESTORE_EMULATOR_HOST=localhost:8200 go test -run
 - You are not to put in placeholders for any code unless you explicitly ask me first or if I ask you to.
 - When you put in placeholders, you MUST use the key "TODO:" and explain why you are doing it and what the placeholder is for.
 - Before you claim that something is fully implemented you must have resolved all TODOs or gotten explicit approval from me.
+
+## Development Testing Notes
+
+- **Background Services in Testing**: For most testing we don't need background services running. If unsure, see `./cmd/web/main.go::startService`. To run the server without background services use the `--no-services` flag or just run `task live:test`

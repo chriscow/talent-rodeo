@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"talent-rodeo/internal"
@@ -145,6 +146,26 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 
 		// Check if user is authenticated
 		userID := app.sessionManager.GetString(r.Context(), "UserID")
+
+		// In testing mode, automatically authenticate with test user if no session exists
+		if userID == "" && os.Getenv("TESTING_MODE") == "true" {
+			testUser, err := app.loadTestUser()
+			if err != nil {
+				app.logger.Warn("authenticate: failed to load test user in testing mode", "error", err)
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Set test user in session for future requests
+			app.sessionManager.Put(r.Context(), "UserID", testUser.ID)
+			userID = testUser.ID
+
+			app.logger.Info("authenticate: auto-authenticated test user in testing mode",
+				"user_id", testUser.ID,
+				"email", testUser.Email,
+				"path", r.URL.Path)
+		}
+
 		if userID == "" {
 			app.logger.Debug("authenticate: no UserID in session", "path", r.URL.Path)
 			next.ServeHTTP(w, r)
