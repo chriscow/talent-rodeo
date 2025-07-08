@@ -12,7 +12,6 @@ import (
 	"talent-rodeo/internal/response"
 	"time"
 
-	"github.com/chriscow/vapi-go"
 	"github.com/gorilla/websocket"
 	"github.com/sashabaranov/go-openai"
 )
@@ -800,14 +799,35 @@ func (app *application) startChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Build assistant overrides to get the first message
+	assistantOverrides, err := internal.BuildAssistantOverrides(r.Context(), user, app.fs, app.logger)
+	if err != nil {
+		app.logger.Error("Failed to build assistant overrides for chat start", "error", err, "user_id", user.ID)
+		// Continue with default message
+	}
+
+	firstMessage := "Hi! I'm Shirely. I'm excited to learn about your career preferences. What kind of work environment do you prefer?"
+	if assistantOverrides != nil && assistantOverrides.FirstMessage != nil {
+		// Adapt the phone-oriented message for chat
+		firstMessage = *assistantOverrides.FirstMessage
+		firstMessage = strings.Replace(firstMessage, "calling back", "coming back to chat", -1)
+		firstMessage = strings.Replace(firstMessage, "Am I speaking with", "Am I chatting with", -1)
+	}
+
 	// Create a new chat appointment
 	appointment := &internal.Appointment{
-		Name:                  "initial-chat",
-		Type:                  internal.AppointmentTypeChat,
-		ScheduledTime:         time.Now(),
-		Timezone:              req.Timezone,
-		Status:                internal.AppointmentStatusRunning,
-		ChatMessages:          []internal.ChatMessage{},
+		Name:          "initial-chat",
+		Type:          internal.AppointmentTypeChat,
+		ScheduledTime: time.Now(),
+		Timezone:      req.Timezone,
+		Status:        internal.AppointmentStatusRunning,
+		ChatMessages: []internal.ChatMessage{
+			{
+				Role:      "assistant",
+				Content:   firstMessage,
+				Timestamp: time.Now(),
+			},
+		},
 		ConversationChecklist: internal.InitializeConversationChecklist(),
 	}
 
@@ -815,21 +835,6 @@ func (app *application) startChat(w http.ResponseWriter, r *http.Request) {
 		app.logger.Error("Failed to create chat appointment", "error", err, "user_id", user.ID)
 		response.JSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create chat session"})
 		return
-	}
-
-	// Build assistant overrides to get the first message
-	assistantOverrides, err := internal.BuildAssistantOverrides(r.Context(), user, app.fs, app.logger)
-	if err != nil {
-		app.logger.Error("Failed to build assistant overrides for chat start", "error", err, "user_id", user.ID)
-		// Continue with default message
-		assistantOverrides = &vapi.Assistant{
-			FirstMessage: stringPtr("Hi! I'm Shirely. I'm excited to learn about your career preferences. What kind of work environment do you prefer?"),
-		}
-	}
-
-	firstMessage := "Hi! I'm Shirely. I'm excited to learn about your career preferences. What kind of work environment do you prefer?"
-	if assistantOverrides != nil && assistantOverrides.FirstMessage != nil {
-		firstMessage = *assistantOverrides.FirstMessage
 	}
 
 	// Update user status to indicate chat started

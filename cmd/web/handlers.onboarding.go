@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
 	"time"
@@ -208,13 +209,35 @@ func (app *application) startChatFromOnboarding(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// Build assistant overrides to get the first message
+	assistantOverrides, err := internal.BuildAssistantOverrides(r.Context(), user, app.fs, app.logger)
+	if err != nil {
+		app.logger.Error("Failed to build assistant overrides for chat start", "error", err, "user_id", user.ID)
+		// Continue with default message
+	}
+
+	firstMessage := "Hi! I'm Shirely, your AI career assistant. I'm excited to learn about your career preferences and help you find great job opportunities. What kind of work environment do you prefer?"
+	if assistantOverrides != nil && assistantOverrides.FirstMessage != nil {
+		// Adapt the phone-oriented message for chat
+		firstMessage = *assistantOverrides.FirstMessage
+		firstMessage = strings.Replace(firstMessage, "calling back", "coming back to chat", -1)
+		firstMessage = strings.Replace(firstMessage, "Am I speaking with", "Am I chatting with", -1)
+	}
+
 	// Create a new chat appointment directly (don't call startChat since it returns JSON)
 	appointment := &internal.Appointment{
 		Name:          "initial-chat",
 		Type:          internal.AppointmentTypeChat,
 		ScheduledTime: time.Now(),
 		Status:        internal.AppointmentStatusRunning,
-		ChatMessages:  []internal.ChatMessage{},
+		ChatMessages: []internal.ChatMessage{
+			{
+				Role:      "assistant",
+				Content:   firstMessage,
+				Timestamp: time.Now(),
+			},
+		},
+		ConversationChecklist: internal.InitializeConversationChecklist(),
 	}
 
 	if err := internal.CreateAppointment(r.Context(), app.fs, user.ID, appointment); err != nil {

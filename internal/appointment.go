@@ -560,12 +560,10 @@ func ListAppointmentsNeedingProcessing(ctx context.Context, fs *FirestoreClient,
 			continue
 		}
 
-		if appointment.Type == AppointmentTypeChat {
-			// TODO: We need to handle chat appointments differently
-			continue
+		// Include both voice and chat appointments now that processing is unified
+		if appointment.Type == AppointmentTypeVoice || appointment.Type == AppointmentTypeChat {
+			appointments = append(appointments, appointment)
 		}
-
-		appointments = append(appointments, appointment)
 	}
 
 	// Clean up orphaned references synchronously

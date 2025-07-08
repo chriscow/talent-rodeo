@@ -15,6 +15,7 @@ import (
 	"talent-rodeo/internal"
 	"time"
 
+	"github.com/chriscow/minds"
 	"github.com/chriscow/minds/tools"
 	"github.com/getsentry/sentry-go"
 	"github.com/pusher/pusher-http-go/v5"
@@ -42,19 +43,44 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 	sentry.SetHubOnContext(ctx, hub)
 
 	// Log initial state for debugging
-	logger.Info("starting call processing",
+	logger.Info("starting appointment processing",
 		"userID", user.ID,
 		"appointmentID", appointment.ID,
 		"user-email", user.Email,
 		"appointment-status", appointment.Status,
+		"appointment-type", appointment.Type,
 		"has-call-id", appointment.CallID != nil,
+		"chat-message-count", len(appointment.ChatMessages),
 		"has-smtp-config", smtpCfg != nil,
 		"has-queue", queue != nil,
 		"has-dispatch", dispatch != nil)
 
-	if appointment.CallID == nil {
-		logger.Error("call ID is nil", "userID", user.ID, "appointmentID", appointment.ID)
-		internal.SentryReportError(ctx, fmt.Errorf("call ID is nil for appointment %s", appointment.ID), sentry.LevelError, map[string]string{
+	// Validate appointment type and required data
+	if appointment.Type == internal.AppointmentTypeVoice {
+		if appointment.CallID == nil {
+			logger.Error("voice appointment missing call ID", "userID", user.ID, "appointmentID", appointment.ID)
+			internal.SentryReportError(ctx, fmt.Errorf("call ID is nil for voice appointment %s", appointment.ID), sentry.LevelError, map[string]string{
+				"userID":         user.ID,
+				"appointment_id": appointment.ID,
+				"user_email":     user.Email,
+				"step":           "validation",
+			})
+			return
+		}
+	} else if appointment.Type == internal.AppointmentTypeChat {
+		if len(appointment.ChatMessages) == 0 {
+			logger.Error("chat appointment has no messages", "userID", user.ID, "appointmentID", appointment.ID)
+			internal.SentryReportError(ctx, fmt.Errorf("chat appointment %s has no messages", appointment.ID), sentry.LevelError, map[string]string{
+				"userID":         user.ID,
+				"appointment_id": appointment.ID,
+				"user_email":     user.Email,
+				"step":           "validation",
+			})
+			return
+		}
+	} else {
+		logger.Error("unsupported appointment type", "userID", user.ID, "appointmentID", appointment.ID, "type", appointment.Type)
+		internal.SentryReportError(ctx, fmt.Errorf("unsupported appointment type %s", appointment.Type), sentry.LevelError, map[string]string{
 			"userID":         user.ID,
 			"appointment_id": appointment.ID,
 			"user_email":     user.Email,
@@ -80,7 +106,13 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 
 	internal.SendPusherRedirect(psh, user.ID, "/dashboard")
 	time.Sleep(3 * time.Second)
-	internal.SendPusherMessage(psh, user.ID, "Analyzing your call", nil)
+
+	// Send appropriate message based on appointment type
+	if appointment.Type == internal.AppointmentTypeChat {
+		internal.SendPusherMessage(psh, user.ID, "Analyzing your conversation", nil)
+	} else {
+		internal.SendPusherMessage(psh, user.ID, "Analyzing your call", nil)
+	}
 
 	start := time.Now()
 
@@ -102,35 +134,32 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 	logger.Debug("retrieved supported locations", "count", len(locations), "userID", user.ID, "appointmentID", appointment.ID)
 
 	//
-	// Get the transcript from the VAPI call
+	// Get the transcript (from VAPI call or chat messages)
 	//
-	logger.Debug("getting transcript from VAPI call", "name", user.Name, "call-id", *appointment.CallID, "userID", user.ID, "appointmentID", appointment.ID)
-	if appointment.CallID == nil || *appointment.CallID == "" {
-		logger.Error("call ID is nil", "userID", user.ID, "appointmentID", appointment.ID)
-		internal.SentryReportError(ctx, fmt.Errorf("call ID is nil for appointment %s", appointment.ID), sentry.LevelError, map[string]string{
-			"userID":         user.ID,
-			"appointment_id": appointment.ID,
-			"user_email":     user.Email,
-			"step":           "GetAppointmentTranscript",
-		})
-		internal.ProcessAppointmentFailed(ctx, fs, user, appointment, fmt.Errorf("call ID is nil for appointment %s", appointment.ID))
-		return
-	}
+	var transcript *internal.Transcript
 
-	transcript, err := internal.GetAppointmentTranscript(ctx, fs, *appointment.CallID)
-	if err != nil {
-		logger.Error("failed to get transcript from VAPI call", "error", err, "call-id", *appointment.CallID, "userID", user.ID, "appointmentID", appointment.ID)
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"userID":         user.ID,
-			"appointment_id": appointment.ID,
-			"user_email":     user.Email,
-			"call_id":        *appointment.CallID,
-			"step":           "GetAppointmentTranscript",
-		})
-		internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
-		return
+	if appointment.Type == internal.AppointmentTypeVoice {
+		logger.Debug("getting transcript from VAPI call", "name", user.Name, "call-id", *appointment.CallID, "userID", user.ID, "appointmentID", appointment.ID)
+		transcript, err = internal.GetAppointmentTranscript(ctx, fs, *appointment.CallID)
+		if err != nil {
+			logger.Error("failed to get transcript from VAPI call", "error", err, "call-id", *appointment.CallID, "userID", user.ID, "appointmentID", appointment.ID)
+			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+				"userID":         user.ID,
+				"appointment_id": appointment.ID,
+				"user_email":     user.Email,
+				"call_id":        *appointment.CallID,
+				"step":           "GetAppointmentTranscript",
+			})
+			internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
+			return
+		}
+		logger.Debug("retrieved VAPI transcript", "transcript-messages", len(transcript.Messages), "userID", user.ID, "appointmentID", appointment.ID)
+	} else {
+		// Convert chat messages to transcript format
+		logger.Debug("converting chat messages to transcript", "name", user.Name, "userID", user.ID, "appointmentID", appointment.ID, "message-count", len(appointment.ChatMessages))
+		transcript = convertChatMessagesToTranscript(appointment.ChatMessages)
+		logger.Debug("converted chat transcript", "transcript-messages", len(transcript.Messages), "userID", user.ID, "appointmentID", appointment.ID)
 	}
-	logger.Debug("retrieved transcript", "transcript-messages", len(transcript.Messages), "userID", user.ID, "appointmentID", appointment.ID)
 
 	//
 	// Get work preferences
@@ -139,13 +168,7 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 	logger.Debug("extracting GeoID from transcript", "name", user.Name, "userID", user.ID, "appointmentID", appointment.ID, "locations-count", len(locations))
 	if err := getWorkPreferences(ctx, fs, logger, transcript, locations, user); err != nil {
 		logger.Error("failed to get work preferences", "error", err, "userID", user.ID, "appointmentID", appointment.ID)
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"userID":         user.ID,
-			"appointment_id": appointment.ID,
-			"user_email":     user.Email,
-			"call_id":        *appointment.CallID,
-			"step":           "getWorkPreferences",
-		})
+		internal.SentryReportError(ctx, err, sentry.LevelError, buildErrorContext(appointment, user, "getWorkPreferences"))
 		internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
 		return
 	}
@@ -158,13 +181,7 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 	logger.Debug("generating steering query", "name", user.Name, "userID", user.ID, "appointmentID", appointment.ID)
 	if err := generateSteeringQuery(ctx, fs, user, transcript); err != nil {
 		logger.Error("failed to generate steering query", "error", err, "userID", user.ID, "appointmentID", appointment.ID)
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"userID":         user.ID,
-			"appointment_id": appointment.ID,
-			"user_email":     user.Email,
-			"call_id":        *appointment.CallID,
-			"step":           "generateSteeringQuery",
-		})
+		internal.SentryReportError(ctx, err, sentry.LevelError, buildErrorContext(appointment, user, "generateSteeringQuery"))
 		internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
 		return
 	}
@@ -176,15 +193,10 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 	logger.Debug("validating user data", "name", user.Name, "userID", user.ID, "appointmentID", appointment.ID, "has-steering-query", user.SteeringQuery != nil, "has-work-preferences", user.LocationPreference != nil)
 	if user.SteeringQuery == nil || user.LocationPreference == nil {
 		logger.Error("user steering query or work preferences not found", "userID", user.ID, "has-steering-query", user.SteeringQuery != nil, "has-work-preferences", user.LocationPreference != nil)
-		internal.SentryReportError(ctx, fmt.Errorf("user steering query or work preferences not found"), sentry.LevelError, map[string]string{
-			"userID":               user.ID,
-			"appointment_id":       appointment.ID,
-			"user_email":           user.Email,
-			"call_id":              *appointment.CallID,
-			"has_steering_query":   fmt.Sprintf("%t", user.SteeringQuery != nil),
-			"has_work_preferences": fmt.Sprintf("%t", user.LocationPreference != nil),
-			"step":                 "validate user data",
-		})
+		errorContext := buildErrorContext(appointment, user, "validate user data")
+		errorContext["has_steering_query"] = fmt.Sprintf("%t", user.SteeringQuery != nil)
+		errorContext["has_work_preferences"] = fmt.Sprintf("%t", user.LocationPreference != nil)
+		internal.SentryReportError(ctx, fmt.Errorf("user steering query or work preferences not found"), sentry.LevelError, errorContext)
 		internal.ProcessAppointmentFailed(ctx, fs, user, appointment, fmt.Errorf("user steering query or work preferences not found"))
 		return
 	}
@@ -211,7 +223,11 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 	// Get user statement
 	//
 	logger.Debug("getting user statement", "name", user.Name, "userID", user.ID, "appointmentID", appointment.ID)
-	internal.SendPusherMessage(psh, user.ID, "Analyzing your call", nil)
+	if appointment.Type == internal.AppointmentTypeChat {
+		internal.SendPusherMessage(psh, user.ID, "Analyzing your conversation", nil)
+	} else {
+		internal.SendPusherMessage(psh, user.ID, "Analyzing your call", nil)
+	}
 	if err := GetUserStatement(ctx, user, transcript, fs, logger); err != nil {
 		logger.Error("failed to get user statement", "error", err, "userID", user.ID, "appointmentID", appointment.ID)
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
@@ -413,6 +429,71 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 	logger.Debug(internal.Green("✅ appointment processing completed"), "name", user.Name, "userID", user.ID, "appointmentID", appointment.ID)
 }
 
+// convertChatMessagesToTranscript converts chat messages to transcript format
+func convertChatMessagesToTranscript(chatMessages []internal.ChatMessage) *internal.Transcript {
+	messages := make([]minds.Message, 0, len(chatMessages))
+
+	for _, msg := range chatMessages {
+		// Map chat message roles to minds roles
+		var role minds.Role
+		switch msg.Role {
+		case "user":
+			role = minds.RoleUser
+		case "assistant":
+			role = minds.RoleAssistant
+		case "system":
+			role = minds.RoleSystem
+		case "tool_call":
+			role = minds.RoleTool
+		default:
+			// Skip unknown roles or map to user as fallback
+			role = minds.RoleUser
+		}
+
+		// Skip empty messages
+		if strings.TrimSpace(msg.Content) == "" {
+			continue
+		}
+
+		messages = append(messages, minds.Message{
+			Role:    role,
+			Content: msg.Content,
+		})
+	}
+
+	return &internal.Transcript{
+		Messages: messages,
+	}
+}
+
+// getSafeCallID returns the call ID for error reporting, or "chat" for chat appointments
+func getSafeCallID(appointment *internal.Appointment) string {
+	if appointment.Type == internal.AppointmentTypeChat {
+		return "chat"
+	}
+	if appointment.CallID != nil {
+		return *appointment.CallID
+	}
+	return "nil"
+}
+
+// buildErrorContext creates error context map with conditional call_id
+func buildErrorContext(appointment *internal.Appointment, user *internal.User, step string) map[string]string {
+	context := map[string]string{
+		"userID":         user.ID,
+		"appointment_id": appointment.ID,
+		"user_email":     user.Email,
+		"step":           step,
+	}
+
+	// Only add call_id for voice appointments
+	if appointment.Type == internal.AppointmentTypeVoice && appointment.CallID != nil {
+		context["call_id"] = *appointment.CallID
+	}
+
+	return context
+}
+
 func SendRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user *internal.User, appointment *internal.Appointment, transcript *internal.Transcript, cfg *smtp.Config, logger *slog.Logger) error {
 	if cfg == nil {
 		logger.Debug("skipping recap email - no SMTP config", "userID", user.ID, "appointmentID", appointment.ID)
@@ -464,8 +545,14 @@ func SendFailureEmail(ctx context.Context, fs *internal.FirestoreClient, user *i
 			"userID":         user.ID,
 			"appointment_id": appointment.ID,
 			"user_email":     user.Email,
-			"call_id":        func() string { if appointment.CallID != nil { return *appointment.CallID } else { return "nil" } }(),
-			"step":           "GenerateFailureEmail",
+			"call_id": func() string {
+				if appointment.CallID != nil {
+					return *appointment.CallID
+				} else {
+					return "nil"
+				}
+			}(),
+			"step": "GenerateFailureEmail",
 		})
 		return fmt.Errorf("SendFailureEmail: GenerateFailureEmail: %w", err)
 	}
