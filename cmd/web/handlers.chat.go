@@ -24,8 +24,8 @@ func stringPtr(s string) *string {
 }
 
 // redactSensitiveInfo removes or masks sensitive information from tool arguments for logging
-func redactSensitiveInfo(args map[string]interface{}) map[string]interface{} {
-	redacted := make(map[string]interface{})
+func redactSensitiveInfo(args map[string]any) map[string]any {
+	redacted := make(map[string]any)
 
 	for key, value := range args {
 		switch strings.ToLower(key) {
@@ -93,15 +93,15 @@ type ToolResponse struct {
 
 // UIAction represents an action for the client to perform
 type UIAction struct {
-	Type  string                 `json:"type"`  // "redirect", "show_message", "update_status", etc.
-	Data  map[string]interface{} `json:"data"`  // Action-specific data
-	Delay int                    `json:"delay"` // Delay in milliseconds before executing
+	Type  string         `json:"type"`  // "redirect", "show_message", "update_status", etc.
+	Data  map[string]any `json:"data"`  // Action-specific data
+	Delay int            `json:"delay"` // Delay in milliseconds before executing
 }
 
 // ChatTool represents a tool that can be called by the LLM
 type ChatTool struct {
 	Definition openai.Tool
-	Handler    func(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]interface{}) (*ToolResponse, error)
+	Handler    func(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]any) (*ToolResponse, error)
 }
 
 // ChatToolRegistry holds all available tools for the chat system
@@ -130,19 +130,19 @@ func (r *ChatToolRegistry) registerDefaultTools() {
 			Function: &openai.FunctionDefinition{
 				Name:        "complete_chat",
 				Description: "Call this when the chat conversation is complete and you have gathered sufficient information about the user's career preferences. This will transition the user to the next step in their onboarding process.",
-				Parameters: map[string]interface{}{
+				Parameters: map[string]any{
 					"type": "object",
-					"properties": map[string]interface{}{
-						"summary": map[string]interface{}{
+					"properties": map[string]any{
+						"summary": map[string]any{
 							"type":        "string",
 							"description": "A brief summary of what was learned about the user's career preferences during this chat",
 						},
-						"confidence_level": map[string]interface{}{
+						"confidence_level": map[string]any{
 							"type":        "string",
 							"enum":        []string{"low", "medium", "high"},
 							"description": "Your confidence level in the information gathered (low/medium/high)",
 						},
-						"next_step_recommendation": map[string]interface{}{
+						"next_step_recommendation": map[string]any{
 							"type":        "string",
 							"description": "What you recommend as the next step for this user (e.g., 'schedule_call', 'review_profile', 'job_search')",
 						},
@@ -161,33 +161,33 @@ func (r *ChatToolRegistry) registerDefaultTools() {
 			Function: &openai.FunctionDefinition{
 				Name:        "update_user_preferences",
 				Description: "Update the user's career preferences based on information gathered during the chat conversation.",
-				Parameters: map[string]interface{}{
+				Parameters: map[string]any{
 					"type": "object",
-					"properties": map[string]interface{}{
-						"job_titles": map[string]interface{}{
+					"properties": map[string]any{
+						"job_titles": map[string]any{
 							"type":        "array",
-							"items":       map[string]interface{}{"type": "string"},
+							"items":       map[string]any{"type": "string"},
 							"description": "Job titles the user is interested in",
 						},
-						"industries": map[string]interface{}{
+						"industries": map[string]any{
 							"type":        "array",
-							"items":       map[string]interface{}{"type": "string"},
+							"items":       map[string]any{"type": "string"},
 							"description": "Industries the user wants to work in",
 						},
-						"work_location_preference": map[string]interface{}{
+						"work_location_preference": map[string]any{
 							"type":        "string",
 							"enum":        []string{"remote", "hybrid", "onsite", "flexible"},
 							"description": "User's work location preference",
 						},
-						"salary_range": map[string]interface{}{
+						"salary_range": map[string]any{
 							"type": "object",
-							"properties": map[string]interface{}{
-								"min": map[string]interface{}{"type": "number"},
-								"max": map[string]interface{}{"type": "number"},
+							"properties": map[string]any{
+								"min": map[string]any{"type": "number"},
+								"max": map[string]any{"type": "number"},
 							},
 							"description": "Desired salary range",
 						},
-						"experience_level": map[string]interface{}{
+						"experience_level": map[string]any{
 							"type":        "string",
 							"enum":        []string{"entry", "mid", "senior", "executive"},
 							"description": "User's experience level",
@@ -207,24 +207,24 @@ func (r *ChatToolRegistry) registerDefaultTools() {
 			Function: &openai.FunctionDefinition{
 				Name:        "schedule_followup",
 				Description: "Schedule a follow-up call or action based on the user's needs identified during the chat.",
-				Parameters: map[string]interface{}{
+				Parameters: map[string]any{
 					"type": "object",
-					"properties": map[string]interface{}{
-						"followup_type": map[string]interface{}{
+					"properties": map[string]any{
+						"followup_type": map[string]any{
 							"type":        "string",
 							"enum":        []string{"recruiter_call", "job_review", "resume_review", "interview_prep"},
 							"description": "Type of follow-up needed",
 						},
-						"priority": map[string]interface{}{
+						"priority": map[string]any{
 							"type":        "string",
 							"enum":        []string{"low", "medium", "high", "urgent"},
 							"description": "Priority level for the follow-up",
 						},
-						"notes": map[string]interface{}{
+						"notes": map[string]any{
 							"type":        "string",
 							"description": "Additional notes about what should be covered in the follow-up",
 						},
-						"suggested_timeframe": map[string]interface{}{
+						"suggested_timeframe": map[string]any{
 							"type":        "string",
 							"description": "When this follow-up should ideally happen (e.g., 'within 24 hours', 'this week', 'next week')",
 						},
@@ -243,9 +243,9 @@ func (r *ChatToolRegistry) registerDefaultTools() {
 			Function: &openai.FunctionDefinition{
 				Name:        "get_checklist_status",
 				Description: "Get the current status of the conversation checklist to see what topics have been covered and what information is still needed.",
-				Parameters: map[string]interface{}{
+				Parameters: map[string]any{
 					"type":       "object",
-					"properties": map[string]interface{}{},
+					"properties": map[string]any{},
 					"required":   []string{},
 				},
 			},
@@ -260,29 +260,29 @@ func (r *ChatToolRegistry) registerDefaultTools() {
 			Function: &openai.FunctionDefinition{
 				Name:        "mark_topic_progress",
 				Description: "Mark progress on a specific conversation topic and record the quality of information gathered.",
-				Parameters: map[string]interface{}{
+				Parameters: map[string]any{
 					"type": "object",
-					"properties": map[string]interface{}{
-						"topic_id": map[string]interface{}{
+					"properties": map[string]any{
+						"topic_id": map[string]any{
 							"type":        "string",
 							"enum":        []string{"introduction", "warm_up", "deal_breakers", "search_strategy", "work_environment", "location_preferences", "validation", "final_confirmation"},
 							"description": "The ID of the topic to update",
 						},
-						"status": map[string]interface{}{
+						"status": map[string]any{
 							"type":        "string",
 							"enum":        []string{"pending", "in_progress", "completed"},
 							"description": "Current status of the topic",
 						},
-						"quality": map[string]interface{}{
+						"quality": map[string]any{
 							"type":        "string",
 							"enum":        []string{"low", "medium", "high"},
 							"description": "Quality level of the information gathered",
 						},
-						"extracted_info": map[string]interface{}{
+						"extracted_info": map[string]any{
 							"type":        "object",
 							"description": "Key information extracted from the conversation about this topic",
 						},
-						"notes": map[string]interface{}{
+						"notes": map[string]any{
 							"type":        "string",
 							"description": "Additional notes about the information quality or any concerns",
 						},
@@ -301,15 +301,15 @@ func (r *ChatToolRegistry) registerDefaultTools() {
 			Function: &openai.FunctionDefinition{
 				Name:        "validate_information_quality",
 				Description: "Validate the quality and completeness of information gathered for job matching purposes.",
-				Parameters: map[string]interface{}{
+				Parameters: map[string]any{
 					"type": "object",
-					"properties": map[string]interface{}{
-						"topic_id": map[string]interface{}{
+					"properties": map[string]any{
+						"topic_id": map[string]any{
 							"type":        "string",
 							"enum":        []string{"introduction", "warm_up", "deal_breakers", "search_strategy", "work_environment", "location_preferences", "validation", "final_confirmation"},
 							"description": "The topic to validate",
 						},
-						"validation_notes": map[string]interface{}{
+						"validation_notes": map[string]any{
 							"type":        "string",
 							"description": "Notes about the validation results and any concerns",
 						},
@@ -328,9 +328,9 @@ func (r *ChatToolRegistry) registerDefaultTools() {
 			Function: &openai.FunctionDefinition{
 				Name:        "check_completion_readiness",
 				Description: "Check if the conversation has gathered sufficient information to complete the chat session.",
-				Parameters: map[string]interface{}{
+				Parameters: map[string]any{
 					"type":       "object",
-					"properties": map[string]interface{}{},
+					"properties": map[string]any{},
 					"required":   []string{},
 				},
 			},
@@ -345,14 +345,14 @@ func (r *ChatToolRegistry) registerDefaultTools() {
 			Function: &openai.FunctionDefinition{
 				Name:        "override_completion",
 				Description: "Override completion requirements in emergency situations or when user needs to end the conversation.",
-				Parameters: map[string]interface{}{
+				Parameters: map[string]any{
 					"type": "object",
-					"properties": map[string]interface{}{
-						"reason": map[string]interface{}{
+					"properties": map[string]any{
+						"reason": map[string]any{
 							"type":        "string",
 							"description": "Reason for overriding completion requirements",
 						},
-						"summary": map[string]interface{}{
+						"summary": map[string]any{
 							"type":        "string",
 							"description": "Summary of information gathered despite incomplete checklist",
 						},
@@ -386,7 +386,7 @@ func (r *ChatToolRegistry) GetAllTools() []openai.Tool {
 }
 
 // ExecuteTool executes a tool by name with the given arguments
-func (r *ChatToolRegistry) ExecuteTool(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, toolName string, args map[string]interface{}) (*ToolResponse, error) {
+func (r *ChatToolRegistry) ExecuteTool(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, toolName string, args map[string]any) (*ToolResponse, error) {
 	tool, exists := r.GetTool(toolName)
 	if !exists {
 		return &ToolResponse{
@@ -470,7 +470,7 @@ func (r *ChatToolRegistry) handleCompleteChat(ctx context.Context, app *applicat
 		UIActions: []UIAction{
 			{
 				Type: "show_message",
-				Data: map[string]interface{}{
+				Data: map[string]any{
 					"message": "Great! I've learned about your career preferences. Let me prepare your next steps...",
 					"type":    "success",
 				},
@@ -478,7 +478,7 @@ func (r *ChatToolRegistry) handleCompleteChat(ctx context.Context, app *applicat
 			},
 			{
 				Type: "redirect",
-				Data: map[string]interface{}{
+				Data: map[string]any{
 					"url": "/onboarding",
 				},
 				Delay: 3000,
@@ -498,18 +498,18 @@ func (r *ChatToolRegistry) handleCompleteChat(ctx context.Context, app *applicat
 }
 
 // handleUpdateUserPreferences handles the update_user_preferences tool call
-func (r *ChatToolRegistry) handleUpdateUserPreferences(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]interface{}) (*ToolResponse, error) {
+func (r *ChatToolRegistry) handleUpdateUserPreferences(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]any) (*ToolResponse, error) {
 	app.logger.Debug("Updating user preferences", "user_id", user.ID, "args", redactSensitiveInfo(args))
 
 	// TODO: Implement actual user preference updates
 	// This would involve updating the user's profile in the database with the new preferences
 
 	// For now, we'll log the preferences and return success
-	if jobTitles, ok := args["job_titles"].([]interface{}); ok {
+	if jobTitles, ok := args["job_titles"].([]any); ok {
 		app.logger.Info("Job titles updated", "user_id", user.ID, "job_titles", jobTitles)
 	}
 
-	if industries, ok := args["industries"].([]interface{}); ok {
+	if industries, ok := args["industries"].([]any); ok {
 		app.logger.Info("Industries updated", "user_id", user.ID, "industries", industries)
 	}
 
@@ -517,7 +517,7 @@ func (r *ChatToolRegistry) handleUpdateUserPreferences(ctx context.Context, app 
 		app.logger.Info("Work location preference updated", "user_id", user.ID, "work_location", workLocation)
 	}
 
-	if salaryRange, ok := args["salary_range"].(map[string]interface{}); ok {
+	if salaryRange, ok := args["salary_range"].(map[string]any); ok {
 		app.logger.Info("Salary range updated", "user_id", user.ID, "salary_range", salaryRange)
 	}
 
@@ -533,7 +533,7 @@ func (r *ChatToolRegistry) handleUpdateUserPreferences(ctx context.Context, app 
 }
 
 // handleScheduleFollowup handles the schedule_followup tool call
-func (r *ChatToolRegistry) handleScheduleFollowup(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]interface{}) (*ToolResponse, error) {
+func (r *ChatToolRegistry) handleScheduleFollowup(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]any) (*ToolResponse, error) {
 	app.logger.Debug("Scheduling follow-up", "user_id", user.ID, "args", redactSensitiveInfo(args))
 
 	followupType, _ := args["followup_type"].(string)
@@ -562,7 +562,7 @@ func (r *ChatToolRegistry) handleScheduleFollowup(ctx context.Context, app *appl
 		UIActions: []UIAction{
 			{
 				Type: "show_message",
-				Data: map[string]interface{}{
+				Data: map[string]any{
 					"message": "I've scheduled a follow-up for you. You'll receive more details soon!",
 					"type":    "info",
 				},
@@ -573,7 +573,7 @@ func (r *ChatToolRegistry) handleScheduleFollowup(ctx context.Context, app *appl
 }
 
 // handleGetChecklistStatus retrieves the current checklist status
-func (r *ChatToolRegistry) handleGetChecklistStatus(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]interface{}) (*ToolResponse, error) {
+func (r *ChatToolRegistry) handleGetChecklistStatus(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]any) (*ToolResponse, error) {
 	app.logger.Info("Getting checklist status", "user_id", user.ID, "appointment_id", appointment.ID)
 
 	// Ensure checklist exists
@@ -613,7 +613,7 @@ func (r *ChatToolRegistry) handleGetChecklistStatus(ctx context.Context, app *ap
 }
 
 // handleMarkTopicProgress updates progress on a conversation topic
-func (r *ChatToolRegistry) handleMarkTopicProgress(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]interface{}) (*ToolResponse, error) {
+func (r *ChatToolRegistry) handleMarkTopicProgress(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]any) (*ToolResponse, error) {
 	topicID, _ := args["topic_id"].(string)
 	status, _ := args["status"].(string)
 	quality, _ := args["quality"].(string)
@@ -627,8 +627,8 @@ func (r *ChatToolRegistry) handleMarkTopicProgress(ctx context.Context, app *app
 	}
 
 	// Extract info from args
-	var extractedInfo map[string]interface{}
-	if info, ok := args["extracted_info"].(map[string]interface{}); ok {
+	var extractedInfo map[string]any
+	if info, ok := args["extracted_info"].(map[string]any); ok {
 		extractedInfo = info
 	}
 
@@ -661,7 +661,7 @@ func (r *ChatToolRegistry) handleMarkTopicProgress(ctx context.Context, app *app
 }
 
 // handleValidateInformationQuality validates the quality of gathered information
-func (r *ChatToolRegistry) handleValidateInformationQuality(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]interface{}) (*ToolResponse, error) {
+func (r *ChatToolRegistry) handleValidateInformationQuality(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]any) (*ToolResponse, error) {
 	topicID, _ := args["topic_id"].(string)
 	validationNotes, _ := args["validation_notes"].(string)
 
@@ -705,7 +705,7 @@ func (r *ChatToolRegistry) handleValidateInformationQuality(ctx context.Context,
 }
 
 // handleCheckCompletionReadiness checks if the conversation is ready for completion
-func (r *ChatToolRegistry) handleCheckCompletionReadiness(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]interface{}) (*ToolResponse, error) {
+func (r *ChatToolRegistry) handleCheckCompletionReadiness(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]any) (*ToolResponse, error) {
 	app.logger.Debug(internal.Green("Checking completion readiness"), "name", user.Name, "user_id", user.ID, "appointment_id", appointment.ID)
 
 	// Ensure checklist exists
@@ -739,7 +739,7 @@ func (r *ChatToolRegistry) handleCheckCompletionReadiness(ctx context.Context, a
 }
 
 // handleOverrideCompletion handles emergency completion override
-func (r *ChatToolRegistry) handleOverrideCompletion(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]interface{}) (*ToolResponse, error) {
+func (r *ChatToolRegistry) handleOverrideCompletion(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]any) (*ToolResponse, error) {
 	reason, _ := args["reason"].(string)
 	summary, _ := args["summary"].(string)
 
@@ -774,7 +774,7 @@ func (r *ChatToolRegistry) handleOverrideCompletion(ctx context.Context, app *ap
 		UIActions: []UIAction{
 			{
 				Type: "show_message",
-				Data: map[string]interface{}{
+				Data: map[string]any{
 					"message": "Chat session completed. You'll be redirected to the next step shortly.",
 					"type":    "success",
 				},
@@ -782,7 +782,7 @@ func (r *ChatToolRegistry) handleOverrideCompletion(ctx context.Context, app *ap
 			},
 			{
 				Type: "redirect",
-				Data: map[string]interface{}{
+				Data: map[string]any{
 					"url": "/onboarding",
 				},
 				Delay: 3000,
@@ -1098,7 +1098,7 @@ func (app *application) handleWebSocketUserMessage(conn *websocket.Conn, user *i
 
 		if canComplete {
 			// Trigger complete_chat
-			args := map[string]interface{}{
+			args := map[string]any{
 				"summary":                  "Conversation completed due to length limit",
 				"confidence_level":         "medium",
 				"next_step_recommendation": "review_profile",
@@ -1117,7 +1117,7 @@ func (app *application) handleWebSocketUserMessage(conn *websocket.Conn, user *i
 			}
 		} else {
 			// Trigger override_completion
-			args := map[string]interface{}{
+			args := map[string]any{
 				"reason":  fmt.Sprintf("Conversation exceeded maximum length (%d messages)", internal.MaxConversationLength),
 				"summary": fmt.Sprintf("Conversation ended due to length limit. Issues: %s", strings.Join(issues, ", ")),
 			}
@@ -1319,7 +1319,7 @@ YOUR TASK: Complete this checklist by calling 'mark_topic_progress' after each u
 			// Parse tool response and add as tool message
 			if strings.HasPrefix(msg.Content, "TOOL_RESPONSE:") {
 				jsonStr := strings.TrimPrefix(msg.Content, "TOOL_RESPONSE:")
-				var toolData map[string]interface{}
+				var toolData map[string]any
 				if err := json.Unmarshal([]byte(jsonStr), &toolData); err != nil {
 					app.logger.Error("Failed to parse stored tool response", "error", err, "content", msg.Content)
 					continue
@@ -1571,7 +1571,7 @@ YOUR TASK: Complete this checklist by calling 'mark_topic_progress' after each u
 
 			// Save tool call to chat history as a special message type
 			// According to OpenAI spec: use "tool" role with ToolCallID
-			toolCallData := map[string]interface{}{
+			toolCallData := map[string]any{
 				"tool_call_id": toolCall.ID,
 				"content":      toolResponse.Content,
 			}
@@ -1670,7 +1670,7 @@ Continue the conversation naturally after processing the tool results.
 						// Parse tool response and add as tool message
 						if strings.HasPrefix(msg.Content, "TOOL_RESPONSE:") {
 							jsonStr := strings.TrimPrefix(msg.Content, "TOOL_RESPONSE:")
-							var toolData map[string]interface{}
+							var toolData map[string]any
 							if err := json.Unmarshal([]byte(jsonStr), &toolData); err != nil {
 								app.logger.Error("Failed to parse stored tool response in follow-up", "error", err)
 								continue
@@ -1941,7 +1941,7 @@ func (app *application) getChatHistory(w http.ResponseWriter, r *http.Request) {
 		filteredMessages = append(filteredMessages, message)
 	}
 
-	response.JSON(w, http.StatusOK, map[string]interface{}{
+	response.JSON(w, http.StatusOK, map[string]any{
 		"messages":       filteredMessages,
 		"appointment_id": appointmentID,
 		"debug_mode":     user.IsSuperUser, // Let client know if debug mode is enabled
@@ -2062,7 +2062,7 @@ func (app *application) fastForwardChat(w http.ResponseWriter, r *http.Request) 
 	}
 
 	for _, topicID := range topicsToComplete {
-		extractedInfo := map[string]interface{}{
+		extractedInfo := map[string]any{
 			"source":         "transcript_injection",
 			"auto_populated": true,
 			"timestamp":      time.Now(),
@@ -2117,7 +2117,7 @@ func (app *application) fastForwardChat(w http.ResponseWriter, r *http.Request) 
 
 	app.logger.Info("Chat fast-forwarded successfully", "appointment_id", appointmentID, "injected_messages", len(messages), "final_total_messages", len(appointment.ChatMessages))
 
-	response.JSON(w, http.StatusOK, map[string]interface{}{
+	response.JSON(w, http.StatusOK, map[string]any{
 		"success":           true,
 		"appointment_id":    appointmentID,
 		"injected_messages": len(messages),

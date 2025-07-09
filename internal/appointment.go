@@ -667,6 +667,28 @@ func GetChatHistory(appointment *Appointment) ([]ChatMessage, error) {
 	return appointment.ChatMessages, nil
 }
 
+// GetChatMessages retrieves chat messages for an appointment by fetching the appointment first
+func GetChatMessages(ctx context.Context, fs *FirestoreClient, userID, appointmentID string) ([]ChatMessage, error) {
+	// Search through the appointments collection to find the appointment
+	query := fs.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).Where("ID", "==", appointmentID).Limit(1)
+
+	iter := query.Documents(ctx)
+	doc, err := iter.Next()
+	if err != nil {
+		if err == iterator.Done {
+			return nil, fmt.Errorf("appointment %s not found", appointmentID)
+		}
+		return nil, fmt.Errorf("failed to query appointment: %w", err)
+	}
+
+	var appointment Appointment
+	if err := doc.DataTo(&appointment); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal appointment: %w", err)
+	}
+
+	return GetChatHistory(&appointment)
+}
+
 // Constants for checklist management
 const (
 	ChecklistStatusInProgress         = "in_progress"

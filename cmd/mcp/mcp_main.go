@@ -11,11 +11,11 @@ import (
 
 func main() {
 	// Create MCP server
-	s := server.NewMCPServer("talent-rodeo-firestore", "1.0.0",
+	s := server.NewMCPServer("talent-rodeo-mcp", "1.0.0",
 		server.WithLogging(),
 		server.WithToolCapabilities(true),
 		server.WithInstructions(`
-Provides access to Firestore data in the "talent-rodeo-dev" project, including users and GeoIDs.
+Provides access to Firestore data in the project.
 
 Available operations:
 - List users with pagination
@@ -29,6 +29,8 @@ Available operations:
 - Get details for specific search criteria by ID
 - Get search criteria that need searching (not searched in 24h)
 - Test Firestore connection
+- List appointments for a user (with optional type filtering)
+- Get chat messages for a specific appointment (with optional checklist details)
 
 The data is read directly from Firestore and reflects the current state of the database.`),
 	)
@@ -45,6 +47,9 @@ The data is read directly from Firestore and reflects the current state of the d
 	s.AddTool(NewGetSearchCriteriaTool(), getSearchCriteriaHandler)
 	s.AddTool(NewGetSearchCriteriaNeedsSearchTool(), getSearchCriteriaNeedsSearchHandler)
 	s.AddTool(NewTestFirestoreConnectionTool(), testFirestoreConnectionHandler)
+	// Appointment tools
+	s.AddTool(NewListAppointmentsTool(), listAppointmentsHandler)
+	s.AddTool(NewGetAppointmentChatTool(), getAppointmentChatHandler)
 
 	// Start server
 	if err := server.ServeStdio(s); err != nil {
