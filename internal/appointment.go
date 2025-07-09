@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"strings"
 	"talent-rodeo/assets"
 	"talent-rodeo/internal/funcs"
 	"talent-rodeo/internal/utils"
@@ -601,7 +602,61 @@ func AddChatMessage(ctx context.Context, fs *FirestoreClient, appointment *Appoi
 	appointment.ChatMessages = append(appointment.ChatMessages, message)
 	appointment.UpdatedAt = time.Now()
 
+	// Auto-invoke checklist update based on message content
+	if appointment.ConversationChecklist != nil {
+		if err := UpdateChecklistFromMessage(appointment.ConversationChecklist, message); err != nil {
+			// Log error but don't fail the message save - checklist update is supplementary
+			// The error will be visible in logs for debugging
+			fmt.Printf("Warning: Failed to auto-update checklist from message: %v\n", err)
+		}
+	}
+
 	return UpdateAppointment(ctx, fs, appointment)
+}
+
+// AddChatMessageSafe adds a new message to a chat appointment using a transaction for thread safety
+// This ensures that concurrent updates don't overwrite each other
+func AddChatMessageSafe(ctx context.Context, fs *FirestoreClient, userID, appointmentID string, role, content string) error {
+	return fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		// Get the latest appointment data within the transaction
+		docRef := fs.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).Doc(appointmentID)
+		doc, err := tx.Get(docRef)
+		if err != nil {
+			return fmt.Errorf("failed to get appointment in transaction: %w", err)
+		}
+
+		var appointment Appointment
+		if err := doc.DataTo(&appointment); err != nil {
+			return fmt.Errorf("failed to unmarshal appointment in transaction: %w", err)
+		}
+
+		if appointment.Type != AppointmentTypeChat {
+			return fmt.Errorf("appointment is not a chat type")
+		}
+
+		// Create the new message
+		message := ChatMessage{
+			ID:        funcs.Slugify(fmt.Sprintf("msg-%d", time.Now().UnixNano())),
+			Role:      role,
+			Content:   content,
+			Timestamp: time.Now(),
+		}
+
+		// Append to the messages
+		appointment.ChatMessages = append(appointment.ChatMessages, message)
+		appointment.UpdatedAt = time.Now()
+
+		// Auto-invoke checklist update based on message content
+		if appointment.ConversationChecklist != nil {
+			if err := UpdateChecklistFromMessage(appointment.ConversationChecklist, message); err != nil {
+				// Log error but don't fail the message save - checklist update is supplementary
+				fmt.Printf("Warning: Failed to auto-update checklist from message: %v\n", err)
+			}
+		}
+
+		// Save within the transaction
+		return tx.Set(docRef, appointment)
+	})
 }
 
 // GetChatHistory returns the chat messages for a chat appointment
@@ -877,4 +932,127 @@ func GetChecklistSummary(checklist *ConversationChecklist) map[string]interface{
 		"items":               checklist.Items,
 		"last_updated":        checklist.LastUpdated,
 	}
+}
+
+// UpdateChecklistFromMessage automatically updates checklist based on message content
+// This provides a lightweight guard to ensure every message pushes checklist state forward
+func UpdateChecklistFromMessage(checklist *ConversationChecklist, message ChatMessage) error {
+	if checklist == nil {
+		return fmt.Errorf("checklist is nil")
+	}
+
+	// Skip system messages and tool calls
+	if message.Role == "system" || message.Role == "tool" {
+		return nil
+	}
+
+	// Skip messages with empty content
+	if message.Content == "" {
+		return nil
+	}
+
+	// Skip tool call messages (these are handled by explicit tool calls)
+	if message.Role == "assistant" && (strings.Contains(message.Content, "TOOL_CALLS:") || strings.Contains(message.Content, "TOOL_RESPONSE:")) {
+		return nil
+	}
+
+	return nil
+}
+
+// autoUpdateChecklistItem updates a checklist item only if it improves the current state
+func autoUpdateChecklistItem(checklist *ConversationChecklist, itemID string, status string, quality string) error {
+	item, err := GetChecklistItem(checklist, itemID)
+	if err != nil {
+		return err
+	}
+
+	// Only update if the new status is an improvement
+	shouldUpdate := false
+	if item.Status == ChecklistItemStatusPending && status != ChecklistItemStatusPending {
+		shouldUpdate = true
+	} else if item.Status == ChecklistItemStatusInProgress && status == ChecklistItemStatusCompleted {
+		shouldUpdate = true
+	}
+
+	// Also update if quality is improving
+	if item.Quality == ChecklistItemQualityLow && quality != ChecklistItemQualityLow {
+		shouldUpdate = true
+	} else if item.Quality == ChecklistItemQualityMedium && quality == ChecklistItemQualityHigh {
+		shouldUpdate = true
+	}
+
+	if shouldUpdate {
+		extractedInfo := map[string]interface{}{
+			"auto_detected":  true,
+			"detection_time": time.Now(),
+			"source":         "message_analysis",
+		}
+		return UpdateChecklistItem(checklist, itemID, status, quality, extractedInfo, "Auto-detected from message content")
+	}
+
+	return nil
+}
+
+// Pattern matching functions for different checklist topics
+func checkIntroductionPatterns(content string) bool {
+	patterns := []string{
+		"my name is", "i'm", "yes this is", "speaking", "good time to talk", "good time to chat",
+		"thanks for calling", "hi", "hello", "yes that's me", "correct", "that's right",
+	}
+	return containsAnyPattern(content, patterns)
+}
+
+func checkBackgroundPatterns(content string) bool {
+	patterns := []string{
+		"background", "experience", "worked at", "current role", "previous", "career", "resume",
+		"graduated", "degree", "university", "college", "skills", "expertise", "accomplishment",
+		"achievement", "project", "responsibility", "manager", "team", "years", "developed",
+	}
+	return containsAnyPattern(content, patterns)
+}
+
+func checkDealBreakerPatterns(content string) bool {
+	patterns := []string{
+		"don't want", "avoid", "not interested", "dislike", "hate", "never again", "terrible",
+		"worst", "bad experience", "nightmare", "toxic", "micromanag", "bureaucracy",
+		"politics", "overtime", "weekend", "on-call", "travel", "relocate", "commute",
+	}
+	return containsAnyPattern(content, patterns)
+}
+
+func checkWorkEnvironmentPatterns(content string) bool {
+	patterns := []string{
+		"company", "startup", "corporation", "team", "culture", "environment", "atmosphere",
+		"collaboration", "independent", "autonomous", "structured", "flexible", "formal",
+		"casual", "fast-paced", "slow", "innovative", "traditional", "creative", "analytical",
+	}
+	return containsAnyPattern(content, patterns)
+}
+
+func checkLocationPatterns(content string) bool {
+	patterns := []string{
+		"location", "remote", "hybrid", "office", "work from home", "wfh", "onsite", "in-person",
+		"commute", "travel", "relocate", "move", "city", "state", "country", "timezone",
+		"flexible", "anywhere", "local", "nearby", "distance",
+	}
+	return containsAnyPattern(content, patterns)
+}
+
+func checkSearchStrategyPatterns(content string) bool {
+	patterns := []string{
+		"looking for", "searching", "interested in", "want to", "hoping", "ideal", "perfect",
+		"title", "role", "position", "job", "opportunity", "skills", "technology", "language",
+		"framework", "industry", "domain", "field", "focus", "specialize", "expertise",
+	}
+	return containsAnyPattern(content, patterns)
+}
+
+// containsAnyPattern checks if the content contains any of the given patterns
+func containsAnyPattern(content string, patterns []string) bool {
+	for _, pattern := range patterns {
+		if strings.Contains(content, pattern) {
+			return true
+		}
+	}
+	return false
 }

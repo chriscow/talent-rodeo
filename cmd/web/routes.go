@@ -74,6 +74,7 @@ func (app *application) routes() http.Handler {
 			mux.HandleFunc("/chat/ws", app.streamChatResponse, "GET")     // WebSocket endpoint
 			mux.HandleFunc("/chat/end", app.endChat, "POST")
 			mux.HandleFunc("/api/chat/history", app.getChatHistory, "GET")
+			mux.HandleFunc("/chat/fast-forward", app.fastForwardChat, "POST") // Testing: inject transcript
 
 			// Main onboarding route - displays different templates based on user's onboarding state:
 			// - StepInitial: onboarding-resume-upload.html

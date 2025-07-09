@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"talent-rodeo/cmd/web/simulate"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
 	"time"
 
+	"github.com/chriscow/vapi-go"
 	"github.com/gorilla/websocket"
 	"github.com/sashabaranov/go-openai"
 )
@@ -19,6 +21,38 @@ import (
 // Helper function to create string pointers
 func stringPtr(s string) *string {
 	return &s
+}
+
+// redactSensitiveInfo removes or masks sensitive information from tool arguments for logging
+func redactSensitiveInfo(args map[string]interface{}) map[string]interface{} {
+	redacted := make(map[string]interface{})
+
+	for key, value := range args {
+		switch strings.ToLower(key) {
+		case "salary_range", "salary", "compensation", "pay":
+			redacted[key] = "[REDACTED]"
+		case "location", "address", "city", "state", "zip", "zipcode":
+			redacted[key] = "[REDACTED]"
+		case "phone", "phone_number", "email", "email_address":
+			redacted[key] = "[REDACTED]"
+		case "name", "first_name", "last_name", "full_name":
+			redacted[key] = "[REDACTED]"
+		case "ssn", "social_security_number", "tax_id":
+			redacted[key] = "[REDACTED]"
+		case "notes", "summary", "extracted_info":
+			// For notes and summaries, truncate if too long
+			if str, ok := value.(string); ok && len(str) > 100 {
+				redacted[key] = str[:100] + "...[TRUNCATED]"
+			} else {
+				redacted[key] = value
+			}
+		default:
+			// Keep other values as-is
+			redacted[key] = value
+		}
+	}
+
+	return redacted
 }
 
 // WebSocket upgrader with CORS support
@@ -368,8 +402,8 @@ func (r *ChatToolRegistry) ExecuteTool(ctx context.Context, app *application, us
 // Tool Handler Functions
 
 // handleCompleteChat handles the complete_chat tool call
-func (r *ChatToolRegistry) handleCompleteChat(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]interface{}) (*ToolResponse, error) {
-	app.logger.Info("Chat completion requested", "user_id", user.ID, "appointment_id", appointment.ID, "args", args)
+func (r *ChatToolRegistry) handleCompleteChat(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]any) (*ToolResponse, error) {
+	app.logger.Debug("Chat completion requested", "user_id", user.ID, "appointment_id", appointment.ID, "args", redactSensitiveInfo(args))
 
 	// Extract arguments
 	summary, _ := args["summary"].(string)
@@ -465,7 +499,7 @@ func (r *ChatToolRegistry) handleCompleteChat(ctx context.Context, app *applicat
 
 // handleUpdateUserPreferences handles the update_user_preferences tool call
 func (r *ChatToolRegistry) handleUpdateUserPreferences(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]interface{}) (*ToolResponse, error) {
-	app.logger.Info("Updating user preferences", "user_id", user.ID, "args", args)
+	app.logger.Debug("Updating user preferences", "user_id", user.ID, "args", redactSensitiveInfo(args))
 
 	// TODO: Implement actual user preference updates
 	// This would involve updating the user's profile in the database with the new preferences
@@ -500,7 +534,7 @@ func (r *ChatToolRegistry) handleUpdateUserPreferences(ctx context.Context, app 
 
 // handleScheduleFollowup handles the schedule_followup tool call
 func (r *ChatToolRegistry) handleScheduleFollowup(ctx context.Context, app *application, user *internal.User, appointment *internal.Appointment, args map[string]interface{}) (*ToolResponse, error) {
-	app.logger.Info("Scheduling follow-up", "user_id", user.ID, "args", args)
+	app.logger.Debug("Scheduling follow-up", "user_id", user.ID, "args", redactSensitiveInfo(args))
 
 	followupType, _ := args["followup_type"].(string)
 	priority, _ := args["priority"].(string)
@@ -929,6 +963,8 @@ func (app *application) streamChatResponse(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	app.logger.Debug("streamChatResponse -> appointment", "chatHistory", len(appointment.ChatMessages))
+
 	if appointment.Type != internal.AppointmentTypeChat {
 		http.Error(w, "Not a chat appointment", http.StatusBadRequest)
 		return
@@ -968,7 +1004,7 @@ func (app *application) streamChatResponse(w http.ResponseWriter, r *http.Reques
 		switch msg.Type {
 		case "user_message":
 			// Save user message and generate AI response
-			go app.handleWebSocketUserMessage(conn, user, appointment, msg.Content)
+			go app.handleWebSocketUserMessage(conn, user, appointmentID, msg.Content)
 		case "ping":
 			// Respond to ping with pong
 			pong := WebSocketMessage{Type: "pong"}
@@ -980,8 +1016,26 @@ func (app *application) streamChatResponse(w http.ResponseWriter, r *http.Reques
 }
 
 // handleWebSocketUserMessage processes a user message and streams the AI response via WebSocket
-func (app *application) handleWebSocketUserMessage(conn *websocket.Conn, user *internal.User, appointment *internal.Appointment, userMessage string) {
+func (app *application) handleWebSocketUserMessage(conn *websocket.Conn, user *internal.User, appointmentID string, userMessage string) {
 	ctx := context.Background()
+
+	// ALWAYS fetch fresh appointment data to avoid stale data issues
+	appointment, err := internal.GetAppointment(ctx, app.fs, user.ID, appointmentID)
+	if err != nil {
+		app.logger.Error("Failed to get fresh appointment data", "error", err, "user_id", user.ID, "appointment_id", appointmentID)
+		errorMsg := WebSocketMessage{
+			Type:  "error",
+			Error: "Failed to get appointment data",
+		}
+		conn.WriteJSON(errorMsg)
+		return
+	}
+
+	// Log the initial state
+	app.logger.Debug("handleWebSocketUserMessage ENTRY",
+		"appointment_id", appointment.ID,
+		"message_count_before", len(appointment.ChatMessages),
+		"user_message", userMessage)
 
 	// Ensure checklist is initialized
 	if appointment.ConversationChecklist == nil {
@@ -1005,6 +1059,17 @@ func (app *application) handleWebSocketUserMessage(conn *websocket.Conn, user *i
 		return
 	}
 
+	// Verify the message was saved by reading it back immediately
+	verifyAppointment, err := internal.GetAppointment(ctx, app.fs, user.ID, appointment.ID)
+	if err != nil {
+		app.logger.Error("Failed to verify message save", "error", err)
+	} else {
+		app.logger.Debug("Message save verification",
+			"expected_count", len(appointment.ChatMessages),
+			"actual_count", len(verifyAppointment.ChatMessages),
+			"save_successful", len(verifyAppointment.ChatMessages) == len(appointment.ChatMessages))
+	}
+
 	// Increment message count in checklist
 	internal.IncrementMessageCount(appointment.ConversationChecklist)
 
@@ -1017,12 +1082,142 @@ func (app *application) handleWebSocketUserMessage(conn *websocket.Conn, user *i
 		conn.WriteJSON(warningMsg)
 	}
 
+	// HARD STOP: Force completion if conversation exceeds maximum length
+	if appointment.ConversationChecklist.MessageCount >= internal.MaxConversationLength {
+		app.logger.Warn("Conversation exceeded maximum length, forcing completion",
+			"user_id", user.ID,
+			"appointment_id", appointmentID,
+			"message_count", appointment.ConversationChecklist.MessageCount,
+			"max_length", internal.MaxConversationLength)
+
+		// First try to check completion readiness
+		canComplete, issues, err := internal.ValidateChecklistCompletion(appointment.ConversationChecklist)
+		if err != nil {
+			app.logger.Error("Failed to validate checklist during hard stop", "error", err)
+		}
+
+		if canComplete {
+			// Trigger complete_chat
+			args := map[string]interface{}{
+				"summary":                  "Conversation completed due to length limit",
+				"confidence_level":         "medium",
+				"next_step_recommendation": "review_profile",
+			}
+			toolResponse, err := chatToolRegistry.ExecuteTool(ctx, app, user, appointment, "complete_chat", args)
+			if err != nil {
+				app.logger.Error("Failed to execute complete_chat during hard stop", "error", err)
+			} else {
+				// Send completion response
+				responseMsg := WebSocketMessage{
+					Type:         "tool_response",
+					ToolResponse: toolResponse,
+				}
+				conn.WriteJSON(responseMsg)
+				return // Don't continue streaming
+			}
+		} else {
+			// Trigger override_completion
+			args := map[string]interface{}{
+				"reason":  fmt.Sprintf("Conversation exceeded maximum length (%d messages)", internal.MaxConversationLength),
+				"summary": fmt.Sprintf("Conversation ended due to length limit. Issues: %s", strings.Join(issues, ", ")),
+			}
+			toolResponse, err := chatToolRegistry.ExecuteTool(ctx, app, user, appointment, "override_completion", args)
+			if err != nil {
+				app.logger.Error("Failed to execute override_completion during hard stop", "error", err)
+			} else {
+				// Send completion response
+				responseMsg := WebSocketMessage{
+					Type:         "tool_response",
+					ToolResponse: toolResponse,
+				}
+				conn.WriteJSON(responseMsg)
+				return // Don't continue streaming
+			}
+		}
+
+		// If both completion methods fail, send error and stop
+		errorMsg := WebSocketMessage{
+			Type:  "error",
+			Error: "Conversation exceeded maximum length and completion failed",
+		}
+		conn.WriteJSON(errorMsg)
+		return
+	}
+
 	// Stream AI response
-	app.streamAIResponseViaWebSocket(ctx, conn, user, appointment)
+	app.streamAIResponseViaWebSocket(ctx, conn, user, appointmentID)
 }
 
 // streamAIResponseViaWebSocket generates and streams the AI response via WebSocket
-func (app *application) streamAIResponseViaWebSocket(ctx context.Context, conn *websocket.Conn, user *internal.User, appointment *internal.Appointment) {
+func (app *application) streamAIResponseViaWebSocket(ctx context.Context, conn *websocket.Conn, user *internal.User, appointmentID string) {
+	// Log initial state
+	app.logger.Debug("streamAIResponseViaWebSocket ENTRY",
+		"appointment_id", appointmentID,
+		"initial_message_count", 0,
+		"user_id", user.ID)
+
+	// IMPORTANT: Always fetch fresh appointment data to avoid stale data issues
+	// This ensures we see any updates made by other handlers (like fastForwardChat)
+	var freshAppointment *internal.Appointment
+	var err error
+
+	// Implement retry with exponential backoff to handle eventual consistency
+	maxRetries := 5
+	for retries := 0; retries < maxRetries; retries++ {
+		freshAppointment, err = internal.GetAppointment(ctx, app.fs, user.ID, appointmentID)
+		if err != nil {
+			app.logger.Error("Failed to fetch fresh appointment data",
+				"error", err,
+				"user_id", user.ID,
+				"appointment_id", appointmentID,
+				"retry", retries)
+
+			if retries < maxRetries-1 {
+				backoffMs := 100 * (1 << retries) // 100ms, 200ms, 400ms, etc.
+				time.Sleep(time.Duration(backoffMs) * time.Millisecond)
+				continue
+			}
+
+			// Final retry failed
+			errorMsg := WebSocketMessage{
+				Type:  "error",
+				Error: "Failed to get latest appointment data",
+			}
+			conn.WriteJSON(errorMsg)
+			return
+		}
+
+		// Log what we got
+		app.logger.Debug("Fetched appointment data",
+			"retry", retries,
+			"message_count", len(freshAppointment.ChatMessages),
+			"expecting_more_than", 2)
+
+		// For fastForward scenario, we expect more than 2 messages
+		// If we're still seeing only 2, it might be a consistency issue
+		if len(freshAppointment.ChatMessages) <= 2 && retries < maxRetries-1 {
+			// Check if this might be a fastForward scenario by looking for super user
+			if user.IsSuperUser {
+				app.logger.Warn("Potential stale data detected for super user, retrying",
+					"current_messages", len(freshAppointment.ChatMessages),
+					"retry", retries)
+
+				backoffMs := 100 * (1 << retries)
+				time.Sleep(time.Duration(backoffMs) * time.Millisecond)
+				continue
+			}
+		}
+
+		// We got data, break out of retry loop
+		break
+	}
+
+	// Use the fresh appointment data from here on
+	appointment := freshAppointment
+	app.logger.Debug(internal.BGYellow("streamAIResponseViaWebSocket USING FRESH DATA"),
+		"chatHistory", len(freshAppointment.ChatMessages),
+		"appointment_id", freshAppointment.ID)
+
 	// Build assistant overrides for personalized chat
 	assistantOverrides, err := internal.BuildAssistantOverrides(ctx, user, app.fs, app.logger)
 	if err != nil {
@@ -1045,20 +1240,16 @@ func (app *application) streamAIResponseViaWebSocket(ctx context.Context, conn *
 		systemPrompt = assistantOverrides.Model.Messages[0].Content
 	}
 
-	// Add checklist status awareness to system prompt
+	// Add checklist status awareness to system prompt (compact JSON format)
 	if appointment.ConversationChecklist != nil {
 		checklistSummary := internal.GetChecklistSummary(appointment.ConversationChecklist)
+
+		// Use compact JSON format to save tokens
 		systemPrompt += fmt.Sprintf(`
 
-CONVERSATION CHECKLIST STATUS:
-- Overall Status: %s
-- Completion Attempts: %d/%d
-- Message Count: %d/%d
-- Progress: %d/%d completed (%d required)
-- Can Complete: %v
+CHECKLIST: {"status":"%s","attempts":%d/%d,"messages":%d/%d,"progress":%d/%d,"required":%d,"ready":%v}
 
-YOUR TASK:
-Your primary goal is to complete this checklist. After each user response, you MUST consider if you can update the checklist by calling the 'mark_topic_progress' tool. Do not wait until the end of the conversation.
+YOUR TASK: Complete this checklist by calling 'mark_topic_progress' after each user response. Before asking questions, check if the slot is already high quality using 'get_checklist_status'. Ask clarifying questions only for low-quality slots.
 `,
 			checklistSummary["overall_status"],
 			checklistSummary["completion_attempts"],
@@ -1090,14 +1281,69 @@ Your primary goal is to complete this checklist. After each user response, you M
 	}
 
 	for _, msg := range chatHistory {
-		role := openai.ChatMessageRoleUser
-		if msg.Role == "assistant" {
-			role = openai.ChatMessageRoleAssistant
+		// Skip messages with empty content
+		if msg.Content == "" {
+			continue
 		}
-		messages = append(messages, openai.ChatCompletionMessage{
-			Role:    role,
-			Content: msg.Content,
-		})
+
+		// Handle different message types according to OpenAI spec
+		switch msg.Role {
+		case openai.ChatMessageRoleUser:
+			messages = append(messages, openai.ChatCompletionMessage{
+				Role:    openai.ChatMessageRoleUser,
+				Content: msg.Content,
+			})
+		case openai.ChatMessageRoleAssistant:
+			// Check if this is a tool call message or regular assistant message
+			if strings.HasPrefix(msg.Content, "TOOL_CALLS:") {
+				// Parse the stored tool calls and add them as an assistant message with tool calls
+				jsonStr := strings.TrimPrefix(msg.Content, "TOOL_CALLS:")
+				var toolCalls []openai.ToolCall
+				if err := json.Unmarshal([]byte(jsonStr), &toolCalls); err != nil {
+					app.logger.Error("Failed to parse stored tool calls", "error", err, "content", msg.Content)
+					continue
+				}
+				messages = append(messages, openai.ChatCompletionMessage{
+					Role:      openai.ChatMessageRoleAssistant,
+					ToolCalls: toolCalls,
+					// Content is empty for tool call messages per OpenAI spec
+				})
+			} else {
+				// Regular assistant message
+				messages = append(messages, openai.ChatCompletionMessage{
+					Role:    openai.ChatMessageRoleAssistant,
+					Content: msg.Content,
+				})
+			}
+		case openai.ChatMessageRoleTool:
+			// Parse tool response and add as tool message
+			if strings.HasPrefix(msg.Content, "TOOL_RESPONSE:") {
+				jsonStr := strings.TrimPrefix(msg.Content, "TOOL_RESPONSE:")
+				var toolData map[string]interface{}
+				if err := json.Unmarshal([]byte(jsonStr), &toolData); err != nil {
+					app.logger.Error("Failed to parse stored tool response", "error", err, "content", msg.Content)
+					continue
+				}
+
+				// Extract tool call ID and response content
+				if toolCallID, ok := toolData["tool_call_id"].(string); ok {
+					if content, ok := toolData["content"].(string); ok {
+						messages = append(messages, openai.ChatCompletionMessage{
+							Role:       openai.ChatMessageRoleTool,
+							Content:    content,
+							ToolCallID: toolCallID,
+						})
+					}
+				}
+			}
+		case openai.ChatMessageRoleSystem:
+			// System messages are typically handled separately, skip in main conversation
+			continue
+		default:
+			// Skip unknown message types
+			app.logger.Debug("Skipping unknown message type", "role", msg.Role)
+			continue
+		}
 	}
 
 	// Create streaming request with tools
@@ -1222,6 +1468,19 @@ Your primary goal is to complete this checklist. After each user response, you M
 	if len(toolCalls) > 0 {
 		app.logger.Info("Processing tool calls", "count", len(toolCalls), "user_id", user.ID)
 
+		// Save the assistant's tool call message to chat history with proper role
+		// According to OpenAI spec: assistant role with ToolCalls array and empty/minimal content
+		toolCallsJSON, err := json.Marshal(toolCalls)
+		if err != nil {
+			app.logger.Error("Failed to marshal tool calls", "error", err)
+		} else {
+			// Store as assistant message with special marker to distinguish from regular assistant messages
+			toolCallContent := "TOOL_CALLS:" + string(toolCallsJSON)
+			if err := internal.AddChatMessage(ctx, app.fs, appointment, openai.ChatMessageRoleAssistant, toolCallContent); err != nil {
+				app.logger.Error("Failed to save tool calls message", "error", err)
+			}
+		}
+
 		// Collect tool call messages to add to conversation
 		var toolMessages []openai.ChatCompletionMessage
 
@@ -1263,7 +1522,7 @@ Your primary goal is to complete this checklist. After each user response, you M
 			app.logger.Info("Executing tool call",
 				"tool_name", toolCall.Function.Name,
 				"tool_id", toolCall.ID,
-				"args", args,
+				"args", redactSensitiveInfo(args),
 			)
 
 			// Execute the tool
@@ -1311,9 +1570,15 @@ Your primary goal is to complete this checklist. After each user response, you M
 			}
 
 			// Save tool call to chat history as a special message type
-			toolCallContent := "Tool call: " + toolCall.Function.Name + " - " + toolResponse.Content
-			if err := internal.AddChatMessage(ctx, app.fs, appointment, "tool_call", toolCallContent); err != nil {
-				app.logger.Error("Failed to save tool call message", "error", err)
+			// According to OpenAI spec: use "tool" role with ToolCallID
+			toolCallData := map[string]interface{}{
+				"tool_call_id": toolCall.ID,
+				"content":      toolResponse.Content,
+			}
+			toolCallJSON, _ := json.Marshal(toolCallData)
+			toolResponseContent := "TOOL_RESPONSE:" + string(toolCallJSON)
+			if err := internal.AddChatMessage(ctx, app.fs, appointment, openai.ChatMessageRoleTool, toolResponseContent); err != nil {
+				app.logger.Error("Failed to save tool response message", "error", err)
 			}
 
 			app.logger.Info("Tool call completed", "tool_call", toolCallLog)
@@ -1321,7 +1586,7 @@ Your primary goal is to complete this checklist. After each user response, you M
 
 		// Generate follow-up response from AI with tool results
 		if len(toolMessages) > 0 {
-			app.logger.Info("Generating follow-up response after tool calls", "user_id", user.ID)
+			app.logger.Debug("generating follow-up response after tool calls", "name", user.Name, "user_id", user.ID, "appointment_id", appointment.ID)
 
 			// Get current conversation history
 			chatHistory, err := internal.GetChatHistory(appointment)
@@ -1339,17 +1604,12 @@ Your primary goal is to complete this checklist. After each user response, you M
 					}
 				}
 
-				// Add checklist status to system prompt
+				// Add checklist status to system prompt (compact JSON format)
 				if appointment.ConversationChecklist != nil {
 					checklistSummary := internal.GetChecklistSummary(appointment.ConversationChecklist)
 					systemPrompt += fmt.Sprintf(`
 
-CONVERSATION CHECKLIST STATUS:
-- Overall Status: %s
-- Completion Attempts: %d/%d
-- Message Count: %d/%d
-- Progress: %d/%d completed (%d required)
-- Can Complete: %v
+CHECKLIST: {"status":"%s","attempts":%d/%d,"messages":%d/%d,"progress":%d/%d,"required":%d,"ready":%v}
 
 Continue the conversation naturally after processing the tool results.
 `,
@@ -1372,14 +1632,67 @@ Continue the conversation naturally after processing the tool results.
 
 				// Add conversation history
 				for _, msg := range chatHistory {
-					role := openai.ChatMessageRoleUser
-					if msg.Role == "assistant" {
-						role = openai.ChatMessageRoleAssistant
+					// Skip messages with empty content
+					if msg.Content == "" {
+						continue
 					}
-					followUpMessages = append(followUpMessages, openai.ChatCompletionMessage{
-						Role:    role,
-						Content: msg.Content,
-					})
+
+					// Handle different message types according to OpenAI spec
+					switch msg.Role {
+					case openai.ChatMessageRoleUser:
+						followUpMessages = append(followUpMessages, openai.ChatCompletionMessage{
+							Role:    openai.ChatMessageRoleUser,
+							Content: msg.Content,
+						})
+					case openai.ChatMessageRoleAssistant:
+						// Check if this is a tool call message or regular assistant message
+						if strings.HasPrefix(msg.Content, "TOOL_CALLS:") {
+							// Parse the stored tool calls and add them as an assistant message with tool calls
+							jsonStr := strings.TrimPrefix(msg.Content, "TOOL_CALLS:")
+							var toolCalls []openai.ToolCall
+							if err := json.Unmarshal([]byte(jsonStr), &toolCalls); err != nil {
+								app.logger.Error("Failed to parse stored tool calls in follow-up", "error", err)
+								continue
+							}
+							followUpMessages = append(followUpMessages, openai.ChatCompletionMessage{
+								Role:      openai.ChatMessageRoleAssistant,
+								ToolCalls: toolCalls,
+								// Content is empty for tool call messages per OpenAI spec
+							})
+						} else {
+							// Regular assistant message
+							followUpMessages = append(followUpMessages, openai.ChatCompletionMessage{
+								Role:    openai.ChatMessageRoleAssistant,
+								Content: msg.Content,
+							})
+						}
+					case openai.ChatMessageRoleTool:
+						// Parse tool response and add as tool message
+						if strings.HasPrefix(msg.Content, "TOOL_RESPONSE:") {
+							jsonStr := strings.TrimPrefix(msg.Content, "TOOL_RESPONSE:")
+							var toolData map[string]interface{}
+							if err := json.Unmarshal([]byte(jsonStr), &toolData); err != nil {
+								app.logger.Error("Failed to parse stored tool response in follow-up", "error", err)
+								continue
+							}
+
+							if toolCallID, ok := toolData["tool_call_id"].(string); ok {
+								if content, ok := toolData["content"].(string); ok {
+									followUpMessages = append(followUpMessages, openai.ChatCompletionMessage{
+										Role:       openai.ChatMessageRoleTool,
+										Content:    content,
+										ToolCallID: toolCallID,
+									})
+								}
+							}
+						}
+					case openai.ChatMessageRoleSystem:
+						// System messages are handled separately
+						continue
+					default:
+						app.logger.Debug("Skipping unknown message type in follow-up", "role", msg.Role)
+						continue
+					}
 				}
 
 				// Add the tool call messages
@@ -1391,7 +1704,7 @@ Continue the conversation naturally after processing the tool results.
 					Messages:   followUpMessages,
 					Stream:     true,
 					Tools:      chatToolRegistry.GetAllTools(),
-					ToolChoice: "auto",
+					ToolChoice: "none", // Prevent cascading tool calls after processing results
 				}
 
 				// Stream the follow-up response
@@ -1568,6 +1881,16 @@ func (app *application) showChatPage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// isDebugMessage checks if a message role is considered a debug message
+func isDebugMessage(role string) bool {
+	return role == openai.ChatMessageRoleTool || role == openai.ChatMessageRoleSystem
+}
+
+// isDebugMessageContent checks if message content indicates a debug message (tool calls)
+func isDebugMessageContent(role, content string) bool {
+	return role == openai.ChatMessageRoleAssistant && strings.HasPrefix(content, "TOOL_CALLS:")
+}
+
 // getChatHistory returns the chat history for an appointment
 func (app *application) getChatHistory(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -1608,8 +1931,195 @@ func (app *application) getChatHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Filter debug messages for non-super users
+	var filteredMessages []internal.ChatMessage
+	for _, message := range messages {
+		// Skip debug messages for non-super users
+		if !user.IsSuperUser && (isDebugMessage(message.Role) || isDebugMessageContent(message.Role, message.Content)) {
+			continue
+		}
+		filteredMessages = append(filteredMessages, message)
+	}
+
 	response.JSON(w, http.StatusOK, map[string]interface{}{
-		"messages":       messages,
+		"messages":       filteredMessages,
 		"appointment_id": appointmentID,
+		"debug_mode":     user.IsSuperUser, // Let client know if debug mode is enabled
+	})
+}
+
+// fastForwardChat injects a test transcript into the current chat session for testing
+func (app *application) fastForwardChat(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		response.JSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
+		return
+	}
+
+	user := contextGetAuthenticatedUser(r)
+	if user == nil {
+		response.JSON(w, http.StatusUnauthorized, map[string]string{"error": "not authenticated"})
+		return
+	}
+
+	// Only allow super users to use this feature
+	if !user.IsSuperUser {
+		response.JSON(w, http.StatusForbidden, map[string]string{"error": "forbidden - super user required"})
+		return
+	}
+
+	appointmentID := r.URL.Query().Get("appointment_id")
+	if appointmentID == "" {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": "missing appointment_id"})
+		return
+	}
+
+	// Get the appointment
+	appointment, err := internal.GetAppointment(r.Context(), app.fs, user.ID, appointmentID)
+	if err != nil {
+		app.logger.Error("Failed to get appointment for fast-forward", "error", err, "user_id", user.ID, "appointment_id", appointmentID)
+		response.JSON(w, http.StatusNotFound, map[string]string{"error": "appointment not found"})
+		return
+	}
+
+	if appointment.Type != internal.AppointmentTypeChat {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": "not a chat appointment"})
+		return
+	}
+
+	// Load test call data using the TestingCallID
+	app.logger.Info("Loading test call data for fast-forward", "appointment_id", appointmentID, "test_call_id", simulate.TestingCallID)
+
+	call, err := vapi.GetCall(r.Context(), simulate.TestingCallID)
+	if err != nil {
+		app.logger.Error("Failed to get test call data", "error", err, "test_call_id", simulate.TestingCallID)
+		response.JSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load test call data"})
+		return
+	}
+
+	// Extract transcript messages from the call
+	var messages []internal.ChatMessage
+	if call.Artifact != nil && call.Artifact.Messages != nil {
+		app.logger.Info("Fast-forward: Processing call artifact", "artifact_messages_count", len(call.Artifact.Messages))
+
+		tx := internal.NewTranscriptFromCallResult(*call)
+		app.logger.Info("Fast-forward: Transcript processed", "transcript_messages_count", len(tx.Messages))
+
+		for i, msg := range tx.Messages {
+			app.logger.Debug("Fast-forward: Processing message", "index", i, "role", msg.Role, "content_length", len(msg.Content))
+
+			// Skip messages with empty content
+			if msg.Content == "" {
+				app.logger.Debug("Fast-forward: Skipping empty message", "index", i)
+				continue
+			}
+
+			chatMessage := internal.ChatMessage{
+				Role:      string(msg.Role),
+				Content:   msg.Content,
+				Timestamp: time.Now(),
+			}
+			messages = append(messages, chatMessage)
+			contentPreview := chatMessage.Content
+			if len(contentPreview) > 50 {
+				contentPreview = contentPreview[:50] + "..."
+			}
+			app.logger.Debug("Fast-forward: Added message", "index", i, "role", chatMessage.Role, "content_preview", contentPreview)
+		}
+	} else {
+		app.logger.Error("Fast-forward: No artifact or messages found", "has_artifact", call.Artifact != nil, "has_messages", call.Artifact != nil && call.Artifact.Messages != nil)
+	}
+
+	app.logger.Info("Fast-forward: Extracted messages", "count", len(messages))
+	if len(messages) == 0 {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": "no messages found in test call"})
+		return
+	}
+
+	// Inject the messages into the current chat appointment
+	app.logger.Info("Injecting transcript messages into chat", "appointment_id", appointmentID, "message_count", len(messages))
+
+	// Clear existing messages first (except the initial assistant message)
+	app.logger.Info("Fast-forward: Current chat messages before clearing", "count", len(appointment.ChatMessages))
+	if len(appointment.ChatMessages) > 0 {
+		appointment.ChatMessages = appointment.ChatMessages[:0] // Remove all messages
+		app.logger.Info("Fast-forward: Cleared messages", "remaining_count", len(appointment.ChatMessages))
+	}
+
+	// Add the transcript messages
+	app.logger.Info("Fast-forward: Adding transcript messages", "current_count", len(appointment.ChatMessages), "adding_count", len(messages))
+	appointment.ChatMessages = append(appointment.ChatMessages, messages...)
+	app.logger.Info("Fast-forward: Messages after adding transcript", "total_count", len(appointment.ChatMessages))
+
+	// Update the conversation checklist to reflect that topics have been covered
+	if appointment.ConversationChecklist == nil {
+		appointment.ConversationChecklist = internal.InitializeConversationChecklist()
+	}
+
+	// Mark all major topics as completed since we're injecting a full transcript
+	topicsToComplete := []string{
+		"introduction", "warm_up", "deal_breakers", "search_strategy",
+		"work_environment", "location_preferences", "final_confirmation",
+	}
+
+	for _, topicID := range topicsToComplete {
+		extractedInfo := map[string]interface{}{
+			"source":         "transcript_injection",
+			"auto_populated": true,
+			"timestamp":      time.Now(),
+		}
+
+		err := internal.UpdateChecklistItem(
+			appointment.ConversationChecklist,
+			topicID,
+			internal.ChecklistItemStatusCompleted,
+			internal.ChecklistItemQualityMedium,
+			extractedInfo,
+			"Auto-populated from injected transcript for testing",
+		)
+		if err != nil {
+			app.logger.Error("Failed to update checklist item", "error", err, "topic_id", topicID)
+			// Continue with other topics even if one fails
+		}
+	}
+
+	// Update the checklist message count to reflect the injected messages
+	appointment.ConversationChecklist.MessageCount = len(appointment.ChatMessages)
+	appointment.ConversationChecklist.LastUpdated = time.Now()
+
+	// Mark the overall status as ready for completion since we've covered all topics
+	appointment.ConversationChecklist.OverallStatus = internal.ChecklistStatusReadyForCompletion
+
+	// Update the appointment with the new messages and checklist
+	app.logger.Info(internal.BGYellow("Fast-forward: Saving appointment"), "appointment_id", appointmentID, "final_message_count", len(appointment.ChatMessages))
+	if err := internal.UpdateAppointment(r.Context(), app.fs, appointment); err != nil {
+		app.logger.Error("Failed to update appointment with transcript", "error", err, "appointment_id", appointmentID)
+		response.JSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update appointment"})
+		return
+	}
+
+	// Verify the write was successful by reading it back
+	app.logger.Info("Verifying appointment write...", "appointment_id", appointmentID)
+	verifyAppointment, err := internal.GetAppointment(r.Context(), app.fs, user.ID, appointmentID)
+	if err != nil {
+		app.logger.Error("Failed to verify appointment write", "error", err, "appointment_id", appointmentID)
+	} else {
+		app.logger.Info("Appointment write verification",
+			"expected_messages", len(appointment.ChatMessages),
+			"actual_messages", len(verifyAppointment.ChatMessages),
+			"write_successful", len(verifyAppointment.ChatMessages) == len(appointment.ChatMessages))
+
+		if len(verifyAppointment.ChatMessages) != len(appointment.ChatMessages) {
+			app.logger.Error("CRITICAL: Appointment write verification failed - data inconsistency detected",
+				"expected", len(appointment.ChatMessages),
+				"actual", len(verifyAppointment.ChatMessages))
+		}
+	}
+
+	app.logger.Info("Chat fast-forwarded successfully", "appointment_id", appointmentID, "injected_messages", len(messages), "final_total_messages", len(appointment.ChatMessages))
+
+	response.JSON(w, http.StatusOK, map[string]interface{}{
+		"success":           true,
+		"appointment_id":    appointmentID,
+		"injected_messages": len(messages),
 	})
 }
