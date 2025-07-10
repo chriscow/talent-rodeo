@@ -3,9 +3,9 @@ package chat
 import (
 	"context"
 	"talent-rodeo/internal"
-	"time"
 
 	"github.com/chriscow/vapi-go"
+	"github.com/gorilla/websocket"
 	"github.com/sashabaranov/go-openai"
 )
 
@@ -22,14 +22,21 @@ type StartChatResponse struct {
 	FirstMessage  string `json:"first_message"`
 }
 
+// ChatSession represents a WebSocket chat session
+type ChatSession struct {
+	UserID        string
+	AppointmentID string
+	Connection    *websocket.Conn
+}
+
 // StreamMessage represents different types of messages sent via WebSocket during streaming
 type StreamMessage struct {
-	Type         string        `json:"type"`
-	Content      string        `json:"content,omitempty"`
-	Error        string        `json:"error,omitempty"`
-	MessageID    string        `json:"message_id,omitempty"`
-	ToolCall     *ToolCallData `json:"tool_call,omitempty"`
-	ToolResponse *ToolResponse `json:"tool_response,omitempty"`
+	Type         string            `json:"type"`
+	Content      string            `json:"content,omitempty"`
+	Error        string            `json:"error,omitempty"`
+	MessageID    string            `json:"message_id,omitempty"`
+	ToolCall     *ToolCallData     `json:"tool_call,omitempty"`
+	ToolResponse *ToolResponseData `json:"tool_response,omitempty"`
 }
 
 // ToolCallData represents a tool call made by the LLM
@@ -39,8 +46,8 @@ type ToolCallData struct {
 	Arguments string `json:"arguments"`
 }
 
-// ToolResponse represents the response from a tool execution
-type ToolResponse struct {
+// ToolResponseData represents the response from a tool execution
+type ToolResponseData struct {
 	ID        string     `json:"id"`
 	Name      string     `json:"name"`
 	Content   string     `json:"content"`
@@ -55,65 +62,56 @@ type UIAction struct {
 	Delay int            `json:"delay"` // Delay in milliseconds before executing
 }
 
-// ChatSession represents the runtime state of a chat session
-type ChatSession struct {
-	User        *internal.User
-	Appointment *internal.Appointment
-	UpdatedAt   time.Time
-}
-
-// Service defines the interface for chat business logic
+// Service defines the chat service interface
 type Service interface {
 	// StartSession creates a new chat session
 	StartSession(ctx context.Context, userID string, req StartChatRequest) (*StartChatResponse, error)
 
-	// ProcessUserMessage handles a user message and prepares for AI response
-	ProcessUserMessage(ctx context.Context, userID, appointmentID, message string) (*ChatSession, error)
+	// SendMessage sends a message to a chat session
+	SendMessage(ctx context.Context, userID, appointmentID, content string) error
 
-	// StreamAIResponse generates and streams AI response
-	StreamAIResponse(ctx context.Context, session *ChatSession, msgChan chan<- StreamMessage) error
+	// HandleWebSocketSession handles a WebSocket chat session
+	HandleWebSocketSession(ctx context.Context, session *ChatSession) error
 
 	// EndSession ends a chat session
 	EndSession(ctx context.Context, userID, appointmentID string) error
 
-	// GetHistory retrieves chat history
+	// GetOrCreateSession gets an existing session or creates a new one
+	GetOrCreateSession(ctx context.Context, userID string) (*StartChatResponse, error)
+
+	// GetHistory returns the chat history for a session
 	GetHistory(ctx context.Context, userID, appointmentID string, includeDebug bool) ([]internal.ChatMessage, error)
 
-	// FastForward injects test transcript (admin only)
-	FastForward(ctx context.Context, userID, appointmentID string) error
+	// InjectTranscript injects a test transcript into a session (for testing)
+	InjectTranscript(ctx context.Context, userID, appointmentID string, call vapi.Call) (int, error)
 }
 
-// ToolRegistry defines the interface for managing chat tools
-type ToolRegistry interface {
-	// GetAllTools returns all available tools for OpenAI
-	GetAllTools() []openai.Tool
-
-	// ExecuteTool executes a specific tool with given arguments
-	ExecuteTool(ctx context.Context, toolName string, args map[string]any, session *ChatSession) (*ToolResponse, error)
-
-	// RegisterTool adds a new tool to the registry
-	RegisterTool(name string, tool Tool)
-}
-
-// Tool represents a single chat tool
+// Tool represents a chat tool that can be executed
 type Tool struct {
 	Definition openai.Tool
-	Handler    ToolHandler
+	Handler    func(ctx context.Context, session *ChatSession, args map[string]any) (*ToolResponseData, error)
 }
 
-// ToolHandler is the function signature for tool execution
-type ToolHandler func(ctx context.Context, session *ChatSession, args map[string]any) (*ToolResponse, error)
-
-// OpenAIClient interface for dependency injection and testing
-type OpenAIClient interface {
-	CreateChatCompletionStream(ctx context.Context, request openai.ChatCompletionRequest) (*openai.ChatCompletionStream, error)
+// ToolRegistry manages available chat tools
+type ToolRegistry interface {
+	GetAllTools() []openai.Tool
+	ExecuteTool(ctx context.Context, toolName string, args map[string]any, session *ChatSession) (*ToolResponseData, error)
 }
 
 // FirestoreClient interface for dependency injection and testing
 type FirestoreClient interface {
 	GetAppointment(ctx context.Context, userID, appointmentID string) (*internal.Appointment, error)
 	UpdateAppointment(ctx context.Context, appointment *internal.Appointment) error
+	CreateAppointment(ctx context.Context, userID string, appointment *internal.Appointment) error
 	AddChatMessage(ctx context.Context, appointment *internal.Appointment, role, content string) error
+	GetLatestRunningChatAppointment(ctx context.Context, userID string) (*internal.Appointment, bool, error)
 	BuildAssistantOverrides(ctx context.Context, user *internal.User) (*vapi.Assistant, error)
 	ProcessAppointmentStarted(ctx context.Context, user *internal.User, appointment *internal.Appointment) error
+	GetUser(ctx context.Context, userID string) (*internal.User, bool, error)
+	UpdateUserStatus(ctx context.Context, user *internal.User, status internal.UserStatus) error
+}
+
+// OpenAIClient interface for dependency injection and testing
+type OpenAIClient interface {
+	CreateChatCompletionStream(ctx context.Context, request openai.ChatCompletionRequest) (*openai.ChatCompletionStream, error)
 }

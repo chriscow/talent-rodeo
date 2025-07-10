@@ -460,6 +460,9 @@ func run(logger *slog.Logger) error {
 		// jobProcessor:    jobProcessor,
 	}
 
+	// Initialize chat service
+	app.initializeChatService()
+
 	// Start the task processor
 	go func() {
 		app.logger.Info("app: starting task processor")

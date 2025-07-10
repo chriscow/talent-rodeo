@@ -32,10 +32,10 @@ func (r *toolRegistry) GetAllTools() []openai.Tool {
 }
 
 // ExecuteTool executes a specific tool with given arguments
-func (r *toolRegistry) ExecuteTool(ctx context.Context, toolName string, args map[string]any, session *ChatSession) (*ToolResponse, error) {
+func (r *toolRegistry) ExecuteTool(ctx context.Context, toolName string, args map[string]any, session *ChatSession) (*ToolResponseData, error) {
 	tool, exists := r.tools[toolName]
 	if !exists {
-		return &ToolResponse{
+		return &ToolResponseData{
 			Name:    toolName,
 			Content: "Tool not found",
 			Success: false,
