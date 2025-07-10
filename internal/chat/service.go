@@ -2,12 +2,15 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"strings"
 	"talent-rodeo/internal"
 	"time"
 
+	"github.com/chriscow/vapi-go"
 	"github.com/sashabaranov/go-openai"
 )
 
@@ -323,13 +326,439 @@ func (s *ServiceImpl) handleForcedCompletion(ctx context.Context, msgChan chan<-
 
 // generateAIResponse handles the main AI response generation logic
 func (s *ServiceImpl) generateAIResponse(ctx context.Context, msgChan chan<- StreamMessage, user *internal.User, appointment *internal.Appointment) error {
-	// This will contain the main AI generation logic moved from the handlers
-	// For now, return not implemented
-	msgChan <- StreamMessage{
-		Type:  "error",
-		Error: "AI response generation not yet implemented in service layer",
+	s.logger.Debug("Generating AI response", "user_id", user.ID, "appointment_id", appointment.ID)
+
+	// Build assistant overrides for personalized chat
+	assistantOverrides, err := internal.BuildAssistantOverrides(ctx, user, s.fs, s.logger)
+	if err != nil {
+		s.logger.Error("Failed to build assistant overrides", "error", err, "user_id", user.ID)
+		s.sendError(msgChan, "Failed to prepare assistant")
+		return fmt.Errorf("failed to build assistant overrides: %w", err)
 	}
-	return fmt.Errorf("AI response generation not yet implemented")
+
+	// Convert chat history to OpenAI format
+	messages, err := s.buildOpenAIMessages(appointment, assistantOverrides)
+	if err != nil {
+		s.sendError(msgChan, "Failed to prepare conversation")
+		return fmt.Errorf("failed to build OpenAI messages: %w", err)
+	}
+
+	// Create streaming request with tools
+	req := openai.ChatCompletionRequest{
+		Model:      openai.GPT4Dot1,
+		Messages:   messages,
+		Stream:     true,
+		Tools:      s.toolRegistry.GetAllTools(),
+		ToolChoice: "auto",
+	}
+
+	// Create OpenAI streaming response
+	stream, err := s.openAI.CreateChatCompletionStream(ctx, req)
+	if err != nil {
+		s.logger.Error("Failed to create chat completion stream", "error", err)
+		s.sendError(msgChan, "Failed to generate response")
+		return fmt.Errorf("failed to create completion stream: %w", err)
+	}
+	defer stream.Close()
+
+	// Stream the response and handle tool calls
+	return s.processStreamingResponse(ctx, stream, msgChan, user, appointment)
+}
+
+// buildOpenAIMessages converts chat history to OpenAI format with system prompt
+func (s *ServiceImpl) buildOpenAIMessages(appointment *internal.Appointment, assistantOverrides *vapi.Assistant) ([]openai.ChatCompletionMessage, error) {
+	messages := []openai.ChatCompletionMessage{}
+
+	// Add system message from assistant overrides
+	systemPrompt := "You are Shirely, an AI career assistant helping job seekers find the right opportunities."
+	if assistantOverrides != nil && assistantOverrides.Model != nil && assistantOverrides.Model.Messages != nil && len(assistantOverrides.Model.Messages) > 0 {
+		systemPrompt = assistantOverrides.Model.Messages[0].Content
+	}
+
+	// Add checklist status awareness to system prompt (compact JSON format)
+	if appointment.ConversationChecklist != nil {
+		checklistSummary := internal.GetChecklistSummary(appointment.ConversationChecklist)
+		systemPrompt += fmt.Sprintf(`
+
+CHECKLIST: {"status":"%s","attempts":%d/%d,"messages":%d/%d,"progress":%d/%d,"required":%d,"ready":%v}
+
+YOUR TASK: Complete this checklist by calling 'mark_topic_progress' after each user response. Before asking questions, check if the slot is already high quality using 'get_checklist_status'. Ask clarifying questions only for low-quality slots.
+`,
+			checklistSummary["overall_status"],
+			checklistSummary["completion_attempts"],
+			internal.MaxCompletionAttempts,
+			checklistSummary["message_count"],
+			internal.MaxConversationLength,
+			checklistSummary["completed_items"],
+			checklistSummary["total_items"],
+			checklistSummary["required_items"],
+			checklistSummary["can_complete"],
+		)
+	}
+
+	messages = append(messages, openai.ChatCompletionMessage{
+		Role:    openai.ChatMessageRoleSystem,
+		Content: systemPrompt,
+	})
+
+	// Add conversation history
+	chatHistory, err := internal.GetChatHistory(appointment)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get chat history: %w", err)
+	}
+
+	for _, msg := range chatHistory {
+		// Skip messages with empty content
+		if msg.Content == "" {
+			continue
+		}
+
+		// Handle different message types according to OpenAI spec
+		switch msg.Role {
+		case openai.ChatMessageRoleUser:
+			messages = append(messages, openai.ChatCompletionMessage{
+				Role:    openai.ChatMessageRoleUser,
+				Content: msg.Content,
+			})
+		case openai.ChatMessageRoleAssistant:
+			// Check if this is a tool call message or regular assistant message
+			if strings.HasPrefix(msg.Content, "TOOL_CALLS:") {
+				// Parse the stored tool calls and add them as an assistant message with tool calls
+				jsonStr := strings.TrimPrefix(msg.Content, "TOOL_CALLS:")
+				var toolCalls []openai.ToolCall
+				if err := json.Unmarshal([]byte(jsonStr), &toolCalls); err != nil {
+					s.logger.Error("Failed to parse stored tool calls", "error", err, "content", msg.Content)
+					continue
+				}
+				messages = append(messages, openai.ChatCompletionMessage{
+					Role:      openai.ChatMessageRoleAssistant,
+					ToolCalls: toolCalls,
+					// Content is empty for tool call messages per OpenAI spec
+				})
+			} else {
+				// Regular assistant message
+				messages = append(messages, openai.ChatCompletionMessage{
+					Role:    openai.ChatMessageRoleAssistant,
+					Content: msg.Content,
+				})
+			}
+		case openai.ChatMessageRoleTool:
+			// Parse tool response and add as tool message
+			if strings.HasPrefix(msg.Content, "TOOL_RESPONSE:") {
+				jsonStr := strings.TrimPrefix(msg.Content, "TOOL_RESPONSE:")
+				var toolData map[string]any
+				if err := json.Unmarshal([]byte(jsonStr), &toolData); err != nil {
+					s.logger.Error("Failed to parse stored tool response", "error", err, "content", msg.Content)
+					continue
+				}
+
+				// Extract tool call ID and response content
+				if toolCallID, ok := toolData["tool_call_id"].(string); ok {
+					if content, ok := toolData["content"].(string); ok {
+						messages = append(messages, openai.ChatCompletionMessage{
+							Role:       openai.ChatMessageRoleTool,
+							Content:    content,
+							ToolCallID: toolCallID,
+						})
+					}
+				}
+			}
+		case openai.ChatMessageRoleSystem:
+			// System messages are typically handled separately, skip in main conversation
+			continue
+		default:
+			// Skip unknown message types
+			s.logger.Debug("Skipping unknown message type", "role", msg.Role)
+			continue
+		}
+	}
+
+	return messages, nil
+}
+
+// processStreamingResponse handles the OpenAI streaming response and tool execution
+func (s *ServiceImpl) processStreamingResponse(ctx context.Context, stream *openai.ChatCompletionStream, msgChan chan<- StreamMessage, user *internal.User, appointment *internal.Appointment) error {
+	var fullResponse strings.Builder
+	var toolCalls []openai.ToolCall
+
+	// Stream the response
+	for {
+		response, err := stream.Recv()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			s.logger.Error("Error receiving stream", "error", err)
+			s.sendError(msgChan, "Stream error")
+			return fmt.Errorf("stream receive error: %w", err)
+		}
+
+		if len(response.Choices) > 0 {
+			choice := response.Choices[0]
+
+			// Handle regular content streaming
+			if choice.Delta.Content != "" {
+				content := choice.Delta.Content
+				fullResponse.WriteString(content)
+
+				// Send the content chunk via channel
+				msgChan <- StreamMessage{
+					Type:    "content",
+					Content: content,
+				}
+			}
+
+			// Handle tool calls
+			if choice.Delta.ToolCalls != nil {
+				for _, toolCall := range choice.Delta.ToolCalls {
+					// Initialize tool call if it's the first delta for this tool call
+					if toolCall.Index != nil && int(*toolCall.Index) >= len(toolCalls) {
+						// Extend the toolCalls slice if necessary
+						for len(toolCalls) <= int(*toolCall.Index) {
+							toolCalls = append(toolCalls, openai.ToolCall{})
+						}
+					}
+
+					if toolCall.Index != nil {
+						idx := int(*toolCall.Index)
+
+						// Accumulate tool call data
+						if toolCall.ID != "" {
+							toolCalls[idx].ID = toolCall.ID
+						}
+						if toolCall.Type != "" {
+							toolCalls[idx].Type = toolCall.Type
+						}
+						if toolCall.Function.Name != "" {
+							toolCalls[idx].Function.Name = toolCall.Function.Name
+						}
+						if toolCall.Function.Arguments != "" {
+							toolCalls[idx].Function.Arguments += toolCall.Function.Arguments
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Save the complete assistant response if there was text content
+	if fullResponse.Len() > 0 {
+		if err := s.saveAssistantMessage(ctx, appointment, fullResponse.String()); err != nil {
+			s.logger.Error("Failed to save assistant message", "error", err)
+		}
+	}
+
+	// Handle tool calls if any were made
+	if len(toolCalls) > 0 {
+		return s.processToolCalls(ctx, toolCalls, msgChan, user, appointment)
+	}
+
+	// Send completion event
+	msgChan <- StreamMessage{Type: "done"}
+	return nil
+}
+
+// saveAssistantMessage saves an assistant message and updates checklist
+func (s *ServiceImpl) saveAssistantMessage(ctx context.Context, appointment *internal.Appointment, content string) error {
+	if err := internal.AddChatMessage(ctx, s.fs, appointment, "assistant", content); err != nil {
+		return fmt.Errorf("failed to add chat message: %w", err)
+	}
+
+	// Ensure checklist is initialized
+	if appointment.ConversationChecklist == nil {
+		s.logger.Warn("Chat appointment missing checklist during AI response, initializing", "appointment_id", appointment.ID)
+		appointment.ConversationChecklist = internal.InitializeConversationChecklist()
+	}
+
+	// Increment message count in checklist
+	internal.IncrementMessageCount(appointment.ConversationChecklist)
+
+	// Save the updated appointment with incremented message count
+	if err := internal.UpdateAppointment(ctx, s.fs, appointment); err != nil {
+		return fmt.Errorf("failed to save appointment with updated message count: %w", err)
+	}
+
+	return nil
+}
+
+// processToolCalls handles execution of tool calls and follow-up responses
+func (s *ServiceImpl) processToolCalls(ctx context.Context, toolCalls []openai.ToolCall, msgChan chan<- StreamMessage, user *internal.User, appointment *internal.Appointment) error {
+	s.logger.Info("Processing tool calls", "count", len(toolCalls), "user_id", user.ID)
+
+	// Save the assistant's tool call message to chat history
+	if err := s.saveToolCallsMessage(ctx, appointment, toolCalls); err != nil {
+		s.logger.Error("Failed to save tool calls message", "error", err)
+	}
+
+	session := &ChatSession{
+		User:        user,
+		Appointment: appointment,
+		Service:     s,
+	}
+
+	// Execute each tool call
+	for _, toolCall := range toolCalls {
+		if toolCall.Function.Name == "" {
+			s.logger.Warn("Tool call missing function name", "tool_call_id", toolCall.ID)
+			continue
+		}
+
+		// Parse the function arguments
+		var args map[string]any
+		if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
+			s.logger.Error("Failed to parse tool call arguments", "error", err, "tool_call_id", toolCall.ID)
+
+			// Send error response for this tool call
+			errorResponse := &ToolResponse{
+				ID:      toolCall.ID,
+				Name:    toolCall.Function.Name,
+				Content: "Failed to parse tool arguments",
+				Success: false,
+			}
+			msgChan <- StreamMessage{
+				Type:         "tool_response",
+				ToolResponse: errorResponse,
+			}
+			continue
+		}
+
+		s.logger.Info("Executing tool call",
+			"tool_name", toolCall.Function.Name,
+			"tool_id", toolCall.ID,
+			"args", redactSensitiveInfo(args),
+		)
+
+		// Execute the tool
+		toolResponse, err := s.toolRegistry.ExecuteTool(ctx, toolCall.Function.Name, args, session)
+		if err != nil {
+			s.logger.Error("Tool execution failed", "error", err, "tool_name", toolCall.Function.Name)
+			toolResponse = &ToolResponse{
+				ID:      toolCall.ID,
+				Name:    toolCall.Function.Name,
+				Content: "Tool execution failed: " + err.Error(),
+				Success: false,
+			}
+		}
+
+		// Set the tool call ID in the response
+		toolResponse.ID = toolCall.ID
+
+		// Send tool response via channel
+		msgChan <- StreamMessage{
+			Type:         "tool_response",
+			ToolResponse: toolResponse,
+		}
+
+		// Save tool response to chat history
+		if err := s.saveToolResponseMessage(ctx, appointment, toolCall.ID, toolResponse.Content); err != nil {
+			s.logger.Error("Failed to save tool response message", "error", err)
+		}
+
+		s.logger.Info("Tool call completed", "tool_name", toolCall.Function.Name, "success", toolResponse.Success)
+	}
+
+	// Generate follow-up response after tool execution
+	return s.generateFollowUpResponse(ctx, msgChan, user, appointment)
+}
+
+// saveToolCallsMessage saves tool calls to chat history
+func (s *ServiceImpl) saveToolCallsMessage(ctx context.Context, appointment *internal.Appointment, toolCalls []openai.ToolCall) error {
+	toolCallsJSON, err := json.Marshal(toolCalls)
+	if err != nil {
+		return fmt.Errorf("failed to marshal tool calls: %w", err)
+	}
+
+	toolCallContent := "TOOL_CALLS:" + string(toolCallsJSON)
+	return internal.AddChatMessage(ctx, s.fs, appointment, openai.ChatMessageRoleAssistant, toolCallContent)
+}
+
+// saveToolResponseMessage saves a tool response to chat history
+func (s *ServiceImpl) saveToolResponseMessage(ctx context.Context, appointment *internal.Appointment, toolCallID, content string) error {
+	toolCallData := map[string]any{
+		"tool_call_id": toolCallID,
+		"content":      content,
+	}
+	toolCallJSON, _ := json.Marshal(toolCallData)
+	toolResponseContent := "TOOL_RESPONSE:" + string(toolCallJSON)
+	return internal.AddChatMessage(ctx, s.fs, appointment, openai.ChatMessageRoleTool, toolResponseContent)
+}
+
+// generateFollowUpResponse generates AI response after tool execution
+func (s *ServiceImpl) generateFollowUpResponse(ctx context.Context, msgChan chan<- StreamMessage, user *internal.User, appointment *internal.Appointment) error {
+	s.logger.Debug("Generating follow-up response after tool calls", "user_id", user.ID, "appointment_id", appointment.ID)
+
+	// Build assistant overrides
+	assistantOverrides, err := internal.BuildAssistantOverrides(ctx, user, s.fs, s.logger)
+	if err != nil {
+		s.logger.Error("Failed to build assistant overrides for follow-up", "error", err)
+	}
+
+	// Build messages including the recent tool calls
+	messages, err := s.buildOpenAIMessages(appointment, assistantOverrides)
+	if err != nil {
+		s.sendError(msgChan, "Failed to prepare follow-up conversation")
+		return fmt.Errorf("failed to build follow-up messages: %w", err)
+	}
+
+	// Create follow-up request (prevent cascading tool calls)
+	req := openai.ChatCompletionRequest{
+		Model:      openai.GPT4Dot1,
+		Messages:   messages,
+		Stream:     true,
+		Tools:      s.toolRegistry.GetAllTools(),
+		ToolChoice: "none", // Prevent cascading tool calls after processing results
+	}
+
+	// Stream the follow-up response
+	stream, err := s.openAI.CreateChatCompletionStream(ctx, req)
+	if err != nil {
+		s.logger.Error("Failed to create follow-up stream", "error", err)
+		s.sendError(msgChan, "Failed to generate follow-up response")
+		return fmt.Errorf("failed to create follow-up stream: %w", err)
+	}
+	defer stream.Close()
+
+	var followUpResponse strings.Builder
+
+	// Stream the follow-up response
+	for {
+		response, err := stream.Recv()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			s.logger.Error("Error receiving follow-up stream", "error", err)
+			s.sendError(msgChan, "Follow-up stream error")
+			return fmt.Errorf("follow-up stream error: %w", err)
+		}
+
+		if len(response.Choices) > 0 {
+			choice := response.Choices[0]
+
+			// Handle content streaming
+			if choice.Delta.Content != "" {
+				content := choice.Delta.Content
+				followUpResponse.WriteString(content)
+
+				// Send the content chunk via channel
+				msgChan <- StreamMessage{
+					Type:    "content",
+					Content: content,
+				}
+			}
+		}
+	}
+
+	// Save the follow-up response
+	if followUpResponse.Len() > 0 {
+		if err := s.saveAssistantMessage(ctx, appointment, followUpResponse.String()); err != nil {
+			s.logger.Error("Failed to save follow-up assistant message", "error", err)
+		}
+	}
+
+	// Send completion event
+	msgChan <- StreamMessage{Type: "done"}
+	return nil
 }
 
 // sendError sends an error message via the channel
