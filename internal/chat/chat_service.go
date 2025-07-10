@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"talent-rodeo/cmd/web/simulate"
 	"talent-rodeo/internal"
 	"time"
 
@@ -244,11 +245,144 @@ func (s *ServiceImpl) GetHistory(ctx context.Context, userID, appointmentID stri
 	return internal.GetChatHistory(appointment)
 }
 
-// FastForwardChat injects test transcript for testing (super user only)
+// FastForwardChat injects test transcript data into a chat session for testing
 func (s *ServiceImpl) FastForwardChat(ctx context.Context, userID, appointmentID string) error {
-	// Implementation will be moved from handlers.chat.go
-	// For now, return not implemented
-	return fmt.Errorf("fast forward not yet implemented in service layer")
+	// Get the appointment
+	appointment, err := internal.GetAppointment(ctx, s.fs, userID, appointmentID)
+	if err != nil {
+		return fmt.Errorf("failed to get appointment for fast-forward: %w", err)
+	}
+
+	if appointment.Type != internal.AppointmentTypeChat {
+		return fmt.Errorf("appointment is not a chat type")
+	}
+
+	// Load test call data using the TestingCallID
+	s.logger.Info("Loading test call data for fast-forward", "appointment_id", appointmentID, "test_call_id", simulate.TestingCallID)
+
+	call, err := vapi.GetCall(ctx, simulate.TestingCallID)
+	if err != nil {
+		return fmt.Errorf("failed to get test call data: %w", err)
+	}
+
+	// Extract transcript messages from the call
+	var messages []internal.ChatMessage
+	if call.Artifact != nil && call.Artifact.Messages != nil {
+		s.logger.Info("Fast-forward: Processing call artifact", "artifact_messages_count", len(call.Artifact.Messages))
+
+		tx := internal.NewTranscriptFromCallResult(*call)
+		s.logger.Info("Fast-forward: Transcript processed", "transcript_messages_count", len(tx.Messages))
+
+		for i, msg := range tx.Messages {
+			s.logger.Debug("Fast-forward: Processing message", "index", i, "role", msg.Role, "content_length", len(msg.Content))
+
+			// Skip messages with empty content
+			if msg.Content == "" {
+				s.logger.Debug("Fast-forward: Skipping empty message", "index", i)
+				continue
+			}
+
+			chatMessage := internal.ChatMessage{
+				Role:      string(msg.Role),
+				Content:   msg.Content,
+				Timestamp: time.Now(),
+			}
+			messages = append(messages, chatMessage)
+			contentPreview := chatMessage.Content
+			if len(contentPreview) > 50 {
+				contentPreview = contentPreview[:50] + "..."
+			}
+			s.logger.Debug("Fast-forward: Added message", "index", i, "role", chatMessage.Role, "content_preview", contentPreview)
+		}
+	} else {
+		return fmt.Errorf("no artifact or messages found in test call")
+	}
+
+	s.logger.Info("Fast-forward: Extracted messages", "count", len(messages))
+	if len(messages) == 0 {
+		return fmt.Errorf("no messages found in test call")
+	}
+
+	// Inject the messages into the current chat appointment
+	s.logger.Info("Injecting transcript messages into chat", "appointment_id", appointmentID, "message_count", len(messages))
+
+	// Clear existing messages first
+	s.logger.Info("Fast-forward: Current chat messages before clearing", "count", len(appointment.ChatMessages))
+	if len(appointment.ChatMessages) > 0 {
+		appointment.ChatMessages = appointment.ChatMessages[:0] // Remove all messages
+		s.logger.Info("Fast-forward: Cleared messages", "remaining_count", len(appointment.ChatMessages))
+	}
+
+	// Add the transcript messages
+	s.logger.Info("Fast-forward: Adding transcript messages", "current_count", len(appointment.ChatMessages), "adding_count", len(messages))
+	appointment.ChatMessages = append(appointment.ChatMessages, messages...)
+	s.logger.Info("Fast-forward: Messages after adding transcript", "total_count", len(appointment.ChatMessages))
+
+	// Update the conversation checklist to reflect that topics have been covered
+	if appointment.ConversationChecklist == nil {
+		appointment.ConversationChecklist = internal.InitializeConversationChecklist()
+	}
+
+	// Mark all major topics as completed since we're injecting a full transcript
+	topicsToComplete := []string{
+		"introduction", "warm_up", "deal_breakers", "search_strategy",
+		"work_environment", "location_preferences", "final_confirmation",
+	}
+
+	for _, topicID := range topicsToComplete {
+		extractedInfo := map[string]any{
+			"source":         "transcript_injection",
+			"auto_populated": true,
+			"timestamp":      time.Now(),
+		}
+
+		err := internal.UpdateChecklistItem(
+			appointment.ConversationChecklist,
+			topicID,
+			internal.ChecklistItemStatusCompleted,
+			internal.ChecklistItemQualityMedium,
+			extractedInfo,
+			"Auto-populated from injected transcript for testing",
+		)
+		if err != nil {
+			s.logger.Error("Failed to update checklist item", "error", err, "topic_id", topicID)
+			// Continue with other topics even if one fails
+		}
+	}
+
+	// Update the checklist message count to reflect the injected messages
+	appointment.ConversationChecklist.MessageCount = len(appointment.ChatMessages)
+	appointment.ConversationChecklist.LastUpdated = time.Now()
+
+	// Mark the overall status as ready for completion since we've covered all topics
+	appointment.ConversationChecklist.OverallStatus = internal.ChecklistStatusReadyForCompletion
+
+	// Update the appointment with the new messages and checklist
+	s.logger.Info("Fast-forward: Saving appointment", "appointment_id", appointmentID, "final_message_count", len(appointment.ChatMessages))
+	if err := internal.UpdateAppointment(ctx, s.fs, appointment); err != nil {
+		return fmt.Errorf("failed to update appointment with transcript: %w", err)
+	}
+
+	// Verify the write was successful by reading it back
+	s.logger.Info("Verifying appointment write...", "appointment_id", appointmentID)
+	verifyAppointment, err := internal.GetAppointment(ctx, s.fs, userID, appointmentID)
+	if err != nil {
+		s.logger.Error("Failed to verify appointment write", "error", err, "appointment_id", appointmentID)
+	} else {
+		s.logger.Info("Appointment write verification",
+			"expected_messages", len(appointment.ChatMessages),
+			"actual_messages", len(verifyAppointment.ChatMessages),
+			"write_successful", len(verifyAppointment.ChatMessages) == len(appointment.ChatMessages))
+
+		if len(verifyAppointment.ChatMessages) != len(appointment.ChatMessages) {
+			s.logger.Error("CRITICAL: Appointment write verification failed - data inconsistency detected",
+				"expected", len(appointment.ChatMessages),
+				"actual", len(verifyAppointment.ChatMessages))
+		}
+	}
+
+	s.logger.Info("Chat fast-forwarded successfully", "appointment_id", appointmentID, "injected_messages", len(messages), "final_total_messages", len(appointment.ChatMessages))
+	return nil
 }
 
 // Helper methods
@@ -695,6 +829,12 @@ func (s *ServiceImpl) saveToolResponseMessage(ctx context.Context, appointment *
 	toolCallJSON, _ := json.Marshal(toolCallData)
 	toolResponseContent := "TOOL_RESPONSE:" + string(toolCallJSON)
 	return internal.AddChatMessage(ctx, s.fs, appointment, openai.ChatMessageRoleTool, toolResponseContent)
+}
+
+// SaveAppointment saves an appointment to the database
+// This method is exposed for tools that need to persist appointment changes
+func (s *ServiceImpl) SaveAppointment(ctx context.Context, appointment *internal.Appointment) error {
+	return internal.UpdateAppointment(ctx, s.fs, appointment)
 }
 
 // generateFollowUpResponse generates AI response after tool execution

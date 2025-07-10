@@ -69,12 +69,12 @@ func (app *application) routes() http.Handler {
 
 			// Chat routes
 			mux.HandleFunc("/chat", app.showChatPage, "GET")
-			mux.HandleFunc("/chat/start", app.startChat, "POST")
-			mux.HandleFunc("/chat/message", app.sendChatMessage, "POST")
-			mux.HandleFunc("/chat/ws", app.streamChatResponse, "GET")     // WebSocket endpoint
-			mux.HandleFunc("/chat/end", app.endChat, "POST")
-			mux.HandleFunc("/api/chat/history", app.getChatHistory, "GET")
-			mux.HandleFunc("/chat/fast-forward", app.fastForwardChat, "POST") // Testing: inject transcript
+			mux.HandleFunc("/chat/start", app.startChatService, "POST") // Updated to use service
+			// mux.HandleFunc("/chat/message", app.sendChatMessage, "POST") // DEPRECATED: WebSocket handles messages now
+			mux.HandleFunc("/chat/ws", app.streamChatResponseService, "GET")         // Updated to use service
+			mux.HandleFunc("/chat/end", app.endChatService, "POST")                  // Updated to use service
+			mux.HandleFunc("/api/chat/history", app.getChatHistoryService, "GET")    // Updated to use service
+			mux.HandleFunc("/chat/fast-forward", app.fastForwardChatService, "POST") // Updated to use service
 
 			// Main onboarding route - displays different templates based on user's onboarding state:
 			// - StepInitial: onboarding-resume-upload.html
@@ -107,7 +107,7 @@ func (app *application) routes() http.Handler {
 			mux.HandleFunc("/onboarding/step/resume-upload", app.createResume, "POST")
 			mux.HandleFunc("/onboarding/step/start-voice-call", app.callNow, "POST")
 			mux.HandleFunc("/onboarding/step/start-chat", app.startChatFromOnboarding, "POST")
-			
+
 			// API endpoints
 			mux.HandleFunc("/api/user/status", app.getUserStatus, "GET")
 

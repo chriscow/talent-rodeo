@@ -6,32 +6,31 @@ import (
 	"talent-rodeo/internal"
 )
 
-// ChatService defines the main business logic interface for chat functionality
+// ChatService defines the interface for chat functionality
 type ChatService interface {
-	// StartSession creates a new chat session and returns initial response
+	// Session management
 	StartSession(ctx context.Context, userID string, req StartChatRequest) (*StartChatResponse, error)
-
-	// ProcessUserMessage handles a user message and returns whether AI response should be generated
-	ProcessUserMessage(ctx context.Context, userID, appointmentID, message string) error
-
-	// StreamAIResponse generates and streams AI response, sending chunks via the provided channel
-	StreamAIResponse(ctx context.Context, userID, appointmentID string, msgChan chan<- StreamMessage) error
-
-	// EndSession ends a chat session and processes completion
 	EndSession(ctx context.Context, userID, appointmentID string) error
 
-	// GetHistory retrieves chat message history
+	// Message handling
+	ProcessUserMessage(ctx context.Context, userID, appointmentID, message string) error
+	StreamAIResponse(ctx context.Context, userID, appointmentID string, msgChan chan<- StreamMessage) error
+
+	// History and status
 	GetHistory(ctx context.Context, userID, appointmentID string) ([]internal.ChatMessage, error)
 
-	// FastForwardChat injects test transcript for testing (super user only)
+	// Testing and admin functions
 	FastForwardChat(ctx context.Context, userID, appointmentID string) error
+
+	// Internal functionality for tools
+	SaveAppointment(ctx context.Context, appointment *internal.Appointment) error
 }
 
-// ChatSession represents the context for a chat session, implementing LLMToolSession
+// ChatSession represents an active chat session with context for tool execution
 type ChatSession struct {
 	User        *internal.User
 	Appointment *internal.Appointment
-	Service     ChatService // Reference back to service for database operations
+	Service     ChatService // Reference to the service for saving appointments
 }
 
 // Implement LLMToolSession interface
@@ -43,10 +42,18 @@ func (s *ChatSession) GetSessionID() string {
 	return s.Appointment.ID
 }
 
+// GetLogger returns the logger from the session
 func (s *ChatSession) GetLogger() *slog.Logger {
-	// We'll need to get this from the service or pass it in
-	// For now, we'll use a placeholder
+	if serviceImpl, ok := s.Service.(*ServiceImpl); ok {
+		return serviceImpl.logger
+	}
+	// Fallback - this shouldn't happen in normal usage
 	return slog.Default()
+}
+
+// SaveAppointment saves the appointment through the service
+func (s *ChatSession) SaveAppointment(ctx context.Context) error {
+	return s.Service.SaveAppointment(ctx, s.Appointment)
 }
 
 // StreamMessage represents a message chunk sent via WebSocket streaming

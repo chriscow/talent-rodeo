@@ -16,6 +16,7 @@ import (
 
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/auth"
+	"talent-rodeo/internal/chat"
 	"talent-rodeo/internal/feedback"
 	"talent-rodeo/internal/inbox"
 	"talent-rodeo/internal/nudge"
@@ -42,6 +43,7 @@ import (
 	"github.com/markbates/goth/providers/google"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/pusher/pusher-http-go/v5"
+	"github.com/sashabaranov/go-openai"
 	"github.com/stripe/stripe-go/v72/client"
 )
 
@@ -176,6 +178,7 @@ type application struct {
 	inboxProcessor        *inbox.Processor
 	stripeClient          *client.API
 	onboardingSessionMgr  *internal.OnboardingSessionManager
+	chatService           chat.ChatService // New chat service
 }
 
 func run(logger *slog.Logger) error {
@@ -438,6 +441,10 @@ func run(logger *slog.Logger) error {
 	// Initialize Stripe client
 	stripeClient := client.New(cfg.stripe.secretKey, nil)
 
+	// Initialize chat service with OpenAI client
+	openAIClient := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
+	chatService := chat.NewService(FirestoreClient, openAIClient, logger)
+
 	app := &application{
 		config: cfg,
 		fs:     FirestoreClient,
@@ -454,6 +461,7 @@ func run(logger *slog.Logger) error {
 		sessionManager:       sessionManager,
 		onboardingSessionMgr: internal.NewOnboardingSessionManager(sessionManager),
 		stripeClient:         stripeClient,
+		chatService:          chatService,
 		// search:          searchScheduler,
 		// searchProvider:  searchProvider,
 		// searchScheduler: searchScheduler,
