@@ -2,9 +2,8 @@ package chat
 
 import (
 	"context"
+	"log/slog"
 	"talent-rodeo/internal"
-
-	"github.com/sashabaranov/go-openai"
 )
 
 // ChatService defines the main business logic interface for chat functionality
@@ -28,40 +27,34 @@ type ChatService interface {
 	FastForwardChat(ctx context.Context, userID, appointmentID string) error
 }
 
-// ToolRegistry defines the interface for managing and executing chat tools
-type ToolRegistry interface {
-	// GetAllTools returns all registered tools as OpenAI tool definitions
-	GetAllTools() []openai.Tool
-
-	// ExecuteTool executes a tool by name with the given arguments
-	ExecuteTool(ctx context.Context, toolName string, args map[string]any, session *ChatSession) (*ToolResponse, error)
-
-	// RegisterTool adds a new tool to the registry
-	RegisterTool(name string, tool Tool) error
-}
-
-// Tool represents a single chat tool that can be called by the LLM
-type Tool interface {
-	// GetDefinition returns the OpenAI tool definition
-	GetDefinition() openai.Tool
-
-	// Execute runs the tool with the given arguments and session context
-	Execute(ctx context.Context, args map[string]any, session *ChatSession) (*ToolResponse, error)
-}
-
-// ChatSession represents the context for a chat session, passed to tools
+// ChatSession represents the context for a chat session, implementing LLMToolSession
 type ChatSession struct {
 	User        *internal.User
 	Appointment *internal.Appointment
 	Service     ChatService // Reference back to service for database operations
 }
 
+// Implement LLMToolSession interface
+func (s *ChatSession) GetUserID() string {
+	return s.User.ID
+}
+
+func (s *ChatSession) GetSessionID() string {
+	return s.Appointment.ID
+}
+
+func (s *ChatSession) GetLogger() *slog.Logger {
+	// We'll need to get this from the service or pass it in
+	// For now, we'll use a placeholder
+	return slog.Default()
+}
+
 // StreamMessage represents a message chunk sent via WebSocket streaming
 type StreamMessage struct {
-	Type         string        `json:"type"`    // "content", "tool_response", "done", "error"
-	Content      string        `json:"content"` // Text content for streaming
-	Error        string        `json:"error,omitempty"`
-	ToolResponse *ToolResponse `json:"tool_response,omitempty"`
+	Type         string                    `json:"type"`    // "content", "tool_response", "done", "error"
+	Content      string                    `json:"content"` // Text content for streaming
+	Error        string                    `json:"error,omitempty"`
+	ToolResponse *internal.LLMToolResponse `json:"tool_response,omitempty"`
 }
 
 // StartChatRequest represents the request to start a new chat session
@@ -77,18 +70,9 @@ type StartChatResponse struct {
 	FirstMessage  string `json:"first_message"`
 }
 
-// ToolResponse represents the response from a tool execution
-type ToolResponse struct {
-	ID        string     `json:"id"`
-	Name      string     `json:"name"`
-	Content   string     `json:"content"`
-	Success   bool       `json:"success"`
-	UIActions []UIAction `json:"ui_actions,omitempty"`
-}
-
-// UIAction represents an action for the client to perform
-type UIAction struct {
-	Type  string                 `json:"type"`  // "redirect", "show_message", "update_status", etc.
-	Data  map[string]interface{} `json:"data"`  // Action-specific data
-	Delay int                    `json:"delay"` // Delay in milliseconds before executing
-}
+// Legacy type aliases for backward compatibility during transition
+// These will be removed once all code is updated
+type ToolRegistry = internal.LLMToolRegistry
+type Tool = internal.LLMTool
+type ToolResponse = internal.LLMToolResponse
+type UIAction = internal.LLMToolUIAction

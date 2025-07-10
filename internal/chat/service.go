@@ -29,7 +29,7 @@ type ServiceImpl struct {
 	fs           *internal.FirestoreClient // For now, use concrete type until we can extract interface
 	openAI       OpenAIClient
 	logger       *slog.Logger
-	toolRegistry ToolRegistry
+	toolRegistry internal.LLMToolRegistry // Use the generic LLM tool registry
 }
 
 // NewService creates a new ChatService with injected dependencies
@@ -40,10 +40,24 @@ func NewService(fs *internal.FirestoreClient, openAI OpenAIClient, logger *slog.
 		logger: logger,
 	}
 
-	// Initialize tool registry with reference to service
-	service.toolRegistry = NewToolRegistry(service, logger)
+	// Initialize tool registry with chat-specific tools
+	service.toolRegistry = internal.NewLLMToolRegistry("chat", logger)
+	service.registerChatTools()
 
 	return service
+}
+
+// registerChatTools registers chat-specific tools with the registry
+func (s *ServiceImpl) registerChatTools() {
+	// Register all the chat-specific tools
+	s.toolRegistry.RegisterTool("complete_chat", NewCompleteChatTool(s.logger))
+	s.toolRegistry.RegisterTool("update_user_preferences", NewUpdateUserPreferencesTool(s.logger))
+	s.toolRegistry.RegisterTool("schedule_followup", NewScheduleFollowupTool(s.logger))
+	s.toolRegistry.RegisterTool("get_checklist_status", NewGetChecklistStatusTool(s.logger))
+	s.toolRegistry.RegisterTool("mark_topic_progress", NewMarkTopicProgressTool(s.logger))
+	s.toolRegistry.RegisterTool("validate_information_quality", NewValidateInformationQualityTool(s.logger))
+	s.toolRegistry.RegisterTool("check_completion_readiness", NewCheckCompletionReadinessTool(s.logger))
+	s.toolRegistry.RegisterTool("override_completion", NewOverrideCompletionTool(s.logger))
 }
 
 // StartSession creates a new chat session and returns initial response
@@ -292,7 +306,7 @@ func (s *ServiceImpl) handleForcedCompletion(ctx context.Context, msgChan chan<-
 		Service:     s,
 	}
 
-	var toolResponse *ToolResponse
+	var toolResponse *internal.LLMToolResponse
 	if canComplete {
 		// Try normal completion
 		args := map[string]any{
@@ -609,7 +623,7 @@ func (s *ServiceImpl) processToolCalls(ctx context.Context, toolCalls []openai.T
 			s.logger.Error("Failed to parse tool call arguments", "error", err, "tool_call_id", toolCall.ID)
 
 			// Send error response for this tool call
-			errorResponse := &ToolResponse{
+			errorResponse := &internal.LLMToolResponse{
 				ID:      toolCall.ID,
 				Name:    toolCall.Function.Name,
 				Content: "Failed to parse tool arguments",
@@ -625,14 +639,14 @@ func (s *ServiceImpl) processToolCalls(ctx context.Context, toolCalls []openai.T
 		s.logger.Info("Executing tool call",
 			"tool_name", toolCall.Function.Name,
 			"tool_id", toolCall.ID,
-			"args", redactSensitiveInfo(args),
+			"args", internal.RedactSensitiveInfo(args),
 		)
 
 		// Execute the tool
 		toolResponse, err := s.toolRegistry.ExecuteTool(ctx, toolCall.Function.Name, args, session)
 		if err != nil {
 			s.logger.Error("Tool execution failed", "error", err, "tool_name", toolCall.Function.Name)
-			toolResponse = &ToolResponse{
+			toolResponse = &internal.LLMToolResponse{
 				ID:      toolCall.ID,
 				Name:    toolCall.Function.Name,
 				Content: "Tool execution failed: " + err.Error(),
