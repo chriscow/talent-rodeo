@@ -2,46 +2,62 @@ package chat
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"talent-rodeo/internal"
 	"time"
 
-	"github.com/chriscow/vapi-go"
 	"github.com/sashabaranov/go-openai"
 )
 
-// service implements the Service interface
-type service struct {
-	fs           FirestoreClient
+// Dependencies interfaces for dependency injection
+type FirestoreClient interface {
+	// Add methods as needed - we'll expand this as we extract more logic
+	RunTransaction(ctx context.Context, f func(context.Context, interface{}) error) error
+}
+
+type OpenAIClient interface {
+	CreateChatCompletionStream(ctx context.Context, request openai.ChatCompletionRequest) (*openai.ChatCompletionStream, error)
+}
+
+// ServiceImpl implements the ChatService interface
+type ServiceImpl struct {
+	fs           *internal.FirestoreClient // For now, use concrete type until we can extract interface
 	openAI       OpenAIClient
 	logger       *slog.Logger
 	toolRegistry ToolRegistry
 }
 
-// NewService creates a new chat service with injected dependencies
-func NewService(fs FirestoreClient, openAI OpenAIClient, logger *slog.Logger) Service {
-	return &service{
-		fs:           fs,
-		openAI:       openAI,
-		logger:       logger,
-		toolRegistry: NewToolRegistry(),
+// NewService creates a new ChatService with injected dependencies
+func NewService(fs *internal.FirestoreClient, openAI OpenAIClient, logger *slog.Logger) ChatService {
+	service := &ServiceImpl{
+		fs:     fs,
+		openAI: openAI,
+		logger: logger,
 	}
+
+	// Initialize tool registry with reference to service
+	service.toolRegistry = NewToolRegistry(service, logger)
+
+	return service
 }
 
-// StartSession creates a new chat session
-func (s *service) StartSession(ctx context.Context, userID string, req StartChatRequest) (*StartChatResponse, error) {
-	// Get user for assistant overrides
-	user, found, err := s.fs.GetUser(ctx, userID)
+// StartSession creates a new chat session and returns initial response
+func (s *ServiceImpl) StartSession(ctx context.Context, userID string, req StartChatRequest) (*StartChatResponse, error) {
+	s.logger.Debug("Starting chat session", "user_id", userID, "timezone", req.Timezone)
+
+	// Get user
+	user, found, err := internal.GetUser(ctx, s.fs, userID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 	if !found {
-		return nil, internal.ErrUserNotFound
+		return nil, fmt.Errorf("user not found: %s", userID)
 	}
 
 	// Build assistant overrides to get the first message
-	assistantOverrides, err := s.fs.BuildAssistantOverrides(ctx, user)
+	assistantOverrides, err := internal.BuildAssistantOverrides(ctx, user, s.fs, s.logger)
 	if err != nil {
 		s.logger.Error("Failed to build assistant overrides for chat start", "error", err, "user_id", userID)
 		// Continue with default message
@@ -72,15 +88,17 @@ func (s *service) StartSession(ctx context.Context, userID string, req StartChat
 		ConversationChecklist: internal.InitializeConversationChecklist(),
 	}
 
-	if err := s.fs.CreateAppointment(ctx, userID, appointment); err != nil {
-		return nil, err
+	if err := internal.CreateAppointment(ctx, s.fs, userID, appointment); err != nil {
+		return nil, fmt.Errorf("failed to create chat appointment: %w", err)
 	}
 
 	// Update user status to indicate chat started
-	if err := s.fs.UpdateUserStatus(ctx, user, internal.UserStatusCallStarted); err != nil {
+	if err := internal.UpdateUserStatus(ctx, s.fs, user, internal.UserStatusCallStarted); err != nil {
 		s.logger.Error("Failed to update user status for chat", "error", err, "user_id", userID)
 		// Continue despite error - chat session is already created
 	}
+
+	s.logger.Info("Chat session started", "user_id", userID, "appointment_id", appointment.ID)
 
 	return &StartChatResponse{
 		AppointmentID: appointment.ID,
@@ -89,274 +107,235 @@ func (s *service) StartSession(ctx context.Context, userID string, req StartChat
 	}, nil
 }
 
-// SendMessage sends a message to a chat session
-func (s *service) SendMessage(ctx context.Context, userID, appointmentID, content string) error {
+// ProcessUserMessage handles a user message and saves it to the appointment
+func (s *ServiceImpl) ProcessUserMessage(ctx context.Context, userID, appointmentID, message string) error {
+	s.logger.Debug("Processing user message", "user_id", userID, "appointment_id", appointmentID)
+
+	if message == "" {
+		return fmt.Errorf("message cannot be empty")
+	}
+
 	// Get the appointment
-	appointment, err := s.fs.GetAppointment(ctx, userID, appointmentID)
+	appointment, err := internal.GetAppointment(ctx, s.fs, userID, appointmentID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get appointment: %w", err)
 	}
 
 	if appointment.Type != internal.AppointmentTypeChat {
-		return internal.ErrInvalidAppointmentType
+		return fmt.Errorf("appointment is not a chat type")
 	}
 
-	// Add the user's message
-	return s.fs.AddChatMessage(ctx, appointment, "user", content)
-}
-
-// HandleWebSocketSession handles a WebSocket chat session
-func (s *service) HandleWebSocketSession(ctx context.Context, session *ChatSession) error {
-	// Send connection confirmation
-	confirmMsg := StreamMessage{
-		Type:    "connected",
-		Content: "WebSocket connection established",
-	}
-	if err := session.Connection.WriteJSON(confirmMsg); err != nil {
-		s.logger.Error("Failed to send connection confirmation", "error", err)
-		return err
+	// Ensure checklist is initialized
+	if appointment.ConversationChecklist == nil {
+		s.logger.Warn("Chat appointment missing checklist, initializing", "user_id", userID, "appointment_id", appointmentID)
+		appointment.ConversationChecklist = internal.InitializeConversationChecklist()
 	}
 
-	// Handle WebSocket messages
-	for {
-		var msg StreamMessage
-		err := session.Connection.ReadJSON(&msg)
-		if err != nil {
-			s.logger.Warn("WebSocket read error", "error", err)
-			break
-		}
+	// Save user message to appointment
+	if err := internal.AddChatMessage(ctx, s.fs, appointment, "user", message); err != nil {
+		return fmt.Errorf("failed to save user message: %w", err)
+	}
 
-		switch msg.Type {
-		case "user_message":
-			// Process user message
-			go s.handleWebSocketUserMessage(ctx, session, msg.Content)
-		case "ping":
-			// Respond to ping with pong
-			pong := StreamMessage{Type: "pong"}
-			session.Connection.WriteJSON(pong)
-		default:
-			s.logger.Warn("Unknown WebSocket message type", "type", msg.Type, "user_id", session.UserID)
-		}
+	// Increment message count in checklist
+	internal.IncrementMessageCount(appointment.ConversationChecklist)
+
+	// Check conversation length limits
+	if err := s.checkConversationLimits(appointment); err != nil {
+		return fmt.Errorf("conversation limit check failed: %w", err)
 	}
 
 	return nil
 }
 
-// EndSession ends a chat session
-func (s *service) EndSession(ctx context.Context, userID, appointmentID string) error {
-	// Get the appointment
-	appointment, err := s.fs.GetAppointment(ctx, userID, appointmentID)
+// StreamAIResponse generates and streams AI response via the provided channel
+func (s *ServiceImpl) StreamAIResponse(ctx context.Context, userID, appointmentID string, msgChan chan<- StreamMessage) error {
+	defer close(msgChan)
+
+	s.logger.Debug("Streaming AI response", "user_id", userID, "appointment_id", appointmentID)
+
+	// Get fresh appointment data
+	appointment, err := s.getFreshAppointment(ctx, userID, appointmentID)
 	if err != nil {
-		return err
+		s.sendError(msgChan, "Failed to get appointment data")
+		return fmt.Errorf("failed to get appointment: %w", err)
+	}
+
+	// Get user
+	user, found, err := internal.GetUser(ctx, s.fs, userID)
+	if err != nil {
+		s.sendError(msgChan, "Failed to get user data")
+		return fmt.Errorf("failed to get user: %w", err)
+	}
+	if !found {
+		s.sendError(msgChan, "User not found")
+		return fmt.Errorf("user not found: %s", userID)
+	}
+
+	// Check for hard stop conditions
+	if s.shouldForceCompletion(appointment) {
+		return s.handleForcedCompletion(ctx, msgChan, user, appointment)
+	}
+
+	// Generate AI response
+	return s.generateAIResponse(ctx, msgChan, user, appointment)
+}
+
+// EndSession ends a chat session and processes completion
+func (s *ServiceImpl) EndSession(ctx context.Context, userID, appointmentID string) error {
+	s.logger.Debug("Ending chat session", "user_id", userID, "appointment_id", appointmentID)
+
+	// Get user and appointment
+	user, found, err := internal.GetUser(ctx, s.fs, userID)
+	if err != nil {
+		return fmt.Errorf("failed to get user: %w", err)
+	}
+	if !found {
+		return fmt.Errorf("user not found: %s", userID)
+	}
+
+	appointment, err := internal.GetAppointment(ctx, s.fs, userID, appointmentID)
+	if err != nil {
+		return fmt.Errorf("failed to get appointment: %w", err)
 	}
 
 	if appointment.Type != internal.AppointmentTypeChat {
-		return internal.ErrInvalidAppointmentType
-	}
-
-	// Get user for processing
-	user, found, err := s.fs.GetUser(ctx, userID)
-	if err != nil {
-		return err
-	}
-	if !found {
-		return internal.ErrUserNotFound
+		return fmt.Errorf("appointment is not a chat type")
 	}
 
 	// Mark appointment as processing for transcript processing
-	return s.fs.ProcessAppointmentStarted(ctx, user, appointment)
-}
-
-// GetOrCreateSession gets an existing session or creates a new one
-func (s *service) GetOrCreateSession(ctx context.Context, userID string) (*StartChatResponse, error) {
-	// Try to find the latest running chat appointment
-	appointment, found, err := s.fs.GetLatestRunningChatAppointment(ctx, userID)
-	if err != nil {
-		return nil, err
+	if err := internal.ProcessAppointmentStarted(ctx, s.fs, user, appointment); err != nil {
+		return fmt.Errorf("failed to start appointment processing: %w", err)
 	}
 
-	if found {
-		// Return existing session
-		firstMessage := ""
-		if len(appointment.ChatMessages) > 0 {
-			firstMessage = appointment.ChatMessages[0].Content
-		}
-
-		return &StartChatResponse{
-			AppointmentID: appointment.ID,
-			Status:        "existing",
-			FirstMessage:  firstMessage,
-		}, nil
-	}
-
-	// No running session found, create a new one
-	return s.StartSession(ctx, userID, StartChatRequest{
-		Timezone: "UTC", // Default timezone, could be improved with user preferences
-	})
+	s.logger.Info("Chat session ended", "user_id", userID, "appointment_id", appointmentID)
+	return nil
 }
 
-// GetHistory returns the chat history for a session
-func (s *service) GetHistory(ctx context.Context, userID, appointmentID string, includeDebug bool) ([]internal.ChatMessage, error) {
-	// Get the appointment
-	appointment, err := s.fs.GetAppointment(ctx, userID, appointmentID)
+// GetHistory retrieves chat message history
+func (s *ServiceImpl) GetHistory(ctx context.Context, userID, appointmentID string) ([]internal.ChatMessage, error) {
+	s.logger.Debug("Getting chat history", "user_id", userID, "appointment_id", appointmentID)
+
+	appointment, err := internal.GetAppointment(ctx, s.fs, userID, appointmentID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get appointment: %w", err)
 	}
 
 	if appointment.Type != internal.AppointmentTypeChat {
-		return nil, internal.ErrInvalidAppointmentType
+		return nil, fmt.Errorf("appointment is not a chat type")
 	}
 
-	// Get chat history
-	messages, err := internal.GetChatHistory(appointment)
-	if err != nil {
-		return nil, err
-	}
-
-	// Filter debug messages for non-debug users
-	if !includeDebug {
-		var filteredMessages []internal.ChatMessage
-		for _, message := range messages {
-			// Skip debug messages
-			if isDebugMessage(message.Role) || isDebugMessageContent(message.Role, message.Content) {
-				continue
-			}
-			filteredMessages = append(filteredMessages, message)
-		}
-		return filteredMessages, nil
-	}
-
-	return messages, nil
+	return internal.GetChatHistory(appointment)
 }
 
-// InjectTranscript injects a test transcript into a session (for testing)
-func (s *service) InjectTranscript(ctx context.Context, userID, appointmentID string, call vapi.Call) (int, error) {
-	// Get the appointment
-	appointment, err := s.fs.GetAppointment(ctx, userID, appointmentID)
-	if err != nil {
-		return 0, err
-	}
+// FastForwardChat injects test transcript for testing (super user only)
+func (s *ServiceImpl) FastForwardChat(ctx context.Context, userID, appointmentID string) error {
+	// Implementation will be moved from handlers.chat.go
+	// For now, return not implemented
+	return fmt.Errorf("fast forward not yet implemented in service layer")
+}
 
-	if appointment.Type != internal.AppointmentTypeChat {
-		return 0, internal.ErrInvalidAppointmentType
-	}
+// Helper methods
 
-	// Extract transcript messages from the call
-	var messages []internal.ChatMessage
-	if call.Artifact != nil && call.Artifact.Messages != nil {
-		s.logger.Info("Fast-forward: Processing call artifact", "artifact_messages_count", len(call.Artifact.Messages))
-
-		tx := internal.NewTranscriptFromCallResult(call)
-		s.logger.Info("Fast-forward: Transcript processed", "transcript_messages_count", len(tx.Messages))
-
-		for i, msg := range tx.Messages {
-			s.logger.Debug("Fast-forward: Processing message", "index", i, "role", msg.Role, "content_length", len(msg.Content))
-
-			// Skip messages with empty content
-			if msg.Content == "" {
-				s.logger.Debug("Fast-forward: Skipping empty message", "index", i)
-				continue
-			}
-
-			chatMessage := internal.ChatMessage{
-				Role:      string(msg.Role),
-				Content:   msg.Content,
-				Timestamp: time.Now(),
-			}
-			messages = append(messages, chatMessage)
-		}
-	} else {
-		s.logger.Error("Fast-forward: No artifact or messages found", "has_artifact", call.Artifact != nil)
-		return 0, internal.ErrNoMessagesFound
-	}
-
-	if len(messages) == 0 {
-		return 0, internal.ErrNoMessagesFound
-	}
-
-	// Clear existing messages and inject the new ones
-	appointment.ChatMessages = messages
-
-	// Update the conversation checklist to reflect that topics have been covered
-	if appointment.ConversationChecklist == nil {
-		appointment.ConversationChecklist = internal.InitializeConversationChecklist()
-	}
-
-	// Mark all major topics as completed since we're injecting a full transcript
-	topicsToComplete := []string{
-		"introduction", "warm_up", "deal_breakers", "search_strategy",
-		"work_environment", "location_preferences", "final_confirmation",
-	}
-
-	for _, topicID := range topicsToComplete {
-		extractedInfo := map[string]any{
-			"source":         "transcript_injection",
-			"auto_populated": true,
-			"timestamp":      time.Now(),
-		}
-
-		err := internal.UpdateChecklistItem(
-			appointment.ConversationChecklist,
-			topicID,
-			internal.ChecklistItemStatusCompleted,
-			internal.ChecklistItemQualityMedium,
-			extractedInfo,
-			"Auto-populated from injected transcript for testing",
-		)
+// getFreshAppointment fetches appointment with retry logic for eventual consistency
+func (s *ServiceImpl) getFreshAppointment(ctx context.Context, userID, appointmentID string) (*internal.Appointment, error) {
+	maxRetries := 3
+	for retry := 0; retry < maxRetries; retry++ {
+		appointment, err := internal.GetAppointment(ctx, s.fs, userID, appointmentID)
 		if err != nil {
-			s.logger.Error("Failed to update checklist item", "error", err, "topic_id", topicID)
-			// Continue with other topics even if one fails
+			if retry < maxRetries-1 {
+				time.Sleep(time.Duration(100*(1<<retry)) * time.Millisecond) // 100ms, 200ms, 400ms
+				continue
+			}
+			return nil, err
 		}
+		return appointment, nil
 	}
-
-	// Update the checklist message count to reflect the injected messages
-	appointment.ConversationChecklist.MessageCount = len(appointment.ChatMessages)
-	appointment.ConversationChecklist.LastUpdated = time.Now()
-
-	// Mark the overall status as ready for completion since we've covered all topics
-	appointment.ConversationChecklist.OverallStatus = internal.ChecklistStatusReadyForCompletion
-
-	// Update the appointment with the new messages and checklist
-	if err := s.fs.UpdateAppointment(ctx, appointment); err != nil {
-		return 0, err
-	}
-
-	return len(messages), nil
+	return nil, fmt.Errorf("failed to get appointment after retries")
 }
 
-// handleWebSocketUserMessage processes a user message from WebSocket
-func (s *service) handleWebSocketUserMessage(ctx context.Context, session *ChatSession, userMessage string) {
-	// TODO: Implement the actual WebSocket message handling logic
-	// This would include:
-	// 1. Saving the user message
-	// 2. Generating AI response
-	// 3. Streaming the response back via WebSocket
-	// 4. Handling tool calls
-
-	s.logger.Info("Processing WebSocket user message", "user_id", session.UserID, "appointment_id", session.AppointmentID, "message", userMessage)
-
-	// For now, just acknowledge the message
-	response := StreamMessage{
-		Type:    "content",
-		Content: "Message received: " + userMessage,
+// checkConversationLimits validates conversation length and warns user
+func (s *ServiceImpl) checkConversationLimits(appointment *internal.Appointment) error {
+	if appointment.ConversationChecklist.MessageCount >= internal.MaxConversationLength-10 {
+		s.logger.Warn("Conversation approaching length limit",
+			"appointment_id", appointment.ID,
+			"message_count", appointment.ConversationChecklist.MessageCount,
+			"max_length", internal.MaxConversationLength)
 	}
-	session.Connection.WriteJSON(response)
-
-	// Send done message
-	done := StreamMessage{
-		Type: "done",
-	}
-	session.Connection.WriteJSON(done)
+	return nil
 }
 
-// Helper functions
-
-// isDebugMessage checks if a message role is considered a debug message
-func isDebugMessage(role string) bool {
-	return role == openai.ChatMessageRoleTool || role == openai.ChatMessageRoleSystem
+// shouldForceCompletion checks if conversation should be forcibly completed
+func (s *ServiceImpl) shouldForceCompletion(appointment *internal.Appointment) bool {
+	return appointment.ConversationChecklist.MessageCount >= internal.MaxConversationLength
 }
 
-// isDebugMessageContent checks if message content indicates a debug message (tool calls)
-func isDebugMessageContent(role, content string) bool {
-	return role == openai.ChatMessageRoleAssistant && strings.HasPrefix(content, "TOOL_CALLS:")
+// handleForcedCompletion handles forced completion when limits are exceeded
+func (s *ServiceImpl) handleForcedCompletion(ctx context.Context, msgChan chan<- StreamMessage, user *internal.User, appointment *internal.Appointment) error {
+	s.logger.Warn("Conversation exceeded maximum length, forcing completion",
+		"user_id", user.ID,
+		"appointment_id", appointment.ID,
+		"message_count", appointment.ConversationChecklist.MessageCount,
+		"max_length", internal.MaxConversationLength)
+
+	// Check if we can complete normally first
+	canComplete, issues, err := internal.ValidateChecklistCompletion(appointment.ConversationChecklist)
+	if err != nil {
+		s.logger.Error("Failed to validate checklist during hard stop", "error", err)
+	}
+
+	session := &ChatSession{
+		User:        user,
+		Appointment: appointment,
+		Service:     s,
+	}
+
+	var toolResponse *ToolResponse
+	if canComplete {
+		// Try normal completion
+		args := map[string]any{
+			"summary":                  "Conversation completed due to length limit",
+			"confidence_level":         "medium",
+			"next_step_recommendation": "review_profile",
+		}
+		toolResponse, err = s.toolRegistry.ExecuteTool(ctx, "complete_chat", args, session)
+	} else {
+		// Use override completion
+		args := map[string]any{
+			"reason":  fmt.Sprintf("Conversation exceeded maximum length (%d messages)", internal.MaxConversationLength),
+			"summary": fmt.Sprintf("Conversation ended due to length limit. Issues: %s", strings.Join(issues, ", ")),
+		}
+		toolResponse, err = s.toolRegistry.ExecuteTool(ctx, "override_completion", args, session)
+	}
+
+	if err != nil {
+		s.sendError(msgChan, "Failed to complete conversation")
+		return fmt.Errorf("failed to execute completion tool: %w", err)
+	}
+
+	// Send tool response
+	msgChan <- StreamMessage{
+		Type:         "tool_response",
+		ToolResponse: toolResponse,
+	}
+
+	return nil
+}
+
+// generateAIResponse handles the main AI response generation logic
+func (s *ServiceImpl) generateAIResponse(ctx context.Context, msgChan chan<- StreamMessage, user *internal.User, appointment *internal.Appointment) error {
+	// This will contain the main AI generation logic moved from the handlers
+	// For now, return not implemented
+	msgChan <- StreamMessage{
+		Type:  "error",
+		Error: "AI response generation not yet implemented in service layer",
+	}
+	return fmt.Errorf("AI response generation not yet implemented")
+}
+
+// sendError sends an error message via the channel
+func (s *ServiceImpl) sendError(msgChan chan<- StreamMessage, message string) {
+	msgChan <- StreamMessage{
+		Type:  "error",
+		Error: message,
+	}
 }
