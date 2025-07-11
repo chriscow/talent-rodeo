@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"talent-rodeo/internal"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -66,7 +65,7 @@ func NewGmailReader(config InboxConfig, logger *slog.Logger) (*GmailReader, erro
 }
 
 // GetUnreadEmails retrieves unread emails from Gmail
-func (g *GmailReader) GetUnreadEmails(ctx context.Context, maxResults int) ([]*internal.Email, error) {
+func (g *GmailReader) GetUnreadEmails(ctx context.Context, maxResults int) ([]*Email, error) {
 	g.logger.Debug("fetching unread emails", "max_results", maxResults)
 
 	// Search for unread emails
@@ -83,10 +82,10 @@ func (g *GmailReader) GetUnreadEmails(ctx context.Context, maxResults int) ([]*i
 
 	if len(resp.Messages) == 0 {
 		g.logger.Debug("no unread emails found")
-		return []*internal.Email{}, nil
+		return []*Email{}, nil
 	}
 
-	emails := make([]*internal.Email, 0, len(resp.Messages))
+	emails := make([]*Email, 0, len(resp.Messages))
 	for _, msg := range resp.Messages {
 		email, err := g.convertMessage(ctx, msg.Id)
 		if err != nil {
@@ -123,13 +122,13 @@ func (g *GmailReader) Close() error {
 }
 
 // convertMessage converts a Gmail message to our Email struct
-func (g *GmailReader) convertMessage(ctx context.Context, messageID string) (*internal.Email, error) {
+func (g *GmailReader) convertMessage(ctx context.Context, messageID string) (*Email, error) {
 	msg, err := g.service.Users.Messages.Get("me", messageID).Do()
 	if err != nil {
 		return nil, fmt.Errorf("unable to retrieve message: %w", err)
 	}
 
-	email := &internal.Email{
+	email := &Email{
 		ID:       msg.Id,
 		ThreadID: msg.ThreadId,
 		Labels:   msg.LabelIds,
@@ -206,11 +205,11 @@ func (g *GmailReader) extractBody(payload *gmail.MessagePart) (text, html string
 }
 
 // extractAttachments extracts attachments from Gmail message payload
-func (g *GmailReader) extractAttachments(payload *gmail.MessagePart) []internal.Attachment {
-	var attachments []internal.Attachment
+func (g *GmailReader) extractAttachments(payload *gmail.MessagePart) []Attachment {
+	var attachments []Attachment
 
 	if payload.Filename != "" && payload.Body != nil && payload.Body.AttachmentId != "" {
-		attachment := internal.Attachment{
+		attachment := Attachment{
 			ID:       payload.Body.AttachmentId,
 			Filename: payload.Filename,
 			MimeType: payload.MimeType,

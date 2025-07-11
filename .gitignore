@@ -36,6 +36,7 @@ __pycache__
 bin/
 tmp/
 
+logs/
 testdata/
 build-errors.log
 

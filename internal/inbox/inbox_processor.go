@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"sync"
-	"talent-rodeo/internal"
 	"talent-rodeo/internal/cloudflare"
 	"time"
 )
@@ -35,7 +34,7 @@ var DefaultSettings = ProcessorSettings{
 // Processor handles periodic inbox checking and email processing
 type Processor struct {
 	reader     InboxReader
-	handler    internal.EmailHandler
+	handler    EmailHandler
 	logger     *slog.Logger
 	ticker     *time.Ticker
 	done       chan bool
@@ -47,7 +46,7 @@ type Processor struct {
 }
 
 // NewProcessor creates a new inbox processor
-func NewProcessor(reader InboxReader, handler internal.EmailHandler, logger *slog.Logger) *Processor {
+func NewProcessor(reader InboxReader, handler EmailHandler, logger *slog.Logger) *Processor {
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 	}
@@ -243,9 +242,15 @@ func (p *Processor) process(ctx context.Context) error {
 	// Process each email
 	processedCount := 0
 	for _, email := range emails {
-		if err := p.handler.HandleEmail(ctx, email); err != nil {
+		result, err := p.handler.HandleEmail(ctx, email)
+		if err != nil {
 			p.logger.Error("failed to handle email", "email_id", email.ID, "error", err)
 			continue
+		}
+
+		// For now, we just log the result but don't process it further
+		if result != nil {
+			p.logger.Debug("email handling result", "email_id", email.ID, "handled", result.Handled, "summary", result.Summary)
 		}
 
 		// Mark email as read after successful processing

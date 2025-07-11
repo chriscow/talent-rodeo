@@ -4,13 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"talent-rodeo/internal"
 )
 
 // InboxReader defines the interface for reading emails from an inbox
 type InboxReader interface {
 	// GetUnreadEmails retrieves unread emails from the inbox
-	GetUnreadEmails(ctx context.Context, maxResults int) ([]*internal.Email, error)
+	GetUnreadEmails(ctx context.Context, maxResults int) ([]*Email, error)
 
 	// MarkAsRead marks an email as read
 	MarkAsRead(ctx context.Context, emailID string) error

@@ -1,0 +1,25 @@
+{{define "subject"}}User Search Adjustment: {{.UserEmail}}{{end}}
+
+{{define "plainBody"}}
+User Search Statement Updated via Email
+
+USER DETAILS:
+- User ID: {{.UserID}}
+- Email: {{.UserEmail}}
+- Name: {{.UserName}}
+- Processed At: {{.ProcessedAt.Format "2006-01-02 15:04:05 MST"}}
+
+ORIGINAL EMAIL REQUEST:
+{{.OriginalRequest}}
+
+PREVIOUS SEARCH STATEMENT:
+{{if .PreviousStatement}}{{.PreviousStatement}}{{else}}(No previous statement){{end}}
+
+NEW SEARCH STATEMENT:
+{{.UpdatedStatement}}
+
+ADJUSTMENT SUMMARY:
+{{.AdjustmentSummary}}
+
+This notification was sent because SEND_FEEDBACK_ADJUSTMENTS=true is set.
+{{end}}

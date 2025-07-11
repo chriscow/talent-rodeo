@@ -1,0 +1,628 @@
+{{define "title"}}User Detail - {{.User.Name}}{{end}}
+
+{{define "page:main"}}
+<main class="container">
+    <div class="user-detail-header">
+        <nav class="breadcrumb">
+            <a href="/admin/users">← Back to Users</a>
+        </nav>
+        <h1>User Details</h1>
+        <div class="user-summary">
+            <h2>{{if and .User.FirstName .User.LastName}}{{.User.FirstName}} {{.User.LastName}}{{else}}{{.User.Name}}{{end}}</h2>
+            <p>{{.User.Email}}</p>
+            <span>
+                <code id="user-id-header">{{.User.ID}}</code>
+                <button type="button" class="copy-btn copy-user-id" onclick="copyUserID()">
+                    <i data-feather="copy"></i>
+                </button>
+            </span>
+
+            <div class="user-badges">
+                <span class="badge status-{{.User.Status.String}}">{{.User.Status.String}}</span>
+                {{if .User.Tier}}<span class="badge tier-{{.User.Tier}}">{{.User.Tier}}</span>{{end}}
+                {{if .User.IsSuperUser}}<span class="badge super-user">Super User</span>{{end}}
+            </div>
+        </div>
+    </div>
+
+    <div class="user-detail-content">
+        <!-- Personal Information -->
+        <section class="info-section">
+            <h3>Personal Information</h3>
+            <div class="info-grid">
+                <div class="info-item">
+                    <label>Full Name:</label>
+                    <span>{{if and .User.FirstName .User.LastName}}{{.User.FirstName}} {{.User.LastName}}{{else}}{{.User.Name}}{{end}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Email:</label>
+                    <span>{{.User.Email}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Phone:</label>
+                    <span>{{if .User.Phone}}{{.User.Phone}}{{else}}Not provided{{end}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Location:</label>
+                    <span>{{if .User.Location}}{{.User.Location}}{{else}}Not provided{{end}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Nickname:</label>
+                    <span>{{if .User.NickName}}{{.User.NickName}}{{else}}Not set{{end}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Description:</label>
+                    <span>{{if .User.Description}}{{.User.Description}}{{else}}Not provided{{end}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Avatar URL:</label>
+                    <span>{{if .User.AvatarURL}}<a href="{{.User.AvatarURL}}" target="_blank">{{.User.AvatarURL}}</a>{{else}}Not provided{{end}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Timezone:</label>
+                    <span>{{if .User.Timezone}}{{.User.Timezone}}{{else}}Not set{{end}}</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Account Details -->
+        <section class="info-section">
+            <h3>Account Details</h3>
+            <div class="info-grid">
+                <div class="info-item">
+                    <label>User ID:</label>
+                    <div class="user-id-container">
+                        <span><code id="user-id-code">{{.User.ID}}</code></span>
+                        <button type="button" class="copy-btn copy-user-id" onclick="copyUserID()">
+                            <i data-feather="copy"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <label>Provider:</label>
+                    <span>{{if .User.Provider}}{{.User.Provider}}{{else}}Not set{{end}}</span>
+                </div>
+                <div class="info-item">
+                    <label>External User ID:</label>
+                    <span>{{if .User.UserID}}{{.User.UserID}}{{else}}Not set{{end}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Status:</label>
+                    <span class="status-{{.User.Status.String}}">{{.User.Status.String}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Tier:</label>
+                    <span class="tier-{{.User.Tier}}">{{if .User.Tier}}{{.User.Tier}}{{else}}Not set{{end}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Super User:</label>
+                    <span>{{if .User.IsSuperUser}}✓ Yes{{else}}✗ No{{end}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Created At:</label>
+                    <span>{{.User.CreatedAt.Format "2006-01-02 15:04:05"}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Updated At:</label>
+                    <span>{{.User.UpdatedAt.Format "2006-01-02 15:04:05"}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Last Accessed:</label>
+                    <span>{{if .User.LastAccessedAt.IsZero}}Never{{else}}{{.User.LastAccessedAt.Format "2006-01-02 15:04:05"}}{{end}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Status Updated:</label>
+                    <span>{{.User.StatusUpdatedAt.Format "2006-01-02 15:04:05"}}</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Subscription & Trial -->
+        <section class="info-section">
+            <h3>Subscription & Trial</h3>
+            <div class="info-grid">
+                <div class="info-item">
+                    <label>Subscription End:</label>
+                    <span>{{if .User.SubscriptionEnd}}{{.User.SubscriptionEnd.Format "2006-01-02 15:04:05"}}{{else}}Not set{{end}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Completed At:</label>
+                    <span>{{if .User.CompletedAt}}{{.User.CompletedAt.Format "2006-01-02 15:04:05"}}{{else}}Not completed{{end}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Trial Appointment ID:</label>
+                    <span>{{if .User.TrialAppointmentID}}{{.User.TrialAppointmentID}}{{else}}Not set{{end}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Trial Started:</label>
+                    <span>{{if .User.TrialStartedAt}}{{.User.TrialStartedAt.Format "2006-01-02 15:04:05"}}{{else}}Not started{{end}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Trial Ends:</label>
+                    <span>{{if .User.TrialEndAt}}{{.User.TrialEndAt.Format "2006-01-02 15:04:05"}}{{else}}Not set{{end}}</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Job Search Statistics -->
+        <section class="info-section">
+            <h3>Job Search Statistics</h3>
+            <div class="info-grid">
+                <div class="info-item">
+                    <label>Last Job Evaluation:</label>
+                    <span>{{if .User.LastJobEvaluationRun}}{{.User.LastJobEvaluationRun.Format "2006-01-02 15:04:05"}}{{else}}Never{{end}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Last Evaluation Date:</label>
+                    <span>{{if .User.LastEvaluationDate}}{{.User.LastEvaluationDate.Format "2006-01-02"}}{{else}}Never{{end}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Total Jobs Evaluated:</label>
+                    <span>{{.User.TotalJobsEvaluated}}</span>
+                </div>
+                <div class="info-item">
+                    <label>New Jobs Found:</label>
+                    <span>{{.User.NewJobsFound}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Rejected Jobs:</label>
+                    <span>{{.User.RejectedJobsCount}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Quality Jobs Found:</label>
+                    <span>{{.User.QualityJobsFound}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Location Preference:</label>
+                    <span>{{if .User.LocationPreference}}{{.User.LocationPreference}}{{else}}Not set{{end}}</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Communication & Nudges -->
+        <section class="info-section">
+            <h3>Communication & Nudges</h3>
+            <div class="info-grid">
+                <div class="info-item">
+                    <label>Followup Questions Sent:</label>
+                    <span>{{if .User.FollowupQuestionsSentAt}}{{.User.FollowupQuestionsSentAt.Format "2006-01-02 15:04:05"}}{{else}}Never{{end}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Last Nudge Email:</label>
+                    <span>{{if .User.LastNudgeEmailSent}}{{.User.LastNudgeEmailSent.Format "2006-01-02 15:04:05"}}{{else}}Never{{end}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Last Nudge Type:</label>
+                    <span>{{if .User.LastNudgeEmailType}}{{.User.LastNudgeEmailType}}{{else}}None{{end}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Nudge Emails Sent:</label>
+                    <span>{{.User.NudgeEmailsSentCount}}</span>
+                </div>
+                <div class="info-item">
+                    <label>Nudge Type Counts:</label>
+                    <div class="nudge-counts">
+                        {{if .User.NudgeTypeCount}}
+                            {{range $type, $count := .User.NudgeTypeCount}}
+                                <div class="nudge-count-item">
+                                    <span class="nudge-type">{{$type}}:</span>
+                                    <span class="nudge-count">{{$count}}</span>
+                                </div>
+                            {{end}}
+                        {{else}}
+                            <span>No nudges sent</span>
+                        {{end}}
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Statement -->
+        {{if .User.Statement}}
+        <section class="info-section statement-section">
+            <h3>Statement</h3>
+            <div class="statement-container">
+                <div class="statement-header">
+                    <label>Work Preferences Statement:</label>
+                    <button type="button" class="copy-btn" onclick="copyStatement()">
+                        <i data-feather="copy"></i>
+                    </button>
+                </div>
+                <textarea id="statement-textarea" class="statement-text" readonly>{{.User.Statement}}</textarea>
+            </div>
+        </section>
+        {{end}}
+
+        <!-- Error Information -->
+        {{if .User.Error}}
+        <section class="info-section error-section">
+            <h3>Error Information</h3>
+            <div class="error-container">
+                <p class="error-message">{{.User.Error}}</p>
+            </div>
+        </section>
+        {{end}}
+    </div>
+</main>
+{{end}}
+
+{{define "page:styles"}}
+<style>
+    .user-detail-header {
+        margin-bottom: 2rem;
+    }
+    
+    .breadcrumb {
+        margin-bottom: 1rem;
+    }
+    
+    .breadcrumb a {
+        color: var(--primary);
+        text-decoration: none;
+        font-weight: 500;
+    }
+    
+    .breadcrumb a:hover {
+        text-decoration: underline;
+    }
+    
+    .user-summary {
+        background: var(--card-background-color);
+        padding: 1.5rem;
+        border-radius: var(--border-radius);
+        border: 1px solid var(--card-border-color);
+        margin-bottom: 2rem;
+    }
+    
+    .user-summary h2 {
+        margin-bottom: 0.5rem;
+        color: var(--primary);
+    }
+    
+    .user-summary p {
+        margin-bottom: 1rem;
+        color: var(--muted-color);
+    }
+    
+    .user-summary span {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    
+    .user-summary .copy-user-id {
+        padding: 0.25rem;
+        font-size: 0.75rem;
+        min-width: auto;
+        height: auto;
+    }
+    
+    .user-badges {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    
+    .badge {
+        padding: 0.25rem 0.75rem;
+        border-radius: calc(var(--border-radius) / 2);
+        font-size: 0.875rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    .badge.super-user {
+        background: var(--primary);
+        color: var(--primary-inverse);
+    }
+    
+    /* Status badges */
+    .status-initial { background: #6c757d; color: white; }
+    .status-resume_uploaded { background: #17a2b8; color: white; }
+    .status-phone_call_scheduled { background: #ffc107; color: black; }
+    .status-phone_call_completed { background: #fd7e14; color: white; }
+    .status-preferences_extracted { background: #20c997; color: white; }
+    .status-job_search_started { background: #007bff; color: white; }
+    .status-complete { background: #28a745; color: white; }
+    .status-error { background: #dc3545; color: white; }
+    
+    /* Tier badges */
+    .tier-free { background: #6c757d; color: white; }
+    .tier-pro { background: #007bff; color: white; }
+    .tier-enterprise { background: #28a745; color: white; }
+    
+    .info-section {
+        background: var(--card-background-color);
+        padding: 1.5rem;
+        border-radius: var(--border-radius);
+        border: 1px solid var(--card-border-color);
+        margin-bottom: 2rem;
+    }
+    
+    .info-section h3 {
+        margin-bottom: 1rem;
+        color: var(--primary);
+        border-bottom: 2px solid var(--primary);
+        padding-bottom: 0.5rem;
+    }
+    
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 1rem;
+    }
+    
+    .info-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+    
+    .info-item label {
+        font-weight: 600;
+        color: var(--color);
+        font-size: 0.875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    .info-item span {
+        padding: 0.5rem;
+        background: var(--card-sectionning-background-color);
+        border-radius: calc(var(--border-radius) / 2);
+        border: 1px solid var(--muted-border-color);
+    }
+    
+    .info-item code {
+        background: var(--code-background-color);
+        padding: 0.25rem 0.5rem;
+        border-radius: calc(var(--border-radius) / 2);
+        font-family: var(--font-family-monospace);
+    }
+    
+    .nudge-counts {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+    
+    .nudge-count-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.25rem 0.5rem;
+        background: var(--card-sectionning-background-color);
+        border-radius: calc(var(--border-radius) / 2);
+        border: 1px solid var(--muted-border-color);
+    }
+    
+    .nudge-type {
+        font-weight: 500;
+        color: var(--color);
+    }
+    
+    .nudge-count {
+        font-weight: bold;
+        color: var(--primary);
+        background: var(--primary-focus);
+        padding: 0.125rem 0.375rem;
+        border-radius: calc(var(--border-radius) / 2);
+        min-width: 1.5rem;
+        text-align: center;
+    }
+    
+    .statement-section {
+        background: var(--card-background-color);
+    }
+    
+    .statement-container {
+        width: 100%;
+    }
+    
+    .statement-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+    
+    .statement-header label {
+        font-weight: 600;
+        color: var(--color);
+        font-size: 0.875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    .copy-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        background: var(--primary);
+        color: var(--primary-inverse);
+        border: none;
+        border-radius: calc(var(--border-radius) / 2);
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    
+    .copy-btn:hover {
+        background: var(--primary-hover);
+        transform: translateY(-1px);
+    }
+    
+    .copy-btn:active {
+        transform: translateY(0);
+    }
+    
+    .copy-btn.copied {
+        background: var(--success);
+        color: white;
+    }
+    
+    .user-id-container {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem;
+        background: var(--card-sectionning-background-color);
+        border-radius: calc(var(--border-radius) / 2);
+        border: 1px solid var(--muted-border-color);
+    }
+    
+    .user-id-container span {
+        flex: 1;
+        padding: 0;
+        background: none;
+        border: none;
+    }
+    
+    .copy-user-id {
+        flex-shrink: 0;
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+    }
+    
+    .statement-text {
+        width: 100%;
+        min-height: 200px;
+        padding: 1rem;
+        border: 1px solid var(--muted-border-color);
+        border-radius: var(--border-radius);
+        background: var(--card-sectionning-background-color);
+        font-family: var(--font-family);
+        font-size: 0.95rem;
+        line-height: 1.6;
+        resize: vertical;
+    }
+    
+    .statement-text:focus {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+    }
+    
+    .error-section {
+        background: var(--error-background, #fdf2f2);
+        border-color: var(--error-border, #f87171);
+    }
+    
+    .error-container {
+        padding: 1rem;
+        background: var(--error-background, #fef2f2);
+        border: 1px solid var(--error-border, #f87171);
+        border-radius: var(--border-radius);
+    }
+    
+    .error-message {
+        color: var(--error-color, #dc2626);
+        font-weight: 500;
+        margin: 0;
+    }
+    
+    @media (max-width: 768px) {
+        .info-grid {
+            grid-template-columns: 1fr;
+        }
+        
+        .statement-header {
+            flex-direction: column;
+            gap: 1rem;
+            align-items: flex-start;
+        }
+        
+        .user-badges {
+            justify-content: center;
+        }
+    }
+</style>
+{{end}}
+
+{{define "page:scripts"}}
+<script>
+    async function copyStatement() {
+        const textarea = document.getElementById('statement-textarea');
+        const copyBtn = document.querySelector('.copy-btn');
+        const copyText = copyBtn.querySelector('.copy-text');
+        
+        try {
+            // Try to use the modern clipboard API
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(textarea.value);
+            } else {
+                // Fallback for older browsers
+                textarea.select();
+                document.execCommand('copy');
+            }
+            
+            // Visual feedback
+            copyBtn.classList.add('copied');
+            copyText.textContent = 'Copied!';
+            
+            // Reset after 2 seconds
+            setTimeout(() => {
+                copyBtn.classList.remove('copied');
+                copyText.textContent = 'Copy';
+            }, 2000);
+            
+        } catch (err) {
+            console.error('Failed to copy text: ', err);
+            // Show error feedback
+            copyText.textContent = 'Failed';
+            setTimeout(() => {
+                copyText.textContent = 'Copy';
+            }, 2000);
+        }
+    }
+    
+    async function copyUserID() {
+        // Get the User ID value from either element
+        const userIdElement = document.getElementById('user-id-code') || document.getElementById('user-id-header');
+        const copyBtn = event.target.closest('.copy-user-id');
+        const copyText = copyBtn.querySelector('.copy-text');
+        
+        try {
+            // Try to use the modern clipboard API
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(userIdElement.textContent);
+            } else {
+                // Fallback for older browsers
+                const range = document.createRange();
+                range.selectNode(userIdElement);
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(range);
+                document.execCommand('copy');
+                window.getSelection().removeAllRanges();
+            }
+            
+            // Visual feedback
+            copyBtn.classList.add('copied');
+            if (copyText) {
+                copyText.textContent = 'Copied!';
+            }
+            
+            // Reset after 2 seconds
+            setTimeout(() => {
+                copyBtn.classList.remove('copied');
+                if (copyText) {
+                    copyText.textContent = 'Copy';
+                }
+            }, 2000);
+            
+        } catch (err) {
+            console.error('Failed to copy User ID: ', err);
+            // Show error feedback
+            if (copyText) {
+                copyText.textContent = 'Failed';
+                setTimeout(() => {
+                    copyText.textContent = 'Copy';
+                }, 2000);
+            }
+        }
+    }
+</script>
+{{end}}
