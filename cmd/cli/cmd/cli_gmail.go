@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"talent-rodeo/internal/inbox"
 
 	"github.com/spf13/cobra"
@@ -72,6 +73,11 @@ Requires Gmail OAuth to be set up first using 'gmail setup'.`,
 			return fmt.Errorf("GMAIL_READER_CREDENTIALS environment variable is required")
 		}
 
+		// Check if token file exists
+		if _, err := os.Stat(gmailTokenPath); os.IsNotExist(err) {
+			return fmt.Errorf("Gmail token file not found at %s. Run 'gmail setup' first", gmailTokenPath)
+		}
+
 		logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 			Level: slog.LevelInfo,
 		}))
@@ -94,6 +100,10 @@ Requires Gmail OAuth to be set up first using 'gmail setup'.`,
 		ctx := context.Background()
 		emails, err := reader.GetUnreadEmails(ctx, gmailMaxEmails)
 		if err != nil {
+			// Check for common OAuth errors and provide helpful messages
+			if strings.Contains(err.Error(), "invalid_grant") {
+				return fmt.Errorf("Gmail token has expired or been revoked. Run 'gmail setup' to get a new token")
+			}
 			return fmt.Errorf("failed to get unread emails: %w", err)
 		}
 

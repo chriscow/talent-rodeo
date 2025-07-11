@@ -43,7 +43,7 @@
             </thead>
             <tbody>
                 {{range .Users}}
-                <tr>
+                <tr class="clickable-row" data-user-id="{{.ID}}" onclick="window.location.href='/admin/users/{{.ID}}'">
                     <td>
                         <code >
                             {{slice .ID 0 8}}
@@ -142,6 +142,20 @@
         
         tr:hover {
             background-color: #f8f9fa;
+        }
+        
+        .clickable-row {
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        
+        .clickable-row:hover {
+            background-color: var(--primary-focus);
+            transform: translateY(-1px);
+        }
+        
+        .clickable-row:active {
+            transform: translateY(0);
         }
         
         .overflow-auto {

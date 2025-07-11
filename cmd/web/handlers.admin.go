@@ -21,6 +21,8 @@ import (
 	"talent-rodeo/internal/search/providers/scrapingdog"
 	"talent-rodeo/internal/subscription"
 	"time"
+
+	"github.com/alexedwards/flow"
 )
 
 func (app *application) adminIndex(w http.ResponseWriter, r *http.Request) {
@@ -1429,6 +1431,38 @@ func (app *application) adminSearchTaskAnalytics(w http.ResponseWriter, r *http.
 	data["CurrentSort"] = sortBy
 
 	if err := response.Page(w, http.StatusOK, data, "pages/admin/search-task-analytics.html"); err != nil {
+		app.serverError(w, r, err)
+	}
+}
+
+// --- Admin User Detail ---
+func (app *application) adminUserDetail(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	data := app.newTemplateData(r)
+
+	// Extract user ID from URL path using Flow's parameter extraction
+	userID := flow.Param(r.Context(), "id")
+	if userID == "" {
+		http.Error(w, "User ID is required", http.StatusBadRequest)
+		return
+	}
+
+	// Fetch user from database
+	user, found, err := internal.GetUser(ctx, app.fs, userID)
+	if err != nil {
+		app.serverError(w, r, fmt.Errorf("failed to get user: %w", err))
+		return
+	}
+	if !found {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	// Add user data to template
+	data["User"] = user
+	data["UserID"] = userID
+
+	if err := response.Page(w, http.StatusOK, data, "pages/admin/user-detail.html"); err != nil {
 		app.serverError(w, r, err)
 	}
 }

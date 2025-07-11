@@ -731,93 +731,182 @@ func runGmailSetup(logger *slog.Logger) error {
 }
 
 func (app *application) startServices(ctx context.Context, smtpCfg *smtp.Config) error {
-
-	if !app.config.nudgeOnly {
-		app.feedbackProcessor = feedback.NewProcessor(app.fs, app.logger)
-		if err := app.feedbackProcessor.Start(ctx); err != nil {
-			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-				"action": "startServices: failed to start feedback processor",
-			})
-			return fmt.Errorf("failed to start feedback processor: %w", err)
-		}
-
-		app.subscriptionProcessor = subscription.NewProcessor(app.fs, app.pusher, app.logger)
-
-		app.jobDispatch = internal.NewJobEventDispatch()
-		app.searchResultProcessor = internal.NewSearchResultProcessor(app.fs, app.logger, app.pusher, app.jobDispatch)
-		app.jobDispatch.Register("search-result-processor", app.searchResultProcessor)
-		app.searchResultProcessor.Start()
-
-		app.searchProvider = scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), app.logger, scrapingdog.WithJobEventHandler(app.jobDispatch))
-		app.searchScheduler = search.NewScheduler(app.fs, app.logger, app.searchProvider, app.mailer, app.config.notifications.email)
-
-		if err := app.subscriptionProcessor.Start(ctx); err != nil {
-			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-				"action": "startServices: failed to start subscription processor",
-			})
-			return fmt.Errorf("failed to start subscription processor: %w", err)
-		}
-		if err := app.searchProvider.Start(ctx); err != nil {
-			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-				"action": "startServices: failed to start search provider",
-			})
-			return fmt.Errorf("failed to start search provider: %w", err)
-		}
-		if err := app.searchScheduler.Start(ctx); err != nil {
-			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-				"action": "startServices: failed to start search scheduler",
-			})
-			return fmt.Errorf("failed to start search scheduler: %w", err)
-		}
+	if err := app.startCoreServices(ctx); err != nil {
+		return err
 	}
 
-	app.nudgeProcessor = nudge.NewProcessorWithDefaults(app.fs, smtpCfg, app.logger)
-	if err := app.nudgeProcessor.Start(ctx); err != nil {
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"action": "startServices: failed to start nudge processor",
-		})
-		return fmt.Errorf("failed to start nudge processor: %w", err)
+	if err := app.startNudgeProcessor(ctx, smtpCfg); err != nil {
+		return err
 	}
 
-	// Only initialize Gmail if credentials are available and token exists
-	if os.Getenv("GMAIL_READER_CREDENTIALS") != "" {
-		app.logger.Info("Gmail credentials found, attempting to initialize Gmail integration")
-
-		tokenPath := getGmailTokenPath()
-
-		// Try to setup token from environment secret if file doesn't exist
-		if err := setupGmailTokenFromSecret(tokenPath, app.logger); err != nil {
-			app.logger.Warn("failed to setup token from secret", "error", err)
-		}
-
-		// Check if token file exists
-		if _, err := os.Stat(tokenPath); err == nil {
-			app.logger.Info("Gmail token found, initializing Gmail reader", "token_path", tokenPath)
-			gmail, err := inbox.NewGmailReader(inbox.InboxConfig{
-				TokenPath: tokenPath,
-			}, app.logger)
-			if err != nil {
-				app.logger.Warn("failed to create Gmail reader - Gmail features will be unavailable", "error", err)
-			} else {
-				dispatch := internal.NewInboxDispatch()
-				// dispatch.Register("feedback", app.feedbackProcessor)
-
-				app.inboxProcessor = inbox.NewProcessor(gmail, dispatch, app.logger)
-				if err := app.inboxProcessor.Start(ctx); err != nil {
-					app.logger.Warn("failed to start inbox processor - Gmail features will be unavailable", "error", err)
-				} else {
-					app.logger.Info("✅ Gmail integration successfully initialized")
-				}
-			}
-		} else {
-			app.logger.Info("Gmail token not found - Gmail features will be unavailable",
-				"token_path", tokenPath,
-				"help", "Run 'go run cmd/cli/cli_main.go gmail setup' to configure Gmail access")
-		}
-	} else {
-		app.logger.Info("Gmail credentials not configured - Gmail features will be unavailable",
-			"help", "Set GMAIL_READER_CREDENTIALS environment variable to enable Gmail integration")
+	if err := app.startGmailIntegration(ctx); err != nil {
+		return err
 	}
 
 	return nil
+}
+
+func (app *application) startCoreServices(ctx context.Context) error {
+	if app.config.nudgeOnly {
+		return nil
+	}
+
+	// Start feedback processor
+	app.feedbackProcessor = feedback.NewProcessor(app.fs, app.logger)
+	if err := app.feedbackProcessor.Start(ctx); err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "startCoreServices: failed to start feedback processor",
+		})
+		return fmt.Errorf("failed to start feedback processor: %w", err)
+	}
+
+	// Start subscription processor
+	app.subscriptionProcessor = subscription.NewProcessor(app.fs, app.pusher, app.logger)
+	if err := app.subscriptionProcessor.Start(ctx); err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "startCoreServices: failed to start subscription processor",
+		})
+		return fmt.Errorf("failed to start subscription processor: %w", err)
+	}
+
+	// Setup job dispatch and search components
+	app.jobDispatch = internal.NewJobEventDispatch()
+	app.searchResultProcessor = internal.NewSearchResultProcessor(app.fs, app.logger, app.pusher, app.jobDispatch)
+	app.jobDispatch.Register("search-result-processor", app.searchResultProcessor)
+	app.searchResultProcessor.Start()
+
+	app.searchProvider = scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), app.logger, scrapingdog.WithJobEventHandler(app.jobDispatch))
+	app.searchScheduler = search.NewScheduler(app.fs, app.logger, app.searchProvider, app.mailer, app.config.notifications.email)
+
+	// Start search provider and scheduler
+	if err := app.searchProvider.Start(ctx); err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "startCoreServices: failed to start search provider",
+		})
+		return fmt.Errorf("failed to start search provider: %w", err)
+	}
+
+	if err := app.searchScheduler.Start(ctx); err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "startCoreServices: failed to start search scheduler",
+		})
+		return fmt.Errorf("failed to start search scheduler: %w", err)
+	}
+
+	return nil
+}
+
+func (app *application) startNudgeProcessor(ctx context.Context, smtpCfg *smtp.Config) error {
+	app.nudgeProcessor = nudge.NewProcessorWithDefaults(app.fs, smtpCfg, app.logger)
+	if err := app.nudgeProcessor.Start(ctx); err != nil {
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"action": "startNudgeProcessor: failed to start nudge processor",
+		})
+		return fmt.Errorf("failed to start nudge processor: %w", err)
+	}
+	return nil
+}
+
+func (app *application) startGmailIntegration(ctx context.Context) error {
+	if os.Getenv("GMAIL_READER_CREDENTIALS") == "" {
+		app.logger.Info("Gmail credentials not configured - Gmail features will be unavailable",
+			"help", "Set GMAIL_READER_CREDENTIALS environment variable to enable Gmail integration")
+		return nil
+	}
+
+	app.logger.Info("Gmail credentials found, attempting to initialize Gmail integration")
+
+	tokenPath := getGmailTokenPath()
+	if err := setupGmailTokenFromSecret(tokenPath, app.logger); err != nil {
+		app.logger.Warn("failed to setup token from secret", "error", err)
+	}
+
+	if _, err := os.Stat(tokenPath); err != nil {
+		app.logger.Info("Gmail token not found - Gmail features will be unavailable",
+			"token_path", tokenPath,
+			"help", "Run 'go run cmd/cli/cli_main.go gmail setup' to configure Gmail access")
+		return nil
+	}
+
+	return app.setupGmailReader(ctx, tokenPath)
+}
+
+func (app *application) setupGmailReader(ctx context.Context, tokenPath string) error {
+	app.logger.Info("Gmail token found, initializing Gmail reader", "token_path", tokenPath)
+
+	gmail, err := inbox.NewGmailReader(inbox.InboxConfig{
+		TokenPath: tokenPath,
+	}, app.logger)
+	if err != nil {
+		app.logger.Warn("failed to create Gmail reader - Gmail features will be unavailable", "error", err)
+		return nil
+	}
+
+	dispatch, err := app.createInboxDispatch()
+	if err != nil {
+		app.logger.Error("failed to create inbox dispatch", "error", err)
+		return nil
+	}
+
+	// Create adapter to convert InboxDispatch to inbox.EmailHandler interface
+	handlerAdapter := inbox.EmailHandlerFunc(func(ctx context.Context, email *inbox.Email) (*inbox.HandlingResult, error) {
+		err := dispatch.HandleEmail(ctx, email)
+		if err != nil {
+			return nil, err
+		}
+		// Return a basic result since dispatch handles everything internally
+		return &inbox.HandlingResult{
+			Handled: true,
+			Summary: "Email processed by dispatch system",
+		}, nil
+	})
+
+	app.inboxProcessor = inbox.NewProcessor(gmail, handlerAdapter, app.logger)
+	if err := app.inboxProcessor.Start(ctx); err != nil {
+		app.logger.Warn("failed to start inbox processor - Gmail features will be unavailable", "error", err)
+		return nil
+	}
+
+	app.logger.Info("✅ Gmail integration successfully initialized")
+	return nil
+}
+
+func (app *application) createInboxDispatch() (*internal.InboxDispatch, error) {
+	// Create OpenAI client for inbox processing
+	openAIAPIKey := os.Getenv("OPENAI_API_KEY")
+	if openAIAPIKey == "" {
+		app.logger.Warn("OpenAI API key not set - using basic dispatch without AI features")
+		return internal.NewInboxDispatch(), nil
+	}
+
+	notificationEmail := os.Getenv("ADMIN_EMAIL")
+
+	// Create inbox OpenAI client (different from feedback OpenAI client)
+	inboxOpenAIClient := inbox.NewOpenAIClient(openAIAPIKey, app.logger)
+	
+	// Create response components
+	responder := inbox.NewEmailResponder(inboxOpenAIClient, app.logger)
+	sender := inbox.NewResponseSender(app.mailer, app.logger)
+	escalationService := inbox.NewEscalationService(notificationEmail, app.mailer, app.logger)
+	
+	// Create enhanced dispatch with response capabilities
+	dispatch := internal.NewEnhancedInboxDispatch(responder, sender, escalationService, app.logger)
+
+	// Create and register feedback handler
+	feedbackOpenAIClient := feedback.NewOpenAIClient(openAIAPIKey, app.logger)
+	inboxFeedbackHandler := feedback.NewInboxFeedbackHandler(
+		feedbackOpenAIClient,
+		app.fs,
+		app.mailer,
+		notificationEmail,
+		app.logger,
+	)
+
+	if err := dispatch.Register("inbox-feedback", inboxFeedbackHandler); err != nil {
+		app.logger.Error("failed to register inbox feedback handler", "error", err)
+		return nil, err
+	}
+
+	app.logger.Info("✅ Inbox feedback handler registered successfully")
+	return dispatch, nil
 }
