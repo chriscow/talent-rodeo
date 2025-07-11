@@ -31,14 +31,16 @@ type ServiceImpl struct {
 	openAI       OpenAIClient
 	logger       *slog.Logger
 	toolRegistry internal.LLMToolRegistry // Use the generic LLM tool registry
+	serviceDeps  *internal.ServiceDeps    // Dependencies for completion processing
 }
 
 // NewService creates a new ChatService with injected dependencies
-func NewService(fs *internal.FirestoreClient, openAI OpenAIClient, logger *slog.Logger) ChatService {
+func NewService(fs *internal.FirestoreClient, openAI OpenAIClient, serviceDeps *internal.ServiceDeps, logger *slog.Logger) ChatService {
 	service := &ServiceImpl{
-		fs:     fs,
-		openAI: openAI,
-		logger: logger,
+		fs:          fs,
+		openAI:      openAI,
+		logger:      logger,
+		serviceDeps: serviceDeps,
 	}
 
 	// Initialize tool registry with chat-specific tools

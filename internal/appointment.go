@@ -125,6 +125,10 @@ func CreateAppointment(ctx context.Context, fs *FirestoreClient, userID string, 
 		appointment.ID = funcs.Slugify(fmt.Sprintf("%s-%d", appointment.Name, time.Now().UnixNano()))
 	}
 
+	if appointment.Type == "" {
+		return fmt.Errorf("appointment type is required")
+	}
+
 	appointment.UserID = userID
 	appointment.CreatedAt = time.Now()
 	appointment.UpdatedAt = appointment.CreatedAt

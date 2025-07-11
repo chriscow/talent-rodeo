@@ -443,7 +443,15 @@ func run(logger *slog.Logger) error {
 
 	// Initialize chat service with OpenAI client
 	openAIClient := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
-	chatService := chat.NewService(FirestoreClient, openAIClient, logger)
+
+	// Create ServiceDeps for unified completion processing
+	smtpCfg := smtp.Config{
+		Host:     cfg.smtp.host,
+		Port:     cfg.smtp.port,
+		Username: cfg.smtp.username,
+		Password: cfg.smtp.password,
+		From:     cfg.smtp.from,
+	}
 
 	app := &application{
 		config: cfg,
@@ -461,7 +469,6 @@ func run(logger *slog.Logger) error {
 		sessionManager:       sessionManager,
 		onboardingSessionMgr: internal.NewOnboardingSessionManager(sessionManager),
 		stripeClient:         stripeClient,
-		chatService:          chatService,
 		// search:          searchScheduler,
 		// searchProvider:  searchProvider,
 		// searchScheduler: searchScheduler,
@@ -476,18 +483,26 @@ func run(logger *slog.Logger) error {
 		}
 	}()
 
-	smtpCfg := smtp.Config{
-		Host:     app.config.smtp.host,
-		Port:     app.config.smtp.port,
-		Username: app.config.smtp.username,
-		Password: app.config.smtp.password,
-		From:     app.config.smtp.from,
-	}
 	if err := app.startServices(ctx, &smtpCfg); err != nil {
 		return fmt.Errorf("failed to start services: %w", err)
 	}
 
-	if err := transcript.RecoverProcessingAppointments(sentry.CurrentHub(), FirestoreClient, pusherClient, logger, app.jobDispatch, app.searchProvider, &smtpCfg); err != nil {
+	// Initialize ServiceDeps after all services are started
+	serviceDeps := internal.NewServiceDeps(
+		sentry.CurrentHub(),
+		FirestoreClient,
+		pusherClient,
+		logger,
+		app.searchProvider,
+		app.jobDispatch,
+		&smtpCfg,
+	)
+
+	// Initialize chat service with ServiceDeps
+	chatService := chat.NewService(FirestoreClient, openAIClient, serviceDeps, logger)
+	app.chatService = chatService
+
+	if err := transcript.RecoverProcessingAppointments(serviceDeps); err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"error_type": "transcript_recovery",
 		})

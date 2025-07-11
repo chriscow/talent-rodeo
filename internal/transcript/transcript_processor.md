@@ -130,13 +130,13 @@ After processing the transcript:
 To process a completed appointment:
 
 ```go
-ProcessCompletedCall(hub, fs, psh, queue, logger, dispatch, user, appointment)
+ProcessCompletedCall(deps, user, appointment)
 ```
 
 To recover interrupted processing on service startup:
 
 ```go
-err := RecoverProcessingAppointments(hub, fs, psh, logger, dispatch, queue)
+err := RecoverProcessingAppointments(deps)
 if err != nil {
     // Handle error
 }

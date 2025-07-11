@@ -393,6 +393,7 @@ func (app *application) callNow(w http.ResponseWriter, r *http.Request) {
 	appointment := &internal.Appointment{
 		UserID:        user.ID,
 		Name:          "initial-call",
+		Type:          internal.AppointmentTypeVoice,
 		ScheduledTime: scheduledTime,
 		Timezone:      "UTC", // Immediate calls don't need specific timezone
 		Status:        internal.AppointmentStatusScheduled,

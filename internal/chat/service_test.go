@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"testing"
+	"talent-rodeo/internal"
 
 	"github.com/sashabaranov/go-openai"
 )
@@ -21,9 +22,14 @@ func TestNewService(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	mockOpenAI := &MockOpenAIClient{}
 
+	// Create a mock ServiceDeps for testing
+	mockServiceDeps := &internal.ServiceDeps{
+		Logger: logger,
+	}
+
 	// For now, pass nil for firestore client since we haven't fully extracted the interface yet
 	// This test verifies our package structure compiles correctly
-	service := NewService(nil, mockOpenAI, logger)
+	service := NewService(nil, mockOpenAI, mockServiceDeps, logger)
 
 	if service == nil {
 		t.Fatal("Expected service to be created, got nil")
@@ -38,7 +44,12 @@ func TestServiceInterface(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	mockOpenAI := &MockOpenAIClient{}
 
-	service := NewService(nil, mockOpenAI, logger)
+	// Create a mock ServiceDeps for testing
+	mockServiceDeps := &internal.ServiceDeps{
+		Logger: logger,
+	}
+
+	service := NewService(nil, mockOpenAI, mockServiceDeps, logger)
 
 	// Verify we can access the service interface without calling methods that need real dependencies
 	var _ ChatService = service

@@ -336,6 +336,59 @@ func SetUserStatement(ctx context.Context, fs *FirestoreClient, id string, state
 	return nil
 }
 
+func SetUserStatus(ctx context.Context, fs *FirestoreClient, id string, s UserStatus) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
+	if s == UserStatusUnknown || s == UserStatusError {
+		return fmt.Errorf("invalid user status: %s", s.String())
+	}
+
+	fsUpdates := []firestore.Update{
+		{
+			Path:  "Status",
+			Value: s,
+		},
+	}
+
+	_, err := fs.Collection(usersCollection).Doc(id).Update(ctx, fsUpdates)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return fmt.Errorf("user not found")
+		}
+		return fmt.Errorf("failed to update user status: %w", err)
+	}
+	// Invalidate cache so next read is fresh
+	fs.EvictUserCache(id)
+	return nil
+}
+
+func SetUserStatusTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, id string, s UserStatus) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
+	if s == UserStatusUnknown || s == UserStatusError {
+		return fmt.Errorf("invalid user status: %s", s.String())
+	}
+
+	fsUpdates := []firestore.Update{
+		{
+			Path:  "Status",
+			Value: s,
+		},
+	}
+
+	if err := tx.Update(fs.Collection(usersCollection).Doc(id), fsUpdates); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return fmt.Errorf("user not found")
+		}
+		return fmt.Errorf("failed to update user status: %w", err)
+	}
+	// Invalidate cache so next read is fresh
+	fs.EvictUserCache(id)
+	return nil
+}
+
 // UpdateUser updates an existing user document
 func UpdateUser(ctx context.Context, fs *FirestoreClient, id string, updates map[string]any) error {
 	if fs == nil {

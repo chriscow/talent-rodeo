@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 	"talent-rodeo/internal"
+	"talent-rodeo/internal/transcript"
 	"time"
 
 	"github.com/sashabaranov/go-openai"
@@ -140,15 +141,20 @@ func (t *CompleteChatTool) Execute(ctx context.Context, args map[string]any, ses
 	chatSession.Appointment.ConversationChecklist.OverallStatus = internal.ChecklistStatusCompleted
 	chatSession.Appointment.ConversationChecklist.LastUpdated = time.Now()
 
-	// Process appointment completion by marking it as processing
-	if err := internal.ProcessAppointmentStarted(ctx, chatSession.Service.(*ServiceImpl).fs, chatSession.User, chatSession.Appointment); err != nil {
-		session.GetLogger().Error("Failed to process appointment completion", "error", err)
+	// Only process completion for successful calls
+	// This actually just starts a goroutine to process the appointment and
+	// doesn't return an error but we check anyway in case that changes
+	// in the future.
+	deps := chatSession.GetServiceDeps()
+	if deps == nil {
 		return &internal.LLMToolResponse{
-			Name:    "override_completion",
-			Content: "Failed to complete chat session",
+			Name:    "complete_chat",
+			Content: "Service dependencies not available",
 			Success: false,
-		}, err
+		}, fmt.Errorf("service dependencies not available")
 	}
+
+	go transcript.ProcessCompletedCall(deps, chatSession.User, chatSession.Appointment)
 
 	// Create response with UI actions using helper functions
 	response := &internal.LLMToolResponse{
@@ -161,7 +167,7 @@ func (t *CompleteChatTool) Execute(ctx context.Context, args map[string]any, ses
 				"success",
 				1000,
 			),
-			internal.CreateRedirectAction("/onboarding", 3000),
+			internal.CreateRedirectAction("/dashboard", 3000), // this will show the "dashboard-waiting-call.html" page
 		},
 	}
 
@@ -742,7 +748,16 @@ func (t *OverrideCompletionTool) Execute(ctx context.Context, args map[string]an
 	chatSession.Appointment.ConversationChecklist.LastUpdated = time.Now()
 
 	// Process appointment completion by marking it as processing
-	if err := internal.ProcessAppointmentStarted(ctx, chatSession.Service.(*ServiceImpl).fs, chatSession.User, chatSession.Appointment); err != nil {
+	deps := chatSession.GetServiceDeps()
+	if deps == nil {
+		return &internal.LLMToolResponse{
+			Name:    "override_completion",
+			Content: "Service dependencies not available",
+			Success: false,
+		}, fmt.Errorf("service dependencies not available")
+	}
+
+	if err := internal.ProcessAppointmentStarted(ctx, deps.FS, chatSession.User, chatSession.Appointment); err != nil {
 		session.GetLogger().Error("Failed to process appointment completion", "error", err)
 		return &internal.LLMToolResponse{
 			Name:    "override_completion",

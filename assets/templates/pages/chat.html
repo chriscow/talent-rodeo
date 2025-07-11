@@ -17,7 +17,7 @@
                 <div class="chat-page-input-container">
                     <div class="chat-page-input-row">
                         <div class="input-with-status">
-                            <input type="text" id="chat-input" placeholder="Type your message..." disabled>
+                            <textarea id="chat-input" placeholder="Type your message..." disabled rows="1"></textarea>
                             <div id="chat-status-icon" class="chat-status-icon" title=""></div>
                         </div>
                         <button type="button" id="send-message-btn" class="chat-send-btn" disabled>Send</button>
@@ -108,6 +108,16 @@
         background: var(--pico-background-color);
         color: var(--pico-color);
         transition: all 0.2s ease;
+        resize: none; /* Disable manual resize */
+        overflow-y: hidden; /* Hide scrollbar initially */
+        min-height: 20px;
+        max-height: 120px; /* Limit maximum height */
+        line-height: 1.4;
+        font-family: inherit;
+        word-wrap: break-word; /* Allow breaking long words */
+        word-break: break-word; /* More aggressive word breaking */
+        white-space: pre-wrap; /* Preserve whitespace and wrap text */
+        overflow-wrap: break-word; /* Modern property for word breaking */
     }
     
     .chat-status-icon {
@@ -338,6 +348,7 @@
         #chat-input {
             font-size: 16px; /* Prevent zoom on iOS */
             padding: 10px 40px 10px 16px; /* Add right padding for icon */
+            max-height: 100px; /* Smaller max height on mobile */
         }
         
         .chat-status-icon {
@@ -486,12 +497,28 @@ class ChatManager {
     }
     
     setupEventListeners() {
-        // Send message on Enter key
+        // Send message on Enter key (but allow Shift+Enter for new lines)
         this.elements.chatInput?.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 this.sendMessage();
             }
+        });
+        
+        // Auto-resize textarea as user types
+        this.elements.chatInput?.addEventListener('input', () => {
+            this.autoResizeTextarea();
+            this.handleTyping();
+        });
+        
+        // Also resize on keyup and paste events for immediate response
+        this.elements.chatInput?.addEventListener('keyup', () => {
+            this.autoResizeTextarea();
+        });
+        
+        this.elements.chatInput?.addEventListener('paste', () => {
+            // Use setTimeout to allow paste content to be processed first
+            setTimeout(() => this.autoResizeTextarea(), 0);
         });
         
         // Send button click
@@ -505,9 +532,6 @@ class ChatManager {
         
         // Focus management
         this.elements.chatInput?.addEventListener('focus', () => this.scrollToBottom());
-        
-        // Input typing detection for future typing indicators
-        this.elements.chatInput?.addEventListener('input', () => this.handleTyping());
     }
     
     initializeUI() {
@@ -524,6 +548,9 @@ class ChatManager {
         
         // Disable inputs initially
         this.setInputState(false);
+        
+        // Initialize textarea sizing
+        this.autoResizeTextarea();
     }
     
     async loadChatHistory() {
@@ -615,6 +642,9 @@ class ChatManager {
         // Add user message to UI with animation
         this.addMessageToUI('user', message, false, false);
         this.elements.chatInput.value = '';
+        
+        // Reset textarea height after clearing
+        this.autoResizeTextarea();
         this.scrollToBottom();
         
         // Disable input while sending
@@ -880,6 +910,40 @@ class ChatManager {
     clearMessages() {
         if (this.elements.messagesContainer) {
             this.elements.messagesContainer.innerHTML = '';
+        }
+    }
+    
+    autoResizeTextarea() {
+        const textarea = this.elements.chatInput;
+        if (!textarea) return;
+        
+        // Store current scroll position
+        const scrollTop = textarea.scrollTop;
+        
+        // Reset height to get accurate measurement
+        textarea.style.height = 'auto';
+        
+        // Calculate the desired height based on content
+        const scrollHeight = textarea.scrollHeight;
+        const minHeight = 44; // Minimum single line height
+        const maxHeight = 120; // Maximum height before scrolling
+        
+        let newHeight = Math.max(scrollHeight, minHeight);
+        
+        // Apply max height constraint
+        if (newHeight > maxHeight) {
+            newHeight = maxHeight;
+            textarea.style.overflowY = 'auto';
+        } else {
+            textarea.style.overflowY = 'hidden';
+        }
+        
+        // Set the new height
+        textarea.style.height = newHeight + 'px';
+        
+        // Restore scroll position if we're at max height
+        if (newHeight === maxHeight) {
+            textarea.scrollTop = scrollTop;
         }
     }
     

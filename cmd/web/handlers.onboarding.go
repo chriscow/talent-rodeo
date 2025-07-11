@@ -162,26 +162,40 @@ func (app *application) handleOnboardingStepRequest(w http.ResponseWriter, r *ht
 	data["OnboardingStep"] = string(currentStep)
 	data["OnboardingStepCompleted"] = app.buildStepCompletionStatus(user, session)
 
-	// Return the appropriate partial template for HTMX
-	templateName := ""
+	// Return the appropriate partial template for HTMX, or redirect if active_conversation
 	switch currentStep {
 	case internal.OnboardingStepResumeUpload:
-		templateName = "partial:onboarding-resume-upload"
+		if err := response.NamedTemplate(w, http.StatusOK, data, "partial:onboarding-resume-upload", "partials/*.html", "shared/*.html"); err != nil {
+			app.logger.Error("failed to render step content", "error", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	case internal.OnboardingStepResumeProcessing:
-		templateName = "partial:onboarding-resume-processing"
+		if err := response.NamedTemplate(w, http.StatusOK, data, "partial:onboarding-resume-processing", "partials/*.html", "shared/*.html"); err != nil {
+			app.logger.Error("failed to render step content", "error", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	case internal.OnboardingStepCommunicationChoice:
-		templateName = "partial:onboarding-communication-choice"
+		if err := response.NamedTemplate(w, http.StatusOK, data, "partial:onboarding-communication-choice", "partials/*.html", "shared/*.html"); err != nil {
+			app.logger.Error("failed to render step content", "error", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	case internal.OnboardingStepActiveConversation:
-		templateName = "partial:onboarding-active-conversation"
+		// Instead of rendering the interstitial, redirect to chat or dashboard
+		if session.ConversationType == "chat" {
+			w.Header().Set("HX-Redirect", "/chat?appointment_id="+session.AppointmentID)
+			w.WriteHeader(http.StatusSeeOther)
+			return
+		} else {
+			w.Header().Set("HX-Redirect", "/dashboard")
+			w.WriteHeader(http.StatusSeeOther)
+			return
+		}
 	default:
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Unknown step"))
-		return
-	}
-
-	if err := response.NamedTemplate(w, http.StatusOK, data, templateName, "partials/*.html", "shared/*.html"); err != nil {
-		app.logger.Error("failed to render step content", "error", err)
-		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 }

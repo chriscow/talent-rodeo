@@ -33,6 +33,14 @@ type ChatSession struct {
 	Service     ChatService // Reference to the service for saving appointments
 }
 
+// GetServiceDeps returns the ServiceDeps from the chat service
+func (s *ChatSession) GetServiceDeps() *internal.ServiceDeps {
+	if serviceImpl, ok := s.Service.(*ServiceImpl); ok {
+		return serviceImpl.serviceDeps
+	}
+	return nil
+}
+
 // Implement LLMToolSession interface
 func (s *ChatSession) GetUserID() string {
 	return s.User.ID

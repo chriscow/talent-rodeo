@@ -335,7 +335,14 @@ Examples:
 					defer srp.Stop()
 
 					queue := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), logger, scrapingdog.WithJobEventHandler(dispatch))
-					transcript.ProcessCompletedCall(hub, fs, nil, queue, logger, dispatch, user, appt, nil)
+					deps := &internal.ServiceDeps{
+						Hub:      hub,
+						FS:       fs,
+						Logger:   logger,
+						Queue:    queue,
+						Dispatch: dispatch,
+					}
+					transcript.ProcessCompletedCall(deps, user, appt)
 					time.Sleep(5 * time.Second)
 					currentAppt, err := internal.GetAppointment(ctx, fs, user.ID, appt.ID)
 					if err != nil {
@@ -448,7 +455,15 @@ Examples:
 		dispatch.Register(userID, internal.NewSearchResultProcessor(fs, logger, nil, dispatch))
 		queue := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), logger, scrapingdog.WithJobEventHandler(dispatch))
 
-		transcript.ProcessCompletedCall(hub, fs, nil, queue, logger, dispatch, user, appointment, cfg)
+		deps := &internal.ServiceDeps{
+			Hub:        hub,
+			FS:         fs,
+			Logger:     logger,
+			Queue:      queue,
+			Dispatch:   dispatch,
+			SMTPConfig: cfg,
+		}
+		transcript.ProcessCompletedCall(deps, user, appointment)
 		time.Sleep(5 * time.Second) // Wait for processing to start
 
 		currentAppt, err := internal.GetAppointment(ctx, fs, userID, appointmentID)
