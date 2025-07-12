@@ -46,6 +46,7 @@ func TestProcessCompletedAppointmentIntegration(t *testing.T) {
 				ID:            "test-appointment-" + generateRandomID(),
 				Name:          "initial-call",
 				UserID:        user.ID,
+				Type:          internal.AppointmentTypeVoice,
 				ScheduledTime: time.Now(),
 				Status:        internal.AppointmentStatusScheduled,
 				CreatedAt:     time.Now(),

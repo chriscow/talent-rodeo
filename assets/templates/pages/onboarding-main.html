@@ -220,7 +220,7 @@
             {{else if eq .OnboardingStep "communication_choice"}}
                 {{template "partial:onboarding-communication-choice" .}}
             {{else if eq .OnboardingStep "active_conversation"}}
-                <!-- Skipped: active_conversation interstitial is now bypassed in backend. -->
+                {{template "partial:onboarding-active-conversation" .}}
             {{else}}
                 <!-- Loading state -->
                 <div style="text-align: center; padding: 2rem;">

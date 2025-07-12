@@ -64,7 +64,7 @@ func (m *MockEventHandler) OnJobListing(search *internal.SearchTask, listing int
 	defer m.mutex.Unlock()
 	m.onJobListingCalled = true
 	m.jobsReceived = append(m.jobsReceived, listing.ID)
-	return false // not a duplicate
+	return true // new listing, should fetch details
 }
 
 func (m *MockEventHandler) OnJobDetail(search internal.SearchTask, listing internal.JobListing, details internal.JobDetail, userID *string) {

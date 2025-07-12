@@ -89,6 +89,7 @@ func TestShowDashboard(t *testing.T) {
 					ID:            "test-appt",
 					ScheduledTime: time.Now().Add(24 * time.Hour),
 					Status:        internal.AppointmentStatusScheduled,
+					Type:          internal.AppointmentTypeVoice,
 				}
 			},
 			wantStatus: http.StatusOK,
@@ -153,6 +154,33 @@ func TestShowDashboard(t *testing.T) {
 			if user := tt.setupUser(); user != nil {
 				app.sessionManager.Put(req.Context(), "UserID", user.ID)
 				req = contextSetAuthenticatedUser(req, user)
+				
+				// For users with actual IDs, update the database
+				if user.ID != "" && user.Status != internal.UserStatusUnknown {
+					// Use the existing test user but modify it for this test
+					testUser := ts.user1
+					testUser.Status = user.Status
+					
+					// Update the user in the database to match test expectations
+					err := internal.UpdateUserStatus(req.Context(), app.fs, testUser, user.Status)
+					if err != nil {
+						t.Fatalf("Failed to update test user status: %v", err)
+					}
+					
+					// Set up appointment if provided
+					if tt.setupAppt != nil {
+						appt := tt.setupAppt()
+						appt.UserID = testUser.ID
+						err := internal.CreateAppointment(req.Context(), app.fs, testUser.ID, appt)
+						if err != nil {
+							t.Fatalf("Failed to create test appointment: %v", err)
+						}
+					}
+					
+					// Update the authenticated user to point to the test user
+					app.sessionManager.Put(req.Context(), "UserID", testUser.ID)
+					req = contextSetAuthenticatedUser(req, testUser)
+				}
 			}
 
 			w := httptest.NewRecorder()

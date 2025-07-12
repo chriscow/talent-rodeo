@@ -70,6 +70,7 @@ func convertJobListings(jobProviderName string, jobListings []LinkedInJobListing
 		}
 
 		result[i] = internal.JobListing{
+			ID:             fmt.Sprintf("%s:%s:%s", SearchProviderName, jobProviderName, job.LinkedInJobID),
 			Provider:       jobProviderName, // linkedin, etc.
 			ProviderJobID:  job.LinkedInJobID,
 			Title:          job.Position,
@@ -79,6 +80,7 @@ func convertJobListings(jobProviderName string, jobListings []LinkedInJobListing
 			URL:            job.Link,
 			CompanyProfile: job.CompanyProfile,
 			CompanyLogo:    job.CompanyLogo,
+			SearchHash:     criteria.GetSearchHash(),
 			CreatedAt:      time.Now(),
 		}
 
@@ -143,6 +145,7 @@ func convertJobDetail(ctx context.Context, fs *internal.FirestoreClient, logger 
 	}
 
 	result := internal.JobDetail{
+		ID:            fmt.Sprintf("%s:%s:%s", SearchProviderName, JobProviderName, detail.ID),
 		Provider:      JobProviderName,
 		ProviderJobID: detail.ID,
 		Title:         detail.Position,

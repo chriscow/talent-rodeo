@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -38,7 +39,7 @@ func (app *application) showOnboardingPage(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Determine current step based on user status and session
-	currentStep := app.determineOnboardingStep(user, session)
+	currentStep := app.determineOnboardingStep(r.Context(), user, session)
 
 	// Update session step if it's different
 	if session.Step != currentStep {
@@ -104,7 +105,7 @@ func (app *application) showOnboardingPage(w http.ResponseWriter, r *http.Reques
 }
 
 // determineOnboardingStep determines the current step based on user status and session
-func (app *application) determineOnboardingStep(user *internal.User, session *internal.OnboardingSession) internal.OnboardingStep {
+func (app *application) determineOnboardingStep(ctx context.Context, user *internal.User, session *internal.OnboardingSession) internal.OnboardingStep {
 	switch user.Status {
 	case internal.UserStatusPendingResumeUpload:
 		return internal.OnboardingStepResumeUpload
@@ -112,7 +113,16 @@ func (app *application) determineOnboardingStep(user *internal.User, session *in
 		return internal.OnboardingStepResumeProcessing
 	case internal.UserStatusResumeUploaded:
 		return internal.OnboardingStepCommunicationChoice
-	case internal.UserStatusCallScheduled, internal.UserStatusCallStarted:
+	case internal.UserStatusCallScheduled:
+		// Check if user has any appointments
+		// If no appointments exist, reset to resume upload
+		// This can happen if appointments are deleted or expired
+		appointments, err := internal.ListAppointments(ctx, app.fs, user.ID)
+		if err != nil || len(appointments) == 0 {
+			return internal.OnboardingStepResumeUpload
+		}
+		return internal.OnboardingStepCommunicationChoice
+	case internal.UserStatusCallStarted:
 		return internal.OnboardingStepActiveConversation
 	default:
 		// Default to resume upload if we can't determine
@@ -164,7 +174,7 @@ func (app *application) handleOnboardingStepRequest(w http.ResponseWriter, r *ht
 	}
 
 	// Determine current step
-	currentStep := app.determineOnboardingStep(user, session)
+	currentStep := app.determineOnboardingStep(r.Context(), user, session)
 
 	// Build template data
 	data := app.newTemplateData(r)
