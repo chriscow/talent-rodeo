@@ -31,7 +31,10 @@ func NewTestFirestoreClient(ctx context.Context) (*FirestoreClient, error) {
 		return nil, fmt.Errorf("FIRESTORE_EMULATOR_HOST not set")
 	}
 
-	println("Using Firestore emulator at", os.Getenv(firestoreEmulatorHost))
+	// Suppress debug output in CLI mode to avoid contaminating JSON output
+	if os.Getenv("CLI_JSON_MODE") == "" {
+		println("Using Firestore emulator at", os.Getenv(firestoreEmulatorHost))
+	}
 
 	client, err := firestore.NewClient(ctx, testProjectID)
 	if err != nil {
