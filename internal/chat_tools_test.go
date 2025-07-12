@@ -278,7 +278,6 @@ func createTestAppointmentWithChecklist(t *testing.T, app *MockApplication, user
 		UserID:                userID,
 		Type:                  AppointmentTypeChat,
 		ScheduledTime:         time.Now(),
-		Timezone:              "UTC",
 		Status:                AppointmentStatusRunning,
 		ChatMessages:          []ChatMessage{},
 		ConversationChecklist: InitializeConversationChecklist(),

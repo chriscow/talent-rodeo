@@ -19,17 +19,17 @@ import (
 // TestProcessCompletedAppointmentIntegration tests the full flow for both successful and failed calls
 func TestProcessCompletedAppointmentIntegration(t *testing.T) {
 	testCases := []struct {
-		name                   string
-		webhookFile            string
-		expectedStatus         internal.AppointmentStatus
-		expectedEmailType      string
-		expectedFailureReason  string
+		name                  string
+		webhookFile           string
+		expectedStatus        internal.AppointmentStatus
+		expectedEmailType     string
+		expectedFailureReason string
 	}{
 		{
-			name:                "Voicemail Call - Should Fail",
-			webhookFile:         "end-of-call-report_d61bb2a0-260f-454e-9b5d-93a51c848b2a.json",
-			expectedStatus:      internal.AppointmentStatusFailed,
-			expectedEmailType:   "failure",
+			name:                  "Voicemail Call - Should Fail",
+			webhookFile:           "end-of-call-report_d61bb2a0-260f-454e-9b5d-93a51c848b2a.json",
+			expectedStatus:        internal.AppointmentStatusFailed,
+			expectedEmailType:     "failure",
 			expectedFailureReason: "the call went to voicemail",
 		},
 	}
@@ -47,7 +47,6 @@ func TestProcessCompletedAppointmentIntegration(t *testing.T) {
 				Name:          "initial-call",
 				UserID:        user.ID,
 				ScheduledTime: time.Now(),
-				Timezone:      "UTC",
 				Status:        internal.AppointmentStatusScheduled,
 				CreatedAt:     time.Now(),
 				UpdatedAt:     time.Now(),

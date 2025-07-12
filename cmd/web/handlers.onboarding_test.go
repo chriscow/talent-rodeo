@@ -9,7 +9,7 @@ import (
 	"talent-rodeo/internal"
 )
 
-func TestShowProfilePage(t *testing.T) {
+func TestShowOnboardingPage(t *testing.T) {
 	ts := newTestServer(t, "profile")
 	defer ts.Cleanup()
 
@@ -34,7 +34,7 @@ func TestShowProfilePage(t *testing.T) {
 				internal.UpdateUserStatus(context.Background(), ts.app.fs, u, internal.UserStatusPendingResumeUpload)
 			},
 			wantCode: http.StatusOK,
-			wantBody: "Upload Resume",
+			wantBody: "Upload Your Resume",
 		},
 		{
 			name:            "Processing Resume Shows Processing Page",
@@ -43,7 +43,7 @@ func TestShowProfilePage(t *testing.T) {
 				internal.UpdateUserStatus(context.Background(), ts.app.fs, u, internal.UserStatusProcessingResume)
 			},
 			wantCode: http.StatusOK,
-			wantBody: "processing",
+			wantBody: "Analyzing your skills and experience...",
 		},
 		{
 			name:            "Resume Uploaded Shows Schedule Page",
@@ -52,7 +52,7 @@ func TestShowProfilePage(t *testing.T) {
 				internal.UpdateUserStatus(context.Background(), ts.app.fs, u, internal.UserStatusResumeUploaded)
 			},
 			wantCode: http.StatusOK,
-			wantBody: "Schedule",
+			wantBody: "Choose Your Communication Method",
 		},
 		{
 			name:            "Call Scheduled Shows Waiting Page",
@@ -133,7 +133,7 @@ func TestShowWaitingCallPage(t *testing.T) {
 			wantBody: "calling you shortly",
 		},
 		{
-			name:            "Redirects to Profile When No Active Appointment",
+			name:            "Redirects to Onboarding When No Active Appointment",
 			isAuthenticated: true,
 			setupUser: func(u *internal.User) {
 				// Clean up any existing appointments first

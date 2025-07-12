@@ -138,6 +138,7 @@ func calculateSemanticJobsMemory(jobs []JobWithDetails) int {
 	return totalMemory
 }
 
+// showWaitingForCall is called by showDashboard when the user has not completed the onboarding process
 func (app *application) showWaitingForCall(w http.ResponseWriter, r *http.Request, user *internal.User) {
 	appointments, err := internal.ListAppointments(r.Context(), app.fs, user.ID)
 	if err != nil {
@@ -173,6 +174,14 @@ func (app *application) showWaitingForCall(w http.ResponseWriter, r *http.Reques
 
 	data := app.newTemplateData(r)
 	data["Appointment"] = activeAppointment
+
+	if r.Header.Get("HX-Request") == "true" {
+		// Handle HTMX request
+		if err := response.NamedTemplate(w, http.StatusOK, data, "partial:dashboard-waiting-call", "partials/*.html", "shared/*.html"); err != nil {
+			app.serverError(w, r, fmt.Errorf("failed to render partial: %w", err))
+		}
+		return
+	}
 
 	if err := response.Page(w, http.StatusOK, data, "pages/dashboard-waiting-call.html"); err != nil {
 		app.serverError(w, r, fmt.Errorf("failed to render dashboard page: %w", err))

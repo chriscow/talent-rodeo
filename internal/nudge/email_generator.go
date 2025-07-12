@@ -225,8 +225,8 @@ func isTrialEmailType(nudgeType NudgeType) bool {
 func (eg *EmailGenerator) populateTrialEmailData(data *NudgeEmailData, user *internal.User, additionalData map[string]any) {
 	// Default timezone if not set
 	timezone := "UTC"
-	if user.Timezone != nil {
-		timezone = *user.Timezone
+	if user.Timezone != "" {
+		timezone = user.Timezone
 	}
 
 	// Calculate trial dates if user has subscription end

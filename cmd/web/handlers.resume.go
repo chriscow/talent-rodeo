@@ -121,13 +121,13 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 			"action":  "parseMultipartForm",
 			"maxSize": "10MB",
 		})
-		
+
 		// Handle HTMX error response
 		if r.Header.Get("HX-Request") == "true" {
 			app.returnHTMXError(w, r, "File too large. Maximum size is 10MB")
 			return
 		}
-		
+
 		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/onboarding-resume-upload.html"); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
 			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
@@ -162,6 +162,8 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	form.Phone = r.FormValue("phone")
+	// Capture timezone from form and update user record if present
+	timezone := r.FormValue("timezone")
 
 	// Ensure phone number is prefixed with +1 (E.164 format)
 	if !strings.HasPrefix(form.Phone, "+1") && !strings.HasPrefix(form.Phone, "1") {
@@ -241,6 +243,12 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := contextGetAuthenticatedUser(r)
+	// Update timezone if present
+	if timezone != "" {
+		if err := internal.UpdateUserTimezone(r.Context(), app.fs, user, timezone); err != nil {
+			app.logger.Error("Failed to update user timezone during resume upload", "error", err)
+		}
+	}
 	resume := internal.Resume{
 		RawText: resumeText,
 	}
@@ -307,7 +315,7 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 		// Return the processing step partial for HTMX
 		data := app.newTemplateData(r)
 		data["User"] = user
-		
+
 		if err := response.NamedTemplate(w, http.StatusOK, data, "partial:onboarding-resume-processing", "partials/*.html", "shared/*.html"); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render processing partial: %w", err))
 			return

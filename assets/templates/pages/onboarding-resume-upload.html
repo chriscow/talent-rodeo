@@ -47,6 +47,7 @@
         </ul>
 
         {{template "partial:resume-form" .}}
+        <input type="hidden" name="timezone" id="timezone-field" />
     </article>
     <p>
         <em><small>Your information is secure and will only be used to help match you. We don't store your resume, it is only used for discussion with Shirely. See our simple <a href="/privacy#data-retention">Privacy Policy</a> for details.</small></em>
@@ -72,6 +73,9 @@
                 notyf.error(errorData.dataset.error);
             }, 500);
         }
+
+        var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        document.getElementById("timezone-field").value = tz;
     });
 </script>
 {{end}}

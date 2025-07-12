@@ -97,7 +97,7 @@ func (app *application) routes() http.Handler {
 
 			mux.HandleFunc("/onboarding/schedule", app.showSchedulePage, "GET")
 
-			mux.HandleFunc("/onboarding/schedule/appointment", app.createAppointment, "POST")
+			mux.HandleFunc("/onboarding/schedule/appointment", app.createVoiceAppointment, "POST")
 			mux.HandleFunc("/onboarding/schedule/appointment/:id", app.cancelAppointment, "DELETE")
 			mux.HandleFunc("/onboarding/schedule/reschedule", app.rescheduleAppointment, "POST")
 			mux.HandleFunc("/onboarding/schedule/call-now", app.callNow, "POST")

@@ -57,6 +57,19 @@ func (app *application) showOnboardingPage(w http.ResponseWriter, r *http.Reques
 	// Check if this is an HTMX request for specific content
 	if r.Header.Get("HX-Request") == "true" {
 		// Return the appropriate partial template for HTMX
+		// For HTMX requests, handled in handleOnboardingStepRequest
+		// For non-HTMX requests, redirect if active_conversation step
+		if currentStep == internal.OnboardingStepActiveConversation {
+			session := data["OnboardingSession"].(*internal.OnboardingSession)
+			if session.ConversationType == "chat" {
+				http.Redirect(w, r, "/chat?appointment_id="+session.AppointmentID, http.StatusSeeOther)
+				return
+			} else {
+				http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+				return
+			}
+		}
+
 		templateName := ""
 		switch currentStep {
 		case internal.OnboardingStepResumeUpload:
@@ -65,8 +78,6 @@ func (app *application) showOnboardingPage(w http.ResponseWriter, r *http.Reques
 			templateName = "partial:onboarding-resume-processing"
 		case internal.OnboardingStepCommunicationChoice:
 			templateName = "partial:onboarding-communication-choice"
-		case internal.OnboardingStepActiveConversation:
-			templateName = "partial:onboarding-active-conversation"
 		default:
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte("Unknown step"))

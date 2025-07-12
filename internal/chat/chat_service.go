@@ -91,12 +91,15 @@ func (s *ServiceImpl) StartSession(ctx context.Context, userID string, req Start
 		firstMessage = strings.Replace(firstMessage, "Am I speaking with", "Am I chatting with", -1)
 	}
 
+	if user.Timezone != "" {
+		internal.UpdateUserTimezone(ctx, s.fs, user, user.Timezone)
+	}
+
 	// Create a new chat appointment
 	appointment := &internal.Appointment{
 		Name:          "initial-chat",
 		Type:          internal.AppointmentTypeChat,
 		ScheduledTime: time.Now(),
-		Timezone:      req.Timezone,
 		Status:        internal.AppointmentStatusRunning,
 		ChatMessages: []internal.ChatMessage{
 			{

@@ -52,7 +52,6 @@ func TestAppointment(t *testing.T) {
 		appointment := &Appointment{
 			Name:          "Test Appointment",
 			ScheduledTime: time.Now().Add(24 * time.Hour),
-			Timezone:      "UTC",
 			Status:        AppointmentStatusScheduled,
 		}
 
@@ -69,8 +68,8 @@ func TestAppointment(t *testing.T) {
 			ID:            customID,
 			Name:          "Test Appointment",
 			ScheduledTime: time.Now().Add(24 * time.Hour),
-			Timezone:      "UTC",
 			Status:        AppointmentStatusScheduled,
+			Type:          AppointmentTypeVoice,
 		}
 
 		err := CreateAppointment(ctx, client, user.ID, appointment)
@@ -580,7 +579,6 @@ func TestAppointmentEdgeCases(t *testing.T) {
 		appointment := &Appointment{
 			Name:          "Test Appointment",
 			ScheduledTime: time.Now().Add(24 * time.Hour),
-			Timezone:      "UTC",
 			Status:        AppointmentStatusScheduled,
 		}
 
@@ -642,8 +640,8 @@ func TestAppointmentEdgeCases(t *testing.T) {
 		appointment := &Appointment{
 			Name:          "Full Test Appointment",
 			ScheduledTime: now.Add(24 * time.Hour),
-			Timezone:      "America/New_York",
 			Status:        AppointmentStatusCompleted,
+			Type:          AppointmentTypeVoice,
 			EndReason:     &endReason,
 			Error:         &errorMsg,
 			CallID:        &callID,
@@ -677,9 +675,6 @@ func TestAppointmentEdgeCases(t *testing.T) {
 		}
 		if got.Notes == nil || *got.Notes != notes {
 			t.Errorf("GetAppointment() Notes = %v, want %v", got.Notes, notes)
-		}
-		if got.Timezone != "America/New_York" {
-			t.Errorf("GetAppointment() Timezone = %v, want %v", got.Timezone, "America/New_York")
 		}
 	})
 }

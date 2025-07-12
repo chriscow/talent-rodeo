@@ -74,7 +74,7 @@ func (app *application) showSchedulePage(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// createAppointment handles POST requests to schedule a new appointment.
+// createVoiceAppointment handles POST requests to schedule a new appointment.
 // It validates the requested time, creates the appointment, and schedules
 // the voice call.
 //
@@ -94,7 +94,7 @@ func (app *application) showSchedulePage(w http.ResponseWriter, r *http.Request)
 //
 // State Transitions:
 //   - StepResumeUploaded → StepPhoneCallScheduled
-func (app *application) createAppointment(w http.ResponseWriter, r *http.Request) {
+func (app *application) createVoiceAppointment(w http.ResponseWriter, r *http.Request) {
 	user := contextGetAuthenticatedUser(r)
 	if user == nil {
 		http.Redirect(w, r, "/auth/linkedin", http.StatusSeeOther)
@@ -156,12 +156,24 @@ func (app *application) createAppointment(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	user.Timezone = timezone
+	if err := internal.UpdateUserTimezone(r.Context(), app.fs, user, timezone); err != nil {
+		app.logger.Error("Failed to update user timezone", "error", err, "user_id", user.ID)
+		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
+			"action":   "update_user_timezone",
+			"userID":   user.ID,
+			"timezone": timezone,
+		})
+		app.serverError(w, r, fmt.Errorf("failed to update user timezone: %w", err))
+		return
+	}
+
 	// Create appointment
 	appointment := &internal.Appointment{
 		UserID:        user.ID,
 		Name:          "initial-call",
 		ScheduledTime: scheduledTime.UTC(),
-		Timezone:      timezone,
+		Type:          internal.AppointmentTypeVoice,
 		Status:        internal.AppointmentStatusScheduled,
 	}
 
@@ -395,7 +407,6 @@ func (app *application) callNow(w http.ResponseWriter, r *http.Request) {
 		Name:          "initial-call",
 		Type:          internal.AppointmentTypeVoice,
 		ScheduledTime: scheduledTime,
-		Timezone:      "UTC", // Immediate calls don't need specific timezone
 		Status:        internal.AppointmentStatusScheduled,
 	}
 

@@ -187,8 +187,8 @@ Examples:
 		if setTimezone == "" {
 			fmt.Printf("User: %s (%s)\n", user.Name, userID)
 			fmt.Printf("Email: %s\n", user.Email)
-			if user.Timezone != nil {
-				fmt.Printf("Timezone: %s\n", *user.Timezone)
+			if user.Timezone != "" {
+				fmt.Printf("Timezone: %s\n", user.Timezone)
 			} else {
 				fmt.Printf("Timezone: Not set\n")
 			}

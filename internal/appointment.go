@@ -85,7 +85,6 @@ type Appointment struct {
 	UserID        string
 	Type          AppointmentType // "voice" or "chat"
 	ScheduledTime time.Time
-	Timezone      string
 	Status        AppointmentStatus
 
 	// This is the end reason given by VAPI when we get the end of call report
@@ -387,6 +386,11 @@ func ProcessAppointmentStarted(ctx context.Context, fs *FirestoreClient, user *U
 // When processing is complete, remove from tracking collection
 func ProcessAppointmentComplete(ctx context.Context, fs *FirestoreClient, user *User, appointment *Appointment) error {
 	return fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+
+		if appointment == nil {
+			return fmt.Errorf("appointment cannot be nil")
+		}
+
 		// Update appointment status
 		appointment.Status = AppointmentStatusCompleted
 		appointment.UpdatedAt = time.Now()
@@ -410,13 +414,8 @@ func ProcessAppointmentComplete(ctx context.Context, fs *FirestoreClient, user *
 			return fmt.Errorf("failed to update user state: %w", err)
 		}
 
-		// Store user's timezone from appointment
-		if err := UpdateUserTimezoneTx(ctx, fs, tx, user, appointment.Timezone); err != nil {
-			return fmt.Errorf("failed to update user timezone: %w", err)
-		}
-
 		// Calculate trial end in user's timezone (11:59 PM on 7th day)
-		subscriptionEnd, err := utils.CalculateTrialEndDate(time.Now(), appointment.Timezone)
+		subscriptionEnd, err := utils.CalculateTrialEndDate(time.Now(), user.Timezone)
 		if err != nil {
 			// Fallback to 7 days UTC if timezone parsing fails
 			subscriptionEnd = time.Now().Add(7 * 24 * time.Hour)

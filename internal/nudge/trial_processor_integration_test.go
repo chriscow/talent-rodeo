@@ -31,7 +31,7 @@ func TestTrialEmailProcessorIntegration(t *testing.T) {
 		Name:            "Alice Johnson",
 		Email:           "alice@example.com",
 		Status:          internal.UserStatusCallCompleted,
-		Timezone:        &timezone,
+		Timezone:        timezone,
 		SubscriptionEnd: &trialEndTime,
 		LastAccessedAt:  time.Now().Add(-48 * time.Hour), // Last accessed 2 days ago
 		StatusUpdatedAt: time.Now().Add(-72 * time.Hour), // Status updated 3 days ago
@@ -108,7 +108,7 @@ func TestTrialEmailDataGeneration(t *testing.T) {
 		Name:            "Bob Smith",
 		Email:           "bob@example.com",
 		Status:          internal.UserStatusCallCompleted,
-		Timezone:        &timezone,
+		Timezone:        timezone,
 		SubscriptionEnd: &trialEndTime,
 		LastAccessedAt:  time.Now().Add(-2 * time.Hour),
 		StatusUpdatedAt: time.Now().Add(-24 * time.Hour),
@@ -189,7 +189,7 @@ func TestTrialEmailEndToEndGeneration(t *testing.T) {
 		Name:            "Carol Davis",
 		Email:           "carol@example.com",
 		Status:          internal.UserStatusCallCompleted,
-		Timezone:        &timezone,
+		Timezone:        timezone,
 		SubscriptionEnd: &trialEndTime,
 		LastAccessedAt:  time.Now().Add(-1 * time.Hour),
 		StatusUpdatedAt: time.Now().Add(-72 * time.Hour),

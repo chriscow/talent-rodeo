@@ -55,11 +55,20 @@
 				</label>
 			</fieldset>
 
+			<input type="hidden" name="timezone" id="timezone-field" />
+
 			<button type="submit" aria-describedby="upload-help">
 				Upload Resume & Continue
 			</button>
 			<small id="upload-help">This will start processing your resume</small>
 		</form>
+
+		<script>
+		document.addEventListener("DOMContentLoaded", function() {
+			var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+			document.getElementById("timezone-field").value = tz;
+		});
+		</script>
 	</div>
 </div>
 {{end}}

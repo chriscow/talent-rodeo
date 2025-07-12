@@ -82,7 +82,7 @@ type User struct {
 	TrialAppointmentID *string    // ID of the appointment that started the trial
 	TrialStartedAt     *time.Time // When the trial period started
 	TrialEndAt         *time.Time // When the trial period ends (calculated)
-	Timezone           *string    // User's timezone from appointment scheduling
+	Timezone           string     // User's timezone from appointment scheduling
 
 	// Daily job evaluation tracking
 	LastJobEvaluationRun *time.Time // When the last job evaluation was completed
@@ -604,6 +604,26 @@ func UpdateUserTierTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Tr
 	})
 }
 
+func UpdateUserTimezone(ctx context.Context, fs *FirestoreClient, user *User, timezone string) error {
+	if fs == nil {
+		return fmt.Errorf("firestore client is nil")
+	}
+
+	if timezone == "" {
+		return fmt.Errorf("timezone cannot be empty")
+	}
+
+	user.Timezone = timezone
+
+	_, err := fs.Collection(usersCollection).Doc(user.ID).Update(ctx, []firestore.Update{
+		{Path: "Timezone", Value: timezone},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update user timezone: %w", err)
+	}
+	return nil
+}
+
 func UpdateUserTimezoneTx(ctx context.Context, fs *FirestoreClient, tx *firestore.Transaction, user *User, timezone string) error {
 	if fs == nil {
 		return fmt.Errorf("firestore client is nil")
@@ -613,7 +633,7 @@ func UpdateUserTimezoneTx(ctx context.Context, fs *FirestoreClient, tx *firestor
 		return fmt.Errorf("timezone cannot be empty")
 	}
 
-	user.Timezone = &timezone
+	user.Timezone = timezone
 
 	return tx.Update(fs.Collection(usersCollection).Doc(user.ID), []firestore.Update{
 		{Path: "Timezone", Value: timezone},
