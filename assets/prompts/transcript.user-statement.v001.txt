@@ -27,6 +27,11 @@ looking for, and end with what fundamentally drives them in their career.
 It should be strictly written in the first person as if the user is speaking
 directly to the recruiter.
 
+**IMPORTANT**
+This is a first person narrative as if the person were speaking it. Do not add titles, headings or any other text.
+Do not add anything like "Here’s a first-person narrative based on the transcript, written as if Chris is speaking directly about his job search preferences:  "
+I just want the narrative. 
+
 This is an example of the output you should generate:
 
 ```
@@ -68,6 +73,8 @@ excellence, all while fostering a culture where people feel valued and heard.
 If the environment is collaborative, the leadership is transparent, and the work
 stretches me—I’m all in.
 ```
+
+Note that the above has no titles, headings or further statements from yourself.
 
 Here is the transcript to analyze:
 {{.Transcript}}
