@@ -94,7 +94,7 @@ def main():
         
         # Ensure log directory exists
         import os
-        log_dir = os.path.join(os.getcwd(), '.logs')
+        log_dir = os.path.join(os.getcwd(), '.logs/claude/hooks')
         os.makedirs(log_dir, exist_ok=True)
         log_file = os.path.join(log_dir, 'notification.json')
         

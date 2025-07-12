@@ -44,5 +44,8 @@ build-errors.log
 
 # binaries
 **/bin/
+
+# Ignore the binary 'cli' (not the directory)
+cli
 trcli
-llm-golang-htmx-chat-main
+web
