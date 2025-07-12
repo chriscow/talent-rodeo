@@ -27,22 +27,48 @@ update their job search statements.
 ```go
 import "talent-rodeo/internal/feedback"
 
-// During application startup
-dispatcher := internal.NewInboxDispatch()
-err := feedback.RegisterInboxFeedbackHandler(dispatcher, fsClient, logger)
+// During application startup - Enhanced dispatch with AI response capabilities
+openAIClient := inbox.NewOpenAIClient(openAIAPIKey, logger)
+responder := inbox.NewEmailResponder(openAIClient, logger)
+sender := inbox.NewResponseSender(mailer, logger)
+escalationService := inbox.NewEscalationService(notificationEmail, mailer, logger)
+
+dispatcher := internal.NewEnhancedInboxDispatch(responder, sender, escalationService, logger)
+
+// Register the feedback handler
+feedbackOpenAIClient := feedback.NewOpenAIClient(openAIAPIKey, logger)
+inboxFeedbackHandler := feedback.NewInboxFeedbackHandler(
+    feedbackOpenAIClient,
+    firestoreClient,
+    mailer,
+    notificationEmail,
+    logger,
+)
+
+err := dispatcher.Register("inbox-feedback", inboxFeedbackHandler)
 if err != nil {
     log.Fatal("Failed to register inbox feedback handler:", err)
 }
 ```
 
+**Fallback for missing OpenAI API key:**
+```go
+// If OPENAI_API_KEY is not set, falls back to basic dispatch without AI features
+if openAIAPIKey == "" {
+    dispatcher := internal.NewInboxDispatch()
+    // Basic handler registration only - no AI response generation
+}
+```
+
 ### Environment Variables
 
-- `OPENAI_API_KEY` - Required for email analysis and statement updates
+- `OPENAI_API_KEY` - Required for email analysis, statement updates, and AI response generation
+- `ADMIN_EMAIL` - Admin email for escalation notifications when emails can't be handled automatically
 - `SEND_FEEDBACK_ADJUSTMENTS` - Set to "true" to enable email notifications for search adjustments
 
 ## Usage
 
-Once registered with the inbox dispatch system, the handler will automatically:
+Once registered with the enhanced inbox dispatch system, the handler will automatically:
 
 1. Receive new emails from the dispatcher
 2. Analyze each email to determine if it contains search adjustment requests
@@ -51,8 +77,21 @@ Once registered with the inbox dispatch system, the handler will automatically:
 5. Save the updated statement to Firestore
 6. Send email notification (if enabled) with adjustment summary
 
+**Enhanced dispatch features (when using `NewEnhancedInboxDispatch`):**
+- **AI-generated responses**: Automatically sends contextual replies to users based on handling results
+- **Admin escalation**: Forwards unhandled emails to admin for manual review
+- **Comprehensive logging**: Detailed tracking of email processing workflow
+
 ## Email Processing Flow
 
+**Enhanced Dispatch Workflow:**
+```
+Email Received → Handler Processing → AI Response Generation → Send User Reply → Admin Escalation (if needed)
+     ↓
+   Analysis (OpenAI) → User Lookup → Statement Update (OpenAI) → Save to DB → Handling Result
+```
+
+**Basic Dispatch Workflow (fallback):**
 ```
 Email Received → Analysis (OpenAI) → User Lookup → Statement Update (OpenAI) → Save to DB → Email Notification (if enabled)
 ```
@@ -129,5 +168,6 @@ The complex functions have been broken down into smaller, single-purpose functio
 
 - `github.com/sashabaranov/go-openai` - OpenAI API client
 - `internal/user.go` - User data operations
-- `internal/inbox_dispatch.go` - Email dispatch system
+- `internal/inbox_dispatch.go` - Enhanced email dispatch system with AI responses and escalation
+- `internal/inbox/` - Email processing components (EmailResponder, ResponseSender, EscalationService)
 - Standard library for testing (no external test frameworks)

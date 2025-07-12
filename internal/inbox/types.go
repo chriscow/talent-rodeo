@@ -54,3 +54,4 @@ type EmailHandlerFunc func(ctx context.Context, email *Email) (*HandlingResult, 
 func (f EmailHandlerFunc) HandleEmail(ctx context.Context, email *Email) (*HandlingResult, error) {
 	return f(ctx, email)
 }
+
