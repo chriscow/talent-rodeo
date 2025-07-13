@@ -36,6 +36,7 @@ type Processor struct {
 
 // NewProcessor creates a new nudge processor
 func NewProcessor(fs *internal.FirestoreClient, emailGenerator EmailContentGenerator, emailSender EmailSender, logger *slog.Logger) *Processor {
+	logger = logger.With("component", "NudgeProcessor", "pkg", "nudge")
 	return &Processor{
 		fs:             fs,
 		emailGenerator: emailGenerator,
@@ -48,6 +49,7 @@ func NewProcessor(fs *internal.FirestoreClient, emailGenerator EmailContentGener
 
 // NewProcessorWithDefaults creates a new nudge processor with default implementations
 func NewProcessorWithDefaults(fs *internal.FirestoreClient, smtpConfig *smtp.Config, logger *slog.Logger) *Processor {
+	logger = logger.With("component", "NudgeProcessorWithDefaults", "pkg", "nudge")
 	templateReader := NewAssetTemplateReader()
 	promptProcessor := NewLLMPromptProcessor()
 	emailGenerator := NewEmailGenerator(templateReader, promptProcessor)

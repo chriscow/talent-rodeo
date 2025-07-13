@@ -23,6 +23,7 @@ type ResponseSender struct {
 
 // NewResponseSender creates a new response sender instance.
 func NewResponseSender(mailer smtp.Mailer, logger *slog.Logger) *ResponseSender {
+	logger = logger.With("component", "ResponseSender", "pkg", "inbox")
 	return &ResponseSender{
 		mailer: mailer,
 		logger: logger,
@@ -88,7 +89,7 @@ func (rs *ResponseSender) validateAndCleanEmail(email string) (string, error) {
 
 	// Clean the email address
 	cleanEmail := strings.TrimSpace(email)
-	
+
 	// Handle "Name <email@domain.com>" format
 	if strings.Contains(cleanEmail, "<") || strings.Contains(cleanEmail, ">") {
 		start := strings.Index(cleanEmail, "<")
@@ -173,23 +174,23 @@ func (rs *ResponseSender) buildEscalationBody(originalEmail *Email, escalatedIte
 	var body strings.Builder
 
 	body.WriteString("An email from a user could not be fully processed and requires manual attention.\n\n")
-	
+
 	body.WriteString("ORIGINAL EMAIL:\n")
 	body.WriteString(fmt.Sprintf("From: %s\n", originalEmail.From))
 	body.WriteString(fmt.Sprintf("Subject: %s\n", originalEmail.Subject))
 	body.WriteString(fmt.Sprintf("Date: %s\n", originalEmail.Date.Format("2006-01-02 15:04:05")))
 	body.WriteString("\n")
-	
+
 	body.WriteString("Body:\n")
 	body.WriteString(originalEmail.Body)
 	body.WriteString("\n\n")
-	
+
 	body.WriteString("ESCALATED ITEMS:\n")
 	for i, item := range escalatedItems {
 		body.WriteString(fmt.Sprintf("%d. %s\n", i+1, item))
 	}
 	body.WriteString("\n")
-	
+
 	body.WriteString("Please review this email and take appropriate action.\n\n")
 	body.WriteString("Best regards,\n")
 	body.WriteString("Talent Rodeo Inbox System")

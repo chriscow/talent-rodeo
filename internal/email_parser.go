@@ -58,6 +58,7 @@ type openAIEmailParser struct {
 
 // NewOpenAIEmailParser creates a new OpenAI-based email parser instance with cost tracking.
 func NewOpenAIEmailParser(apiKey string, logger *slog.Logger, fs *FirestoreClient) EmailParser {
+	logger = logger.With("component", "OpenAIEmailParser", "pkg", "internal")
 	return &openAIEmailParser{
 		client: openai.NewClient(apiKey),
 		logger: logger,

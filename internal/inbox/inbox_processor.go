@@ -58,7 +58,7 @@ func NewProcessor(reader InboxReader, handler EmailHandler, logger *slog.Logger)
 	}
 
 	settings := DefaultSettings
-	logger = logger.With("pkg", "inbox.Processor")
+	logger = logger.With("component", "InboxProcessor", "pkg", "inbox")
 
 	return &Processor{
 		reader:   reader,

@@ -52,7 +52,7 @@ func NewProcessor(fs *internal.FirestoreClient, logger *slog.Logger) *Processor 
 		panic("firestore client cannot be nil")
 	}
 	settings := DefaultSettings
-	logger = logger.With("pkg", "feedback.Processor")
+	logger = logger.With("component", "FeedbackProcessor", "pkg", "feedback")
 	return &Processor{
 		fs:       fs,
 		logger:   logger,
