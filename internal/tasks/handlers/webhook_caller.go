@@ -37,6 +37,7 @@ type WebhookScheduler struct {
 
 // NewWebhookScheduler creates a new webhook scheduler
 func NewWebhookScheduler(logger *slog.Logger, fs *internal.FirestoreClient) *WebhookScheduler {
+	logger = logger.With("component", "WebhookScheduler", "pkg", "tasks")
 	return &WebhookScheduler{
 		logger: logger,
 		fs:     fs,

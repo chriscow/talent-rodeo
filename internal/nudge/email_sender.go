@@ -18,6 +18,7 @@ type SMTPEmailSender struct {
 
 // NewSMTPEmailSender creates a new SMTP email sender
 func NewSMTPEmailSender(smtpConfig *smtp.Config, logger *slog.Logger) *SMTPEmailSender {
+	logger = logger.With("component", "SMTPEmailSender", "pkg", "nudge")
 	return &SMTPEmailSender{
 		smtpConfig: smtpConfig,
 		logger:     logger,

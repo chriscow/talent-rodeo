@@ -1,173 +1,403 @@
-# Inbox Feedback Processor
+# Inbox Email Processing System
 
-This module implements an email-based feedback system that allows users to send
-search adjustment requests via email, which are automatically processed to
-update their job search statements.
+This system implements a comprehensive email-based feedback and adjustment
+system that allows users to send requests via email, which are automatically
+processed using AI to update their job search preferences and generate
+appropriate responses.
 
-## Architecture
+## System Overview
 
-### Core Components
+The email processing system consists of three main layers:
 
-1. **InboxFeedbackHandler** - Main handler that implements the `EmailHandler` interface
-2. **OpenAIClient** - Interface for LLM operations (email analysis and statement updates)  
-3. **UserService** - Interface for user data operations (lookup and statement updates)
+1. **Email Infrastructure** (`internal/inbox/`) - Handles email reception, response generation, and escalation
+2. **Central Dispatch** (`internal/inbox_dispatch.go`) - Orchestrates email routing to specialized handlers
+3. **Specialized Handlers** (`internal/feedback/`, `internal/email_parser.go`) - Process specific types of email content
 
-### Key Features
+## Complete Architecture
 
-- **Email Analysis**: Uses OpenAI GPT-4o-mini to determine if emails contain search adjustment requests
-- **Statement Updates**: Merges email requests with existing user statements using LLM
-- **User Lookup**: Finds users by email address from the email "From" field
-- **Error Handling**: Graceful error handling with detailed logging
-- **Testability**: Interface-based design with comprehensive mocks
+### Email Infrastructure Layer (`internal/inbox/`)
 
-## Integration
+**Email Reception:**
+- `gmail_reader.go` - Gmail API integration for reading emails
+- `imap_reader.go` - IMAP server integration for email reading
+- `inbox_processor.go` - Main email processing pipeline coordinator
+- `inbox.go` - Core inbox functionality and email handling
+- `types.go` - Core data structures (Email, HandlingResult, etc.)
 
-### Setup
+**Response System:**
+- `email_responder.go` - AI-powered response generation using OpenAI
+- `email_response.go` - Response data structures and formatting
+- `email_sender.go` - Response delivery system
+- `escalation_service.go` - Admin escalation for unhandled emails
+- `errors.go` - Email processing error definitions
 
+### Central Dispatch Layer (`internal/inbox_dispatch.go`)
+
+**InboxDispatch** - Central orchestrator that:
+- Maintains handler registry (`map[string]EmailHandler`)
+- Routes emails to appropriate handlers
+- Handles panic recovery and error logging
+- Supports two operational modes:
+  - **Basic Mode**: Handler processing only
+  - **Enhanced Mode**: Adds AI response generation + admin escalation
+- Provides comprehensive logging and metrics
+
+### Email Parsing Layer (`internal/email_parser.go`)
+
+**NEW: LLM-First Email Structure Analysis**
+- `EmailParser` interface - Converts raw emails into structured format
+- `openAIEmailParser` - OpenAI implementation with cost tracking
+- `EmailStructure` - Categorized email content:
+  - `Requests` - Actionable items (job search changes, account updates)
+  - `GeneralFeedback` - Human feedback requiring admin review
+  - `NonRequests` - Greetings, signatures, non-actionable content
+- **Cost Tracking** - Allocates LLM usage costs to user accounts
+- **Comprehensive Testing** - Integration, validation, and unit tests
+
+### Specialized Handlers
+
+**Search Adjustment Handler** (`internal/feedback/inbox_feedback.go`):
+- `InboxFeedbackHandler` - Processes job search adjustment requests
+- `OpenAIClient` - Interface for LLM operations (analysis and statement updates)
+- `UserService` - Interface for user data operations
+- **Features**:
+  - Email analysis for search adjustment detection
+  - Statement updates using LLM merging
+  - User lookup by email address
+  - Admin notifications for adjustments
+
+### Key System Features
+
+- **AI-Powered Analysis**: Uses OpenAI GPT-4o-mini and GPT-4 for email understanding
+- **Structured Processing**: Categorizes email content into actionable and non-actionable items
+- **Cost Management**: Tracks and allocates LLM usage costs to user accounts
+- **Response Generation**: Automatically generates contextual replies to users
+- **Admin Escalation**: Routes unhandled content to administrators
+- **Comprehensive Logging**: Detailed tracking throughout the processing pipeline
+- **Error Recovery**: Panic recovery and graceful error handling
+- **Testability**: Interface-based design with extensive mocking
+
+## Complete Email Processing Flow
+
+### Enhanced Dispatch Workflow (Production)
+```
+Email Received → Email Parser → Handler Registry → AI Response → Admin Escalation
+      ↓              ↓              ↓              ↓              ↓
+   Gmail/IMAP → Structure Analysis → Route to Handlers → Generate Reply → Escalate Unhandled
+      ↓              ↓              ↓              ↓              ↓
+   Email Object → EmailStructure → HandlingResult → Response Email → Admin Notification
+```
+
+### Detailed Step-by-Step Flow
+
+1. **Email Reception** (`internal/inbox/`)
+   - `gmail_reader.go` or `imap_reader.go` receives email
+   - `inbox_processor.go` validates and normalizes email data
+   - Creates `Email` struct with ID, From, Subject, Body
+
+2. **Optional: Structured Parsing** (`internal/email_parser.go`)
+   - `ParseEmail()` analyzes content with OpenAI GPT-4
+   - Categorizes into `Requests`, `GeneralFeedback`, `NonRequests`
+   - Records LLM cost to user account via `RecordLLMCost()`
+
+3. **Central Dispatch** (`internal/inbox_dispatch.go`)
+   - `InboxDispatch.HandleEmail()` orchestrates processing
+   - Loops through registered handlers in `map[string]EmailHandler`
+   - Collects `HandlingResult` from each handler
+   - Handles panic recovery with detailed logging
+
+4. **Handler Processing** (e.g., `internal/feedback/inbox_feedback.go`)
+   - `HandleEmail()` analyzes email for specific content type
+   - For search adjustments: OpenAI analysis → user lookup → statement update
+   - Returns `HandlingResult{Handled: bool, Summary: string, Metadata: map}`
+
+5. **Response Generation** (`internal/inbox/email_responder.go`)
+   - `GenerateResponse()` creates AI-powered replies based on handling results
+   - Uses handling summaries to craft contextual responses
+   - Supports multiple response types (confirmation, error, escalation)
+
+6. **Response Delivery** (`internal/inbox/email_sender.go`)
+   - `SendResponse()` delivers replies to original email sender
+   - Uses SMTP mailer with template rendering
+
+7. **Admin Escalation** (`internal/inbox/escalation_service.go`)
+   - `SendEscalation()` notifies admin of unhandled content
+   - Includes original email and unprocessed items
+
+## Integration Setup
+
+### Enhanced Mode (Full AI Pipeline)
 ```go
-import "talent-rodeo/internal/feedback"
-
-// During application startup - Enhanced dispatch with AI response capabilities
-openAIClient := inbox.NewOpenAIClient(openAIAPIKey, logger)
-responder := inbox.NewEmailResponder(openAIClient, logger)
-sender := inbox.NewResponseSender(mailer, logger)
-escalationService := inbox.NewEscalationService(notificationEmail, mailer, logger)
-
-dispatcher := internal.NewEnhancedInboxDispatch(responder, sender, escalationService, logger)
-
-// Register the feedback handler
-feedbackOpenAIClient := feedback.NewOpenAIClient(openAIAPIKey, logger)
-inboxFeedbackHandler := feedback.NewInboxFeedbackHandler(
-    feedbackOpenAIClient,
-    firestoreClient,
-    mailer,
-    notificationEmail,
-    logger,
+import (
+    "talent-rodeo/internal"
+    "talent-rodeo/internal/feedback" 
+    "talent-rodeo/internal/inbox"
 )
 
-err := dispatcher.Register("inbox-feedback", inboxFeedbackHandler)
-if err != nil {
-    log.Fatal("Failed to register inbox feedback handler:", err)
-}
+// Setup email infrastructure
+responder := inbox.NewEmailResponder(openAIClient, logger)
+sender := inbox.NewResponseSender(mailer, logger)
+escalationService := inbox.NewEscalationService(adminEmail, mailer, logger)
+
+// Create enhanced dispatcher
+dispatcher := internal.NewEnhancedInboxDispatch(responder, sender, escalationService, logger)
+
+// Register email parser (optional but recommended)
+emailParser := internal.NewOpenAIEmailParser(openAIAPIKey, logger, firestoreClient)
+
+// Register search adjustment handler
+feedbackHandler := feedback.NewInboxFeedbackHandler(
+    feedback.NewOpenAIClient(openAIAPIKey, logger),
+    firestoreClient,
+    mailer, 
+    adminEmail,
+    logger,
+)
+dispatcher.Register("search-feedback", feedbackHandler)
+
+// Register other handlers as needed
+dispatcher.Register("account-updates", accountHandler)
+dispatcher.Register("support-requests", supportHandler)
 ```
 
-**Fallback for missing OpenAI API key:**
+### Basic Mode (Handler Processing Only)
 ```go
-// If OPENAI_API_KEY is not set, falls back to basic dispatch without AI features
-if openAIAPIKey == "" {
-    dispatcher := internal.NewInboxDispatch()
-    // Basic handler registration only - no AI response generation
+// Fallback when AI features unavailable
+dispatcher := internal.NewInboxDispatch()
+dispatcher.Register("search-feedback", feedbackHandler)
+// No AI responses or escalation
+```
+
+## Environment Variables
+
+### Required
+- `OPENAI_API_KEY` - Required for all AI features (email parsing, analysis, statement updates, response generation)
+- `FIREBASE_PROJECT_ID` - Firestore project for user data and cost tracking
+- `FIREBASE_CREDENTIALS` - Firestore service account credentials
+
+### Optional  
+- `ADMIN_EMAIL` - Admin email for escalation notifications when emails can't be handled automatically
+- `SEND_FEEDBACK_ADJUSTMENTS` - Set to "true" to enable admin notifications for search adjustments
+- `BASE_URL` - Application base URL for email templates and links
+
+### Email Infrastructure
+- Gmail: `GMAIL_CREDENTIALS`, `GMAIL_TOKEN`
+- IMAP: `IMAP_SERVER`, `IMAP_USERNAME`, `IMAP_PASSWORD`
+- SMTP: Mailer configuration for response delivery
+
+## File-by-File Documentation
+
+### Core Email Infrastructure (`internal/inbox/`)
+
+| File | Purpose | Key Functions |
+|------|---------|---------------|
+| `types.go` | Core data structures | `Email`, `HandlingResult`, `ResponseType` |
+| `gmail_reader.go` | Gmail API integration | `ReadEmails()`, token management |
+| `imap_reader.go` | IMAP server integration | `Connect()`, `ReadEmails()` |
+| `inbox_processor.go` | Email processing pipeline | `ProcessInbox()`, email validation |
+| `email_responder.go` | AI response generation | `GenerateResponse()` with OpenAI |
+| `email_response.go` | Response data structures | `EmailResponse`, formatting helpers |
+| `email_sender.go` | Response delivery | `SendResponse()` via SMTP |
+| `escalation_service.go` | Admin escalation | `SendEscalation()`, unhandled item processing |
+| `errors.go` | Error definitions | Email processing error types |
+
+### Central Dispatch (`internal/`)
+
+| File | Purpose | Key Functions |
+|------|---------|---------------|
+| `inbox_dispatch.go` | Handler orchestration | `HandleEmail()`, handler registry, panic recovery |
+| `email_parser.go` | LLM-based email parsing | `ParseEmail()`, structured content analysis |
+
+### Search Feedback Handler (`internal/feedback/`)
+
+| File | Purpose | Key Functions |
+|------|---------|---------------|
+| `inbox_feedback.go` | Search adjustment processing | `HandleEmail()`, user statement updates |
+| `inbox_feedback_test.go` | Comprehensive test suite | Handler testing with mocks |
+
+### Testing Files
+
+| File | Purpose | Coverage |
+|------|---------|----------|
+| `inbox_dispatch_test.go` | Dispatch system testing | Handler registry, error scenarios |
+| `email_parser_test.go` | Parser unit tests | Content categorization |
+| `email_parser_integration_test.go` | Parser integration tests | Real OpenAI API calls |
+| `email_parser_validation_test.go` | Parser validation tests | Edge cases, malformed content |
+| `inbox_feedback_test.go` | Feedback handler tests | Search adjustment scenarios |
+
+## Cost Tracking Integration
+
+The system includes comprehensive LLM cost tracking:
+
+```go
+// Automatic cost allocation in email_parser.go:98-110
+user, found, err := GetUserByEmail(ctx, p.fs, email.From)
+if found {
+    err := RecordLLMCost(ctx, p.fs, &user.ID, string(tools.GPT41), 
+                        resp, "email_parsing", nil)
 }
 ```
 
-### Environment Variables
+**Cost Categories:**
+- `email_parsing` - Structured content analysis
+- `email_analysis` - Search request detection  
+- `statement_update` - User statement modifications
+- `response_generation` - AI reply creation
 
-- `OPENAI_API_KEY` - Required for email analysis, statement updates, and AI response generation
-- `ADMIN_EMAIL` - Admin email for escalation notifications when emails can't be handled automatically
-- `SEND_FEEDBACK_ADJUSTMENTS` - Set to "true" to enable email notifications for search adjustments
+**Cost Tracking Location:** `internal/cost_tracking.go`
 
-## Usage
+## Testing Strategy
 
-Once registered with the enhanced inbox dispatch system, the handler will automatically:
+### Test Coverage by Component
 
-1. Receive new emails from the dispatcher
-2. Analyze each email to determine if it contains search adjustment requests
-3. Look up the user by their email address
-4. Update the user's statement using LLM to merge the request with existing preferences
-5. Save the updated statement to Firestore
-6. Send email notification (if enabled) with adjustment summary
-
-**Enhanced dispatch features (when using `NewEnhancedInboxDispatch`):**
-- **AI-generated responses**: Automatically sends contextual replies to users based on handling results
-- **Admin escalation**: Forwards unhandled emails to admin for manual review
-- **Comprehensive logging**: Detailed tracking of email processing workflow
-
-## Email Processing Flow
-
-**Enhanced Dispatch Workflow:**
-```
-Email Received → Handler Processing → AI Response Generation → Send User Reply → Admin Escalation (if needed)
-     ↓
-   Analysis (OpenAI) → User Lookup → Statement Update (OpenAI) → Save to DB → Handling Result
-```
-
-**Basic Dispatch Workflow (fallback):**
-```
-Email Received → Analysis (OpenAI) → User Lookup → Statement Update (OpenAI) → Save to DB → Email Notification (if enabled)
-```
-
-## Testing
-
-The module includes comprehensive tests covering:
-
-- Email address extraction from various formats
-- Search request detection (positive and negative cases)
-- User lookup scenarios (found/not found)
-- Statement updates (with and without existing statements)
-- Error handling for API failures
-- Email notification functionality (enabled/disabled scenarios)
-- Integration testing with real OpenAI API calls
-
-Run tests:
+**Email Infrastructure Tests:**
 ```bash
-go test ./internal/feedback -run "TestInboxFeedbackHandler|TestExtractEmailAddress|TestAnalyzeEmail" -v
+# Core inbox functionality
+go test ./internal/inbox -v
+
+# Email dispatch system  
+go test ./internal -run "TestInboxDispatch" -v
+
+# Email parser (structured analysis)
+go test ./internal -run "TestEmailParser" -v
 ```
 
-## Example Email Processing
+**Feedback Handler Tests:**
+```bash
+# Comprehensive feedback handler testing
+go test ./internal/feedback -run "TestInboxFeedbackHandler" -v
 
-**Input Email:**
+# Email analysis and extraction
+go test ./internal/feedback -run "TestExtractEmailAddress|TestAnalyzeEmail" -v
+```
+
+**Integration Tests:**
+```bash
+# Real OpenAI API integration tests (requires OPENAI_API_KEY)
+go test ./internal -run "TestEmailParserIntegration" -v
+go test ./internal/feedback -run "TestInboxIntegration" -v
+```
+
+### Test Categories
+
+| Test Type | Files | Coverage |
+|-----------|-------|----------|
+| **Unit Tests** | `*_test.go` | Email parsing, handler logic, utilities |
+| **Integration Tests** | `*_integration_test.go` | Real API calls, end-to-end flows |
+| **Validation Tests** | `*_validation_test.go` | Edge cases, malformed data |
+| **Mock Tests** | Uses `test_mocks.go` | Isolated component testing |
+
+### Key Test Scenarios
+
+**Email Parser Tests:**
+- Content categorization (Requests vs GeneralFeedback vs NonRequests)
+- Cost tracking integration
+- Malformed email handling
+- Empty content scenarios
+
+**Dispatch System Tests:**
+- Handler registration/deregistration
+- Panic recovery and error handling
+- Enhanced vs basic mode functionality
+- Response generation and escalation
+
+**Feedback Handler Tests:**
+- Search adjustment detection (positive/negative cases)
+- User lookup scenarios (found/not found/error)
+- Statement updates with OpenAI integration
+- Email notification functionality
+- Error handling for API failures
+
+## Example: Complete Email Processing
+
+### Input Email
 ```
 From: john.doe@example.com
-Subject: Update my job search
-Body: I would like to add remote work options and focus on senior-level positions instead of entry-level roles.
+Subject: Update my job search preferences
+Body: Hi! I would like to add remote work options and focus on senior-level positions instead of entry-level roles. Also, the job recommendations have been helpful but could be more accurate. Thanks!
 ```
 
-**Processing:**
-1. OpenAI analysis identifies this as a search adjustment request
-2. User lookup finds user with email "john.doe@example.com"  
-3. Current statement: "I am looking for entry-level software engineering positions in San Francisco"
-4. OpenAI updates statement: "I am looking for senior-level software engineering positions with remote work options"
-5. Updated statement saved to user's profile
-6. Email notification sent to admin (if `SEND_FEEDBACK_ADJUSTMENTS=true`)
+### Step-by-Step Processing
 
-## Error Scenarios
+**1. Email Parser Analysis** (`internal/email_parser.go`)
+```json
+{
+  "requests": [
+    {
+      "id": "req_1",
+      "type": "job_search", 
+      "description": "User wants remote work and senior positions",
+      "quote": "I would like to add remote work options and focus on senior-level positions instead of entry-level roles"
+    }
+  ],
+  "general_feedback": [
+    {
+      "id": "feedback_2", 
+      "type": "feedback",
+      "description": "Feedback about job recommendation accuracy",
+      "quote": "the job recommendations have been helpful but could be more accurate"
+    }
+  ],
+  "non_requests": [
+    {
+      "id": "non_req_3",
+      "type": "greeting", 
+      "description": "Email greeting",
+      "quote": "Hi!"
+    }
+  ]
+}
+```
 
-- **Unknown user**: Email from unregistered user → logged and skipped
-- **OpenAI API failure**: Temporary API issues → error logged, processing skipped
-- **Invalid email format**: Malformed emails → error logged, processing skipped
-- **Statement save failure**: Database issues → error logged, retry logic could be added
+**2. Handler Processing** (`internal/feedback/inbox_feedback.go`)
+- Search adjustment detected: ✅ 
+- User lookup: `john.doe@example.com` → Found user ID `user_123`
+- Current statement: `"I am looking for entry-level software engineering positions in San Francisco"`
+- OpenAI statement update: `"I am looking for senior-level software engineering positions with remote work options"`
+- Statement saved to Firestore
+- Returns: `HandlingResult{Handled: true, Summary: "Updated search preferences: remote work and senior positions"}`
 
-## Code Quality Improvements
+**3. AI Response Generation** (`internal/inbox/email_responder.go`)
+```
+Subject: Re: Update my job search preferences
+Body: Hi John! I've successfully updated your job search preferences to include remote work options and focus on senior-level positions. Your updated preferences are now active and will be used for future job recommendations. Thanks for your feedback!
+```
 
-The codebase has been enhanced for better maintainability and clarity:
+**4. Admin Escalation** (`internal/inbox/escalation_service.go`)
+- Unhandled item: General feedback about recommendation accuracy
+- Admin notification sent with original email and unprocessed feedback
 
-### **Documentation**
-- Complete Go-style documentation for all exported functions and types
-- Detailed comments explaining error conditions and return values
-- Clear interface documentation with usage examples
+### Result Summary
+- ✅ Search preferences updated automatically
+- ✅ User receives confirmation email  
+- ✅ Admin notified about feedback requiring review
+- 💰 LLM costs tracked to user account
 
-### **Function Decomposition**
-The complex functions have been broken down into smaller, single-purpose functions:
+## Error Scenarios & Handling
 
-- `extractUserEmail()` - Validates and extracts email addresses from email headers
-- `lookupUser()` - Handles user lookup with proper error handling
-- `buildUserName()` - Constructs user display names with fallback logic
+| Scenario | Behavior | Recovery |
+|----------|----------|----------|
+| **Unknown User** | Log warning, skip processing | Continue with other emails |
+| **OpenAI API Failure** | Log error, return unhandled result | Retry with exponential backoff |
+| **Firestore Connection Error** | Log error, fail gracefully | Connection retry logic |
+| **Malformed Email** | Log error, skip processing | Continue processing queue |
+| **Handler Panic** | Catch panic, log stack trace | Continue with next handler |
 
-### **Enhanced Testing**
-- **13 test functions** covering all scenarios including new helper functions
-- Comprehensive edge case testing for email extraction and user name building
-- Error condition testing for user lookup scenarios
-- Maintained 100% test coverage for new functions
+## System Dependencies
 
-### **Improved Error Handling**
-- More descriptive error messages with context
-- Better separation of concerns for error scenarios
-- Graceful handling of missing or malformed data
+### Core Libraries
+- `github.com/sashabaranov/go-openai` - OpenAI API client for LLM operations
+- `github.com/chriscow/minds/tools` - Structured LLM queries with cost tracking
+- Standard Go library for HTTP, JSON, context handling
 
-## Dependencies
+### Internal Dependencies  
+- `internal/firestore.go` - Firestore client and user operations
+- `internal/cost_tracking.go` - LLM usage cost allocation
+- `internal/smtp/` - Email delivery infrastructure
+- `internal/sentry.go` - Error tracking and monitoring
 
-- `github.com/sashabaranov/go-openai` - OpenAI API client
-- `internal/user.go` - User data operations
-- `internal/inbox_dispatch.go` - Enhanced email dispatch system with AI responses and escalation
-- `internal/inbox/` - Email processing components (EmailResponder, ResponseSender, EscalationService)
-- Standard library for testing (no external test frameworks)
+### External Services
+- **OpenAI API** - GPT-4 and GPT-4o-mini for content analysis
+- **Firestore** - User data and cost tracking storage
+- **Gmail API** - Email reception (optional, can use IMAP)
+- **SMTP Provider** - Email response delivery

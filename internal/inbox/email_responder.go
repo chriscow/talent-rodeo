@@ -26,6 +26,7 @@ type openAIClient struct {
 
 // NewOpenAIClient creates a new OpenAI client instance for email response generation.
 func NewOpenAIClient(apiKey string, logger *slog.Logger) OpenAIClient {
+	logger = logger.With("component", "OpenAIClient", "pkg", "inbox")
 	return &openAIClient{
 		client: openai.NewClient(apiKey),
 		logger: logger,
@@ -76,19 +77,19 @@ func (c *openAIClient) buildResponsePrompt(originalEmail *Email, results []*Hand
 	// Build prompt with conditional unhandled items section
 	var promptBuilder strings.Builder
 	promptBuilder.WriteString("You are Shirely, the AI Career Specialist at Talent Rodeo. Write an email response based on the user's original email and actions taken.\n\n")
-	
+
 	// Original email section
-	promptBuilder.WriteString(fmt.Sprintf("ORIGINAL EMAIL:\nSubject: %s\nFrom: %s\nBody: %s\n\n", 
+	promptBuilder.WriteString(fmt.Sprintf("ORIGINAL EMAIL:\nSubject: %s\nFrom: %s\nBody: %s\n\n",
 		originalEmail.Subject, originalEmail.From, originalEmail.Body))
-	
+
 	// Actions taken section
 	promptBuilder.WriteString(fmt.Sprintf("ACTIONS TAKEN:\n%s\n\n", strings.Join(handledItems, "\n- ")))
-	
+
 	// Only include unhandled items section if there are actually unhandled items
 	if len(unhandledItems) > 0 {
 		promptBuilder.WriteString(fmt.Sprintf("UNHANDLED ITEMS:\n%s\n\n", strings.Join(unhandledItems, "\n- ")))
 	}
-	
+
 	// Voice and tone guidelines
 	promptBuilder.WriteString(`SHIRELY'S VOICE & TONE GUIDELINES:
 - You're Shirely (deliberately misspelled)
@@ -106,12 +107,12 @@ INSTRUCTIONS:
 - Write from Shirely's perspective, responding to their email
 - Use the original subject prepending "RE: ". Use the original body to understand context and personalize your response
 - Acknowledge what was accomplished with enthusiasm`)
-	
+
 	// Only mention escalation if there are unhandled items
 	if len(unhandledItems) > 0 {
 		promptBuilder.WriteString("\n- Mention the unhandled items and that they've been escalated to the human team")
 	}
-	
+
 	promptBuilder.WriteString(`
 - Keep response concise but warm
 - Include one of Shirely's signature taglines about HIRE being in her name
@@ -169,6 +170,7 @@ type EmailResponder struct {
 
 // NewEmailResponder creates a new email responder instance.
 func NewEmailResponder(openAIClient OpenAIClient, logger *slog.Logger) *EmailResponder {
+	logger = logger.With("component", "EmailResponder", "pkg", "inbox")
 	return &EmailResponder{
 		openAIClient: openAIClient,
 		logger:       logger,

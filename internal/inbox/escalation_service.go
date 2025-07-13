@@ -18,6 +18,7 @@ type EscalationService struct {
 
 // NewEscalationService creates a new escalation service instance.
 func NewEscalationService(adminEmail string, mailer smtp.Mailer, logger *slog.Logger) *EscalationService {
+	logger = logger.With("component", "EscalationService", "pkg", "inbox")
 	return &EscalationService{
 		adminEmail: adminEmail,
 		mailer:     mailer,

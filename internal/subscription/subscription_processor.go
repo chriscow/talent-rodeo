@@ -74,7 +74,7 @@ func NewProcessor(fs *internal.FirestoreClient, psh *pusher.Client, logger *slog
 
 	settings := DefaultSettings
 
-	logger = logger.With("pkg", "subscription.Processor")
+	logger = logger.With("component", "SubscriptionProcessor", "pkg", "subscription")
 	return &Processor{
 		fs:       fs,
 		logger:   logger,

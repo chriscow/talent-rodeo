@@ -38,6 +38,7 @@ type openAIClient struct {
 // Takes an API key and logger as parameters.
 // Returns an OpenAIClient interface that can be used for email analysis and statement updates.
 func NewOpenAIClient(apiKey string, logger *slog.Logger) OpenAIClient {
+	logger = logger.With("component", "OpenAIClient", "pkg", "feedback")
 	return &openAIClient{
 		client: openai.NewClient(apiKey),
 		logger: logger,
@@ -261,6 +262,7 @@ type InboxFeedbackHandler struct {
 // updating user statements, and sending notifications.
 // Returns a configured InboxFeedbackHandler ready for use.
 func NewInboxFeedbackHandler(openAIClient OpenAIClient, fsClient *internal.FirestoreClient, mailer smtp.Mailer, notificationEmail string, logger *slog.Logger) *InboxFeedbackHandler {
+	logger = logger.With("component", "InboxFeedbackHandler", "pkg", "feedback")
 	return &InboxFeedbackHandler{
 		openAIClient:      openAIClient,
 		userService:       &firestoreUserService{fsClient: fsClient},
@@ -275,6 +277,7 @@ func NewInboxFeedbackHandler(openAIClient OpenAIClient, fsClient *internal.Fires
 // Takes custom implementations of OpenAIClient, UserService, and other dependencies.
 // Returns a configured InboxFeedbackHandler with the provided services.
 func NewInboxFeedbackHandlerWithServices(openAIClient OpenAIClient, userService UserService, mailer smtp.Mailer, notificationEmail string, logger *slog.Logger) *InboxFeedbackHandler {
+	logger = logger.With("component", "InboxFeedbackHandlerWithServices", "pkg", "feedback")
 	return &InboxFeedbackHandler{
 		openAIClient:      openAIClient,
 		userService:       userService,
