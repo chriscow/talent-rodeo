@@ -768,7 +768,7 @@ func (app *application) startServices(ctx context.Context, smtpCfg *smtp.Config)
 }
 
 func (app *application) startCoreServices(ctx context.Context) error {
-	if app.config.nudgeOnly {
+	if app.config.noServices {
 		return nil
 	}
 
