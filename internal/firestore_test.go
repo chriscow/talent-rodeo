@@ -2,20 +2,11 @@ package internal
 
 import (
 	"context"
-	"log"
 	"os"
 	"testing"
 )
 
 func TestMain(m *testing.M) {
-	// Start emulator
-	if err := StartEmulator(); err != nil {
-		log.Fatalf("Failed to start emulator: %v", err)
-	}
-
-	// Ensure emulator is stopped after tests
-	defer StopEmulator()
-
 	// Run tests
 	code := m.Run()
 

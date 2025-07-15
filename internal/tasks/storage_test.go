@@ -42,7 +42,6 @@ package tasks
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"testing"
 	"time"
@@ -53,14 +52,6 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	// Start emulator
-	if err := internal.StartEmulator(); err != nil {
-		log.Fatalf("Failed to start emulator: %v", err)
-	}
-
-	// Ensure emulator is stopped after tests
-	defer internal.StopEmulator()
-
 	// Run tests
 	code := m.Run()
 

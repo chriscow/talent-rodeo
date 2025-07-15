@@ -58,20 +58,6 @@ func BuildAssistantOverrides(ctx context.Context, user *User, fs *FirestoreClien
 		return nil, fmt.Errorf("failed to get latest resume (userID:%s) (found:%v) : %w", user.ID, found, err)
 	}
 
-	resumeText := ""
-	if resume != nil {
-		resumeText = resume.RawText
-	}
-
-	fullName := ""
-	if user != nil {
-		fullName = user.Name
-	}
-	firstName := ""
-	if user != nil {
-		firstName = user.FirstName
-	}
-
 	searchStrategy := ""
 	if resume.SearchAnalysis != nil {
 		searchStrategy = *resume.SearchAnalysis
@@ -117,9 +103,9 @@ func BuildAssistantOverrides(ctx context.Context, user *User, fs *FirestoreClien
 		SearchStrategy     string
 		PreviousDiscussion []previousDiscussion
 	}{
-		FirstName:          firstName,
-		FullName:           fullName,
-		Resume:             resumeText,
+		FirstName:          user.FirstName,
+		FullName:           user.Name,
+		Resume:             resume.RawText,
 		SearchStrategy:     searchStrategy,
 		PreviousDiscussion: previousDiscussions,
 	}

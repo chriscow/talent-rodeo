@@ -11,6 +11,8 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
+// Look into: https://github.com/nlpodyssey/openai-agents-go
+
 // EmailRequest represents a single actionable request extracted from an email.
 // It maintains referential integrity by preserving the exact quote from the original email.
 type EmailRequest struct {
