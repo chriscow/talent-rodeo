@@ -187,7 +187,7 @@ func createSteps(ctx context.Context, sessionID, resume string, status StatusSen
 		return nil, fmt.Errorf("createSteps: failed to create skills step: %w", err)
 	}
 
-	fmt.Printf(step2.Block.Instruction)
+	fmt.Printf("%s", step2.Block.Instruction)
 
 	// status.SendStatus(sessionID, "info", "planning conversation workflow (3/3)")
 	// step3, err := createPreferencesStep(ctx, resume)

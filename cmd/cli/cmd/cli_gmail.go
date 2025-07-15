@@ -152,7 +152,7 @@ Google Cloud service account credentials.`,
 			os.Remove(gmailTokenPath)
 			return fmt.Errorf("❌ New token test failed: %w\n" +
 				"The token was created but doesn't work properly.\n" +
-				"I've deleted the bad token. Please try running 'gmail setup' again.")
+				"I've deleted the bad token. Please try running 'gmail setup' again.", err)
 		}
 
 		fmt.Println("✅ Gmail OAuth setup complete!")

@@ -114,6 +114,22 @@ func (app *application) completeSocialAuth(w http.ResponseWriter, r *http.Reques
 			app.serverError(w, r, fmt.Errorf("failed to create firestore user: %w", err))
 			return
 		}
+
+		// Send notification for new user creation
+		notificationData := map[string]any{
+			"UserID":     u.ID,
+			"Email":      u.Email,
+			"Name":       u.Name,
+			"Provider":   u.Provider,
+			"Location":   u.Location,
+			"AvatarURL":  u.AvatarURL,
+			"CreatedAt":  u.StatusUpdatedAt,
+		}
+
+		err = app.sendNotification("user-created.html", notificationData)
+		if err != nil {
+			app.logger.Error("failed to send new user notification", "userID", u.ID, "email", u.Email, "error", err)
+		}
 	}
 
 	// Store user ID in session

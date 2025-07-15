@@ -50,3 +50,24 @@ func (app *application) backgroundTask(r *http.Request, fn func() error) {
 		}
 	}()
 }
+
+func (app *application) sendNotification(templateName string, data map[string]any) error {
+	if app.config.notifications.email == "" {
+		app.logger.Debug("notification email not configured, skipping notification")
+		return nil
+	}
+
+	emailData := app.newEmailData()
+	for key, value := range data {
+		emailData[key] = value
+	}
+
+	err := app.mailer.SendFromTemplate(app.config.notifications.email, emailData, templateName)
+	if err != nil {
+		app.logger.Error("failed to send notification email", "template", templateName, "error", err)
+		return fmt.Errorf("failed to send notification email: %w", err)
+	}
+
+	app.logger.Debug("notification email sent successfully", "template", templateName, "to", app.config.notifications.email)
+	return nil
+}

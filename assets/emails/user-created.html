@@ -1,0 +1,83 @@
+{{define "subject"}}New User Registration - {{.Name}}{{end}}
+
+{{define "plainBody"}}
+New User Registration
+
+A new user has registered on the platform:
+
+Name: {{.Name}}
+Email: {{.Email}}
+Provider: {{.Provider}}
+User ID: {{.UserID}}
+Location: {{.Location}}
+Created: {{.CreatedAt}}
+Avatar URL: {{.AvatarURL}}
+
+View user profile: {{.BaseURL}}/admin/users/{{.UserID}}
+{{end}}
+
+{{define "htmlBody"}}
+<!doctype html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width" />
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <style>
+      body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+      .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+      .header { background-color: #f4f4f4; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
+      .user-info { background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0; }
+      .user-info table { width: 100%; border-collapse: collapse; }
+      .user-info td { padding: 8px; border-bottom: 1px solid #ddd; }
+      .user-info td:first-child { font-weight: bold; width: 30%; }
+      .button { display: inline-block; padding: 10px 20px; background-color: #007cba; color: white; text-decoration: none; border-radius: 5px; margin-top: 20px; }
+      .avatar { width: 50px; height: 50px; border-radius: 50%; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h2>🎉 New User Registration</h2>
+        <p>A new user has registered on the platform.</p>
+      </div>
+      
+      <div class="user-info">
+        <table>
+          <tr>
+            <td>Name:</td>
+            <td>{{.Name}}</td>
+          </tr>
+          <tr>
+            <td>Email:</td>
+            <td>{{.Email}}</td>
+          </tr>
+          <tr>
+            <td>Provider:</td>
+            <td>{{.Provider}}</td>
+          </tr>
+          <tr>
+            <td>User ID:</td>
+            <td>{{.UserID}}</td>
+          </tr>
+          <tr>
+            <td>Location:</td>
+            <td>{{.Location}}</td>
+          </tr>
+          <tr>
+            <td>Created:</td>
+            <td>{{.CreatedAt}}</td>
+          </tr>
+          {{if .AvatarURL}}
+          <tr>
+            <td>Avatar:</td>
+            <td><img src="{{.AvatarURL}}" alt="User Avatar" class="avatar"></td>
+          </tr>
+          {{end}}
+        </table>
+      </div>
+      
+      <a href="{{.BaseURL}}/admin/users/{{.UserID}}" class="button">View User Profile</a>
+    </div>
+  </body>
+</html>
+{{end}}
