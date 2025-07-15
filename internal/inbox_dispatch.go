@@ -462,7 +462,7 @@ func (id *InboxDispatch) extractUserEmail(email *inbox.Email) (string, error) {
 	}
 
 	userEmail = trimSpace(userEmail)
-	
+
 	// Basic validation
 	if userEmail == "" || !containsChar(userEmail, '@') {
 		return "", fmt.Errorf("invalid email format: %s", email.From)
@@ -474,7 +474,7 @@ func (id *InboxDispatch) extractUserEmail(email *inbox.Email) (string, error) {
 // collectUnhandledItems extracts descriptions of unhandled items from results
 func (id *InboxDispatch) collectUnhandledItems(results []*inbox.HandlingResult) []string {
 	var unhandledItems []string
-	
+
 	// If no results at all, the entire email was unhandled
 	if len(results) == 0 {
 		unhandledItems = append(unhandledItems, "Email could not be processed by any handler")
@@ -523,17 +523,17 @@ func containsChar(s string, c byte) bool {
 func trimSpace(s string) string {
 	start := 0
 	end := len(s)
-	
+
 	// Trim leading spaces
 	for start < end && (s[start] == ' ' || s[start] == '\t' || s[start] == '\n' || s[start] == '\r') {
 		start++
 	}
-	
+
 	// Trim trailing spaces
 	for end > start && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\n' || s[end-1] == '\r') {
 		end--
 	}
-	
+
 	return s[start:end]
 }
 

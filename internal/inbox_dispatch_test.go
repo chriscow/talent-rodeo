@@ -3,8 +3,8 @@ package internal
 import (
 	"context"
 	"errors"
-	"testing"
 	"talent-rodeo/internal/inbox"
+	"testing"
 )
 
 func TestHandlingResult(t *testing.T) {

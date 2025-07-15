@@ -48,20 +48,20 @@ type JobDetailRef struct {
 
 // SearchTaskCriteriaAnalytics represents aggregated analytics for search tasks grouped by criteria
 type SearchTaskCriteriaAnalytics struct {
-	CriteriaID          string    `json:"criteria_id"`
-	CriteriaQuery       string    `json:"criteria_query"`
-	CriteriaGeoID       string    `json:"criteria_geo_id"`
-	CriteriaWorkType    WorkType  `json:"criteria_work_type"`
-	CriteriaExpLevel    ExperienceLevel `json:"criteria_experience_level"`
-	TaskCount           int       `json:"task_count"`
-	TotalListings       int       `json:"total_listings"`
-	TotalDuplicates     int       `json:"total_duplicates"`
-	DuplicatePercentage float64   `json:"duplicate_percentage"`
-	LastSearchAt        *time.Time `json:"last_search_at"`
-	CompletedTasks      int       `json:"completed_tasks"`
-	FailedTasks         int       `json:"failed_tasks"`
-	QueuedTasks         int       `json:"queued_tasks"`
-	ProcessingTasks     int       `json:"processing_tasks"`
+	CriteriaID          string
+	CriteriaQuery       string
+	CriteriaGeoID       string
+	CriteriaWorkType    WorkType
+	CriteriaExpLevel    ExperienceLevel
+	TaskCount           int
+	TotalListings       int
+	TotalDuplicates     int
+	DuplicatePercentage float64
+	LastSearchAt        *time.Time
+	CompletedTasks      int
+	FailedTasks         int
+	QueuedTasks         int
+	ProcessingTasks     int
 }
 
 var ErrSearchTaskExists = errors.New("search task already exists")
@@ -336,10 +336,10 @@ func GetSearchTaskAnalyticsByCriteria(ctx context.Context, fs *FirestoreClient) 
 
 	// Query all search tasks
 	iter := fs.Collection(SearchTaskCollection).Documents(ctx)
-	
+
 	// Map to aggregate data by criteria ID
 	analytics := make(map[string]*SearchTaskCriteriaAnalytics)
-	
+
 	for {
 		doc, err := iter.Next()
 		if err == iterator.Done {
@@ -348,14 +348,14 @@ func GetSearchTaskAnalyticsByCriteria(ctx context.Context, fs *FirestoreClient) 
 		if err != nil {
 			return nil, fmt.Errorf("error iterating search tasks: %w", err)
 		}
-		
+
 		searchTask := &SearchTask{}
 		if err = doc.DataTo(searchTask); err != nil {
 			return nil, fmt.Errorf("error parsing search task data: %w", err)
 		}
-		
+
 		criteriaID := searchTask.Criteria.ID
-		
+
 		// Initialize analytics for this criteria if not exists
 		if analytics[criteriaID] == nil {
 			analytics[criteriaID] = &SearchTaskCriteriaAnalytics{
@@ -366,13 +366,13 @@ func GetSearchTaskAnalyticsByCriteria(ctx context.Context, fs *FirestoreClient) 
 				CriteriaExpLevel: searchTask.Criteria.ExperienceLevel,
 			}
 		}
-		
+
 		// Aggregate the data
 		a := analytics[criteriaID]
 		a.TaskCount++
 		a.TotalListings += searchTask.TotalListings
 		a.TotalDuplicates += searchTask.DuplicateListings
-		
+
 		// Update last search time
 		if a.LastSearchAt == nil || (searchTask.UpdatedAt != nil && searchTask.UpdatedAt.After(*a.LastSearchAt)) {
 			if searchTask.UpdatedAt != nil {
@@ -381,7 +381,7 @@ func GetSearchTaskAnalyticsByCriteria(ctx context.Context, fs *FirestoreClient) 
 				a.LastSearchAt = &searchTask.CreatedAt
 			}
 		}
-		
+
 		// Count by status
 		switch searchTask.Status {
 		case SearchTaskStatusCompleted:
@@ -394,7 +394,7 @@ func GetSearchTaskAnalyticsByCriteria(ctx context.Context, fs *FirestoreClient) 
 			a.ProcessingTasks++
 		}
 	}
-	
+
 	// Convert map to slice and calculate percentages
 	result := make([]SearchTaskCriteriaAnalytics, 0, len(analytics))
 	for _, a := range analytics {
@@ -404,6 +404,6 @@ func GetSearchTaskAnalyticsByCriteria(ctx context.Context, fs *FirestoreClient) 
 		}
 		result = append(result, *a)
 	}
-	
+
 	return result, nil
 }

@@ -21,7 +21,7 @@ func TestTrialEndDateCalculation(t *testing.T) {
 			expectedDayOffset: 7,
 		},
 		{
-			name:              "Eastern timezone", 
+			name:              "Eastern timezone",
 			timezone:          "America/New_York",
 			callTime:          time.Date(2025, 1, 1, 15, 30, 0, 0, time.UTC),
 			expectedDayOffset: 7,
@@ -59,22 +59,22 @@ func TestTrialEndDateCalculation(t *testing.T) {
 
 			// Verify it's exactly 7 days later
 			expectedDate := callTimeInUserTZ.AddDate(0, 0, tt.expectedDayOffset)
-			
+
 			if trialEndInUserTZ.Year() != expectedDate.Year() ||
 				trialEndInUserTZ.Month() != expectedDate.Month() ||
 				trialEndInUserTZ.Day() != expectedDate.Day() {
-				t.Errorf("Expected trial to end on %v, got %v", 
-					expectedDate.Format("2006-01-02"), 
+				t.Errorf("Expected trial to end on %v, got %v",
+					expectedDate.Format("2006-01-02"),
 					trialEndInUserTZ.Format("2006-01-02"))
 			}
 
 			// Verify it ends at 11:59:59 PM in user's timezone
-			if trialEndInUserTZ.Hour() != 23 || 
-				trialEndInUserTZ.Minute() != 59 || 
+			if trialEndInUserTZ.Hour() != 23 ||
+				trialEndInUserTZ.Minute() != 59 ||
 				trialEndInUserTZ.Second() != 59 {
 				t.Errorf("Expected trial to end at 23:59:59, got %02d:%02d:%02d",
 					trialEndInUserTZ.Hour(),
-					trialEndInUserTZ.Minute(), 
+					trialEndInUserTZ.Minute(),
 					trialEndInUserTZ.Second())
 			}
 
@@ -87,13 +87,13 @@ func TestTrialEndDateCalculation(t *testing.T) {
 func TestTrialEndDateEdgeCases(t *testing.T) {
 	t.Run("Invalid timezone falls back to UTC", func(t *testing.T) {
 		callTime := time.Now()
-		
+
 		// This should fail for invalid timezone
 		_, err := utils.CalculateTrialEndDate(callTime, "Invalid/Timezone")
 		if err == nil {
 			t.Error("Expected error for invalid timezone")
 		}
-		
+
 		// Verify error is returned but contains helpful message
 		if err != nil && err.Error() == "" {
 			t.Error("Error message should not be empty")
@@ -104,7 +104,7 @@ func TestTrialEndDateEdgeCases(t *testing.T) {
 		// Test during a DST transition period
 		// Using a time just before DST starts in US Eastern
 		callTime := time.Date(2025, 3, 8, 12, 0, 0, 0, time.UTC) // Day before DST
-		
+
 		trialEnd, err := utils.CalculateTrialEndDate(callTime, "America/New_York")
 		if err != nil {
 			t.Fatalf("CalculateTrialEndDate() error = %v", err)
@@ -112,7 +112,7 @@ func TestTrialEndDateEdgeCases(t *testing.T) {
 
 		loc, _ := time.LoadLocation("America/New_York")
 		trialEndInET := trialEnd.In(loc)
-		
+
 		// Should still end at 11:59 PM regardless of DST
 		if trialEndInET.Hour() != 23 || trialEndInET.Minute() != 59 {
 			t.Errorf("Expected 23:59, got %02d:%02d", trialEndInET.Hour(), trialEndInET.Minute())
