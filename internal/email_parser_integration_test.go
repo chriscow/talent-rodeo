@@ -53,7 +53,7 @@ func TestEmailParser_RealLLMIntegration(t *testing.T) {
 	defer fs.Close()
 
 	// Create real EmailParser with cost tracking
-	parser := NewOpenAIEmailParser(openAIAPIKey, logger, fs)
+	parser := NewOpenAIEmailParser(logger, fs)
 
 	// Test scenarios with varying complexity
 	testCases := []struct {
@@ -480,7 +480,7 @@ func TestEmailParser_PromptStressTest(t *testing.T) {
 	}
 	defer fs.Close()
 
-	parser := NewOpenAIEmailParser(openAIAPIKey, logger, fs)
+	parser := NewOpenAIEmailParser(logger, fs)
 
 	stressTests := []struct {
 		name  string

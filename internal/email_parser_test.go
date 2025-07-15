@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"talent-rodeo/internal/inbox"
+
+	"github.com/chriscow/minds/tools"
 )
 
 // mockEmailParser implements EmailParser for testing
@@ -18,7 +20,7 @@ type mockEmailParser struct {
 	err       error
 }
 
-func (m *mockEmailParser) ParseEmail(ctx context.Context, email *inbox.Email) (*EmailStructure, error) {
+func (m *mockEmailParser) ParseEmail(ctx context.Context, email *inbox.Email, opts ...tools.Option) (*EmailStructure, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -27,10 +29,9 @@ func (m *mockEmailParser) ParseEmail(ctx context.Context, email *inbox.Email) (*
 
 func TestNewOpenAIEmailParser(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	apiKey := "test-api-key"
 	fs := &FirestoreClient{}
 
-	parser := NewOpenAIEmailParser(apiKey, logger, fs)
+	parser := NewOpenAIEmailParser(logger, fs)
 
 	if parser == nil {
 		t.Error("NewOpenAIEmailParser returned nil")

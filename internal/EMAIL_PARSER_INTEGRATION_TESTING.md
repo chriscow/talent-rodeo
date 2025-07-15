@@ -10,6 +10,8 @@ The EmailParser integration tests validate:
 - **Structured output quality** and consistency
 - **Cost tracking functionality** integration
 - **Edge case handling** and robustness
+- **Error handling** for API failures, network issues, and malformed content
+- **Security resilience** against prompt injection and malicious content
 
 ## Test Suites
 
@@ -46,6 +48,67 @@ The EmailParser integration tests validate:
 - Graceful handling of challenging content
 - Maintained structure quality standards
 
+### 3. Error Handling Test (`TestEmailParser_ErrorHandling`)
+
+**Purpose**: Validates parser behavior under various error conditions and production failure scenarios.
+
+**Error Scenarios**:
+- **API Authentication failures** - Invalid API keys, expired tokens
+- **Network timeouts** - Slow connections, connection drops
+- **Context cancellation** - Timeout handling during LLM calls
+- **Firestore failures** - Cost tracking database issues
+- **Input validation** - Nil emails, empty content, malformed data
+- **Large content handling** - Very long emails approaching token limits
+- **Special characters** - JSON-breaking characters, Unicode handling
+
+**Success Criteria**:
+- Graceful error handling without crashes
+- Appropriate error messages and logging
+- Fallback behavior when non-critical systems fail
+- Proper cleanup on context cancellation
+
+### 4. Malformed Response Handling Test (`TestEmailParser_MalformedResponseHandling`)
+
+**Purpose**: Tests parser resilience against malicious or unexpected content.
+
+**Security Scenarios**:
+- **Prompt injection attempts** - Malicious content trying to manipulate LLM
+- **Extremely ambiguous content** - Content requiring interpretation
+- **JSON-breaking characters** - Content that might break structured output
+
+**Success Criteria**:
+- Resistance to prompt injection attacks
+- Proper handling of ambiguous content
+- Maintained structure quality despite malicious input
+
+### 5. Concurrent Operations Test (`TestEmailParser_ConcurrentOperations`)
+
+**Purpose**: Validates parser behavior under concurrent load and resource contention.
+
+**Concurrency Scenarios**:
+- **Multiple simultaneous parsing** - Race condition testing
+- **Context cancellation during concurrent ops** - Cleanup testing
+- **Resource contention** - Shared resource access validation
+
+**Success Criteria**:
+- No race conditions or data corruption
+- Proper context cancellation handling
+- Stable performance under concurrent load
+
+### 6. Performance Edge Cases Test (`TestEmailParser_PerformanceEdgeCases`)
+
+**Purpose**: Tests performance-related edge cases and resource management.
+
+**Performance Scenarios**:
+- **Rapid sequential parsing** - Resource leak detection
+- **Memory usage monitoring** - Large content processing
+- **Response time validation** - Performance degradation detection
+
+**Success Criteria**:
+- No memory leaks or resource exhaustion
+- Consistent response times
+- Proper resource cleanup
+
 ## Running the Tests
 
 ### Prerequisites
@@ -75,6 +138,18 @@ go test -tags=integration -run TestEmailParser_RealLLMIntegration -v ./internal
 
 # Run stress tests only
 go test -tags=integration -run TestEmailParser_PromptStressTest -v ./internal
+
+# Run error handling tests
+go test -tags=integration -run TestEmailParser_ErrorHandling -v ./internal
+
+# Run malformed response tests
+go test -tags=integration -run TestEmailParser_MalformedResponseHandling -v ./internal
+
+# Run concurrent operations tests
+go test -tags=integration -run TestEmailParser_ConcurrentOperations -v ./internal
+
+# Run performance edge case tests
+go test -tags=integration -run TestEmailParser_PerformanceEdgeCases -v ./internal
 
 # Run with timeout for long operations
 go test -tags=integration -run TestEmailParser -timeout=10m -v ./internal
