@@ -107,22 +107,15 @@ func (t *CompleteChatTool) Execute(ctx context.Context, args map[string]any, ses
 	// Increment completion attempt counter
 	internal.IncrementCompletionAttempt(chatSession.Appointment.ConversationChecklist)
 
-	// Validate checklist completion
-	canComplete, issues, err := internal.ValidateChecklistCompletion(chatSession.Appointment.ConversationChecklist)
-	if err != nil {
-		session.GetLogger().Error("Failed to validate checklist completion", "error", err)
-		return &internal.LLMToolResponse{
-			Name:    "complete_chat",
-			Content: "Failed to validate completion requirements",
-			Success: false,
-		}, err
-	}
+	// Get hybrid completion status
+	completionStatus := internal.GetHybridCompletionStatus(chatSession.Appointment.ConversationChecklist)
 
-	if !canComplete {
+	if !completionStatus.CanComplete {
 		session.GetLogger().Info("Chat completion denied due to incomplete checklist",
 			"user_id", chatSession.User.ID,
-			"issues", issues,
+			"issues", completionStatus.Issues,
 			"completion_attempts", chatSession.Appointment.ConversationChecklist.CompletionAttempts,
+			"completion_score", completionStatus.CompletionScore,
 		)
 
 		// Save the updated appointment with incremented attempt counter
@@ -130,9 +123,23 @@ func (t *CompleteChatTool) Execute(ctx context.Context, args map[string]any, ses
 			session.GetLogger().Error("Failed to save appointment with completion attempt", "error", err)
 		}
 
+		// Generate helpful response based on completion status
+		var responseContent strings.Builder
+		if len(completionStatus.MissingCritical) > 0 {
+			responseContent.WriteString(fmt.Sprintf("Cannot complete chat yet. Please focus on these critical topics: %s. ", strings.Join(completionStatus.MissingCritical, ", ")))
+		} else {
+			responseContent.WriteString("Cannot complete chat yet. ")
+		}
+		
+		responseContent.WriteString(completionStatus.Guidance)
+		
+		if len(completionStatus.Issues) > 0 {
+			responseContent.WriteString(fmt.Sprintf(" Issues: %s", strings.Join(completionStatus.Issues, ", ")))
+		}
+
 		return &internal.LLMToolResponse{
 			Name:    "complete_chat",
-			Content: fmt.Sprintf("Cannot complete chat yet. Please address these issues first: %s", strings.Join(issues, ", ")),
+			Content: responseContent.String(),
 			Success: false,
 		}, nil
 	}
@@ -177,6 +184,16 @@ func (t *CompleteChatTool) Execute(ctx context.Context, args map[string]any, ses
 		"confidence", confidenceLevel,
 		"next_step", nextStepRecommendation,
 		"completion_attempts", chatSession.Appointment.ConversationChecklist.CompletionAttempts,
+		"completion_type", func() string {
+			if completionStatus.HardComplete {
+				return "hard"
+			} else if completionStatus.SoftComplete {
+				return "soft"
+			} else {
+				return "escalated"
+			}
+		}(),
+		"completion_score", completionStatus.CompletionScore,
 	)
 
 	return response, nil
@@ -649,28 +666,54 @@ func (t *CheckCompletionReadinessTool) Execute(ctx context.Context, args map[str
 		}, err
 	}
 
-	// Validate completion readiness
-	canComplete, issues, err := internal.ValidateChecklistCompletion(chatSession.Appointment.ConversationChecklist)
-	if err != nil {
-		session.GetLogger().Error("Failed to validate checklist completion", "error", err)
-		return &internal.LLMToolResponse{
-			Name:    "check_completion_readiness",
-			Content: "Failed to validate completion readiness",
-			Success: false,
-		}, err
+	// Get hybrid completion status
+	completionStatus := internal.GetHybridCompletionStatus(chatSession.Appointment.ConversationChecklist)
+
+	// Build detailed response content
+	var responseContent strings.Builder
+	
+	// Main completion status
+	if completionStatus.HardComplete {
+		responseContent.WriteString("✅ HARD COMPLETION: All requirements met. Ready for immediate completion.\n")
+	} else if completionStatus.SoftComplete {
+		responseContent.WriteString("✅ SOFT COMPLETION: Sufficient information gathered. Can complete with natural conversation ending.\n")
+	} else if completionStatus.CanComplete {
+		responseContent.WriteString("⚠️ ESCALATED COMPLETION: Can complete due to conversation limits or multiple attempts.\n")
+	} else {
+		responseContent.WriteString("❌ NOT READY: Conversation needs more information before completion.\n")
 	}
 
-	var responseContent string
-	if canComplete {
-		responseContent = "✅ Conversation is ready for completion. All required information has been gathered with sufficient quality."
-	} else {
-		responseContent = fmt.Sprintf("❌ Conversation is not ready for completion. Issues: %s", strings.Join(issues, ", "))
+	// Add completion score and metrics
+	responseContent.WriteString(fmt.Sprintf("📊 Completion Score: %.1f%% | Progress: %d/%d required items | Quality: %d high-quality items\n",
+		completionStatus.CompletionScore*100,
+		completionStatus.QualityMetrics.CompletedItems,
+		completionStatus.QualityMetrics.RequiredItems,
+		completionStatus.QualityMetrics.HighQualityItems))
+
+	// Add attempt and message tracking
+	responseContent.WriteString(fmt.Sprintf("🔄 Attempt: %d/%d | Messages: %d/%d\n",
+		completionStatus.QualityMetrics.AttemptNumber,
+		internal.MaxCompletionAttempts,
+		completionStatus.QualityMetrics.MessageCount,
+		internal.MaxConversationLength))
+
+	// Add guidance
+	responseContent.WriteString(fmt.Sprintf("💡 GUIDANCE: %s\n", completionStatus.Guidance))
+
+	// Add critical missing items if any
+	if len(completionStatus.MissingCritical) > 0 {
+		responseContent.WriteString(fmt.Sprintf("🎯 CRITICAL MISSING: %s\n", strings.Join(completionStatus.MissingCritical, ", ")))
+	}
+
+	// Add all issues if present
+	if len(completionStatus.Issues) > 0 {
+		responseContent.WriteString(fmt.Sprintf("⚠️ ISSUES: %s", strings.Join(completionStatus.Issues, ", ")))
 	}
 
 	return &internal.LLMToolResponse{
 		Name:    "check_completion_readiness",
-		Content: responseContent,
-		Success: canComplete,
+		Content: responseContent.String(),
+		Success: completionStatus.CanComplete,
 	}, nil
 }
 

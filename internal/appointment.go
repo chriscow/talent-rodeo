@@ -49,33 +49,33 @@ const (
 
 // ChatMessage represents a single message in a chat conversation
 type ChatMessage struct {
-	ID        string    `json:"id"`
-	Role      string    `json:"role"` // "user" or "assistant"
-	Content   string    `json:"content"`
-	Timestamp time.Time `json:"timestamp"`
+	ID        string
+	Role      string
+	Content   string
+	Timestamp time.Time
 }
 
 // ConversationChecklist tracks the progress of gathering required information during chat
 type ConversationChecklist struct {
-	Items              []ChecklistItem `json:"items"`
-	OverallStatus      string          `json:"overall_status"`      // "in_progress", "ready_for_completion", "completed"
-	CompletionAttempts int             `json:"completion_attempts"` // Track attempts to prevent infinite loops
-	LastUpdated        time.Time       `json:"last_updated"`
-	MessageCount       int             `json:"message_count"` // Track conversation length
+	Items              []ChecklistItem
+	OverallStatus      string
+	CompletionAttempts int
+	LastUpdated        time.Time
+	MessageCount       int
 }
 
 // ChecklistItem represents a specific topic or piece of information to be gathered
 type ChecklistItem struct {
-	ID              string                 `json:"id"`
-	Topic           string                 `json:"topic"`
-	Description     string                 `json:"description"`
-	Status          string                 `json:"status"`           // "pending", "in_progress", "completed"
-	Quality         string                 `json:"quality"`          // "low", "medium", "high"
-	RequiredInfo    []string               `json:"required_info"`    // What specific information is needed
-	ExtractedInfo   map[string]interface{} `json:"extracted_info"`   // What was actually gathered
-	ValidationNotes string                 `json:"validation_notes"` // Notes about information quality
-	Required        bool                   `json:"required"`         // Whether this item is required for completion
-	LastUpdated     time.Time              `json:"last_updated"`
+	ID              string
+	Topic           string
+	Description     string
+	Status          string
+	Quality         string
+	RequiredInfo    []string
+	ExtractedInfo   map[string]interface{}
+	ValidationNotes string
+	Required        bool
+	LastUpdated     time.Time
 }
 
 // Appointment represents a scheduled phone interview or chat session
@@ -1080,4 +1080,249 @@ func containsAnyPattern(content string, patterns []string) bool {
 		}
 	}
 	return false
+}
+
+// CompletionStatus represents the different types of completion readiness
+type CompletionStatus struct {
+	CanComplete     bool
+	SoftComplete    bool
+	HardComplete    bool
+	CompletionScore float64
+	Issues          []string
+	MissingCritical []string
+	QualityMetrics  QualityMetrics
+	Guidance        string
+}
+
+// QualityMetrics provides detailed completion quality information
+type QualityMetrics struct {
+	TotalItems       int
+	RequiredItems    int
+	CompletedItems   int
+	HighQualityItems int
+	CompletionRate   float64
+	QualityRate      float64
+	AttemptNumber    int
+	MessageCount     int
+}
+
+// GetHybridCompletionStatus provides both soft and hard completion assessment
+func GetHybridCompletionStatus(checklist *ConversationChecklist) *CompletionStatus {
+	if checklist == nil {
+		return &CompletionStatus{
+			CanComplete:     false,
+			SoftComplete:    false,
+			HardComplete:    false,
+			CompletionScore: 0.0,
+			Issues:          []string{"checklist not initialized"},
+			Guidance:        "Please initialize the conversation checklist.",
+		}
+	}
+
+	// Calculate quality metrics
+	metrics := calculateQualityMetrics(checklist)
+
+	// Determine hard completion (strict requirements)
+	hardComplete, hardIssues := checkHardCompletion(checklist)
+
+	// Determine soft completion (flexible requirements)
+	softComplete, softIssues := checkSoftCompletion(checklist, metrics)
+
+	// Calculate completion score (0.0 to 1.0)
+	completionScore := calculateCompletionScore(metrics)
+
+	// Determine if we can complete (soft OR hard, with escalation rules)
+	canComplete := softComplete || hardComplete
+
+	// Apply escalation rules based on attempts and message count
+	if !canComplete {
+		canComplete = shouldAllowEscalatedCompletion(checklist, metrics)
+	}
+
+	// Generate guidance based on current state
+	guidance := generateCompletionGuidance(checklist, metrics, hardComplete, softComplete)
+
+	// Combine issues
+	allIssues := append(hardIssues, softIssues...)
+	criticalIssues := findCriticalIssues(checklist, metrics)
+
+	return &CompletionStatus{
+		CanComplete:     canComplete,
+		SoftComplete:    softComplete,
+		HardComplete:    hardComplete,
+		CompletionScore: completionScore,
+		Issues:          allIssues,
+		MissingCritical: criticalIssues,
+		QualityMetrics:  metrics,
+		Guidance:        guidance,
+	}
+}
+
+// calculateQualityMetrics computes detailed completion metrics
+func calculateQualityMetrics(checklist *ConversationChecklist) QualityMetrics {
+	totalItems := len(checklist.Items)
+	requiredItems := 0
+	completedItems := 0
+	highQualityItems := 0
+
+	for _, item := range checklist.Items {
+		if item.Required {
+			requiredItems++
+		}
+		if item.Status == ChecklistItemStatusCompleted {
+			completedItems++
+		}
+		if item.Quality == ChecklistItemQualityHigh {
+			highQualityItems++
+		}
+	}
+
+	var completionRate, qualityRate float64
+	if requiredItems > 0 {
+		completionRate = float64(completedItems) / float64(requiredItems)
+	}
+	if totalItems > 0 {
+		qualityRate = float64(highQualityItems) / float64(totalItems)
+	}
+
+	return QualityMetrics{
+		TotalItems:       totalItems,
+		RequiredItems:    requiredItems,
+		CompletedItems:   completedItems,
+		HighQualityItems: highQualityItems,
+		CompletionRate:   completionRate,
+		QualityRate:      qualityRate,
+		AttemptNumber:    checklist.CompletionAttempts,
+		MessageCount:     checklist.MessageCount,
+	}
+}
+
+// checkHardCompletion enforces strict completion requirements
+func checkHardCompletion(checklist *ConversationChecklist) (bool, []string) {
+	var issues []string
+
+	for _, item := range checklist.Items {
+		if item.Required {
+			if item.Status != ChecklistItemStatusCompleted {
+				issues = append(issues, fmt.Sprintf("%s: not completed", item.Topic))
+			} else if item.Quality == ChecklistItemQualityLow {
+				issues = append(issues, fmt.Sprintf("%s: low quality information", item.Topic))
+			}
+		}
+	}
+
+	return len(issues) == 0, issues
+}
+
+// checkSoftCompletion allows more flexible completion criteria
+func checkSoftCompletion(checklist *ConversationChecklist, metrics QualityMetrics) (bool, []string) {
+	var issues []string
+
+	// Soft completion criteria:
+	// - At least 75% of required items completed
+	// - OR at least 50% completion with high conversation engagement (20+ messages)
+	// - OR multiple completion attempts with reasonable progress
+
+	if metrics.CompletionRate >= 0.75 {
+		return true, issues
+	}
+
+	if metrics.CompletionRate >= 0.5 && metrics.MessageCount >= 20 {
+		return true, issues
+	}
+
+	if metrics.AttemptNumber >= 2 && metrics.CompletionRate >= 0.5 {
+		return true, issues
+	}
+
+	// If none of the soft criteria are met, list the gaps
+	for _, item := range checklist.Items {
+		if item.Required && item.Status == ChecklistItemStatusPending {
+			issues = append(issues, fmt.Sprintf("%s: not started", item.Topic))
+		}
+	}
+
+	return false, issues
+}
+
+// shouldAllowEscalatedCompletion handles edge cases for completion
+func shouldAllowEscalatedCompletion(checklist *ConversationChecklist, metrics QualityMetrics) bool {
+	// Force allow completion if we've hit limits
+	if metrics.AttemptNumber >= MaxCompletionAttempts {
+		return true
+	}
+
+	if metrics.MessageCount >= MaxConversationLength {
+		return true
+	}
+
+	// Allow completion if we have some progress and user seems engaged
+	if metrics.CompletionRate >= 0.3 && metrics.MessageCount >= 15 {
+		return true
+	}
+
+	return false
+}
+
+// calculateCompletionScore provides a numeric score (0.0 to 1.0)
+func calculateCompletionScore(metrics QualityMetrics) float64 {
+	// Weighted score based on completion rate, quality, and engagement
+	completionWeight := 0.5
+	qualityWeight := 0.3
+	engagementWeight := 0.2
+
+	// Engagement score based on message count (normalized to 0-1)
+	engagementScore := float64(metrics.MessageCount) / float64(MaxConversationLength)
+	if engagementScore > 1.0 {
+		engagementScore = 1.0
+	}
+
+	score := (completionWeight * metrics.CompletionRate) +
+		(qualityWeight * metrics.QualityRate) +
+		(engagementWeight * engagementScore)
+
+	return score
+}
+
+// generateCompletionGuidance provides contextual guidance for the AI
+func generateCompletionGuidance(checklist *ConversationChecklist, metrics QualityMetrics, hardComplete, softComplete bool) string {
+	if hardComplete {
+		return "All requirements met. Ready for immediate completion."
+	}
+
+	if softComplete {
+		return "Sufficient information gathered. Can complete with natural conversation ending."
+	}
+
+	// Progressive guidance based on attempt number
+	if metrics.AttemptNumber == 0 {
+		return "Focus on gathering required information naturally through conversation."
+	} else if metrics.AttemptNumber == 1 {
+		return "Some information still needed. Try to address gaps while maintaining conversation flow."
+	} else if metrics.AttemptNumber >= 2 {
+		return "Multiple attempts made. Consider completing with available information to avoid user frustration."
+	}
+
+	return "Continue gathering information as conversation allows."
+}
+
+// findCriticalIssues identifies the most important missing items
+func findCriticalIssues(checklist *ConversationChecklist, metrics QualityMetrics) []string {
+	var critical []string
+
+	// Prioritize core topics that are still pending
+	priorityTopics := []string{"deal_breakers", "search_strategy", "work_environment"}
+
+	for _, item := range checklist.Items {
+		if item.Required && item.Status == ChecklistItemStatusPending {
+			for _, priority := range priorityTopics {
+				if item.ID == priority {
+					critical = append(critical, item.Topic)
+					break
+				}
+			}
+		}
+	}
+
+	return critical
 }

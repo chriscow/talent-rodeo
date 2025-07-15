@@ -528,25 +528,12 @@ func (s *ServiceImpl) buildOpenAIMessages(appointment *internal.Appointment, ass
 		systemPrompt = assistantOverrides.Model.Messages[0].Content
 	}
 
-	// Add checklist status awareness to system prompt (compact JSON format)
+	// Add progressive completion awareness to system prompt
 	if appointment.ConversationChecklist != nil {
-		checklistSummary := internal.GetChecklistSummary(appointment.ConversationChecklist)
-		systemPrompt += fmt.Sprintf(`
-
-CHECKLIST: {"status":"%s","attempts":%d/%d,"messages":%d/%d,"progress":%d/%d,"required":%d,"ready":%v}
-
-YOUR TASK: Complete this checklist by calling 'mark_topic_progress' after each user response. Before asking questions, check if the slot is already high quality using 'get_checklist_status'. Ask clarifying questions only for low-quality slots.
-`,
-			checklistSummary["overall_status"],
-			checklistSummary["completion_attempts"],
-			internal.MaxCompletionAttempts,
-			checklistSummary["message_count"],
-			internal.MaxConversationLength,
-			checklistSummary["completed_items"],
-			checklistSummary["total_items"],
-			checklistSummary["required_items"],
-			checklistSummary["can_complete"],
-		)
+		completionStatus := internal.GetHybridCompletionStatus(appointment.ConversationChecklist)
+		
+		// Generate progressive prompting based on completion status
+		systemPrompt += s.generateProgressivePrompting(completionStatus)
 	}
 
 	messages = append(messages, openai.ChatCompletionMessage{
@@ -926,4 +913,81 @@ func (s *ServiceImpl) sendError(msgChan chan<- StreamMessage, message string) {
 		Type:  "error",
 		Error: message,
 	}
+}
+
+// generateProgressivePrompting creates context-aware system prompts based on completion status
+func (s *ServiceImpl) generateProgressivePrompting(completionStatus *internal.CompletionStatus) string {
+	var prompt strings.Builder
+	
+	// Base checklist information
+	prompt.WriteString(fmt.Sprintf(`
+
+COMPLETION STATUS: {"score":%.1f%%,"hard":%v,"soft":%v,"can_complete":%v}
+METRICS: {"attempts":%d/%d,"messages":%d/%d,"progress":%d/%d,"quality":%d}
+`,
+		completionStatus.CompletionScore*100,
+		completionStatus.HardComplete,
+		completionStatus.SoftComplete,
+		completionStatus.CanComplete,
+		completionStatus.QualityMetrics.AttemptNumber,
+		internal.MaxCompletionAttempts,
+		completionStatus.QualityMetrics.MessageCount,
+		internal.MaxConversationLength,
+		completionStatus.QualityMetrics.CompletedItems,
+		completionStatus.QualityMetrics.RequiredItems,
+		completionStatus.QualityMetrics.HighQualityItems,
+	))
+	
+	// Progressive guidance based on completion status
+	if completionStatus.HardComplete {
+		prompt.WriteString(`
+COMPLETION READY: All requirements met. You may complete the conversation naturally when it feels right.
+FOCUS: Wrap up naturally and call 'complete_chat' when appropriate.
+`)
+	} else if completionStatus.SoftComplete {
+		prompt.WriteString(`
+SOFT COMPLETION: Sufficient information gathered. You can complete naturally but may continue if user is engaged.
+FOCUS: Balance completion readiness with natural conversation flow.
+`)
+	} else if completionStatus.CanComplete {
+		prompt.WriteString(`
+ESCALATED MODE: Can complete due to limits/attempts. Prioritize user experience over perfect completion.
+FOCUS: Find a natural stopping point and complete to avoid user frustration.
+`)
+	} else {
+		// Progressive urgency based on attempt number
+		if completionStatus.QualityMetrics.AttemptNumber == 0 {
+			prompt.WriteString(`
+GATHERING PHASE: Focus on collecting information naturally through conversation.
+FOCUS: Use 'mark_topic_progress' to track what you learn, maintain conversational flow.
+`)
+		} else if completionStatus.QualityMetrics.AttemptNumber == 1 {
+			prompt.WriteString(`
+GUIDANCE PHASE: Some information still needed. Gently guide conversation toward gaps.
+FOCUS: Address missing items while maintaining natural dialogue. Use 'check_completion_readiness' to assess.
+`)
+		} else {
+			prompt.WriteString(`
+CLOSURE PHASE: Multiple attempts made. Prioritize user experience over perfect completion.
+FOCUS: Consider completing with available information. Avoid repetitive information gathering.
+`)
+		}
+	}
+	
+	// Add critical missing items guidance
+	if len(completionStatus.MissingCritical) > 0 {
+		prompt.WriteString(fmt.Sprintf(`
+CRITICAL MISSING: %s
+APPROACH: Naturally work these topics into conversation without being mechanical.
+`, strings.Join(completionStatus.MissingCritical, ", ")))
+	}
+	
+	// Add specific guidance
+	prompt.WriteString(fmt.Sprintf(`
+GUIDANCE: %s
+
+TOOLS: Always call 'mark_topic_progress' after learning something new. Use 'check_completion_readiness' to assess status.
+`, completionStatus.Guidance))
+	
+	return prompt.String()
 }
