@@ -283,6 +283,4 @@ func (fs *FirestoreClient) DeleteCollectionTx(ctx context.Context, tx *firestore
 			numDeleted++
 		}
 	}
-
-	return nil
 }
