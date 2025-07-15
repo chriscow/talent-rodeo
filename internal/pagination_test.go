@@ -31,18 +31,18 @@ func TestEncodeDecodePageToken(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Encode the job ID
 			encoded := EncodePageToken(tt.jobID)
-			
+
 			// Decode it back
 			decoded, err := DecodePageToken(encoded)
 			if err != nil {
 				t.Fatalf("DecodePageToken() error = %v", err)
 			}
-			
+
 			// Verify they match
 			if decoded != tt.jobID {
 				t.Errorf("DecodePageToken() = %v, want %v", decoded, tt.jobID)
 			}
-			
+
 			// For non-empty strings, verify the encoded token is different from original
 			if tt.jobID != "" && encoded == tt.jobID {
 				t.Errorf("EncodePageToken() = %v, should be different from original %v", encoded, tt.jobID)

@@ -366,15 +366,15 @@ Alex Chen`,
 			// Allow ±1 difference for LLM interpretation variations
 			tolerance := 1
 			if requestDiff > tolerance {
-				t.Errorf("Request count mismatch: got %d, expected %d (±%d tolerance)", 
+				t.Errorf("Request count mismatch: got %d, expected %d (±%d tolerance)",
 					len(structure.Requests), tc.expectRequests, tolerance)
 			}
 			if feedbackDiff > tolerance {
-				t.Errorf("Feedback count mismatch: got %d, expected %d (±%d tolerance)", 
+				t.Errorf("Feedback count mismatch: got %d, expected %d (±%d tolerance)",
 					len(structure.GeneralFeedback), tc.expectFeedback, tolerance)
 			}
 			if nonReqDiff > tolerance {
-				t.Errorf("Non-request count mismatch: got %d, expected %d (±%d tolerance)", 
+				t.Errorf("Non-request count mismatch: got %d, expected %d (±%d tolerance)",
 					len(structure.NonRequests), tc.expectNonReq, tolerance)
 			}
 
@@ -434,9 +434,9 @@ func validateEmailStructure(t *testing.T, structure *EmailStructure) {
 		}
 
 		// Validate ID format
-		validPrefix := strings.HasPrefix(item.ID, "req_") || 
-					   strings.HasPrefix(item.ID, "feedback_") || 
-					   strings.HasPrefix(item.ID, "non_req_")
+		validPrefix := strings.HasPrefix(item.ID, "req_") ||
+			strings.HasPrefix(item.ID, "feedback_") ||
+			strings.HasPrefix(item.ID, "non_req_")
 		if !validPrefix {
 			t.Errorf("Item %d has invalid ID format: %s", i, item.ID)
 		}

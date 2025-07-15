@@ -18,11 +18,11 @@ func DecodePageToken(token string) (string, error) {
 	if token == "" {
 		return "", nil
 	}
-	
+
 	decoded, err := base64.URLEncoding.DecodeString(token)
 	if err != nil {
 		return "", fmt.Errorf("invalid page token: %w", err)
 	}
-	
+
 	return string(decoded), nil
 }

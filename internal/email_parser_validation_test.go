@@ -295,7 +295,7 @@ func TestEmailParser_PromptQuality(t *testing.T) {
 	// Verify prompt quality
 	requiredElements := []string{
 		"REQUESTS",
-		"GENERAL_FEEDBACK", 
+		"GENERAL_FEEDBACK",
 		"NON_REQUESTS",
 		"type",
 		"description",
@@ -385,7 +385,7 @@ Thanks!`,
 		t.Run(tt.name, func(t *testing.T) {
 			// Test that parsing doesn't panic or error on edge cases
 			prompt := parser.buildParsingPrompt(tt.email)
-			
+
 			if prompt == "" {
 				t.Error("Prompt should not be empty for edge case")
 			}
