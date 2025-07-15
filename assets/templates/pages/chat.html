@@ -446,7 +446,7 @@ class ChatManager {
         }
     }
     
-    init() {
+    async init() {
         // Get appointment ID from URL
         const urlParams = new URLSearchParams(window.location.search);
         this.appointmentId = urlParams.get('appointment_id');
@@ -465,14 +465,13 @@ class ChatManager {
         // Initialize UI
         this.initializeUI();
         
-        // Load chat history
-        this.loadChatHistory();
+        // Load chat history (await to ensure it completes before continuing)
+        await this.loadChatHistory();
         
         // Connect WebSocket
         this.connectWebSocket();
         
-        // Add initial message if needed
-        this.addInitialMessageIfNeeded();
+        // No need for addInitialMessageIfNeeded() - history loading handles initial messages
     }
     
     cacheElements() {
@@ -568,7 +567,7 @@ class ChatManager {
                 
                 // Add messages to UI with animation
                 for (const message of messages) {
-                    this.addMessageToUI(message.role, message.content, false, true);
+                    this.addMessageToUI(message.Role, message.Content, false, true);
                 }
                 
                 this.scrollToBottom();
@@ -824,14 +823,6 @@ class ChatManager {
         return messageId;
     }
     
-    addInitialMessageIfNeeded() {
-        if (this.elements.messagesContainer?.children.length > 0) {
-            return; // Already have messages
-        }
-        
-        const welcomeMessage = "Hi! I'm Shirely. I'm excited to learn about your career preferences. What kind of work environment do you prefer?";
-        this.addMessageToUI('assistant', welcomeMessage, false, false);
-    }
     
     setInputState(enabled, statusText = '') {
         if (this.elements.chatInput) {
