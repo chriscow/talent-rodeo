@@ -48,28 +48,27 @@ type EmailStructure struct {
 type EmailParser interface {
 	// ParseEmail analyzes an email and returns its structured representation.
 	// Returns an error if parsing fails or if the email cannot be processed.
-	ParseEmail(ctx context.Context, email *inbox.Email) (*EmailStructure, error)
+	// Additional options can be passed to control LLM behavior (e.g., for testing).
+	ParseEmail(ctx context.Context, email *inbox.Email, opts ...tools.Option) (*EmailStructure, error)
 }
 
 // openAIEmailParser implements EmailParser using the OpenAI API with cost tracking.
 type openAIEmailParser struct {
-	client *openai.Client
 	logger *slog.Logger
 	fs     *FirestoreClient
 }
 
 // NewOpenAIEmailParser creates a new OpenAI-based email parser instance with cost tracking.
-func NewOpenAIEmailParser(apiKey string, logger *slog.Logger, fs *FirestoreClient) EmailParser {
+func NewOpenAIEmailParser(logger *slog.Logger, fs *FirestoreClient) EmailParser {
 	logger = logger.With("component", "OpenAIEmailParser", "pkg", "internal")
 	return &openAIEmailParser{
-		client: openai.NewClient(apiKey),
 		logger: logger,
 		fs:     fs,
 	}
 }
 
 // ParseEmail analyzes an email and returns its structured representation with cost tracking.
-func (p *openAIEmailParser) ParseEmail(ctx context.Context, email *inbox.Email) (*EmailStructure, error) {
+func (p *openAIEmailParser) ParseEmail(ctx context.Context, email *inbox.Email, opts ...tools.Option) (*EmailStructure, error) {
 	if email == nil {
 		return nil, fmt.Errorf("email cannot be nil")
 	}
@@ -85,11 +84,18 @@ func (p *openAIEmailParser) ParseEmail(ctx context.Context, email *inbox.Email) 
 	prompt := p.buildParsingPrompt(email)
 
 	var resp openai.ChatCompletionResponse
-	structure, err := tools.StructuredAsk[EmailStructure](ctx, prompt,
+	
+	// Prepare default options
+	defaultOpts := []tools.Option{
 		tools.WantCompletionResponse(&resp),
 		tools.WithMaxTokens(8192),
 		tools.WithModel(tools.GPT41),
-	)
+	}
+	
+	// Append any additional options (e.g., for testing)
+	allOpts := append(defaultOpts, opts...)
+	
+	structure, err := tools.StructuredAsk[EmailStructure](ctx, prompt, allOpts...)
 	if err != nil {
 		p.logger.Error("failed to parse email", "error", err, "email_id", email.ID)
 		return nil, fmt.Errorf("failed to parse email: %w", err)
