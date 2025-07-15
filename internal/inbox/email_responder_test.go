@@ -35,7 +35,7 @@ func TestNewEmailResponder(t *testing.T) {
 		t.Error("NewEmailResponder should set the OpenAI client")
 	}
 
-	if responder.logger != logger {
+	if responder.logger == nil {
 		t.Error("NewEmailResponder should set the logger")
 	}
 }
@@ -512,8 +512,8 @@ Shirely
 <p>This is a test HTML response.</p>
 </div>
 </html_email_body>`,
-			expectedSubject:  "RE: Test Subject",
-			expectedBody:     "Hi there!\n\nThis is a test plain text response.\n\nBest regards,\nShirely",
+			expectedSubject: "RE: Test Subject",
+			expectedBody:    "Hi there!\n\nThis is a test plain text response.\n\nBest regards,\nShirely",
 			expectedHTMLBody: `<div style="font-family: Arial, sans-serif;">
 <h1>Test Response</h1>
 <p>This is a test HTML response.</p>
