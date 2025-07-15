@@ -61,12 +61,12 @@ require (
 	github.com/cloudflare/cloudflare-go v0.115.0
 	github.com/dgraph-io/ristretto/v2 v2.2.0
 	github.com/getsentry/sentry-go v0.32.0
-	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
 	github.com/pinecone-io/go-pinecone/v3 v3.1.0
 	github.com/playwright-community/playwright-go v0.5101.0
 	github.com/samber/lo v1.50.0
 	github.com/sashabaranov/go-openai v1.40.2
 	github.com/stretchr/testify v1.10.0
+	github.com/stripe/stripe-go/v72 v72.122.0
 	google.golang.org/protobuf v1.36.6
 )
 
@@ -130,7 +130,6 @@ require (
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.5.0 // indirect
-	github.com/stripe/stripe-go/v72 v72.122.0 // indirect
 	github.com/zeebo/errs v1.4.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/contrib/detectors/gcp v1.35.0 // indirect
