@@ -319,7 +319,7 @@ func TestExtractRelatedJobIDs(t *testing.T) {
 
 func TestMinRatingForRelatedJobsConstant(t *testing.T) {
 	// Test that the constant is properly defined
-	if MinRatingForRelatedJobs != 3 {
+	if MinRatingForRelatedJobs != 4 {
 		t.Errorf("MinRatingForRelatedJobs = %d, expected 3", MinRatingForRelatedJobs)
 	}
 }
