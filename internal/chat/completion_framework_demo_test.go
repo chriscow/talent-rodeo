@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"talent-rodeo/internal"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,7 +22,6 @@ func TestCompletionFrameworkDemo(t *testing.T) {
 		t.Skip("Skipping integration test: OPENAI_API_KEY not set")
 	}
 
-	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	t.Log("===== COMPLETION FRAMEWORK DEMONSTRATION =====")
@@ -57,7 +58,7 @@ func TestCompletionFrameworkDemo(t *testing.T) {
 	t.Log("Running complete test suite...")
 	startTime := time.Now()
 	
-	result, err := runner.RunAllTests(ctx)
+	result, err := runner.RunAllTests(context.Background())
 	require.NoError(t, err, "Failed to run test suite")
 	
 	executionTime := time.Since(startTime)
@@ -205,7 +206,6 @@ func TestFrameworkComponentsIntegration(t *testing.T) {
 		t.Skip("Skipping integration test: OPENAI_API_KEY not set")
 	}
 
-	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	t.Log("Testing individual framework components...")
@@ -299,7 +299,6 @@ func TestFrameworkReliability(t *testing.T) {
 		t.Skip("Skipping integration test: OPENAI_API_KEY not set")
 	}
 
-	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	t.Log("Testing framework reliability with edge cases...")
@@ -319,7 +318,7 @@ func TestFrameworkReliability(t *testing.T) {
 		runner.config = config
 
 		// This should handle timeouts gracefully
-		result, err := runner.RunAllTests(ctx)
+		result, err := runner.RunAllTests(context.Background())
 		
 		// Should not crash, even with timeouts
 		require.NoError(t, err, "Should handle timeouts gracefully")
@@ -356,7 +355,7 @@ func TestFrameworkReliability(t *testing.T) {
 		require.NoError(t, err, "Failed to create test runner")
 		runner.config = config
 
-		result, err := runner.RunAllTests(ctx)
+		result, err := runner.RunAllTests(context.Background())
 		require.NoError(t, err, "Should work with minimal configuration")
 		
 		assert.Greater(t, result.ExecutedTests, 0, "Should execute at least one test")

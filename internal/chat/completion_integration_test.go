@@ -4,11 +4,9 @@ package chat
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -19,154 +17,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestConversationData represents the structure of test conversation files
-type TestConversationData struct {
-	Name                 string
-	Description          string
-	ExpectedOutcome      string
-	ExpectedToolCalls    []string
-	ConversationMessages []ConversationMessage
-	ChecklistState       ExpectedChecklistState
-}
+// Types are defined in completion_test_runner.go to avoid redeclaration
 
-// ConversationMessage represents a single message in the test conversation
-type ConversationMessage struct {
-	Role    string
-	Content string
-}
-
-// ExpectedChecklistState represents the expected final state of the checklist
-type ExpectedChecklistState struct {
-	OverallStatus      string
-	CompletedTopics    []string
-	InProgressTopics   []string
-	PendingTopics      []string
-	HighQualityTopics  []string
-	MessageCount       int
-	CompletionAttempts int
-}
-
-// CompletionTestResult represents the result of a single completion test run
-type CompletionTestResult struct {
-	TestName           string
-	RunNumber          int
-	Success            bool
-	CompletionStatus   *internal.CompletionStatus
-	ToolCallsExecuted  []string
-	CompletionAchieved bool
-	ExecutionTime      time.Duration
-	ErrorMessage       string
-	AIResponse         string
-}
-
-// ConsistencyAnalysis represents the analysis of multiple test runs
-type ConsistencyAnalysis struct {
-	TestName                string
-	TotalRuns               int
-	SuccessfulRuns          int
-	SuccessRate             float64
-	ToolCallConsistency     map[string]int
-	CompletionConsistency   map[string]int
-	AverageExecutionTime    time.Duration
-	CompletionScoreVariance float64
-	Results                 []CompletionTestResult
-}
-
-// CompletionTestFramework provides the framework for running completion consistency tests
-type CompletionTestFramework struct {
-	chatService ChatService
-	logger      *slog.Logger
-	testDataDir string
-}
-
-// NewCompletionTestFramework creates a new completion test framework
-func NewCompletionTestFramework(chatService ChatService, logger *slog.Logger) *CompletionTestFramework {
-	// Find the testdata directory
-	testDataDir := filepath.Join("../../testdata", "conversations")
-
-	return &CompletionTestFramework{
-		chatService: chatService,
-		logger:      logger,
-		testDataDir: testDataDir,
-	}
-}
-
-// LoadConversationData loads test conversation data from JSON files
-func (f *CompletionTestFramework) LoadConversationData(filename string) (*TestConversationData, error) {
-	filepath := filepath.Join(f.testDataDir, filename)
-
-	data, err := os.ReadFile(filepath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read test data file %s: %w", filename, err)
-	}
-
-	var conversationData TestConversationData
-	if err := json.Unmarshal(data, &conversationData); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal test data: %w", err)
-	}
-
-	return &conversationData, nil
-}
-
-// RunConsistencyTest runs a conversation test multiple times and analyzes consistency
-func (f *CompletionTestFramework) RunConsistencyTest(ctx context.Context, testData *TestConversationData, runs int) (*ConsistencyAnalysis, error) {
-	f.logger.Info("Starting consistency test", "test_name", testData.Name, "runs", runs)
-
-	analysis := &ConsistencyAnalysis{
-		TestName:              testData.Name,
-		TotalRuns:             runs,
-		ToolCallConsistency:   make(map[string]int),
-		CompletionConsistency: make(map[string]int),
-		Results:               make([]CompletionTestResult, 0, runs),
-	}
-
-	var totalExecutionTime time.Duration
-	var completionScores []float64
-
-	for i := 0; i < runs; i++ {
-		f.logger.Info("Running test iteration", "test_name", testData.Name, "run", i+1)
-
-		result := f.runSingleTest(ctx, testData, i+1)
-		analysis.Results = append(analysis.Results, result)
-
-		if result.Success {
-			analysis.SuccessfulRuns++
-			totalExecutionTime += result.ExecutionTime
-
-			// Track tool call consistency
-			for _, toolCall := range result.ToolCallsExecuted {
-				analysis.ToolCallConsistency[toolCall]++
-			}
-
-			// Track completion consistency
-			if result.CompletionStatus != nil {
-				completionType := f.getCompletionType(result.CompletionStatus)
-				analysis.CompletionConsistency[completionType]++
-				completionScores = append(completionScores, result.CompletionStatus.CompletionScore)
-			}
-		}
-	}
-
-	// Calculate final metrics
-	analysis.SuccessRate = float64(analysis.SuccessfulRuns) / float64(analysis.TotalRuns)
-	if analysis.SuccessfulRuns > 0 {
-		analysis.AverageExecutionTime = totalExecutionTime / time.Duration(analysis.SuccessfulRuns)
-	}
-
-	// Calculate completion score variance
-	if len(completionScores) > 1 {
-		analysis.CompletionScoreVariance = f.calculateVariance(completionScores)
-	}
-
-	f.logger.Info("Consistency test completed",
-		"test_name", testData.Name,
-		"success_rate", analysis.SuccessRate,
-		"avg_execution_time", analysis.AverageExecutionTime,
-		"score_variance", analysis.CompletionScoreVariance,
-	)
-
-	return analysis, nil
-}
+// Functions are defined in completion_test_runner.go to avoid redeclaration
 
 // runSingleTest executes a single test run with the given conversation data
 func (f *CompletionTestFramework) runSingleTest(ctx context.Context, testData *TestConversationData, runNumber int) CompletionTestResult {
@@ -220,7 +73,7 @@ func (f *CompletionTestFramework) createTestUser() *internal.User {
 		ID:       fmt.Sprintf("test-user-%d", time.Now().UnixNano()),
 		Email:    "test@example.com",
 		Name:     "Test User",
-		Status:   internal.UserStatusActive,
+		Status:   internal.UserStatusCallCompleted,
 		Timezone: "America/New_York",
 	}
 }
@@ -267,7 +120,7 @@ func (f *CompletionTestFramework) initializeConversation(ctx context.Context, ap
 }
 
 // simulateLLMToolCalls simulates the tool calls that an LLM would make
-func (f *CompletionTestFramework) simulateLLMToolCalls(ctx context.Context, user *internal.User, appointment *internal.Appointment, testData *TestConversationData) []string {
+func (f *CompletionTestFramework) simulateLLMToolCalls(_ context.Context, user *internal.User, appointment *internal.Appointment, testData *TestConversationData) []string {
 	var toolCalls []string
 
 	// Simulate mark_topic_progress calls for completed topics
@@ -416,7 +269,6 @@ func TestHybridCompletionScenarios(t *testing.T) {
 		t.Skip("Skipping integration test: OPENAI_API_KEY not set")
 	}
 
-	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	// Create a test framework
