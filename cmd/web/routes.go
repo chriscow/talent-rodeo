@@ -155,6 +155,11 @@ func (app *application) routes() http.Handler {
 			// Add feedback processing dashboard
 			mux.HandleFunc("/admin/feedback-dashboard", app.showFeedbackDashboard, "GET")
 
+			// Admin held response management
+			mux.HandleFunc("/admin/held-responses", app.adminHeldResponses, "GET")
+			mux.HandleFunc("/admin/held-responses/:id", app.adminHeldResponseDetail, "GET", "POST")
+			mux.HandleFunc("/admin/held-response-stats", app.adminHeldResponseStats, "GET")
+
 		})
 	})
 

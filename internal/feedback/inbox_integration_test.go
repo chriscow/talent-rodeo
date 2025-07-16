@@ -64,10 +64,10 @@ func TestFeedbackProcessingWithRealFirestore(t *testing.T) {
 		t.Logf("Could not get current statement (user may not have one): %v", err)
 	}
 
-	currentSteeringQuery, err := feedbackStore.GetUserSteeringQuery(ctx, userID)
-	if err != nil {
-		t.Logf("Could not get current steering query (user may not have one): %v", err)
-	}
+	// currentSteeringQuery, err := feedbackStore.GetUserSteeringQuery(ctx, userID)
+	// if err != nil {
+	// 	t.Logf("Could not get current steering query (user may not have one): %v", err)
+	// }
 
 	// Load user's actual feedback from Firestore
 	feedback, err := feedbackStore.GetUnprocessedUserFeedback(ctx, userID)
@@ -126,14 +126,14 @@ func TestFeedbackProcessingWithRealFirestore(t *testing.T) {
 	}
 
 	// Show current vs. new steering query
-	t.Logf("\n=== STEERING QUERY COMPARISON ===")
-	if currentSteeringQuery != nil {
-		t.Logf("Current steering query - Move toward: %s", currentSteeringQuery.MoveToward)
-		t.Logf("Current steering query - Move away: %s", currentSteeringQuery.MoveAway)
-		t.Logf("Current steering query - Force away: %.2f", currentSteeringQuery.ForceAway)
-	} else {
-		t.Logf("Current steering query: (none)")
-	}
+	// t.Logf("\n=== STEERING QUERY COMPARISON ===")
+	// if currentSteeringQuery != nil {
+	// 	t.Logf("Current steering query - Move toward: %s", currentSteeringQuery.MoveToward)
+	// 	t.Logf("Current steering query - Move away: %s", currentSteeringQuery.MoveAway)
+	// 	t.Logf("Current steering query - Force away: %.2f", currentSteeringQuery.ForceAway)
+	// } else {
+	// 	t.Logf("Current steering query: (none)")
+	// }
 
 	newSteeringQuery := readOnlyStore.capturedSteeringQuery
 	if newSteeringQuery != nil {

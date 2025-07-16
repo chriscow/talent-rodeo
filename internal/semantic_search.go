@@ -64,7 +64,7 @@ type HybridSearchParams struct {
 func DefaultHybridSearchParams() *HybridSearchParams {
 	return &HybridSearchParams{
 		DenseWeight:     0.9,
-		SparseWeight:    0,
+		SparseWeight:    0.3,
 		ScoreFusion:     "linear", // Default to linear fusion
 		RecencyWeight:   0.1,
 		RecencyHalfLife: 30.0,

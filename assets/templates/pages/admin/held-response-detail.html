@@ -1,0 +1,304 @@
+{{define "title"}}Held Response Detail{{end}}
+
+{{define "page:main"}}
+<main class="container">
+    <nav aria-label="breadcrumb">
+        <ul>
+            <li><a href="/admin">Admin</a></li>
+            <li><a href="/admin/held-responses">Held Responses</a></li>
+            <li>{{slice .ResponseID 0 8}}...</li>
+        </ul>
+    </nav>
+
+    <h1>Held Response Review</h1>
+    
+    {{if .Error}}
+    <article style="background-color: var(--pico-color-red-50); border-left: 4px solid var(--pico-color-red);">
+        <p><strong>Error:</strong> {{.Error}}</p>
+    </article>
+    {{end}}
+
+    {{if .Success}}
+    <article style="background-color: var(--pico-color-green-50); border-left: 4px solid var(--pico-color-green);">
+        <p><strong>Success:</strong> {{.Success}}</p>
+    </article>
+    {{end}}
+
+    {{if .HeldResponse}}
+    <div class="grid">
+        <!-- Left Column: Original Email -->
+        <article>
+            <header>
+                <h3>Original Email</h3>
+                <span class="status status-{{.HeldResponse.Status}}">{{.HeldResponse.Status}}</span>
+            </header>
+            
+            <div class="email-meta">
+                <p><strong>From:</strong> {{.HeldResponse.OriginalFrom}}</p>
+                <p><strong>To:</strong> {{.HeldResponse.RecipientEmail}}</p>
+                <p><strong>Subject:</strong> {{.HeldResponse.OriginalSubject}}</p>
+                <p><strong>Date:</strong> 
+                    <time datetime="{{.HeldResponse.OriginalDate.Format "2006-01-02T15:04:05Z"}}">
+                        {{.HeldResponse.OriginalDate.Format "Jan 2, 2006 at 3:04 PM"}}
+                    </time>
+                </p>
+            </div>
+
+            <div class="email-body">
+                <h4>Email Content</h4>
+                <div class="content-box">
+                    {{.HeldResponse.OriginalBody}}
+                </div>
+            </div>
+        </article>
+
+        <!-- Right Column: Generated Response -->
+        <article>
+            <header>
+                <h3>Generated Response</h3>
+                <span class="response-type">{{.HeldResponse.ResponseType}}</span>
+            </header>
+            
+            <div class="email-meta">
+                <p><strong>Subject:</strong> {{.HeldResponse.ResponseSubject}}</p>
+                <p><strong>Type:</strong> {{.HeldResponse.ResponseType}}</p>
+                <p><strong>Generated:</strong> 
+                    <time datetime="{{.HeldResponse.CreatedAt.Format "2006-01-02T15:04:05Z"}}">
+                        {{.HeldResponse.CreatedAt.Format "Jan 2, 2006 at 3:04 PM"}}
+                    </time>
+                </p>
+            </div>
+
+            <div class="email-body">
+                <h4>Response Content</h4>
+                {{if .HeldResponse.ResponseHTMLBody}}
+                <div class="content-box html-content">
+                    {{.HeldResponse.ResponseHTMLBody}}
+                </div>
+                {{else}}
+                <div class="content-box">
+                    {{.HeldResponse.ResponseBody}}
+                </div>
+                {{end}}
+            </div>
+        </article>
+    </div>
+
+    <!-- Hold Information -->
+    <article>
+        <header>
+            <h3>Hold Information</h3>
+        </header>
+        
+        <div class="grid">
+            <div>
+                <p><strong>Hold Reason:</strong> {{.HeldResponse.HoldReason}}</p>
+                <p><strong>Hold Criteria:</strong> 
+                    <span class="hold-criteria hold-criteria-{{.HeldResponse.HoldCriteria}}">{{.HeldResponse.HoldCriteria}}</span>
+                </p>
+                <p><strong>Expires:</strong> 
+                    {{if .HeldResponse.IsExpired}}
+                    <span style="color: var(--pico-color-red);">Expired on {{.HeldResponse.ExpiresAt.Format "Jan 2, 2006 at 3:04 PM"}}</span>
+                    {{else}}
+                    <time datetime="{{.HeldResponse.ExpiresAt.Format "2006-01-02T15:04:05Z"}}">
+                        {{.HeldResponse.ExpiresAt.Format "Jan 2, 2006 at 3:04 PM"}}
+                    </time>
+                    {{end}}
+                </p>
+            </div>
+            <div>
+                {{if .HeldResponse.AdminUserID}}
+                <p><strong>Last Reviewed By:</strong> {{.HeldResponse.AdminUserID}}</p>
+                {{end}}
+                {{if not .HeldResponse.ReviewedAt.IsZero}}
+                <p><strong>Reviewed At:</strong> 
+                    <time datetime="{{.HeldResponse.ReviewedAt.Format "2006-01-02T15:04:05Z"}}">
+                        {{.HeldResponse.ReviewedAt.Format "Jan 2, 2006 at 3:04 PM"}}
+                    </time>
+                </p>
+                {{end}}
+                {{if .HeldResponse.RevisionCount}}
+                <p><strong>Revisions:</strong> {{.HeldResponse.RevisionCount}}</p>
+                {{end}}
+            </div>
+        </div>
+
+        {{if .HeldResponse.AdminFeedback}}
+        <div style="margin-top: 1rem;">
+            <h4>Admin Feedback</h4>
+            <div class="content-box feedback-box">
+                {{.HeldResponse.AdminFeedback}}
+            </div>
+        </div>
+        {{end}}
+    </article>
+
+    <!-- Actions -->
+    {{if eq .HeldResponse.Status "pending"}}
+    <article>
+        <header>
+            <h3>Admin Actions</h3>
+        </header>
+        
+        <div class="grid">
+            <div>
+                <form method="POST" onsubmit="return confirm('Are you sure you want to approve and send this response?')">
+                    <input type="hidden" name="action" value="approve">
+                    <button type="submit" class="primary">
+                        ✓ Approve & Send Response
+                    </button>
+                </form>
+            </div>
+            <div>
+                <details>
+                    <summary role="button" class="secondary outline">
+                        Request Revision
+                    </summary>
+                    <form method="POST" style="margin-top: 1rem;">
+                        <input type="hidden" name="action" value="revision">
+                        <label for="feedback">
+                            Feedback for LLM:
+                            <textarea name="feedback" id="feedback" rows="4" 
+                                     placeholder="Provide specific feedback on how to improve this response..." 
+                                     required></textarea>
+                        </label>
+                        <button type="submit" class="secondary">
+                            Request Revision
+                        </button>
+                    </form>
+                </details>
+            </div>
+        </div>
+    </article>
+    {{else if eq .HeldResponse.Status "revision"}}
+    <article>
+        <header>
+            <h3>Revision Requested</h3>
+        </header>
+        <p>This response is awaiting revision based on admin feedback. The LLM will generate a new version based on the feedback provided.</p>
+        {{if .HeldResponse.AdminFeedback}}
+        <p><strong>Feedback provided:</strong> {{.HeldResponse.AdminFeedback}}</p>
+        {{end}}
+    </article>
+    {{else if eq .HeldResponse.Status "approved"}}
+    <article>
+        <header>
+            <h3>Response Approved</h3>
+        </header>
+        <p>✓ This response has been approved and sent to the recipient.</p>
+        {{if not .HeldResponse.ApprovedAt.IsZero}}
+        <p><strong>Approved on:</strong> 
+            <time datetime="{{.HeldResponse.ApprovedAt.Format "2006-01-02T15:04:05Z"}}">
+                {{.HeldResponse.ApprovedAt.Format "Jan 2, 2006 at 3:04 PM"}}
+            </time>
+        </p>
+        {{end}}
+    </article>
+    {{else if eq .HeldResponse.Status "expired"}}
+    <article style="background-color: var(--pico-color-red-50);">
+        <header>
+            <h3>Response Expired</h3>
+        </header>
+        <p>⚠️ This response has expired without being approved or revised.</p>
+    </article>
+    {{end}}
+
+    {{else}}
+    <article>
+        <p>Held response not found.</p>
+        <a href="/admin/held-responses" role="button">← Back to Held Responses</a>
+    </article>
+    {{end}}
+
+    <style>
+        .status-pending { color: #ffc107; background: #fff3cd; padding: 0.25rem 0.5rem; border-radius: 0.25rem; }
+        .status-approved { color: #28a745; background: #d4edda; padding: 0.25rem 0.5rem; border-radius: 0.25rem; }
+        .status-revision { color: #fd7e14; background: #ffeaa7; padding: 0.25rem 0.5rem; border-radius: 0.25rem; }
+        .status-expired { color: #dc3545; background: #f8d7da; padding: 0.25rem 0.5rem; border-radius: 0.25rem; }
+        
+        .hold-criteria { 
+            font-size: 0.875rem; 
+            padding: 0.25rem 0.5rem; 
+            border-radius: 0.25rem; 
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+        .hold-criteria-keyword { background: #e3f2fd; color: #1976d2; }
+        .hold-criteria-domain { background: #f3e5f5; color: #7b1fa2; }
+        .hold-criteria-escalation { background: #ffebee; color: #c62828; }
+        .hold-criteria-user { background: #e8f5e8; color: #2e7d32; }
+        .hold-criteria-all { background: #fff3e0; color: #f57c00; }
+        
+        .response-type {
+            font-size: 0.875rem;
+            color: var(--pico-color-muted);
+            text-transform: capitalize;
+        }
+        
+        .email-meta {
+            background: var(--pico-color-grey-50);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .email-meta p {
+            margin-bottom: 0.5rem;
+        }
+        
+        .email-meta p:last-child {
+            margin-bottom: 0;
+        }
+        
+        .content-box {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .html-content {
+            font-family: inherit;
+            white-space: normal;
+        }
+        
+        .feedback-box {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            font-family: inherit;
+            white-space: normal;
+        }
+        
+        nav[aria-label="breadcrumb"] ul {
+            list-style: none;
+            padding: 0;
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        nav[aria-label="breadcrumb"] li::after {
+            content: " / ";
+            margin-left: 0.5rem;
+            color: var(--pico-color-muted);
+        }
+        
+        nav[aria-label="breadcrumb"] li:last-child::after {
+            content: "";
+        }
+        
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        
+        details[open] summary {
+            margin-bottom: 1rem;
+        }
+    </style>
+</main>
+{{end}}

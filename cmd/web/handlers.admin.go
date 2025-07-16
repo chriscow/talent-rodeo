@@ -1466,3 +1466,221 @@ func (app *application) adminUserDetail(w http.ResponseWriter, r *http.Request) 
 		app.serverError(w, r, err)
 	}
 }
+
+// --- Admin Held Response Management ---
+func (app *application) adminHeldResponses(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	data := app.newTemplateData(r)
+
+	// Get filter parameters
+	status := r.URL.Query().Get("status")
+	if status == "" {
+		status = "pending"
+	}
+	data["SelectedStatus"] = status
+
+	// Define available statuses for filtering
+	data["HeldResponseStatuses"] = []string{
+		"pending",
+		"approved", 
+		"revision",
+		"expired",
+	}
+
+	// Get held response service
+	heldResponseService := app.heldResponseService
+	if heldResponseService == nil {
+		data["Error"] = "Held response service not configured"
+		if err := response.Page(w, http.StatusOK, data, "pages/admin/held-responses.html"); err != nil {
+			app.serverError(w, r, err)
+		}
+		return
+	}
+
+	var heldResponses []*internal.HeldResponse
+	var err error
+
+	// Fetch responses based on status filter
+	switch status {
+	case "pending":
+		heldResponses, err = heldResponseService.GetPendingResponses(ctx)
+	case "approved":
+		heldResponses, err = heldResponseService.GetApprovedResponses(ctx)
+	case "revision":
+		heldResponses, err = heldResponseService.GetRevisionResponses(ctx)
+	case "expired":
+		heldResponses, err = heldResponseService.GetExpiredResponses(ctx)
+	default:
+		heldResponses, err = heldResponseService.GetPendingResponses(ctx)
+	}
+
+	if err != nil {
+		app.serverError(w, r, fmt.Errorf("failed to get held responses: %w", err))
+		return
+	}
+
+	// Sort by created date, most recent first
+	sort.Slice(heldResponses, func(i, j int) bool {
+		return heldResponses[i].CreatedAt.After(heldResponses[j].CreatedAt)
+	})
+
+	data["HeldResponses"] = heldResponses
+	data["TotalResponses"] = len(heldResponses)
+
+	if err := response.Page(w, http.StatusOK, data, "pages/admin/held-responses.html"); err != nil {
+		app.serverError(w, r, err)
+	}
+}
+
+func (app *application) adminHeldResponseDetail(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	data := app.newTemplateData(r)
+
+	// Extract response ID from URL path
+	responseID := flow.Param(r.Context(), "id")
+	if responseID == "" {
+		http.Error(w, "Response ID is required", http.StatusBadRequest)
+		return
+	}
+
+	// Get held response service
+	heldResponseService := app.heldResponseService
+	if heldResponseService == nil {
+		data["Error"] = "Held response service not configured"
+		if err := response.Page(w, http.StatusOK, data, "pages/admin/held-response-detail.html"); err != nil {
+			app.serverError(w, r, err)
+		}
+		return
+	}
+
+	// Handle POST actions (approve/revision)
+	if r.Method == http.MethodPost {
+		if err := r.ParseForm(); err != nil {
+			app.serverError(w, r, fmt.Errorf("failed to parse form: %w", err))
+			return
+		}
+
+		action := r.PostForm.Get("action")
+		adminUser := contextGetAuthenticatedUser(r)
+		adminUserID := ""
+		if adminUser != nil {
+			adminUserID = adminUser.ID
+		}
+
+		switch action {
+		case "approve":
+			err := heldResponseService.ApproveResponse(ctx, responseID, adminUserID)
+			if err != nil {
+				data["Error"] = fmt.Sprintf("Failed to approve response: %v", err)
+			} else {
+				data["Success"] = "Response approved and sent successfully"
+			}
+		case "revision":
+			feedback := r.PostForm.Get("feedback")
+			if feedback == "" {
+				data["Error"] = "Feedback is required for revision requests"
+			} else {
+				err := heldResponseService.RequestRevision(ctx, responseID, adminUserID, feedback)
+				if err != nil {
+					data["Error"] = fmt.Sprintf("Failed to request revision: %v", err)
+				} else {
+					data["Success"] = "Revision requested successfully"
+				}
+			}
+		default:
+			data["Error"] = "Invalid action"
+		}
+	}
+
+	// Fetch the held response
+	heldResponse, exists, err := internal.GetHeldResponse(ctx, app.fs, responseID)
+	if err != nil {
+		app.serverError(w, r, fmt.Errorf("failed to get held response: %w", err))
+		return
+	}
+	if !exists {
+		http.Error(w, "Held response not found", http.StatusNotFound)
+		return
+	}
+
+	data["HeldResponse"] = heldResponse
+	data["ResponseID"] = responseID
+
+	if err := response.Page(w, http.StatusOK, data, "pages/admin/held-response-detail.html"); err != nil {
+		app.serverError(w, r, err)
+	}
+}
+
+func (app *application) adminHeldResponseStats(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	data := app.newTemplateData(r)
+
+	// Get held response service
+	heldResponseService := app.heldResponseService
+	if heldResponseService == nil {
+		data["Error"] = "Held response service not configured"
+		if err := response.Page(w, http.StatusOK, data, "pages/admin/held-response-stats.html"); err != nil {
+			app.serverError(w, r, err)
+		}
+		return
+	}
+
+	// Get statistics for each status
+	pendingResponses, err := heldResponseService.GetPendingResponses(ctx)
+	if err != nil {
+		app.logger.Error("failed to get pending responses", "error", err)
+		pendingResponses = []*internal.HeldResponse{}
+	}
+
+	approvedResponses, err := heldResponseService.GetApprovedResponses(ctx)
+	if err != nil {
+		app.logger.Error("failed to get approved responses", "error", err)
+		approvedResponses = []*internal.HeldResponse{}
+	}
+
+	revisionResponses, err := heldResponseService.GetRevisionResponses(ctx)
+	if err != nil {
+		app.logger.Error("failed to get revision responses", "error", err)
+		revisionResponses = []*internal.HeldResponse{}
+	}
+
+	expiredResponses, err := heldResponseService.GetExpiredResponses(ctx)
+	if err != nil {
+		app.logger.Error("failed to get expired responses", "error", err)
+		expiredResponses = []*internal.HeldResponse{}
+	}
+
+	// Calculate statistics
+	totalResponses := len(pendingResponses) + len(approvedResponses) + len(revisionResponses) + len(expiredResponses)
+	
+	var pendingPercentage, approvedPercentage, revisionPercentage, expiredPercentage float64
+	if totalResponses > 0 {
+		pendingPercentage = float64(len(pendingResponses)) / float64(totalResponses) * 100
+		approvedPercentage = float64(len(approvedResponses)) / float64(totalResponses) * 100
+		revisionPercentage = float64(len(revisionResponses)) / float64(totalResponses) * 100
+		expiredPercentage = float64(len(expiredResponses)) / float64(totalResponses) * 100
+	}
+
+	// Count responses by hold criteria
+	criteriaCounts := make(map[string]int)
+	allResponses := append(append(append(pendingResponses, approvedResponses...), revisionResponses...), expiredResponses...)
+	for _, response := range allResponses {
+		criteriaCounts[response.HoldCriteria]++
+	}
+
+	// Set template data
+	data["TotalResponses"] = totalResponses
+	data["PendingCount"] = len(pendingResponses)
+	data["ApprovedCount"] = len(approvedResponses)
+	data["RevisionCount"] = len(revisionResponses)
+	data["ExpiredCount"] = len(expiredResponses)
+	data["PendingPercentage"] = pendingPercentage
+	data["ApprovedPercentage"] = approvedPercentage
+	data["RevisionPercentage"] = revisionPercentage
+	data["ExpiredPercentage"] = expiredPercentage
+	data["CriteriaCounts"] = criteriaCounts
+
+	if err := response.Page(w, http.StatusOK, data, "pages/admin/held-response-stats.html"); err != nil {
+		app.serverError(w, r, err)
+	}
+}

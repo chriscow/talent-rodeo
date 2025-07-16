@@ -1,0 +1,184 @@
+{{define "title"}}Held Response Management{{end}}
+
+{{define "page:main"}}
+<main class="container">
+    <h1>Held Response Management</h1>
+    <p>Review and manage email responses pending admin approval</p>
+    
+    <div style="margin-bottom: 2rem;">
+        <article>
+            <form method="GET" style="margin-bottom: 1rem;">
+                <label for="status">Filter by Status:</label>
+                <select name="status" id="status" onchange="this.form.submit()">
+                    {{range .HeldResponseStatuses}}
+                    <option value="{{.}}" {{if eq . $.SelectedStatus}}selected{{end}}>
+                        {{title .}}
+                    </option>
+                    {{end}}
+                </select>
+            </form>
+            
+            <div class="grid">
+                <div>
+                    <h4>{{title .SelectedStatus}} Responses: {{.TotalResponses}}</h4>
+                </div>
+                <div style="text-align: right;">
+                    <a href="/admin/held-response-stats" role="button" class="secondary">View Statistics</a>
+                </div>
+            </div>
+        </article>
+    </div>
+
+    {{if .Error}}
+    <article style="background-color: var(--pico-color-red-50); border-left: 4px solid var(--pico-color-red);">
+        <p><strong>Error:</strong> {{.Error}}</p>
+    </article>
+    {{end}}
+
+    {{if .HeldResponses}}
+    <div class="overflow-auto">
+        <table>
+            <thead>
+                <tr>
+                    <th>Created</th>
+                    <th>From</th>
+                    <th>Subject</th>
+                    <th>Response Preview</th>
+                    <th>Hold Reason</th>
+                    <th>Status</th>
+                    <th>Expires</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .HeldResponses}}
+                <tr>
+                    <td>
+                        <time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z"}}">
+                            {{.CreatedAt.Format "Jan 2, 15:04"}}
+                        </time>
+                        <br><small style="color: #666;">{{.CreatedAt.Format "2006-01-02"}}</small>
+                    </td>
+                    <td>
+                        <strong>{{.OriginalFrom}}</strong>
+                        <br><small style="color: var(--pico-color-muted);">{{.RecipientEmail}}</small>
+                    </td>
+                    <td>
+                        <strong>{{.OriginalSubject}}</strong>
+                        <br><small style="color: var(--pico-color-muted);">Response: {{.ResponseSubject}}</small>
+                    </td>
+                    <td>
+                        <div class="response-preview">
+                            {{.GetPreviewText 100}}
+                        </div>
+                        <small style="color: var(--pico-color-muted);">{{.ResponseType}}</small>
+                    </td>
+                    <td>
+                        <span class="hold-criteria hold-criteria-{{.HoldCriteria}}">{{.HoldCriteria}}</span>
+                        {{if .HoldReason}}
+                        <br><small>{{.HoldReason}}</small>
+                        {{end}}
+                    </td>
+                    <td>
+                        <span class="status status-{{.Status}}">{{.Status}}</span>
+                        {{if .RevisionCount}}
+                        <br><small>{{.RevisionCount}} revision{{if ne .RevisionCount 1}}s{{end}}</small>
+                        {{end}}
+                    </td>
+                    <td>
+                        {{if .IsExpired}}
+                        <span style="color: var(--pico-color-red);">Expired</span>
+                        {{else}}
+                        <time datetime="{{.ExpiresAt.Format "2006-01-02T15:04:05Z"}}">
+                            {{.ExpiresAt.Format "Jan 2, 15:04"}}
+                        </time>
+                        {{end}}
+                    </td>
+                    <td>
+                        <a href="/admin/held-responses/{{.ID}}" role="button" class="secondary outline">
+                            Review
+                        </a>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{else}}
+    <article>
+        <p>No {{.SelectedStatus}} held responses found.</p>
+        {{if eq .SelectedStatus "pending"}}
+        <p><em>This is good news! No responses are currently waiting for review.</em></p>
+        {{end}}
+    </article>
+    {{end}}
+
+    <style>
+        .status-pending { color: #ffc107; background: #fff3cd; padding: 0.25rem 0.5rem; border-radius: 0.25rem; }
+        .status-approved { color: #28a745; background: #d4edda; padding: 0.25rem 0.5rem; border-radius: 0.25rem; }
+        .status-revision { color: #fd7e14; background: #ffeaa7; padding: 0.25rem 0.5rem; border-radius: 0.25rem; }
+        .status-expired { color: #dc3545; background: #f8d7da; padding: 0.25rem 0.5rem; border-radius: 0.25rem; }
+        
+        .hold-criteria { 
+            font-size: 0.875rem; 
+            padding: 0.25rem 0.5rem; 
+            border-radius: 0.25rem; 
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+        .hold-criteria-keyword { background: #e3f2fd; color: #1976d2; }
+        .hold-criteria-domain { background: #f3e5f5; color: #7b1fa2; }
+        .hold-criteria-escalation { background: #ffebee; color: #c62828; }
+        .hold-criteria-user { background: #e8f5e8; color: #2e7d32; }
+        .hold-criteria-all { background: #fff3e0; color: #f57c00; }
+        
+        .response-preview {
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.4;
+            max-height: 2.8em;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+            vertical-align: top;
+        }
+        
+        th {
+            font-weight: 600;
+            border-bottom: 2px solid #dee2e6;
+        }
+        
+        tr:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .overflow-auto {
+            overflow-x: auto;
+        }
+        
+        time {
+            white-space: nowrap;
+        }
+        
+        small {
+            font-size: 0.875rem;
+        }
+
+        select {
+            margin-left: 0.5rem;
+            padding: 0.5rem;
+            border: 1px solid #dee2e6;
+            border-radius: 0.25rem;
+        }
+    </style>
+</main>
+{{end}}

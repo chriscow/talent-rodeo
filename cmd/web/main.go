@@ -175,6 +175,7 @@ type application struct {
 	nudgeProcessor        *nudge.Processor
 	inboxProcessor        *inbox.Processor
 	stripeClient          *client.API
+	heldResponseService   *internal.HeldResponseService
 }
 
 func run(logger *slog.Logger) error {
@@ -889,8 +890,19 @@ func (app *application) createInboxDispatch() (*internal.InboxDispatch, error) {
 	sender := inbox.NewResponseSender(app.mailer, app.logger)
 	escalationService := inbox.NewEscalationService(notificationEmail, app.mailer, app.logger)
 	
+	// Create held response service with default disabled configuration
+	holdCriteria := internal.DefaultHoldCriteria()
+	// Keep holding disabled by default for backward compatibility
+	holdCriteria.Enabled = false
+	
+	holdEvaluator := internal.NewHoldDecisionEvaluator(holdCriteria)
+	heldResponseService := internal.NewHeldResponseService(app.fs, holdEvaluator, sender, app.logger)
+	
+	// Assign held response service to app for admin handlers
+	app.heldResponseService = heldResponseService
+	
 	// Create enhanced dispatch with response capabilities
-	dispatch := internal.NewEnhancedInboxDispatch(responder, sender, escalationService, app.logger)
+	dispatch := internal.NewEnhancedInboxDispatch(responder, sender, escalationService, heldResponseService, app.logger)
 
 	// Create and register feedback handler
 	feedbackOpenAIClient := feedback.NewOpenAIClient(openAIAPIKey, app.logger)

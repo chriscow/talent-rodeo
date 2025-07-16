@@ -1,0 +1,341 @@
+{{define "title"}}Held Response Statistics{{end}}
+
+{{define "page:main"}}
+<main class="container">
+    <nav aria-label="breadcrumb">
+        <ul>
+            <li><a href="/admin">Admin</a></li>
+            <li><a href="/admin/held-responses">Held Responses</a></li>
+            <li>Statistics</li>
+        </ul>
+    </nav>
+
+    <h1>Held Response Statistics</h1>
+    <p>Overview of held response system performance and usage</p>
+    
+    {{if .Error}}
+    <article style="background-color: var(--pico-color-red-50); border-left: 4px solid var(--pico-color-red);">
+        <p><strong>Error:</strong> {{.Error}}</p>
+    </article>
+    {{end}}
+
+    <!-- Overview Cards -->
+    <div class="stats-grid">
+        <article class="stat-card">
+            <h3>{{.TotalResponses}}</h3>
+            <p>Total Held Responses</p>
+            <small>All time</small>
+        </article>
+        
+        <article class="stat-card pending">
+            <h3>{{.PendingCount}}</h3>
+            <p>Pending Review</p>
+            <small>{{printf "%.1f" .PendingPercentage}}% of total</small>
+        </article>
+        
+        <article class="stat-card approved">
+            <h3>{{.ApprovedCount}}</h3>
+            <p>Approved & Sent</p>
+            <small>{{printf "%.1f" .ApprovedPercentage}}% of total</small>
+        </article>
+        
+        <article class="stat-card revision">
+            <h3>{{.RevisionCount}}</h3>
+            <p>Needs Revision</p>
+            <small>{{printf "%.1f" .RevisionPercentage}}% of total</small>
+        </article>
+        
+        <article class="stat-card expired">
+            <h3>{{.ExpiredCount}}</h3>
+            <p>Expired</p>
+            <small>{{printf "%.1f" .ExpiredPercentage}}% of total</small>
+        </article>
+    </div>
+
+    <!-- Status Distribution Chart -->
+    {{if .TotalResponses}}
+    <article>
+        <header>
+            <h3>Status Distribution</h3>
+        </header>
+        
+        <div class="chart-container">
+            <div class="progress-chart">
+                {{if .PendingPercentage}}
+                <div class="progress-bar pending" style="width: {{.PendingPercentage}}%">
+                    {{if ge .PendingPercentage 10}}Pending ({{.PendingCount}}){{end}}
+                </div>
+                {{end}}
+                {{if .ApprovedPercentage}}
+                <div class="progress-bar approved" style="width: {{.ApprovedPercentage}}%">
+                    {{if ge .ApprovedPercentage 10}}Approved ({{.ApprovedCount}}){{end}}
+                </div>
+                {{end}}
+                {{if .RevisionPercentage}}
+                <div class="progress-bar revision" style="width: {{.RevisionPercentage}}%">
+                    {{if ge .RevisionPercentage 10}}Revision ({{.RevisionCount}}){{end}}
+                </div>
+                {{end}}
+                {{if .ExpiredPercentage}}
+                <div class="progress-bar expired" style="width: {{.ExpiredPercentage}}%">
+                    {{if ge .ExpiredPercentage 10}}Expired ({{.ExpiredCount}}){{end}}
+                </div>
+                {{end}}
+            </div>
+            
+            <div class="chart-legend">
+                <div class="legend-item">
+                    <span class="legend-color pending"></span>
+                    <span>Pending ({{.PendingCount}} - {{printf "%.1f" .PendingPercentage}}%)</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color approved"></span>
+                    <span>Approved ({{.ApprovedCount}} - {{printf "%.1f" .ApprovedPercentage}}%)</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color revision"></span>
+                    <span>Revision ({{.RevisionCount}} - {{printf "%.1f" .RevisionPercentage}}%)</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color expired"></span>
+                    <span>Expired ({{.ExpiredCount}} - {{printf "%.1f" .ExpiredPercentage}}%)</span>
+                </div>
+            </div>
+        </div>
+    </article>
+    {{end}}
+
+    <!-- Hold Criteria Breakdown -->
+    {{if .CriteriaCounts}}
+    <article>
+        <header>
+            <h3>Hold Criteria Breakdown</h3>
+        </header>
+        
+        <div class="criteria-stats">
+            {{range $criteria, $count := .CriteriaCounts}}
+            <div class="criteria-item">
+                <div class="criteria-header">
+                    <span class="hold-criteria hold-criteria-{{$criteria}}">{{$criteria}}</span>
+                    <span class="criteria-count">{{$count}} responses</span>
+                </div>
+                <div class="criteria-bar">
+                    <div class="criteria-fill hold-criteria-{{$criteria}}" 
+                         style="width: {{div (mul $count 100) $.TotalResponses}}%">
+                    </div>
+                </div>
+                <small>{{printf "%.1f" (div (mul (float64 $count) 100) (float64 $.TotalResponses))}}% of total</small>
+            </div>
+            {{end}}
+        </div>
+    </article>
+    {{end}}
+
+    <!-- Quick Actions -->
+    <article>
+        <header>
+            <h3>Quick Actions</h3>
+        </header>
+        
+        <div class="grid">
+            <a href="/admin/held-responses?status=pending" role="button" class="secondary">
+                Review Pending ({{.PendingCount}})
+            </a>
+            <a href="/admin/held-responses?status=revision" role="button" class="secondary">
+                Check Revisions ({{.RevisionCount}})
+            </a>
+            <a href="/admin/held-responses?status=expired" role="button" class="secondary outline">
+                View Expired ({{.ExpiredCount}})
+            </a>
+            <a href="/admin/held-responses" role="button">
+                View All Responses
+            </a>
+        </div>
+    </article>
+
+    {{if eq .TotalResponses 0}}
+    <article>
+        <header>
+            <h3>No Data Available</h3>
+        </header>
+        <p>No held responses have been created yet. This could mean:</p>
+        <ul>
+            <li>The held response system is disabled</li>
+            <li>No emails have triggered hold criteria</li>
+            <li>All responses are being sent immediately</li>
+        </ul>
+        <p><a href="/admin/held-responses">View Held Responses →</a></p>
+    </article>
+    {{end}}
+
+    <style>
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            text-align: center;
+            padding: 1.5rem 1rem;
+            border-radius: 0.5rem;
+            position: relative;
+        }
+        
+        .stat-card h3 {
+            font-size: 2.5rem;
+            margin: 0 0 0.5rem 0;
+            font-weight: 700;
+        }
+        
+        .stat-card p {
+            margin: 0 0 0.25rem 0;
+            font-weight: 600;
+        }
+        
+        .stat-card small {
+            color: var(--pico-color-muted);
+            font-size: 0.875rem;
+        }
+        
+        .stat-card.pending { border-left: 4px solid #ffc107; }
+        .stat-card.pending h3 { color: #ffc107; }
+        
+        .stat-card.approved { border-left: 4px solid #28a745; }
+        .stat-card.approved h3 { color: #28a745; }
+        
+        .stat-card.revision { border-left: 4px solid #fd7e14; }
+        .stat-card.revision h3 { color: #fd7e14; }
+        
+        .stat-card.expired { border-left: 4px solid #dc3545; }
+        .stat-card.expired h3 { color: #dc3545; }
+        
+        .chart-container {
+            margin: 1rem 0;
+        }
+        
+        .progress-chart {
+            display: flex;
+            height: 40px;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            background: #f8f9fa;
+            margin-bottom: 1rem;
+        }
+        
+        .progress-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 0.875rem;
+            min-width: 2px;
+        }
+        
+        .progress-bar.pending { background: #ffc107; }
+        .progress-bar.approved { background: #28a745; }
+        .progress-bar.revision { background: #fd7e14; }
+        .progress-bar.expired { background: #dc3545; }
+        
+        .chart-legend {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 0.25rem;
+        }
+        
+        .legend-color.pending { background: #ffc107; }
+        .legend-color.approved { background: #28a745; }
+        .legend-color.revision { background: #fd7e14; }
+        .legend-color.expired { background: #dc3545; }
+        
+        .criteria-stats {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        .criteria-item {
+            padding: 1rem;
+            border: 1px solid #dee2e6;
+            border-radius: 0.5rem;
+        }
+        
+        .criteria-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+        
+        .criteria-count {
+            font-weight: 600;
+            color: var(--pico-color-muted);
+        }
+        
+        .criteria-bar {
+            height: 8px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 0.25rem;
+        }
+        
+        .criteria-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        
+        .hold-criteria { 
+            font-size: 0.875rem; 
+            padding: 0.25rem 0.5rem; 
+            border-radius: 0.25rem; 
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+        .hold-criteria-keyword { background: #e3f2fd; color: #1976d2; }
+        .hold-criteria-domain { background: #f3e5f5; color: #7b1fa2; }
+        .hold-criteria-escalation { background: #ffebee; color: #c62828; }
+        .hold-criteria-user { background: #e8f5e8; color: #2e7d32; }
+        .hold-criteria-all { background: #fff3e0; color: #f57c00; }
+        
+        .criteria-fill.hold-criteria-keyword { background: #1976d2; }
+        .criteria-fill.hold-criteria-domain { background: #7b1fa2; }
+        .criteria-fill.hold-criteria-escalation { background: #c62828; }
+        .criteria-fill.hold-criteria-user { background: #2e7d32; }
+        .criteria-fill.hold-criteria-all { background: #f57c00; }
+        
+        nav[aria-label="breadcrumb"] ul {
+            list-style: none;
+            padding: 0;
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        nav[aria-label="breadcrumb"] li::after {
+            content: " / ";
+            margin-left: 0.5rem;
+            color: var(--pico-color-muted);
+        }
+        
+        nav[aria-label="breadcrumb"] li:last-child::after {
+            content: "";
+        }
+    </style>
+</main>
+{{end}}

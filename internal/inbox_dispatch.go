@@ -8,6 +8,17 @@ import (
 	"talent-rodeo/internal/inbox"
 )
 
+// EmailResponder defines the interface for generating email responses
+type EmailResponder interface {
+	GenerateResponse(ctx context.Context, email *inbox.Email, results []*inbox.HandlingResult) (*inbox.EmailResponse, error)
+}
+
+// EscalationService defines the interface for escalation services
+type EscalationService interface {
+	SendEscalation(ctx context.Context, email *inbox.Email, unhandledItems []string) error
+	IsConfigured() bool
+}
+
 // EmailHandler defines the interface for processing emails and returning handling results.
 // Implementations should return a HandlingResult indicating whether they processed
 // the email and what actions were taken.
@@ -27,9 +38,10 @@ func (f EmailHandlerFunc) HandleEmail(ctx context.Context, email *inbox.Email) (
 type InboxDispatch struct {
 	mu                sync.RWMutex
 	handlers          map[string]EmailHandler
-	emailResponder    *inbox.EmailResponder
-	responseSender    *inbox.ResponseSender
-	escalationService *inbox.EscalationService
+	emailResponder    EmailResponder
+	responseSender    ResponseSender
+	escalationService EscalationService
+	heldResponseService *HeldResponseService
 	logger            *slog.Logger
 	responseEnabled   bool
 }
@@ -44,9 +56,10 @@ func NewInboxDispatch() *InboxDispatch {
 
 // NewEnhancedInboxDispatch creates a new InboxDispatch instance with response and escalation capabilities.
 func NewEnhancedInboxDispatch(
-	emailResponder *inbox.EmailResponder,
-	responseSender *inbox.ResponseSender,
-	escalationService *inbox.EscalationService,
+	emailResponder EmailResponder,
+	responseSender ResponseSender,
+	escalationService EscalationService,
+	heldResponseService *HeldResponseService,
 	logger *slog.Logger,
 ) *InboxDispatch {
 	return &InboxDispatch{
@@ -54,6 +67,7 @@ func NewEnhancedInboxDispatch(
 		emailResponder:    emailResponder,
 		responseSender:    responseSender,
 		escalationService: escalationService,
+		heldResponseService: heldResponseService,
 		logger:            logger,
 		responseEnabled:   true,
 	}
@@ -347,6 +361,36 @@ func (id *InboxDispatch) handleResponse(ctx context.Context, email *inbox.Email,
 			)
 		}
 		return fmt.Errorf("failed to generate response: %w", err)
+	}
+
+	// Check if response should be held for admin review
+	if id.heldResponseService != nil {
+		holdDecision := id.heldResponseService.EvaluateHoldDecision(ctx, email, response, userEmail)
+		if holdDecision.ShouldHold {
+			// Create held response record
+			_, err := id.heldResponseService.CreateHeldResponse(ctx, email, response, userEmail, holdDecision)
+			if err != nil {
+				if id.logger != nil {
+					id.logger.Error("failed to create held response",
+						"email_id", email.ID,
+						"recipient", userEmail,
+						"error", err,
+					)
+				}
+				// Continue with sending response if hold creation fails
+			} else {
+				if id.logger != nil {
+					id.logger.Info("response held for admin review",
+						"email_id", email.ID,
+						"recipient", userEmail,
+						"response_type", response.Type.String(),
+						"hold_reason", holdDecision.Reason,
+						"hold_criteria", holdDecision.Criteria,
+					)
+				}
+				return nil // Response was held, don't send
+			}
+		}
 	}
 
 	if id.logger != nil {

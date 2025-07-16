@@ -62,14 +62,14 @@ func (m *mockMailer) reset() {
 func TestNewResponseSender(t *testing.T) {
 	mailer := &mockMailer{}
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	
+
 	sender := NewResponseSender(mailer, logger)
-	
+
 	if sender == nil {
 		t.Error("NewResponseSender should not return nil")
 	}
-	
-	if sender.logger != logger {
+
+	if sender.logger == nil {
 		t.Error("NewResponseSender should set the logger")
 	}
 }

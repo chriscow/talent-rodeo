@@ -44,3 +44,5 @@ build-errors.log
 # binaries
 **/bin/
 trcli
+
+.config/

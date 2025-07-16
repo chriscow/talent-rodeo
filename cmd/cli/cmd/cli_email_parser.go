@@ -139,7 +139,7 @@ func testEmailParser(cmd *cobra.Command, args []string) error {
 	defer fs.Close()
 
 	// Create email parser
-	parser := internal.NewOpenAIEmailParser(openAIAPIKey, logger, fs)
+	parser := internal.NewOpenAIEmailParser(logger, fs)
 
 	// Get email content
 	var emailContent string
@@ -221,7 +221,7 @@ func validateEmailParser(cmd *cobra.Command, args []string) error {
 	defer fs.Close()
 
 	// Create email parser
-	parser := internal.NewOpenAIEmailParser(openAIAPIKey, logger, fs)
+	parser := internal.NewOpenAIEmailParser(logger, fs)
 
 	// Run validation test suite
 	testCases := getValidationTestCases()
@@ -546,7 +546,7 @@ func batchTestEmailParser(cmd *cobra.Command, args []string) error {
 	defer fs.Close()
 
 	// Create email parser
-	parser := internal.NewOpenAIEmailParser(openAIAPIKey, logger, fs)
+	parser := internal.NewOpenAIEmailParser(logger, fs)
 
 	// Determine directory
 	directory := "."

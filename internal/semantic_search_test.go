@@ -158,7 +158,7 @@ func TestDefaultHybridSearchParams(t *testing.T) {
 		t.Errorf("ScoreFusion: got %v, want %v", got.ScoreFusion, "linear")
 	}
 	if got.RecencyWeight != 0.1 {
-		t.Errorf("RecencyWeight: got %v, want %v", got.RecencyWeight, 0.2)
+		t.Errorf("RecencyWeight: got %v, want %v", got.RecencyWeight, 0.1)
 	}
 	if got.RecencyHalfLife != 30.0 {
 		t.Errorf("RecencyHalfLife: got %v, want %v", got.RecencyHalfLife, 30.0)
