@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,7 +17,10 @@ import (
 // TestHeldResponseServiceWorkflow tests the held response service workflow.
 func TestHeldResponseServiceWorkflow(t *testing.T) {
 	ctx := context.Background()
-	fs := getTestFirestoreClient(t)
+	fs, err := NewTestFirestoreClient(ctx)
+	if err != nil {
+		t.Fatalf("Failed to create test Firestore client: %v", err)
+	}
 	defer fs.Close()
 
 	// Create held response service
@@ -44,18 +48,9 @@ func TestHeldResponseServiceWorkflow(t *testing.T) {
 	}
 
 	// Create held response
-	heldResponseID, err := heldResponseService.CreateHeldResponse(ctx, testEmail, testResponse, "recipient@example.com", holdDecision)
+	heldResponse, err := heldResponseService.CreateHeldResponse(ctx, testEmail, testResponse, "recipient@example.com", holdDecision)
 	if err != nil {
 		t.Fatalf("Failed to create held response: %v", err)
-	}
-
-	// Verify it was created as pending
-	heldResponse, exists, err := GetHeldResponse(ctx, fs, heldResponseID)
-	if err != nil {
-		t.Fatalf("Failed to get held response: %v", err)
-	}
-	if !exists {
-		t.Fatal("Held response not found after creation")
 	}
 
 	if heldResponse.Status != HeldResponseStatusPending {
@@ -64,7 +59,7 @@ func TestHeldResponseServiceWorkflow(t *testing.T) {
 
 	// Test approval workflow
 	adminUserID := "admin-123"
-	err = heldResponseService.ApproveResponse(ctx, heldResponseID, adminUserID)
+	err = heldResponseService.ApproveResponse(ctx, heldResponse.ID, adminUserID)
 	if err != nil {
 		t.Fatalf("Failed to approve response: %v", err)
 	}
@@ -75,7 +70,7 @@ func TestHeldResponseServiceWorkflow(t *testing.T) {
 	}
 
 	// Verify status updated
-	updatedResponse, exists, err := GetHeldResponse(ctx, fs, heldResponseID)
+	updatedResponse, exists, err := GetHeldResponse(ctx, fs, heldResponse.ID)
 	if err != nil {
 		t.Fatalf("Failed to get updated response: %v", err)
 	}
@@ -95,30 +90,33 @@ func TestHeldResponseServiceWorkflow(t *testing.T) {
 // TestHeldResponseRevisionWorkflow tests the revision request workflow.
 func TestHeldResponseRevisionWorkflow(t *testing.T) {
 	ctx := context.Background()
-	fs := getTestFirestoreClient(t)
+	fs, err := NewTestFirestoreClient(ctx)
+	if err != nil {
+		t.Fatalf("Failed to create test Firestore client: %v", err)
+	}
 	defer fs.Close()
 
 	// Create a held response for revision testing
 	heldResponse := &HeldResponse{
-		ID:                      "test-revision-001",
-		Status:                  HeldResponseStatusPending,
-		OriginalEmailID:         "email-001",
-		OriginalFrom:            "user@example.com",
-		OriginalSubject:         "Test Subject",
-		OriginalBody:            "Test email body",
-		OriginalDate:            time.Now().Add(-1 * time.Hour),
-		RecipientEmail:          "recipient@example.com",
-		ResponseSubject:         "Re: Test Subject",
-		ResponseBody:            "Original response body",
-		ResponseType:            "job_search",
-		CreatedAt:               time.Now().Add(-30 * time.Minute),
-		ExpiresAt:               time.Now().Add(23 * time.Hour),
-		HoldCriteria:            "keyword",
-		HoldReason:              "Contains keyword: urgent",
-		RevisionCount:           0,
+		ID:              "test-revision-001",
+		Status:          HeldResponseStatusPending,
+		OriginalEmailID: "email-001",
+		OriginalFrom:    "user@example.com",
+		OriginalSubject: "Test Subject",
+		OriginalBody:    "Test email body",
+		OriginalDate:    time.Now().Add(-1 * time.Hour),
+		RecipientEmail:  "recipient@example.com",
+		ResponseSubject: "Re: Test Subject",
+		ResponseBody:    "Original response body",
+		ResponseType:    "job_search",
+		CreatedAt:       time.Now().Add(-30 * time.Minute),
+		ExpiresAt:       time.Now().Add(23 * time.Hour),
+		HoldCriteria:    "keyword",
+		HoldReason:      "Contains keyword: urgent",
+		RevisionCount:   0,
 	}
 
-	err := CreateHeldResponse(ctx, fs, heldResponse)
+	err = CreateHeldResponse(ctx, fs, heldResponse)
 	if err != nil {
 		t.Fatalf("Failed to create test held response: %v", err)
 	}
@@ -164,30 +162,33 @@ func TestHeldResponseRevisionWorkflow(t *testing.T) {
 // TestHeldResponseExpiration tests the expiration workflow.
 func TestHeldResponseExpiration(t *testing.T) {
 	ctx := context.Background()
-	fs := getTestFirestoreClient(t)
+	fs, err := NewTestFirestoreClient(ctx)
+	if err != nil {
+		t.Fatalf("Failed to create test Firestore client: %v", err)
+	}
 	defer fs.Close()
 
 	// Create an expired held response
 	heldResponse := &HeldResponse{
-		ID:                      "test-expired-001",
-		Status:                  HeldResponseStatusPending,
-		OriginalEmailID:         "email-002",
-		OriginalFrom:            "user@example.com",
-		OriginalSubject:         "Test Expired Subject",
-		OriginalBody:            "Test expired email body",
-		OriginalDate:            time.Now().Add(-2 * time.Hour),
-		RecipientEmail:          "recipient@example.com",
-		ResponseSubject:         "Re: Test Expired Subject",
-		ResponseBody:            "Expired response body",
-		ResponseType:            "job_search",
-		CreatedAt:               time.Now().Add(-25 * time.Hour),
-		ExpiresAt:               time.Now().Add(-1 * time.Hour), // Expired 1 hour ago
-		HoldCriteria:            "keyword",
-		HoldReason:              "Contains keyword: urgent",
-		RevisionCount:           0,
+		ID:              "test-expired-001",
+		Status:          HeldResponseStatusPending,
+		OriginalEmailID: "email-002",
+		OriginalFrom:    "user@example.com",
+		OriginalSubject: "Test Expired Subject",
+		OriginalBody:    "Test expired email body",
+		OriginalDate:    time.Now().Add(-2 * time.Hour),
+		RecipientEmail:  "recipient@example.com",
+		ResponseSubject: "Re: Test Expired Subject",
+		ResponseBody:    "Expired response body",
+		ResponseType:    "job_search",
+		CreatedAt:       time.Now().Add(-25 * time.Hour),
+		ExpiresAt:       time.Now().Add(-1 * time.Hour), // Expired 1 hour ago
+		HoldCriteria:    "keyword",
+		HoldReason:      "Contains keyword: urgent",
+		RevisionCount:   0,
 	}
 
-	err := CreateHeldResponse(ctx, fs, heldResponse)
+	err = CreateHeldResponse(ctx, fs, heldResponse)
 	if err != nil {
 		t.Fatalf("Failed to create test held response: %v", err)
 	}
@@ -226,22 +227,22 @@ func TestHeldResponseAdminHandlers(t *testing.T) {
 
 	// Create test held response
 	heldResponse := &HeldResponse{
-		ID:                      "test-admin-001",
-		Status:                  HeldResponseStatusPending,
-		OriginalEmailID:         "email-003",
-		OriginalFrom:            "user@example.com",
-		OriginalSubject:         "Test Admin Subject",
-		OriginalBody:            "Test admin email body",
-		OriginalDate:            time.Now().Add(-1 * time.Hour),
-		RecipientEmail:          "recipient@example.com",
-		ResponseSubject:         "Re: Test Admin Subject",
-		ResponseBody:            "Admin test response body",
-		ResponseType:            "job_search",
-		CreatedAt:               time.Now().Add(-30 * time.Minute),
-		ExpiresAt:               time.Now().Add(23 * time.Hour),
-		HoldCriteria:            "keyword",
-		HoldReason:              "Contains keyword: urgent",
-		RevisionCount:           0,
+		ID:              "test-admin-001",
+		Status:          HeldResponseStatusPending,
+		OriginalEmailID: "email-003",
+		OriginalFrom:    "user@example.com",
+		OriginalSubject: "Test Admin Subject",
+		OriginalBody:    "Test admin email body",
+		OriginalDate:    time.Now().Add(-1 * time.Hour),
+		RecipientEmail:  "recipient@example.com",
+		ResponseSubject: "Re: Test Admin Subject",
+		ResponseBody:    "Admin test response body",
+		ResponseType:    "confirmation",
+		CreatedAt:       time.Now().Add(-30 * time.Minute),
+		ExpiresAt:       time.Now().Add(23 * time.Hour),
+		HoldCriteria:    "keyword",
+		HoldReason:      "Contains keyword: urgent",
+		RevisionCount:   0,
 	}
 
 	err := CreateHeldResponse(ctx, fs, heldResponse)
@@ -270,7 +271,6 @@ func TestHeldResponseAdminHandlers(t *testing.T) {
 	mux.HandleFunc("/admin/held-responses/:id", mockApp.adminHeldResponseDetail, "GET", "POST")
 
 	req = httptest.NewRequest("GET", "/admin/held-responses/"+heldResponse.ID, nil)
-	req = req.WithContext(flow.ContextWithParams(req.Context(), map[string]string{"id": heldResponse.ID}))
 	w = httptest.NewRecorder()
 
 	mux.ServeHTTP(w, req)
@@ -285,13 +285,12 @@ func TestHeldResponseAdminHandlers(t *testing.T) {
 
 	req = httptest.NewRequest("POST", "/admin/held-responses/"+heldResponse.ID, strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req = req.WithContext(flow.ContextWithParams(req.Context(), map[string]string{"id": heldResponse.ID}))
 	w = httptest.NewRecorder()
 
 	mux.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", w.Code)
+		t.Errorf("Expected status 200, got %d. Response body: %s", w.Code, w.Body.String())
 	}
 
 	// Verify response was approved
@@ -332,19 +331,40 @@ func (app *MockApplication) adminHeldResponseDetail(w http.ResponseWriter, r *ht
 	ctx := r.Context()
 	responseID := flow.Param(ctx, "id")
 
+	if responseID == "" {
+		app.serverError(w, r, fmt.Errorf("response ID is required"))
+		return
+	}
+
+	// Handle POST actions (approve/revision) - similar to real handler
 	if r.Method == http.MethodPost {
 		if err := r.ParseForm(); err != nil {
-			app.serverError(w, r, err)
+			app.serverError(w, r, fmt.Errorf("failed to parse form: %w", err))
 			return
 		}
 
 		action := r.PostForm.Get("action")
-		if action == "approve" {
+		switch action {
+		case "approve":
 			err := app.heldResponseService.ApproveResponse(ctx, responseID, "test-admin")
 			if err != nil {
-				app.serverError(w, r, err)
+				app.serverError(w, r, fmt.Errorf("failed to approve response: %w", err))
 				return
 			}
+		case "revision":
+			feedback := r.PostForm.Get("feedback")
+			if feedback == "" {
+				app.serverError(w, r, fmt.Errorf("feedback is required for revision requests"))
+				return
+			}
+			err := app.heldResponseService.RequestRevision(ctx, responseID, "test-admin", feedback)
+			if err != nil {
+				app.serverError(w, r, fmt.Errorf("failed to request revision: %w", err))
+				return
+			}
+		default:
+			app.serverError(w, r, fmt.Errorf("invalid action: %s", action))
+			return
 		}
 	}
 
@@ -359,11 +379,10 @@ type MockEmailHandler struct {
 
 func (h *MockEmailHandler) HandleEmail(ctx context.Context, email *inbox.Email) (*inbox.HandlingResult, error) {
 	return &inbox.HandlingResult{
-		Handled:  true,
-		Summary:  "Mock handling",
+		Handled: true,
+		Summary: "Mock handling",
 		Metadata: map[string]interface{}{
 			"responses": h.responses,
 		},
 	}, nil
 }
-

@@ -884,25 +884,31 @@ func (app *application) createInboxDispatch() (*internal.InboxDispatch, error) {
 
 	// Create inbox OpenAI client (different from feedback OpenAI client)
 	inboxOpenAIClient := inbox.NewOpenAIClient(openAIAPIKey, app.logger)
-	
+
 	// Create response components
 	responder := inbox.NewEmailResponder(inboxOpenAIClient, app.logger)
 	sender := inbox.NewResponseSender(app.mailer, app.logger)
 	escalationService := inbox.NewEscalationService(notificationEmail, app.mailer, app.logger)
-	
+
 	// Create held response service with default disabled configuration
 	holdCriteria := internal.DefaultHoldCriteria()
 	// Keep holding disabled by default for backward compatibility
 	holdCriteria.Enabled = false
-	
+
 	holdEvaluator := internal.NewHoldDecisionEvaluator(holdCriteria)
 	heldResponseService := internal.NewHeldResponseService(app.fs, holdEvaluator, sender, app.logger)
-	
+
 	// Assign held response service to app for admin handlers
 	app.heldResponseService = heldResponseService
-	
+
 	// Create enhanced dispatch with response capabilities
 	dispatch := internal.NewEnhancedInboxDispatch(responder, sender, escalationService, heldResponseService, app.logger)
+
+	inboxFilter := internal.NewUserVerificationFilter(app.fs, app.logger)
+	if err := dispatch.RegisterFilter("user-verification", inboxFilter); err != nil {
+		app.logger.Error("failed to register user verification filter", "error", err)
+		return nil, err
+	}
 
 	// Create and register feedback handler
 	feedbackOpenAIClient := feedback.NewOpenAIClient(openAIAPIKey, app.logger)

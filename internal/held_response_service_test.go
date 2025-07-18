@@ -11,12 +11,12 @@ import (
 
 func TestHeldResponseService_ShouldHoldResponse(t *testing.T) {
 	tests := []struct {
-		name         string
-		criteria     HoldCriteria
+		name          string
+		criteria      HoldCriteria
 		originalEmail *inbox.Email
-		response     *inbox.EmailResponse
-		userEmail    string
-		want         bool
+		response      *inbox.EmailResponse
+		userEmail     string
+		want          bool
 	}{
 		{
 			name: "disabled criteria returns false",
@@ -129,11 +129,11 @@ func TestHeldResponseService_ShouldHoldResponse(t *testing.T) {
 		{
 			name: "no match",
 			criteria: HoldCriteria{
-				Enabled:                true,
-				HoldKeywords:           []string{"urgent", "complaint"},
-				HoldUserEmails:         []string{"vip@example.com", "important@example.com"},
+				Enabled:                 true,
+				HoldKeywords:            []string{"urgent", "complaint"},
+				HoldUserEmails:          []string{"vip@example.com", "important@example.com"},
 				HoldEscalationResponses: true,
-				DefaultExpirationHours: 24,
+				DefaultExpirationHours:  24,
 			},
 			originalEmail: &inbox.Email{
 				ID:      "test-email-1",
@@ -267,21 +267,21 @@ func TestHeldResponseService_ApproveResponse(t *testing.T) {
 
 	// Create a test held response
 	heldResponse := &HeldResponse{
-		OriginalEmailID:    "test-email-1",
-		OriginalFrom:       "test@example.com",
-		OriginalSubject:    "Test Subject",
-		OriginalBody:       "Test body",
-		RecipientEmail:     "recipient@example.com",
-		ResponseSubject:    "RE: Test Subject",
-		ResponseBody:       "Test response",
-		ResponseHTMLBody:   "<p>Test response</p>",
-		ResponseType:       "confirmation",
-		Status:             HeldResponseStatusPending,
-		CreatedAt:          time.Now(),
-		UpdatedAt:          time.Now(),
-		ExpiresAt:          time.Now().Add(24 * time.Hour),
-		AdminFeedback:      "",
-		RevisionCount:      0,
+		OriginalEmailID:  "test-email-1",
+		OriginalFrom:     "test@example.com",
+		OriginalSubject:  "Test Subject",
+		OriginalBody:     "Test body",
+		RecipientEmail:   "recipient@example.com",
+		ResponseSubject:  "RE: Test Subject",
+		ResponseBody:     "Test response",
+		ResponseHTMLBody: "<p>Test response</p>",
+		ResponseType:     "confirmation",
+		Status:           HeldResponseStatusPending,
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+		ExpiresAt:        time.Now().Add(24 * time.Hour),
+		AdminFeedback:    "",
+		RevisionCount:    0,
 	}
 
 	if err := CreateHeldResponse(ctx, client, heldResponse); err != nil {
@@ -338,21 +338,21 @@ func TestHeldResponseService_RequestRevision(t *testing.T) {
 
 	// Create a test held response
 	heldResponse := &HeldResponse{
-		OriginalEmailID:    "test-email-2",
-		OriginalFrom:       "test@example.com",
-		OriginalSubject:    "Test Subject",
-		OriginalBody:       "Test body",
-		RecipientEmail:     "recipient@example.com",
-		ResponseSubject:    "RE: Test Subject",
-		ResponseBody:       "Test response",
-		ResponseHTMLBody:   "<p>Test response</p>",
-		ResponseType:       "confirmation",
-		Status:             HeldResponseStatusPending,
-		CreatedAt:          time.Now(),
-		UpdatedAt:          time.Now(),
-		ExpiresAt:          time.Now().Add(24 * time.Hour),
-		AdminFeedback:      "",
-		RevisionCount:      0,
+		OriginalEmailID:  "test-email-2",
+		OriginalFrom:     "test@example.com",
+		OriginalSubject:  "Test Subject",
+		OriginalBody:     "Test body",
+		RecipientEmail:   "recipient@example.com",
+		ResponseSubject:  "RE: Test Subject",
+		ResponseBody:     "Test response",
+		ResponseHTMLBody: "<p>Test response</p>",
+		ResponseType:     "confirmation",
+		Status:           HeldResponseStatusPending,
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+		ExpiresAt:        time.Now().Add(24 * time.Hour),
+		AdminFeedback:    "",
+		RevisionCount:    0,
 	}
 
 	if err := CreateHeldResponse(ctx, client, heldResponse); err != nil {
@@ -409,7 +409,7 @@ func TestHeldResponseService_MarkExpired(t *testing.T) {
 	// Create expired held responses with unique IDs
 	now := time.Now()
 	testPrefix := fmt.Sprintf("test-expired-%d", now.UnixNano())
-	
+
 	expiredResponse1 := &HeldResponse{
 		OriginalEmailID: testPrefix + "-email-1",
 		OriginalFrom:    "test@example.com",
@@ -507,15 +507,18 @@ func TestHeldResponseService_MarkExpired(t *testing.T) {
 // MockResponseSender for testing
 type MockResponseSender struct {
 	SendResponseCalled bool
+	sentCount          int
 	SendResponseError  error
 }
 
 func (m *MockResponseSender) SendResponse(ctx context.Context, response *inbox.EmailResponse, recipientEmail string) error {
 	m.SendResponseCalled = true
+	m.sentCount++
 	return m.SendResponseError
 }
 
 func (m *MockResponseSender) Reset() {
 	m.SendResponseCalled = false
+	m.sentCount = 0
 	m.SendResponseError = nil
 }

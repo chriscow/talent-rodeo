@@ -34,10 +34,11 @@ func (f EmailHandlerFunc) HandleEmail(ctx context.Context, email *inbox.Email) (
 }
 
 // InboxDispatch implements EmailHandler and dispatches emails to multiple registered handlers.
-// It orchestrates the full email processing workflow including response generation and escalation.
+// It orchestrates the full email processing workflow including filtering, response generation and escalation.
 type InboxDispatch struct {
 	mu                sync.RWMutex
 	handlers          map[string]EmailHandler
+	filters           map[string]EmailFilterer
 	emailResponder    EmailResponder
 	responseSender    ResponseSender
 	escalationService EscalationService
@@ -50,6 +51,7 @@ type InboxDispatch struct {
 func NewInboxDispatch() *InboxDispatch {
 	return &InboxDispatch{
 		handlers:        make(map[string]EmailHandler),
+		filters:         make(map[string]EmailFilterer),
 		responseEnabled: false,
 	}
 }
@@ -64,6 +66,7 @@ func NewEnhancedInboxDispatch(
 ) *InboxDispatch {
 	return &InboxDispatch{
 		handlers:          make(map[string]EmailHandler),
+		filters:           make(map[string]EmailFilterer),
 		emailResponder:    emailResponder,
 		responseSender:    responseSender,
 		escalationService: escalationService,
@@ -123,6 +126,42 @@ func (id *InboxDispatch) GetHandlerCount() int {
 	return len(id.handlers)
 }
 
+// RegisterFilter adds a new filter with the given ID.
+// If a filter with the same ID already exists, it will be replaced.
+// Returns an error if the id is empty or the filter is nil.
+func (id *InboxDispatch) RegisterFilter(filterID string, filter EmailFilterer) error {
+	if filterID == "" {
+		return fmt.Errorf("filter ID cannot be empty")
+	}
+	if filter == nil {
+		return fmt.Errorf("filter cannot be nil")
+	}
+	id.mu.Lock()
+	defer id.mu.Unlock()
+	id.filters[filterID] = filter
+	return nil
+}
+
+// DeregisterFilter removes a filter by ID
+// Returns true if the filter was found and removed, false otherwise
+func (id *InboxDispatch) DeregisterFilter(filterID string) bool {
+	id.mu.Lock()
+	defer id.mu.Unlock()
+
+	if _, exists := id.filters[filterID]; exists {
+		delete(id.filters, filterID)
+		return true
+	}
+	return false
+}
+
+// GetFilterCount returns the number of currently registered filters
+func (id *InboxDispatch) GetFilterCount() int {
+	id.mu.RLock()
+	defer id.mu.RUnlock()
+	return len(id.filters)
+}
+
 // HandleEmail implements inbox.EmailHandler and dispatches the email to all registered handlers.
 // It orchestrates the full email processing workflow including response generation and escalation.
 func (id *InboxDispatch) HandleEmail(ctx context.Context, email *inbox.Email) error {
@@ -135,9 +174,34 @@ func (id *InboxDispatch) HandleEmail(ctx context.Context, email *inbox.Email) er
 			"email_id", email.ID,
 			"from", email.From,
 			"subject", email.Subject,
+			"filter_count", id.GetFilterCount(),
 			"handler_count", id.GetHandlerCount(),
 			"response_enabled", id.IsResponseEnabled(),
 		)
+	}
+
+	// Process email through all filters first
+	shouldProcess, err := id.processFilters(ctx, email)
+	if err != nil {
+		if id.logger != nil {
+			id.logger.Error("filter processing failed",
+				"error", err,
+				"email_id", email.ID,
+				"from", email.From,
+			)
+		}
+		return fmt.Errorf("filter processing failed: %w", err)
+	}
+
+	if !shouldProcess {
+		if id.logger != nil {
+			id.logger.Info("email filtered out, skipping handler processing",
+				"email_id", email.ID,
+				"from", email.From,
+				"subject", email.Subject,
+			)
+		}
+		return nil
 	}
 
 	// Process email through all handlers
@@ -204,6 +268,83 @@ func (id *InboxDispatch) HandleEmail(ctx context.Context, email *inbox.Email) er
 	}
 
 	return nil
+}
+
+// processFilters runs all registered filters and returns whether the email should be processed
+func (id *InboxDispatch) processFilters(ctx context.Context, email *inbox.Email) (bool, error) {
+	id.mu.RLock()
+	filters := make([]EmailFilterer, 0, len(id.filters))
+	filterNames := make([]string, 0, len(id.filters))
+	for name, filter := range id.filters {
+		filters = append(filters, filter)
+		filterNames = append(filterNames, name)
+	}
+	id.mu.RUnlock()
+
+	if id.logger != nil {
+		id.logger.Debug("processing email through filters",
+			"email_id", email.ID,
+			"filter_count", len(filters),
+			"filter_names", filterNames,
+		)
+	}
+
+	// If no filters are registered, allow processing
+	if len(filters) == 0 {
+		return true, nil
+	}
+
+	// Run each filter - if any filter returns false, reject the email
+	for i, filter := range filters {
+		filterName := filterNames[i]
+		func() {
+			defer func() {
+				// Recover from panics and treat them as errors
+				if r := recover(); r != nil {
+					if id.logger != nil {
+						id.logger.Error("filter panic, allowing email through",
+							"filter_name", filterName,
+							"email_id", email.ID,
+							"panic", r,
+						)
+					}
+				}
+			}()
+		}()
+
+		shouldProcess, err := filter.ShouldProcess(ctx, email)
+		if err != nil {
+			if id.logger != nil {
+				id.logger.Error("filter error, allowing email through",
+					"filter_name", filterName,
+					"email_id", email.ID,
+					"error", err,
+				)
+			}
+			// Continue processing on filter errors (fail open)
+			continue
+		}
+
+		if !shouldProcess {
+			if id.logger != nil {
+				id.logger.Info("email rejected by filter",
+					"filter_name", filterName,
+					"email_id", email.ID,
+					"from", email.From,
+				)
+			}
+			return false, nil
+		}
+
+		if id.logger != nil {
+			id.logger.Debug("email passed filter",
+				"filter_name", filterName,
+				"email_id", email.ID,
+			)
+		}
+	}
+
+	return true, nil
 }
 
 // processHandlers runs all registered handlers and collects their results
