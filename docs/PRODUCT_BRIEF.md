@@ -1,10 +1,10 @@
 # Talent Rodeo Product Brief
 
 ## Executive Summary
-Talent Rodeo is an AI-powered recruitment platform that revolutionizes the job search and talent acquisition process through intelligent conversation and matchmaking. The platform leverages Large Language Models (LLMs) to create a personalized, high-touch experience for both job seekers and recruiters, facilitating meaningful connections through natural conversation and data-driven matching.
+Talent Rodeo is an AI-powered job search platform that revolutionizes how professionals find their next opportunity through three core value propositions: 1) We understand you better than anyone else through natural conversation that captures your career story beyond just your resume, 2) We filter out the noise by analyzing thousands of jobs daily to surface only opportunities worth your time and attention, and 3) We make sure you never miss your perfect opportunity through daily deep analysis and instant notifications. The platform leverages Large Language Models (LLMs) to create a personalized, high-touch experience that saves job seekers countless hours while ensuring they never miss their ideal role.
 
 ## Product Vision
-To create an intelligent recruitment platform that understands candidates beyond their resumes, builds lasting relationships through regular engagement, and makes precise matches between talent and opportunities.
+To create an intelligent job search platform that understands professionals through natural conversation rather than forms and keywords, filters signal from noise by analyzing thousands of daily job postings, and ensures candidates never miss their perfect opportunity through timely analysis and notifications.
 
 ## Target Market
 Primary users fall into two categories:
@@ -94,8 +94,8 @@ The system saves candidates many hours of reading job descriptions by pre-screen
 - Calendar integration for scheduling
 
 ## Revenue Model
-- Base service free for job seekers
-- Premium subscription for enhanced features
+- 7-day free trial with full access to all features
+- Premium subscription for continued access after trial
 - Per-introduction fee for recruiters
 - Success-based fees for placements
 - Enterprise pricing for high-volume recruiters
