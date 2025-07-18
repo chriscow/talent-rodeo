@@ -892,8 +892,9 @@ func (app *application) createInboxDispatch() (*internal.InboxDispatch, error) {
 
 	// Create held response service with default disabled configuration
 	holdCriteria := internal.DefaultHoldCriteria()
-	// Keep holding disabled by default for backward compatibility
-	holdCriteria.Enabled = false
+
+	holdCriteria.Enabled = true
+	holdCriteria.HoldAll = true // Hold everything for testing
 
 	holdEvaluator := internal.NewHoldDecisionEvaluator(holdCriteria)
 	heldResponseService := internal.NewHeldResponseService(app.fs, holdEvaluator, sender, app.logger)

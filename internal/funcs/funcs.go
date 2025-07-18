@@ -107,6 +107,9 @@ var TemplateFuncs = template.FuncMap{
 
 	// Sequence functions
 	"seq": seq,
+	
+	// Type conversion functions
+	"float64": toFloat64,
 }
 
 func formatTime(format string, t time.Time) string {
