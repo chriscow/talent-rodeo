@@ -587,15 +587,6 @@ func checkEnv(logger *slog.Logger, envFile string) error {
 
 		"STRIPE_SECRET_KEY", "STRIPE_PUBLISHABLE_KEY", "STRIPE_WEBHOOK_SECRET",
 
-		/*
-					SMTP_HOST="smtp.gmail.com"
-			SMTP_PORT="587"
-			SMTP_PASSWORD="dyvv xuge bbvp cisb"
-			SMTP_USERNAME="madcow@gmail.com"
-			# Example Name <no-reply@example.org>
-			SMTP_FROM="Shirely at Talent Rodeo <shirely@talent.rodeo>"
-		*/
-
 		"SMTP_USERNAME", "SMTP_PASSWORD",
 
 		"TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER",
