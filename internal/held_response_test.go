@@ -19,7 +19,7 @@ func TestHeldResponseStatus_IsValid(t *testing.T) {
 		{"invalid empty", HeldResponseStatus(""), false},
 		{"invalid unknown", HeldResponseStatus("unknown"), false},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := tt.status.IsValid(); got != tt.want {
@@ -38,7 +38,7 @@ func TestHeldResponse_IsValid(t *testing.T) {
 		ResponseBody:    "Test Body",
 		Status:          HeldResponseStatusPending,
 	}
-	
+
 	tests := []struct {
 		name    string
 		hr      *HeldResponse
@@ -97,7 +97,7 @@ func TestHeldResponse_IsValid(t *testing.T) {
 			Status:          HeldResponseStatus("invalid"),
 		}, true},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.hr.IsValid()
@@ -110,7 +110,7 @@ func TestHeldResponse_IsValid(t *testing.T) {
 
 func TestHeldResponse_IsExpired(t *testing.T) {
 	now := time.Now()
-	
+
 	tests := []struct {
 		name      string
 		expiresAt time.Time
@@ -120,7 +120,7 @@ func TestHeldResponse_IsExpired(t *testing.T) {
 		{"not expired - 1 hour from now", now.Add(1 * time.Hour), false},
 		{"expired - exactly now", now, true},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			hr := &HeldResponse{
@@ -146,11 +146,11 @@ func TestHeldResponse_StatusChecks(t *testing.T) {
 		{"revision status", HeldResponseStatusRevision, false, false, true},
 		{"expired status", HeldResponseStatusExpired, false, false, false},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			hr := &HeldResponse{Status: tt.status}
-			
+
 			if got := hr.IsPending(); got != tt.isPending {
 				t.Errorf("HeldResponse.IsPending() = %v, want %v", got, tt.isPending)
 			}
@@ -176,7 +176,7 @@ func TestHeldResponse_GetPreviewText(t *testing.T) {
 		{"empty body uses HTML", "", "<p>HTML content</p>", "<p>HTML content</p>"},
 		{"both present uses body", "Plain text", "<p>HTML content</p>", "Plain text"},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			hr := &HeldResponse{
@@ -197,7 +197,7 @@ func TestCreateHeldResponse(t *testing.T) {
 		t.Fatalf("Failed to create Firestore client: %v", err)
 	}
 	defer fs.Close()
-	
+
 	tests := []struct {
 		name    string
 		hr      *HeldResponse
@@ -221,14 +221,14 @@ func TestCreateHeldResponse(t *testing.T) {
 			Status:          HeldResponseStatusPending,
 		}, true},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := CreateHeldResponse(ctx, fs, tt.hr)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("CreateHeldResponse() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			
+
 			if err == nil && tt.hr != nil {
 				// Verify the held response was created with proper defaults
 				if tt.hr.ID == "" {
@@ -246,7 +246,7 @@ func TestCreateHeldResponse(t *testing.T) {
 				if tt.hr.ExpiresAt.IsZero() {
 					t.Error("Expected ExpiresAt to be set")
 				}
-				
+
 				// Clean up
 				_ = DeleteHeldResponse(ctx, fs, tt.hr.ID)
 			}
@@ -261,7 +261,7 @@ func TestGetHeldResponse(t *testing.T) {
 		t.Fatalf("Failed to create Firestore client: %v", err)
 	}
 	defer fs.Close()
-	
+
 	// Create a test held response
 	hr := &HeldResponse{
 		OriginalEmailID: "test-email-id",
@@ -271,13 +271,13 @@ func TestGetHeldResponse(t *testing.T) {
 		ResponseBody:    "Test Body",
 		Status:          HeldResponseStatusPending,
 	}
-	
+
 	err2 := CreateHeldResponse(ctx, fs, hr)
 	if err2 != nil {
 		t.Fatalf("Failed to create test held response: %v", err2)
 	}
 	defer DeleteHeldResponse(ctx, fs, hr.ID)
-	
+
 	tests := []struct {
 		name    string
 		id      string
@@ -288,7 +288,7 @@ func TestGetHeldResponse(t *testing.T) {
 		{"non-existent held response", "non-existent-id", false, false},
 		{"empty id", "", false, true},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, found, err := GetHeldResponse(ctx, fs, tt.id)
@@ -313,7 +313,7 @@ func TestUpdateHeldResponseStatus(t *testing.T) {
 		t.Fatalf("Failed to create Firestore client: %v", err)
 	}
 	defer fs.Close()
-	
+
 	// Create a test held response
 	hr := &HeldResponse{
 		OriginalEmailID: "test-email-id",
@@ -323,13 +323,13 @@ func TestUpdateHeldResponseStatus(t *testing.T) {
 		ResponseBody:    "Test Body",
 		Status:          HeldResponseStatusPending,
 	}
-	
+
 	err2 := CreateHeldResponse(ctx, fs, hr)
 	if err2 != nil {
 		t.Fatalf("Failed to create test held response: %v", err2)
 	}
 	defer DeleteHeldResponse(ctx, fs, hr.ID)
-	
+
 	tests := []struct {
 		name    string
 		id      string
@@ -340,14 +340,14 @@ func TestUpdateHeldResponseStatus(t *testing.T) {
 		{"invalid status", hr.ID, HeldResponseStatus("invalid"), true},
 		{"empty id", "", HeldResponseStatusApproved, true},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := UpdateHeldResponseStatus(ctx, fs, tt.id, tt.status)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("UpdateHeldResponseStatus() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			
+
 			if err == nil {
 				// Verify the status was updated
 				updated, found, err := GetHeldResponse(ctx, fs, tt.id)
@@ -372,7 +372,7 @@ func TestListHeldResponses(t *testing.T) {
 		t.Fatalf("Failed to create Firestore client: %v", err)
 	}
 	defer fs.Close()
-	
+
 	// Create test held responses
 	hr1 := &HeldResponse{
 		OriginalEmailID: "test-email-id-1",
@@ -390,29 +390,29 @@ func TestListHeldResponses(t *testing.T) {
 		ResponseBody:    "Test Body 2",
 		Status:          HeldResponseStatusApproved,
 	}
-	
+
 	err1 := CreateHeldResponse(ctx, fs, hr1)
 	if err1 != nil {
 		t.Fatalf("Failed to create test held response 1: %v", err1)
 	}
 	defer DeleteHeldResponse(ctx, fs, hr1.ID)
-	
+
 	err2 := CreateHeldResponse(ctx, fs, hr2)
 	if err2 != nil {
 		t.Fatalf("Failed to create test held response 2: %v", err2)
 	}
 	defer DeleteHeldResponse(ctx, fs, hr2.ID)
-	
+
 	// Add small delay to ensure ordering
 	time.Sleep(100 * time.Millisecond)
-	
+
 	tests := []struct {
-		name       string
-		status     HeldResponseStatus
-		limit      int
-		offset     int
-		wantCount  int
-		wantErr    bool
+		name      string
+		status    HeldResponseStatus
+		limit     int
+		offset    int
+		wantCount int
+		wantErr   bool
 	}{
 		{"all responses", "", 10, 0, 2, false},
 		{"pending only", HeldResponseStatusPending, 10, 0, 1, false},
@@ -420,7 +420,7 @@ func TestListHeldResponses(t *testing.T) {
 		{"with limit", "", 1, 0, 1, false},
 		{"with offset", "", 10, 1, 1, false},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := ListHeldResponses(ctx, fs, tt.status, tt.limit, tt.offset)
@@ -442,7 +442,7 @@ func TestGetPendingHeldResponses(t *testing.T) {
 		t.Fatalf("Failed to create Firestore client: %v", err)
 	}
 	defer fs.Close()
-	
+
 	// Create test held responses
 	hr1 := &HeldResponse{
 		OriginalEmailID: "test-email-id-1",
@@ -460,30 +460,30 @@ func TestGetPendingHeldResponses(t *testing.T) {
 		ResponseBody:    "Test Body 2",
 		Status:          HeldResponseStatusApproved,
 	}
-	
+
 	err1 := CreateHeldResponse(ctx, fs, hr1)
 	if err1 != nil {
 		t.Fatalf("Failed to create test held response 1: %v", err1)
 	}
 	defer DeleteHeldResponse(ctx, fs, hr1.ID)
-	
+
 	err2 := CreateHeldResponse(ctx, fs, hr2)
 	if err2 != nil {
 		t.Fatalf("Failed to create test held response 2: %v", err2)
 	}
 	defer DeleteHeldResponse(ctx, fs, hr2.ID)
-	
+
 	// Get pending responses
 	pending, err3 := GetPendingHeldResponses(ctx, fs)
 	if err3 != nil {
 		t.Fatalf("GetPendingHeldResponses() error = %v", err3)
 	}
-	
+
 	// Should only return the pending response
 	if len(pending) != 1 {
 		t.Errorf("Expected 1 pending response, got %v", len(pending))
 	}
-	
+
 	if len(pending) > 0 && pending[0].Status != HeldResponseStatusPending {
 		t.Errorf("Expected pending status, got %v", pending[0].Status)
 	}

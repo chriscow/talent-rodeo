@@ -32,7 +32,7 @@ Available statuses: pending, approved, revision, expired, all (default)`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
-		
+
 		// Get status filter
 		status := "all"
 		if len(args) > 0 {
@@ -93,7 +93,7 @@ Available statuses: pending, approved, revision, expired, all (default)`,
 		}
 
 		fmt.Printf("Found %d %s held response(s):\n\n", len(responses), status)
-		
+
 		for _, response := range responses {
 			fmt.Printf("ID: %s\n", response.ID)
 			fmt.Printf("  Status: %s\n", response.Status)
@@ -217,7 +217,7 @@ var detailHeldResponseCmd = &cobra.Command{
 		// Display detailed information
 		fmt.Printf("Held Response Details:\n")
 		fmt.Printf("======================\n\n")
-		
+
 		fmt.Printf("ID: %s\n", heldResponse.ID)
 		fmt.Printf("Status: %s\n", heldResponse.Status)
 		fmt.Printf("Created: %s\n", heldResponse.CreatedAt.Format("2006-01-02 15:04:05"))
@@ -311,9 +311,9 @@ var statsHeldResponseCmd = &cobra.Command{
 
 		fmt.Printf("Held Response Statistics:\n")
 		fmt.Printf("=========================\n\n")
-		
+
 		fmt.Printf("Total Responses: %d\n\n", totalResponses)
-		
+
 		if totalResponses > 0 {
 			fmt.Printf("Status Breakdown:\n")
 			fmt.Printf("-----------------\n")

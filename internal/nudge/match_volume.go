@@ -3,7 +3,7 @@ package nudge
 const (
 	HighVolumeMatchThreshold    = 10 // 10+ quality matches = high volume
 	TypicalVolumeMatchThreshold = 4  // 4-9 quality matches = typical volume
-	                                 // 3 or fewer quality matches = low volume
+	// 3 or fewer quality matches = low volume
 )
 
 // DetermineMatchVolumeCategory categorizes the number of quality matches

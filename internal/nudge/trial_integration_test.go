@@ -63,7 +63,7 @@ func TestTrialEmailSequenceIntegration(t *testing.T) {
 				t.Run(string(email.nudgeType), func(t *testing.T) {
 					// Calculate days remaining based on email day
 					daysRemaining := 7 - email.day
-					
+
 					// Build email data
 					emailData := &NudgeEmailData{
 						User:      user,
@@ -71,14 +71,14 @@ func TestTrialEmailSequenceIntegration(t *testing.T) {
 						FirstName: user.FirstName,
 						LastName:  user.LastName,
 						FullName:  user.Name,
-						
+
 						// Trial-specific data
 						TrialStartDateUser:  formatTimeForUser(trialStartTime, timezone),
 						TrialEndDateUser:    formatTimeForUser(trialEndTime, timezone),
 						DaysRemaining:       daysRemaining,
 						HighQualityMatches:  scenario.highQualityMatches,
 						MatchVolumeCategory: DetermineMatchVolumeCategory(scenario.highQualityMatches),
-						
+
 						// Standard fields
 						LastAccessed:    time.Now().Add(-24 * time.Hour),
 						LastStateChange: time.Now().Add(-48 * time.Hour),
@@ -238,13 +238,13 @@ func TestTrialEmailSequenceFlow(t *testing.T) {
 				FirstName: user.FirstName,
 				LastName:  user.LastName,
 				FullName:  user.Name,
-				
+
 				TrialStartDateUser:  formatTimeForUser(trialStartTime, timezone),
 				TrialEndDateUser:    formatTimeForUser(trialEndTime, timezone),
 				DaysRemaining:       daysRemaining,
 				HighQualityMatches:  qualityMatches,
 				MatchVolumeCategory: DetermineMatchVolumeCategory(qualityMatches),
-				
+
 				LastAccessed:    currentTime.Add(-1 * time.Hour),
 				LastStateChange: currentTime.Add(-2 * time.Hour),
 			}
@@ -302,10 +302,10 @@ func TestTrialEmailDataValidation(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name            string
-		qualityMatches  int
-		daysRemaining   int
-		expectedValid   bool
+		name             string
+		qualityMatches   int
+		daysRemaining    int
+		expectedValid    bool
 		expectedCategory string
 	}{
 		{"Zero matches", 0, 5, true, "low"},
@@ -328,13 +328,13 @@ func TestTrialEmailDataValidation(t *testing.T) {
 				FirstName: user.FirstName,
 				LastName:  user.LastName,
 				FullName:  user.Name,
-				
+
 				TrialStartDateUser:  formatTimeForUser(trialStartTime, timezone),
 				TrialEndDateUser:    formatTimeForUser(trialEndTime, timezone),
 				DaysRemaining:       tc.daysRemaining,
 				HighQualityMatches:  tc.qualityMatches,
 				MatchVolumeCategory: DetermineMatchVolumeCategory(tc.qualityMatches),
-				
+
 				LastAccessed:    time.Now().Add(-1 * time.Hour),
 				LastStateChange: time.Now().Add(-2 * time.Hour),
 			}

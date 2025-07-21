@@ -225,7 +225,7 @@ func validateEmailParser(cmd *cobra.Command, args []string) error {
 
 	// Run validation test suite
 	testCases := getValidationTestCases()
-	
+
 	fmt.Printf("Running email parser validation suite...\n")
 	fmt.Printf("Test cases: %d\n", len(testCases))
 	fmt.Printf("This will make real LLM API calls and may incur costs.\n\n")
@@ -235,7 +235,7 @@ func validateEmailParser(cmd *cobra.Command, args []string) error {
 
 	for i, tc := range testCases {
 		fmt.Printf("[%d/%d] Testing: %s\n", i+1, len(testCases), tc.Name)
-		
+
 		result := ValidationResult{
 			Name:      tc.Name,
 			Success:   false,
@@ -266,7 +266,7 @@ func validateEmailParser(cmd *cobra.Command, args []string) error {
 
 	// Output summary
 	successRate := float64(successCount) / float64(len(testCases)) * 100
-	
+
 	fmt.Printf("\n=== VALIDATION RESULTS ===\n")
 	fmt.Printf("Total tests: %d\n", len(testCases))
 	fmt.Printf("Passed: %d\n", successCount)
@@ -304,7 +304,7 @@ func runInteractiveEmailParser(ctx context.Context, parser internal.EmailParser)
 	fmt.Printf("Subject: ")
 	var subject string
 	fmt.Scanln(&subject)
-	
+
 	fmt.Printf("Body (enter empty line to finish):\n")
 	for {
 		var line string
@@ -341,7 +341,7 @@ func runInteractiveEmailParser(ctx context.Context, parser internal.EmailParser)
 
 func outputEmailStructureHuman(structure *internal.EmailStructure) error {
 	fmt.Printf("=== PARSING RESULTS ===\n\n")
-	
+
 	fmt.Printf("📋 REQUESTS (%d):\n", len(structure.Requests))
 	for i, req := range structure.Requests {
 		fmt.Printf("  %d. [%s] %s\n", i+1, req.Type, req.Description)
@@ -365,7 +365,7 @@ func outputEmailStructureHuman(structure *internal.EmailStructure) error {
 
 	totalItems := len(structure.Requests) + len(structure.GeneralFeedback) + len(structure.NonRequests)
 	fmt.Printf("Total items extracted: %d\n", totalItems)
-	
+
 	return nil
 }
 
@@ -378,7 +378,7 @@ func outputEmailStructureJSON(structure *internal.EmailStructure) error {
 			"requests":         len(structure.Requests),
 			"general_feedback": len(structure.GeneralFeedback),
 			"non_requests":     len(structure.NonRequests),
-			"total":           len(structure.Requests) + len(structure.GeneralFeedback) + len(structure.NonRequests),
+			"total":            len(structure.Requests) + len(structure.GeneralFeedback) + len(structure.NonRequests),
 		},
 	}
 
@@ -429,12 +429,12 @@ type ExpectedCounts struct {
 
 // ValidationResult represents the result of a validation test
 type ValidationResult struct {
-	Name      string                    `json:"name"`
-	Success   bool                      `json:"success"`
-	Error     string                    `json:"error,omitempty"`
-	StartTime time.Time                 `json:"start_time"`
-	Duration  time.Duration             `json:"duration"`
-	Structure *internal.EmailStructure  `json:"structure,omitempty"`
+	Name      string                   `json:"name"`
+	Success   bool                     `json:"success"`
+	Error     string                   `json:"error,omitempty"`
+	StartTime time.Time                `json:"start_time"`
+	Duration  time.Duration            `json:"duration"`
+	Structure *internal.EmailStructure `json:"structure,omitempty"`
 }
 
 func getValidationTestCases() []ValidationTestCase {
@@ -504,11 +504,11 @@ Happy User`,
 
 func validateTestCase(tc ValidationTestCase, structure *internal.EmailStructure) bool {
 	tolerance := tc.ExpectedCounts.Tolerance
-	
+
 	requestDiff := abs(len(structure.Requests) - tc.ExpectedCounts.Requests)
 	feedbackDiff := abs(len(structure.GeneralFeedback) - tc.ExpectedCounts.Feedback)
 	nonReqDiff := abs(len(structure.NonRequests) - tc.ExpectedCounts.NonReq)
-	
+
 	return requestDiff <= tolerance && feedbackDiff <= tolerance && nonReqDiff <= tolerance
 }
 
@@ -598,9 +598,9 @@ func batchTestEmailParser(cmd *cobra.Command, args []string) error {
 		lines := strings.Split(string(content), "\n")
 		subject := "Test email"
 		body := string(content)
-		
+
 		if len(lines) > 0 && strings.HasPrefix(lines[0], "Subject:") {
-			subject = strings.TrimPrefix(lines[0], "Subject:") 
+			subject = strings.TrimPrefix(lines[0], "Subject:")
 			subject = strings.TrimSpace(subject)
 			if len(lines) > 1 {
 				body = strings.Join(lines[1:], "\n")
@@ -641,7 +641,7 @@ func batchTestEmailParser(cmd *cobra.Command, args []string) error {
 				Total:       total,
 			}
 
-			fmt.Printf("  ✅ PASSED: %d requests, %d feedback, %d non-requests (%d total)\n", 
+			fmt.Printf("  ✅ PASSED: %d requests, %d feedback, %d non-requests (%d total)\n",
 				requests, feedback, nonReq, total)
 		}
 
@@ -650,7 +650,7 @@ func batchTestEmailParser(cmd *cobra.Command, args []string) error {
 
 	// Output summary
 	successRate := float64(successCount) / float64(len(files)) * 100
-	
+
 	fmt.Printf("\n📊 BATCH TEST SUMMARY\n")
 	fmt.Printf("====================\n")
 	fmt.Printf("Total files: %d\n", len(files))
@@ -677,7 +677,7 @@ func batchTestEmailParser(cmd *cobra.Command, args []string) error {
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Summary.Total > results[j].Summary.Total
 	})
-	
+
 	for i, result := range results {
 		if i >= 5 || !result.Success { // Show top 5 successful results
 			break
@@ -697,14 +697,14 @@ func batchTestEmailParser(cmd *cobra.Command, args []string) error {
 
 // BatchTestResult represents the result of testing a single email file
 type BatchTestResult struct {
-	Filename  string                    `json:"filename"`
-	FilePath  string                    `json:"file_path"`
-	Success   bool                      `json:"success"`
-	Error     string                    `json:"error,omitempty"`
-	StartTime time.Time                 `json:"start_time"`
-	Duration  time.Duration             `json:"duration"`
-	Structure *internal.EmailStructure  `json:"structure,omitempty"`
-	Summary   BatchTestSummary          `json:"summary"`
+	Filename  string                   `json:"filename"`
+	FilePath  string                   `json:"file_path"`
+	Success   bool                     `json:"success"`
+	Error     string                   `json:"error,omitempty"`
+	StartTime time.Time                `json:"start_time"`
+	Duration  time.Duration            `json:"duration"`
+	Structure *internal.EmailStructure `json:"structure,omitempty"`
+	Summary   BatchTestSummary         `json:"summary"`
 }
 
 // BatchTestSummary provides a summary of parsing results
@@ -718,7 +718,7 @@ type BatchTestSummary struct {
 func outputBatchResultsJSON(results []BatchTestResult) error {
 	output := map[string]interface{}{
 		"batch_test_results": results,
-		"summary": calculateBatchSummary(results),
+		"summary":            calculateBatchSummary(results),
 	}
 
 	encoder := json.NewEncoder(os.Stdout)
@@ -747,14 +747,14 @@ func calculateBatchSummary(results []BatchTestResult) map[string]interface{} {
 	successRate := float64(successCount) / float64(totalFiles) * 100
 
 	return map[string]interface{}{
-		"total_files":       totalFiles,
-		"successful_files":  successCount,
-		"failed_files":      totalFiles - successCount,
-		"success_rate":      successRate,
-		"total_requests":    totalRequests,
-		"total_feedback":    totalFeedback,
+		"total_files":        totalFiles,
+		"successful_files":   successCount,
+		"failed_files":       totalFiles - successCount,
+		"success_rate":       successRate,
+		"total_requests":     totalRequests,
+		"total_feedback":     totalFeedback,
 		"total_non_requests": totalNonRequests,
-		"total_items":       totalItems,
+		"total_items":        totalItems,
 		"avg_items_per_email": func() float64 {
 			if successCount > 0 {
 				return float64(totalItems) / float64(successCount)

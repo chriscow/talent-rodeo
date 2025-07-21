@@ -1482,7 +1482,7 @@ func (app *application) adminHeldResponses(w http.ResponseWriter, r *http.Reques
 	// Define available statuses for filtering
 	data["HeldResponseStatuses"] = []string{
 		"pending",
-		"approved", 
+		"approved",
 		"revision",
 		"expired",
 	}
@@ -1652,7 +1652,7 @@ func (app *application) adminHeldResponseStats(w http.ResponseWriter, r *http.Re
 
 	// Calculate statistics
 	totalResponses := len(pendingResponses) + len(approvedResponses) + len(revisionResponses) + len(expiredResponses)
-	
+
 	var pendingPercentage, approvedPercentage, revisionPercentage, expiredPercentage float64
 	if totalResponses > 0 {
 		pendingPercentage = float64(len(pendingResponses)) / float64(totalResponses) * 100

@@ -30,11 +30,11 @@ func (m *mockMailer) SendFromTemplate(recipient string, data any, patterns ...st
 
 func TestSendNotification(t *testing.T) {
 	tests := []struct {
-		name           string
-		templateName   string
-		data           map[string]any
-		expectSend     bool
-		expectError    bool
+		name              string
+		templateName      string
+		data              map[string]any
+		expectSend        bool
+		expectError       bool
 		notificationEmail string
 	}{
 		{
@@ -149,7 +149,7 @@ func TestSendNotificationIntegration(t *testing.T) {
 	// Create a real mailer for integration testing
 	// This would use the actual SMTP configuration
 	ts := newTestServer(t, "sendnotification")
-	
+
 	// Set up a mock mailer for integration testing since we don't want to send real emails
 	// but we want to test the full flow
 	var sentEmails []struct {
@@ -157,7 +157,7 @@ func TestSendNotificationIntegration(t *testing.T) {
 		data      any
 		patterns  []string
 	}
-	
+
 	ts.app.mailer = &mockMailer{
 		sendFromTemplateFunc: func(recipient string, data any, patterns ...string) error {
 			sentEmails = append(sentEmails, struct {
@@ -168,19 +168,19 @@ func TestSendNotificationIntegration(t *testing.T) {
 			return nil
 		},
 	}
-	
+
 	// Override the notification email for testing
 	ts.app.config.notifications.email = notificationEmail
 
 	// Test data for user creation notification
 	testData := map[string]any{
-		"UserID":     "test-user-123",
-		"Email":      "testuser@example.com",
-		"Name":       "Test User",
-		"Provider":   "linkedin",
-		"Location":   "Seattle, WA",
-		"AvatarURL":  "https://example.com/avatar.jpg",
-		"CreatedAt":  "2023-01-01T00:00:00Z",
+		"UserID":    "test-user-123",
+		"Email":     "testuser@example.com",
+		"Name":      "Test User",
+		"Provider":  "linkedin",
+		"Location":  "Seattle, WA",
+		"AvatarURL": "https://example.com/avatar.jpg",
+		"CreatedAt": "2023-01-01T00:00:00Z",
 	}
 
 	// Send actual notification
@@ -193,11 +193,11 @@ func TestSendNotificationIntegration(t *testing.T) {
 	if len(sentEmails) != 1 {
 		t.Fatalf("expected 1 email to be sent, got %d", len(sentEmails))
 	}
-	
+
 	if sentEmails[0].recipient != notificationEmail {
 		t.Errorf("expected recipient %s, got %s", notificationEmail, sentEmails[0].recipient)
 	}
-	
+
 	if len(sentEmails[0].patterns) != 1 || sentEmails[0].patterns[0] != "user-created.html" {
 		t.Errorf("expected patterns [user-created.html], got %v", sentEmails[0].patterns)
 	}

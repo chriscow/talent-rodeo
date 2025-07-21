@@ -396,16 +396,132 @@ Examples:
 	},
 }
 
+var userJobsStatsCmd = &cobra.Command{
+	Use:   "stats <user-id>",
+	Short: "Show cumulative job statistics for debugging dashboard stats",
+	Long: `Display cumulative job statistics for a user to debug dashboard calculations.
+
+Shows quality jobs count (4-5 star ratings), rejected jobs count (3 stars or lower 
+OR archived/dismissed), and verifies that the math adds up correctly.
+
+This command helps debug the dashboard job statistics by showing:
+- Total user jobs count
+- Quality jobs count (rating >= 4)
+- Rejected jobs count (rating < 4 OR archived/dismissed) 
+- Verification that Quality + Rejected = Total
+
+Examples:
+  trcli userjobs stats user123                        # Show stats summary
+  trcli userjobs stats user123 --detailed             # Show breakdown by rating and status`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		userID := args[0]
+		detailed, _ := cmd.Flags().GetBool("detailed")
+		ctx := context.Background()
+
+		fs, err := internal.NewFirestoreClient(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to create Firestore client: %w", err)
+		}
+		defer fs.Close()
+
+		// Verify user exists
+		user, found, err := internal.GetUser(ctx, fs, userID)
+		if err != nil {
+			return fmt.Errorf("failed to get user: %w", err)
+		}
+		if !found {
+			return fmt.Errorf("user %s not found", userID)
+		}
+
+		// Get total jobs count
+		allJobs, err := internal.ListUserJobs(ctx, fs, userID)
+		if err != nil {
+			return fmt.Errorf("failed to list user jobs: %w", err)
+		}
+		totalJobs := len(allJobs)
+
+		// Get quality jobs count using our new function
+		qualityCount, err := internal.GetUserJobsQualityCount(ctx, fs, userID)
+		if err != nil {
+			return fmt.Errorf("failed to get quality jobs count: %w", err)
+		}
+
+		// Get rejected jobs count using our new function
+		rejectedCount, err := internal.GetUserJobsRejectedCount(ctx, fs, userID)
+		if err != nil {
+			return fmt.Errorf("failed to get rejected jobs count: %w", err)
+		}
+
+		fmt.Printf("User Job Statistics for %s (%s)\n", user.Name, userID)
+		fmt.Printf("==========================================\n")
+		fmt.Printf("Total Jobs:     %d\n", totalJobs)
+		fmt.Printf("Quality Jobs:   %d (4-5 star ratings)\n", qualityCount)
+		fmt.Printf("Rejected Jobs:  %d (≤3 stars OR archived/dismissed)\n", rejectedCount)
+		fmt.Printf("------------------------------------------\n")
+
+		mathCheck := int64(totalJobs) == qualityCount+rejectedCount
+		if mathCheck {
+			fmt.Printf("Math Check:     ✓ PASS (%d + %d = %d)\n", qualityCount, rejectedCount, totalJobs)
+		} else {
+			fmt.Printf("Math Check:     ✗ FAIL (%d + %d = %d, expected %d)\n",
+				qualityCount, rejectedCount, qualityCount+rejectedCount, totalJobs)
+		}
+
+		if detailed && totalJobs > 0 {
+			fmt.Printf("\nDetailed Breakdown:\n")
+			fmt.Printf("==========================================\n")
+
+			// Count by rating
+			ratingCounts := make(map[int]int)
+			statusCounts := make(map[string]int)
+
+			for _, job := range allJobs {
+				ratingCounts[job.Rating]++
+				statusCounts[string(job.Status)]++
+			}
+
+			fmt.Printf("By Rating:\n")
+			for rating := 5; rating >= 0; rating-- {
+				count := ratingCounts[rating]
+				if count > 0 {
+					qualityMarker := ""
+					if rating >= internal.QualityJobRatingThreshold {
+						qualityMarker = " (Quality)"
+					} else {
+						qualityMarker = " (Rejected)"
+					}
+					fmt.Printf("  %d stars: %d jobs%s\n", rating, count, qualityMarker)
+				}
+			}
+
+			fmt.Printf("\nBy Status:\n")
+			for status, count := range statusCounts {
+				rejectedMarker := ""
+				if status == string(internal.JobStatusArchived) || status == string(internal.JobStatusDismissed) {
+					rejectedMarker = " (Rejected)"
+				}
+				fmt.Printf("  %s: %d jobs%s\n", status, count, rejectedMarker)
+			}
+		}
+
+		return nil
+	},
+}
+
 func init() {
 	userJobsFollowupCmd.Flags().Bool("dump", false, "Dump all follow-up questions, one per line")
 
 	listUserJobsCmd.Flags().Bool("json", false, "Output in JSON format")
+
+	userJobsStatsCmd.Flags().Bool("detailed", false, "Show detailed breakdown by rating and status")
 
 	userJobsUpdateCmd.Flags().BoolP("all", "a", false, "Update ratings for all users")
 
 	userJobsCmd.AddCommand(userJobsUpdateCmd)
 	userJobsCmd.AddCommand(updateUserJobCmd)
 	userJobsCmd.AddCommand(deleteUserJobCmd)
+	userJobsCmd.AddCommand(userJobsStatsCmd)
 	updateUserJobCmd.Flags().StringP("id", "i", "", "Job ID to update")
 	updateUserJobCmd.Flags().StringP("status", "s", "", "Update job status (viewed, saved, applied, archived)")
 	updateUserJobCmd.Flags().StringP("notes", "n", "", "Update job notes")

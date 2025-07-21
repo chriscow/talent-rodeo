@@ -112,7 +112,7 @@ Examples:
 	}
 
 	isRequest := strings.ToUpper(decision) == "YES"
-	
+
 	c.logger.Info("email analysis completed",
 		"email_id", email.ID,
 		"is_search_request", isRequest,
@@ -332,12 +332,12 @@ func (h *InboxFeedbackHandler) HandleEmail(ctx context.Context, email *inbox.Ema
 		"from", email.From)
 
 	return &inbox.HandlingResult{
-		Handled:  true,
-		Summary:  fmt.Sprintf("Updated search preferences: %s", adjustmentSummary),
+		Handled: true,
+		Summary: fmt.Sprintf("Updated search preferences: %s", adjustmentSummary),
 		Metadata: map[string]interface{}{
-			"user_email":          email.From,
-			"adjustment_summary":  adjustmentSummary,
-			"email_subject":       email.Subject,
+			"user_email":         email.From,
+			"adjustment_summary": adjustmentSummary,
+			"email_subject":      email.Subject,
 		},
 	}, nil
 }

@@ -2,41 +2,41 @@ package internal
 
 import (
 	"context"
-	"time"
 	"talent-rodeo/internal/inbox"
+	"time"
 )
 
 // HoldCriteria defines criteria for when to hold an email response
 type HoldCriteria struct {
 	// Enable/disable holding responses
 	Enabled bool
-	
+
 	// Hold all responses regardless of content
 	HoldAll bool
-	
+
 	// Hold responses with escalated items
 	HoldEscalations bool
-	
+
 	// Hold responses for specific users (by email)
 	HoldUserEmails []string
-	
+
 	// Hold responses containing specific keywords
 	HoldKeywords []string
-	
+
 	// Hold responses based on response type
-	HoldConfirmations bool
-	HoldPartialResponses bool
+	HoldConfirmations       bool
+	HoldPartialResponses    bool
 	HoldEscalationResponses bool
-	
+
 	// Hold responses during specific time periods
-	HoldAfterHours bool
+	HoldAfterHours     bool
 	BusinessHoursStart int // 0-23
 	BusinessHoursEnd   int // 0-23
-	
+
 	// Hold responses with high confidence/quality scores
-	HoldHighConfidence bool
+	HoldHighConfidence  bool
 	ConfidenceThreshold float64
-	
+
 	// Auto-expire settings
 	DefaultExpirationHours int
 	MaxExpirationHours     int
@@ -47,19 +47,19 @@ func DefaultHoldCriteria() HoldCriteria {
 	return HoldCriteria{
 		Enabled:                 false, // Disabled by default
 		HoldAll:                 false,
-		HoldEscalations:         true,  // Hold responses with escalations
+		HoldEscalations:         true, // Hold responses with escalations
 		HoldUserEmails:          []string{},
 		HoldKeywords:            []string{},
 		HoldConfirmations:       false,
-		HoldPartialResponses:    true,  // Hold partial responses
-		HoldEscalationResponses: true,  // Hold escalation responses
+		HoldPartialResponses:    true, // Hold partial responses
+		HoldEscalationResponses: true, // Hold escalation responses
 		HoldAfterHours:          false,
-		BusinessHoursStart:      9,     // 9 AM
-		BusinessHoursEnd:        17,    // 5 PM
+		BusinessHoursStart:      9,  // 9 AM
+		BusinessHoursEnd:        17, // 5 PM
 		HoldHighConfidence:      false,
 		ConfidenceThreshold:     0.8,
-		DefaultExpirationHours:  24,    // 24 hours
-		MaxExpirationHours:      72,    // 3 days
+		DefaultExpirationHours:  24, // 24 hours
+		MaxExpirationHours:      72, // 3 days
 	}
 }
 
@@ -102,7 +102,7 @@ func (hde *HoldDecisionEvaluator) EvaluateHoldDecision(ctx context.Context, cont
 			Criteria:   "disabled",
 		}
 	}
-	
+
 	// Check if we should hold all responses
 	if hde.criteria.HoldAll {
 		return HoldDecision{
@@ -112,32 +112,32 @@ func (hde *HoldDecisionEvaluator) EvaluateHoldDecision(ctx context.Context, cont
 			ExpiresAt:  context.Timestamp.Add(time.Duration(hde.criteria.DefaultExpirationHours) * time.Hour),
 		}
 	}
-	
+
 	// Check response type criteria
 	if decision := hde.evaluateResponseType(context); decision.ShouldHold {
 		return decision
 	}
-	
+
 	// Check user email criteria
 	if decision := hde.evaluateUserEmail(context); decision.ShouldHold {
 		return decision
 	}
-	
+
 	// Check keyword criteria
 	if decision := hde.evaluateKeywords(context); decision.ShouldHold {
 		return decision
 	}
-	
+
 	// Check business hours criteria
 	if decision := hde.evaluateBusinessHours(context); decision.ShouldHold {
 		return decision
 	}
-	
+
 	// Check escalation criteria
 	if decision := hde.evaluateEscalations(context); decision.ShouldHold {
 		return decision
 	}
-	
+
 	// Default: don't hold
 	return HoldDecision{
 		ShouldHold: false,
@@ -177,7 +177,7 @@ func (hde *HoldDecisionEvaluator) evaluateResponseType(context HoldDecisionConte
 			}
 		}
 	}
-	
+
 	return HoldDecision{ShouldHold: false}
 }
 
@@ -193,14 +193,14 @@ func (hde *HoldDecisionEvaluator) evaluateUserEmail(context HoldDecisionContext)
 			}
 		}
 	}
-	
+
 	return HoldDecision{ShouldHold: false}
 }
 
 // evaluateKeywords checks if response contains keywords that should be held
 func (hde *HoldDecisionEvaluator) evaluateKeywords(context HoldDecisionContext) HoldDecision {
 	responseText := context.Response.Body + " " + context.Response.HTMLBody
-	
+
 	for _, keyword := range hde.criteria.HoldKeywords {
 		if keyword != "" && contains(responseText, keyword) {
 			return HoldDecision{
@@ -211,7 +211,7 @@ func (hde *HoldDecisionEvaluator) evaluateKeywords(context HoldDecisionContext) 
 			}
 		}
 	}
-	
+
 	return HoldDecision{ShouldHold: false}
 }
 
@@ -220,7 +220,7 @@ func (hde *HoldDecisionEvaluator) evaluateBusinessHours(context HoldDecisionCont
 	if !hde.criteria.HoldAfterHours {
 		return HoldDecision{ShouldHold: false}
 	}
-	
+
 	hour := context.Timestamp.Hour()
 	if hour < hde.criteria.BusinessHoursStart || hour >= hde.criteria.BusinessHoursEnd {
 		return HoldDecision{
@@ -230,7 +230,7 @@ func (hde *HoldDecisionEvaluator) evaluateBusinessHours(context HoldDecisionCont
 			ExpiresAt:  context.Timestamp.Add(time.Duration(hde.criteria.DefaultExpirationHours) * time.Hour),
 		}
 	}
-	
+
 	return HoldDecision{ShouldHold: false}
 }
 
@@ -239,7 +239,7 @@ func (hde *HoldDecisionEvaluator) evaluateEscalations(context HoldDecisionContex
 	if !hde.criteria.HoldEscalations {
 		return HoldDecision{ShouldHold: false}
 	}
-	
+
 	if context.Response.EscalatedCount() > 0 {
 		return HoldDecision{
 			ShouldHold: true,
@@ -248,7 +248,7 @@ func (hde *HoldDecisionEvaluator) evaluateEscalations(context HoldDecisionContex
 			ExpiresAt:  context.Timestamp.Add(time.Duration(hde.criteria.DefaultExpirationHours) * time.Hour),
 		}
 	}
-	
+
 	return HoldDecision{ShouldHold: false}
 }
 
@@ -257,7 +257,7 @@ func contains(haystack, needle string) bool {
 	if len(needle) == 0 {
 		return false
 	}
-	
+
 	// Simple case-insensitive substring search
 	for i := 0; i <= len(haystack)-len(needle); i++ {
 		match := true

@@ -33,7 +33,7 @@ func TestRealCallSuccessEvaluationBug(t *testing.T) {
 	} else {
 		endReason = "unknown"
 	}
-	
+
 	// Create the analysis structure based on the real call data
 	var analysis *vapi.Analysis
 	if call.Analysis != nil {
@@ -201,7 +201,7 @@ func TestSuccessEvaluationPrecedence(t *testing.T) {
 			description: "AI determined call failed despite assistant ending it",
 		},
 		{
-			name:        "Override Customer Ended with Bool False", 
+			name:        "Override Customer Ended with Bool False",
 			endReason:   "customer-ended-call",
 			successEval: false,
 			shouldFail:  true,
@@ -248,7 +248,7 @@ func TestSuccessEvaluationPrecedence(t *testing.T) {
 		// Cases where both agree on failure
 		{
 			name:        "Both Indicate Failure - Voicemail",
-			endReason:   "voicemail", 
+			endReason:   "voicemail",
 			successEval: false,
 			shouldFail:  true,
 			description: "Both end reason and AI agree on failure",
@@ -273,7 +273,7 @@ func TestSuccessEvaluationPrecedence(t *testing.T) {
 				t.Errorf("PRECEDENCE FAILURE: %s", tc.description)
 				t.Errorf("Expected shouldProcessFailure=%v, got %v", tc.shouldFail, shouldProcessFailure)
 				t.Errorf("End reason: %s, Success evaluation: %v (%T)", tc.endReason, tc.successEval, tc.successEval)
-				
+
 				if tc.shouldFail {
 					t.Errorf("This call should result in FAILED appointment status")
 				} else {

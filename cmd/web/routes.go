@@ -37,7 +37,7 @@ func (app *application) routes() http.Handler {
 	// VAPI webhook endpoint
 	mux.HandleFunc("/vapi/outbound-call", app.makeOutboundCall, "POST")
 	mux.HandleFunc("/webhooks/vapi", app.handleVapiWebhook, "POST")
-	
+
 	// Stripe webhook endpoint (no CSRF protection needed)
 	mux.HandleFunc("/webhooks/stripe", app.stripeWebhookPost, "POST")
 

@@ -295,6 +295,143 @@ func GetJobsCount(ctx context.Context, fs *FirestoreClient, userID string, statu
 	return countValue.GetIntegerValue(), nil
 }
 
+// GetUserJobsQualityCount returns the count of all user jobs with rating >= QualityJobRatingThreshold (4 stars or higher)
+func GetUserJobsQualityCount(ctx context.Context, fs *FirestoreClient, userID string) (int64, error) {
+	if fs == nil {
+		return 0, fmt.Errorf("firestore client is nil")
+	}
+	if userID == "" {
+		return 0, fmt.Errorf("user ID is required")
+	}
+
+	query := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).
+		Where("Rating", ">=", QualityJobRatingThreshold)
+
+	// Use the more efficient aggregation query
+	aggregationQuery := query.NewAggregationQuery().WithCount("count")
+	results, err := aggregationQuery.Get(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get quality jobs count: %w", err)
+	}
+
+	// Extract the count from the results using the "count" alias
+	countResult, ok := results["count"]
+	if !ok {
+		return 0, fmt.Errorf("count not found in aggregation results")
+	}
+
+	// Convert the result to the correct type and extract the integer value
+	countValue := countResult.(*firestorepb.Value)
+	return countValue.GetIntegerValue(), nil
+}
+
+// GetUserJobsRejectedCount returns the count of all user jobs with rating < QualityJobRatingThreshold (3 stars or lower)
+// OR jobs with archived/dismissed status. These represent jobs that are "filtered out" or rejected.
+func GetUserJobsRejectedCount(ctx context.Context, fs *FirestoreClient, userID string) (int64, error) {
+	if fs == nil {
+		return 0, fmt.Errorf("firestore client is nil")
+	}
+	if userID == "" {
+		return 0, fmt.Errorf("user ID is required")
+	}
+
+	// We need to count jobs that match either condition:
+	// 1. Rating < QualityJobRatingThreshold (3 stars or lower)
+	// 2. Status is archived or dismissed
+	// Since Firestore doesn't support OR queries directly, we'll make separate queries and combine
+
+	// Count jobs with low rating (< 4 stars)
+	lowRatingQuery := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).
+		Where("Rating", "<", QualityJobRatingThreshold)
+
+	lowRatingAggQuery := lowRatingQuery.NewAggregationQuery().WithCount("count")
+	lowRatingResults, err := lowRatingAggQuery.Get(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get low rating jobs count: %w", err)
+	}
+
+	lowRatingCountResult, ok := lowRatingResults["count"]
+	if !ok {
+		return 0, fmt.Errorf("count not found in low rating aggregation results")
+	}
+	lowRatingCount := lowRatingCountResult.(*firestorepb.Value).GetIntegerValue()
+
+	// Count jobs with archived status
+	archivedQuery := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).
+		Where("Status", "==", string(JobStatusArchived))
+
+	archivedAggQuery := archivedQuery.NewAggregationQuery().WithCount("count")
+	archivedResults, err := archivedAggQuery.Get(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get archived jobs count: %w", err)
+	}
+
+	archivedCountResult, ok := archivedResults["count"]
+	if !ok {
+		return 0, fmt.Errorf("count not found in archived aggregation results")
+	}
+	archivedCount := archivedCountResult.(*firestorepb.Value).GetIntegerValue()
+
+	// Count jobs with dismissed status
+	dismissedQuery := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).
+		Where("Status", "==", string(JobStatusDismissed))
+
+	dismissedAggQuery := dismissedQuery.NewAggregationQuery().WithCount("count")
+	dismissedResults, err := dismissedAggQuery.Get(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get dismissed jobs count: %w", err)
+	}
+
+	dismissedCountResult, ok := dismissedResults["count"]
+	if !ok {
+		return 0, fmt.Errorf("count not found in dismissed aggregation results")
+	}
+	dismissedCount := dismissedCountResult.(*firestorepb.Value).GetIntegerValue()
+
+	// We need to handle potential overlap: jobs that are both low-rating AND archived/dismissed
+	// Get the overlap to avoid double-counting
+
+	// Count low-rating archived jobs
+	lowArchivedQuery := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).
+		Where("Rating", "<", QualityJobRatingThreshold).
+		Where("Status", "==", string(JobStatusArchived))
+
+	lowArchivedAggQuery := lowArchivedQuery.NewAggregationQuery().WithCount("count")
+	lowArchivedResults, err := lowArchivedAggQuery.Get(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get low rating archived jobs count: %w", err)
+	}
+
+	lowArchivedCountResult, ok := lowArchivedResults["count"]
+	if !ok {
+		return 0, fmt.Errorf("count not found in low rating archived aggregation results")
+	}
+	lowArchivedCount := lowArchivedCountResult.(*firestorepb.Value).GetIntegerValue()
+
+	// Count low-rating dismissed jobs
+	lowDismissedQuery := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).
+		Where("Rating", "<", QualityJobRatingThreshold).
+		Where("Status", "==", string(JobStatusDismissed))
+
+	lowDismissedAggQuery := lowDismissedQuery.NewAggregationQuery().WithCount("count")
+	lowDismissedResults, err := lowDismissedAggQuery.Get(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get low rating dismissed jobs count: %w", err)
+	}
+
+	lowDismissedCountResult, ok := lowDismissedResults["count"]
+	if !ok {
+		return 0, fmt.Errorf("count not found in low rating dismissed aggregation results")
+	}
+	lowDismissedCount := lowDismissedCountResult.(*firestorepb.Value).GetIntegerValue()
+
+	// Calculate total without double-counting overlaps
+	// Total = low_rating + archived + dismissed - low_archived_overlap - low_dismissed_overlap
+	totalCount := lowRatingCount + archivedCount + dismissedCount - lowArchivedCount - lowDismissedCount
+
+	return totalCount, nil
+}
+
 // GetAllJobStatusCounts returns a map with counts for all job statuses for a user
 func GetAllJobStatusCounts(ctx context.Context, fs *FirestoreClient, userID string) (map[string]int64, error) {
 	if fs == nil {

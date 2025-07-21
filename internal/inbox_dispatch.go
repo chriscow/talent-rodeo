@@ -36,15 +36,15 @@ func (f EmailHandlerFunc) HandleEmail(ctx context.Context, email *inbox.Email) (
 // InboxDispatch implements EmailHandler and dispatches emails to multiple registered handlers.
 // It orchestrates the full email processing workflow including filtering, response generation and escalation.
 type InboxDispatch struct {
-	mu                sync.RWMutex
-	handlers          map[string]EmailHandler
-	filters           map[string]EmailFilterer
-	emailResponder    EmailResponder
-	responseSender    ResponseSender
-	escalationService EscalationService
+	mu                  sync.RWMutex
+	handlers            map[string]EmailHandler
+	filters             map[string]EmailFilterer
+	emailResponder      EmailResponder
+	responseSender      ResponseSender
+	escalationService   EscalationService
 	heldResponseService *HeldResponseService
-	logger            *slog.Logger
-	responseEnabled   bool
+	logger              *slog.Logger
+	responseEnabled     bool
 }
 
 // NewInboxDispatch creates a new InboxDispatch instance with basic configuration.
@@ -65,14 +65,14 @@ func NewEnhancedInboxDispatch(
 	logger *slog.Logger,
 ) *InboxDispatch {
 	return &InboxDispatch{
-		handlers:          make(map[string]EmailHandler),
-		filters:           make(map[string]EmailFilterer),
-		emailResponder:    emailResponder,
-		responseSender:    responseSender,
-		escalationService: escalationService,
+		handlers:            make(map[string]EmailHandler),
+		filters:             make(map[string]EmailFilterer),
+		emailResponder:      emailResponder,
+		responseSender:      responseSender,
+		escalationService:   escalationService,
 		heldResponseService: heldResponseService,
-		logger:            logger,
-		responseEnabled:   true,
+		logger:              logger,
+		responseEnabled:     true,
 	}
 }
 

@@ -44,43 +44,43 @@ func (s HeldResponseStatus) String() string {
 
 // HeldResponse represents an email response that is being held for admin approval
 type HeldResponse struct {
-	ID             string // Document ID
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	Status         HeldResponseStatus
-	ExpiresAt      time.Time
-	
+	ID        string // Document ID
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	Status    HeldResponseStatus
+	ExpiresAt time.Time
+
 	// Original email information
-	OriginalEmailID      string
-	OriginalFrom         string
-	OriginalSubject      string
-	OriginalBody         string
-	OriginalDate         time.Time
-	OriginalHeaders      map[string]string
-	
+	OriginalEmailID string
+	OriginalFrom    string
+	OriginalSubject string
+	OriginalBody    string
+	OriginalDate    time.Time
+	OriginalHeaders map[string]string
+
 	// Generated response information
-	ResponseSubject      string
-	ResponseBody         string
-	ResponseHTMLBody     string
-	ResponseType         string // confirmation, partial, escalation
-	ResponseSummaries    []string
+	ResponseSubject        string
+	ResponseBody           string
+	ResponseHTMLBody       string
+	ResponseType           string // confirmation, partial, escalation
+	ResponseSummaries      []string
 	ResponseEscalatedItems []string
-	
+
 	// Processing information
-	HandlingResults      []map[string]any
-	RecipientEmail       string
-	
+	HandlingResults []map[string]any
+	RecipientEmail  string
+
 	// Admin workflow information
-	AdminFeedback        string
-	AdminUserID          string
-	ReviewedAt           time.Time
-	ApprovedAt           time.Time
-	SentAt               time.Time
-	RevisionCount        int
-	
+	AdminFeedback string
+	AdminUserID   string
+	ReviewedAt    time.Time
+	ApprovedAt    time.Time
+	SentAt        time.Time
+	RevisionCount int
+
 	// Hold criteria information
-	HoldReason           string
-	HoldCriteria         string
+	HoldReason   string
+	HoldCriteria string
 }
 
 // IsValid validates that the HeldResponse has required fields
@@ -133,12 +133,12 @@ func (hr *HeldResponse) GetPreviewText() string {
 		// Strip HTML tags for preview if no plain text
 		text = hr.ResponseHTMLBody
 	}
-	
+
 	const maxLength = 200
 	if len(text) <= maxLength {
 		return text
 	}
-	
+
 	return text[:maxLength] + "..."
 }
 
@@ -150,38 +150,38 @@ func CreateHeldResponse(ctx context.Context, fs *FirestoreClient, heldResponse *
 	if heldResponse == nil {
 		return fmt.Errorf("held response cannot be nil")
 	}
-	
+
 	// Validate the held response
 	if err := heldResponse.IsValid(); err != nil {
 		return fmt.Errorf("invalid held response: %w", err)
 	}
-	
+
 	// Generate ID if not provided
 	if heldResponse.ID == "" {
 		heldResponse.ID = uuid.New().String()
 	}
-	
+
 	// Set timestamps
 	now := time.Now()
 	heldResponse.CreatedAt = now
 	heldResponse.UpdatedAt = now
-	
+
 	// Set default status if not provided
 	if heldResponse.Status == "" {
 		heldResponse.Status = HeldResponseStatusPending
 	}
-	
+
 	// Set default expiration if not provided (24 hours)
 	if heldResponse.ExpiresAt.IsZero() {
 		heldResponse.ExpiresAt = now.Add(24 * time.Hour)
 	}
-	
+
 	// Create document in Firestore
 	_, err := fs.Collection(heldResponsesCollection).Doc(heldResponse.ID).Set(ctx, heldResponse)
 	if err != nil {
 		return fmt.Errorf("failed to create held response: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -190,7 +190,7 @@ func GetHeldResponse(ctx context.Context, fs *FirestoreClient, id string) (*Held
 	if id == "" {
 		return nil, false, fmt.Errorf("held response ID cannot be empty")
 	}
-	
+
 	doc, err := fs.Collection(heldResponsesCollection).Doc(id).Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -198,12 +198,12 @@ func GetHeldResponse(ctx context.Context, fs *FirestoreClient, id string) (*Held
 		}
 		return nil, false, fmt.Errorf("failed to get held response: %w", err)
 	}
-	
+
 	var heldResponse HeldResponse
 	if err := doc.DataTo(&heldResponse); err != nil {
 		return nil, false, fmt.Errorf("failed to unmarshal held response: %w", err)
 	}
-	
+
 	heldResponse.ID = doc.Ref.ID
 	return &heldResponse, true, nil
 }
@@ -213,25 +213,25 @@ func UpdateHeldResponse(ctx context.Context, fs *FirestoreClient, heldResponse *
 	if heldResponse == nil {
 		return fmt.Errorf("held response cannot be nil")
 	}
-	
+
 	if heldResponse.ID == "" {
 		return fmt.Errorf("held response ID cannot be empty")
 	}
-	
+
 	// Validate the held response
 	if err := heldResponse.IsValid(); err != nil {
 		return fmt.Errorf("invalid held response: %w", err)
 	}
-	
+
 	// Update timestamp
 	heldResponse.UpdatedAt = time.Now()
-	
+
 	// Update document in Firestore
 	_, err := fs.Collection(heldResponsesCollection).Doc(heldResponse.ID).Set(ctx, heldResponse)
 	if err != nil {
 		return fmt.Errorf("failed to update held response: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -240,16 +240,16 @@ func UpdateHeldResponseStatus(ctx context.Context, fs *FirestoreClient, id strin
 	if id == "" {
 		return fmt.Errorf("held response ID cannot be empty")
 	}
-	
+
 	if !status.IsValid() {
 		return fmt.Errorf("invalid status: %s", status)
 	}
-	
+
 	updates := map[string]any{
-		"Status":     status,
+		"Status":    status,
 		"UpdatedAt": time.Now(),
 	}
-	
+
 	// Set specific timestamps based on status
 	switch status {
 	case HeldResponseStatusApproved:
@@ -257,7 +257,7 @@ func UpdateHeldResponseStatus(ctx context.Context, fs *FirestoreClient, id strin
 	case HeldResponseStatusRevision:
 		updates["ReviewedAt"] = time.Now()
 	}
-	
+
 	_, err := fs.Collection(heldResponsesCollection).Doc(id).Update(ctx, []firestore.Update{
 		{Path: "Status", Value: status},
 		{Path: "UpdatedAt", Value: time.Now()},
@@ -265,7 +265,7 @@ func UpdateHeldResponseStatus(ctx context.Context, fs *FirestoreClient, id strin
 	if err != nil {
 		return fmt.Errorf("failed to update held response status: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -274,12 +274,12 @@ func DeleteHeldResponse(ctx context.Context, fs *FirestoreClient, id string) err
 	if id == "" {
 		return fmt.Errorf("held response ID cannot be empty")
 	}
-	
+
 	_, err := fs.Collection(heldResponsesCollection).Doc(id).Delete(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to delete held response: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -288,20 +288,20 @@ func ListHeldResponses(ctx context.Context, fs *FirestoreClient, status HeldResp
 	if limit <= 0 {
 		limit = 50 // Default limit
 	}
-	
+
 	query := fs.Collection(heldResponsesCollection).
 		OrderBy("CreatedAt", firestore.Desc).
 		Limit(limit).
 		Offset(offset)
-	
+
 	// Filter by status if provided
 	if status != "" && status.IsValid() {
 		query = query.Where("Status", "==", status)
 	}
-	
+
 	iter := query.Documents(ctx)
 	defer iter.Stop()
-	
+
 	var heldResponses []*HeldResponse
 	for {
 		doc, err := iter.Next()
@@ -311,16 +311,16 @@ func ListHeldResponses(ctx context.Context, fs *FirestoreClient, status HeldResp
 		if err != nil {
 			return nil, fmt.Errorf("failed to iterate held responses: %w", err)
 		}
-		
+
 		var heldResponse HeldResponse
 		if err := doc.DataTo(&heldResponse); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal held response: %w", err)
 		}
-		
+
 		heldResponse.ID = doc.Ref.ID
 		heldResponses = append(heldResponses, &heldResponse)
 	}
-	
+
 	return heldResponses, nil
 }
 
@@ -337,16 +337,16 @@ func GetExpiredHeldResponses(ctx context.Context, fs *FirestoreClient) ([]*HeldR
 		Where("Status", "==", HeldResponseStatusPending).
 		Documents(ctx)
 	defer pendingIter.Stop()
-	
+
 	// Get expired responses with revision status
 	revisionIter := fs.Collection(heldResponsesCollection).
 		Where("ExpiresAt", "<", time.Now()).
 		Where("Status", "==", HeldResponseStatusRevision).
 		Documents(ctx)
 	defer revisionIter.Stop()
-	
+
 	var expiredResponses []*HeldResponse
-	
+
 	// Process pending responses
 	for {
 		doc, err := pendingIter.Next()
@@ -356,16 +356,16 @@ func GetExpiredHeldResponses(ctx context.Context, fs *FirestoreClient) ([]*HeldR
 		if err != nil {
 			return nil, fmt.Errorf("failed to iterate expired pending held responses: %w", err)
 		}
-		
+
 		var heldResponse HeldResponse
 		if err := doc.DataTo(&heldResponse); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal held response: %w", err)
 		}
-		
+
 		heldResponse.ID = doc.Ref.ID
 		expiredResponses = append(expiredResponses, &heldResponse)
 	}
-	
+
 	// Process revision responses
 	for {
 		doc, err := revisionIter.Next()
@@ -375,16 +375,16 @@ func GetExpiredHeldResponses(ctx context.Context, fs *FirestoreClient) ([]*HeldR
 		if err != nil {
 			return nil, fmt.Errorf("failed to iterate expired revision held responses: %w", err)
 		}
-		
+
 		var heldResponse HeldResponse
 		if err := doc.DataTo(&heldResponse); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal held response: %w", err)
 		}
-		
+
 		heldResponse.ID = doc.Ref.ID
 		expiredResponses = append(expiredResponses, &heldResponse)
 	}
-	
+
 	return expiredResponses, nil
 }
 
@@ -393,13 +393,13 @@ func CountHeldResponsesByStatus(ctx context.Context, fs *FirestoreClient, status
 	if !status.IsValid() {
 		return 0, fmt.Errorf("invalid status: %s", status)
 	}
-	
+
 	query := fs.Collection(heldResponsesCollection).Where("Status", "==", status)
-	
+
 	// Count documents
 	iter := query.Documents(ctx)
 	defer iter.Stop()
-	
+
 	count := 0
 	for {
 		_, err := iter.Next()
@@ -411,6 +411,6 @@ func CountHeldResponsesByStatus(ctx context.Context, fs *FirestoreClient, status
 		}
 		count++
 	}
-	
+
 	return count, nil
 }

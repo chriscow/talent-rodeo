@@ -308,7 +308,7 @@ func TestEvaluateCallSuccess(t *testing.T) {
 func TestSpecificEndOfCallReportRegression(t *testing.T) {
 	// Test the specific file that was causing issues
 	filePath := "../../testdata/webhooks/end-of-call-report_d61bb2a0-260f-454e-9b5d-93a51c848b2a.json"
-	
+
 	// Read the problematic file
 	webhookData, err := os.ReadFile(filePath)
 	if err != nil {
@@ -326,7 +326,7 @@ func TestSpecificEndOfCallReportRegression(t *testing.T) {
 	if envelope.EndOfCallReport.Analysis == nil {
 		t.Fatal("Analysis field is nil")
 	}
-	
+
 	successEval := envelope.EndOfCallReport.Analysis.SuccessEvaluation
 	if successEval != "false" {
 		t.Fatalf("Expected successEvaluation to be 'false', got %v", successEval)
@@ -355,8 +355,6 @@ func TestSpecificEndOfCallReportRegression(t *testing.T) {
 		t.Error("Expected shouldProcessFailure=true for this regression case, got false")
 	}
 
-	t.Logf("Successfully handled regression case: successEvaluation='%v', endReason='%s' -> shouldProcessFailure=%v", 
+	t.Logf("Successfully handled regression case: successEvaluation='%v', endReason='%s' -> shouldProcessFailure=%v",
 		successEval, endReason, shouldProcessFailure)
 }
-
-

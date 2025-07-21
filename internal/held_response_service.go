@@ -58,7 +58,7 @@ func (hrs *HeldResponseService) ShouldHoldResponse(ctx context.Context, original
 
 	// Evaluate hold decision
 	decision := hrs.evaluator.EvaluateHoldDecision(ctx, decisionContext)
-	
+
 	if decision.ShouldHold && hrs.logger != nil {
 		hrs.logger.Info("response will be held",
 			"email_id", originalEmail.ID,
@@ -107,23 +107,23 @@ func (hrs *HeldResponseService) CreateHeldResponse(ctx context.Context, original
 	now := time.Now()
 
 	heldResponse := &HeldResponse{
-		OriginalEmailID:    originalEmail.ID,
-		OriginalFrom:       originalEmail.From,
-		OriginalSubject:    originalEmail.Subject,
-		OriginalBody:       originalEmail.Body,
-		RecipientEmail:     recipientEmail,
-		ResponseSubject:    response.Subject,
-		ResponseBody:       response.Body,
-		ResponseHTMLBody:   response.HTMLBody,
-		ResponseType:       response.Type.String(),
-		Status:             HeldResponseStatusPending,
-		CreatedAt:          now,
-		UpdatedAt:          now,
-		ExpiresAt:          holdDecision.ExpiresAt,
-		HoldReason:         holdDecision.Reason,
-		HoldCriteria:       holdDecision.Criteria,
-		AdminFeedback:      "",
-		RevisionCount:      0,
+		OriginalEmailID:  originalEmail.ID,
+		OriginalFrom:     originalEmail.From,
+		OriginalSubject:  originalEmail.Subject,
+		OriginalBody:     originalEmail.Body,
+		RecipientEmail:   recipientEmail,
+		ResponseSubject:  response.Subject,
+		ResponseBody:     response.Body,
+		ResponseHTMLBody: response.HTMLBody,
+		ResponseType:     response.Type.String(),
+		Status:           HeldResponseStatusPending,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		ExpiresAt:        holdDecision.ExpiresAt,
+		HoldReason:       holdDecision.Reason,
+		HoldCriteria:     holdDecision.Criteria,
+		AdminFeedback:    "",
+		RevisionCount:    0,
 	}
 
 	if err := CreateHeldResponse(ctx, hrs.firestoreClient, heldResponse); err != nil {

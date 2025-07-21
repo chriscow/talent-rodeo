@@ -178,7 +178,7 @@ func TestInboxDispatch_HeldResponseIntegration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to get pending responses: %v", err)
 		}
-		
+
 		foundUrgentResponse := false
 		for _, resp := range pendingResponses {
 			if resp.HoldCriteria == "keyword" {
@@ -300,7 +300,7 @@ func TestInboxDispatch_HeldResponseFailureScenarios(t *testing.T) {
 		holdCriteria.Enabled = true
 		holdCriteria.HoldAll = true
 		holdEvaluator := NewHoldDecisionEvaluator(holdCriteria)
-		
+
 		// Use a nil FirestoreClient to cause CreateHeldResponse to fail
 		heldResponseService := NewHeldResponseService(nil, holdEvaluator, mockSender, nil)
 
@@ -344,11 +344,11 @@ func TestInboxDispatch_HeldResponseFailureScenarios(t *testing.T) {
 // Mock implementations for testing
 
 type MockInboxEmailResponder struct {
-	NextResponse             *inbox.EmailResponse
-	NextError                error
+	NextResponse              *inbox.EmailResponse
+	NextError                 error
 	GenerateResponseCallCount int
-	LastEmail                *inbox.Email
-	LastResults              []*inbox.HandlingResult
+	LastEmail                 *inbox.Email
+	LastResults               []*inbox.HandlingResult
 }
 
 func (m *MockInboxEmailResponder) GenerateResponse(ctx context.Context, email *inbox.Email, results []*inbox.HandlingResult) (*inbox.EmailResponse, error) {
@@ -372,8 +372,8 @@ func (m *MockInboxEmailResponder) Reset() {
 type MockInboxEscalationService struct {
 	SendEscalationCalled bool
 	SendEscalationError  error
-	LastEmail           *inbox.Email
-	LastUnhandledItems  []string
+	LastEmail            *inbox.Email
+	LastUnhandledItems   []string
 }
 
 func (m *MockInboxEscalationService) SendEscalation(ctx context.Context, email *inbox.Email, unhandledItems []string) error {

@@ -2,14 +2,14 @@ package internal
 
 import (
 	"context"
+	"talent-rodeo/internal/inbox"
 	"testing"
 	"time"
-	"talent-rodeo/internal/inbox"
 )
 
 func TestDefaultHoldCriteria(t *testing.T) {
 	criteria := DefaultHoldCriteria()
-	
+
 	// Check default values
 	if criteria.Enabled {
 		t.Error("Expected Enabled to be false by default")
@@ -43,9 +43,9 @@ func TestDefaultHoldCriteria(t *testing.T) {
 func TestHoldDecisionEvaluator_EvaluateHoldDecision_Disabled(t *testing.T) {
 	criteria := DefaultHoldCriteria()
 	criteria.Enabled = false
-	
+
 	evaluator := NewHoldDecisionEvaluator(criteria)
-	
+
 	decisionContext := HoldDecisionContext{
 		OriginalEmail: &inbox.Email{
 			ID:      "test-id",
@@ -61,9 +61,9 @@ func TestHoldDecisionEvaluator_EvaluateHoldDecision_Disabled(t *testing.T) {
 		UserEmail: "test@example.com",
 		Timestamp: time.Now(),
 	}
-	
+
 	decision := evaluator.EvaluateHoldDecision(context.Background(), decisionContext)
-	
+
 	if decision.ShouldHold {
 		t.Error("Expected decision to not hold when disabled")
 	}
@@ -76,9 +76,9 @@ func TestHoldDecisionEvaluator_EvaluateHoldDecision_HoldAll(t *testing.T) {
 	criteria := DefaultHoldCriteria()
 	criteria.Enabled = true
 	criteria.HoldAll = true
-	
+
 	evaluator := NewHoldDecisionEvaluator(criteria)
-	
+
 	decisionContext := HoldDecisionContext{
 		OriginalEmail: &inbox.Email{
 			ID:      "test-id",
@@ -94,9 +94,9 @@ func TestHoldDecisionEvaluator_EvaluateHoldDecision_HoldAll(t *testing.T) {
 		UserEmail: "test@example.com",
 		Timestamp: time.Now(),
 	}
-	
+
 	decision := evaluator.EvaluateHoldDecision(context.Background(), decisionContext)
-	
+
 	if !decision.ShouldHold {
 		t.Error("Expected decision to hold when HoldAll is true")
 	}
@@ -155,7 +155,7 @@ func TestHoldDecisionEvaluator_EvaluateResponseType(t *testing.T) {
 			criteria:       "response_type_escalation",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			criteria := DefaultHoldCriteria()
@@ -164,9 +164,9 @@ func TestHoldDecisionEvaluator_EvaluateResponseType(t *testing.T) {
 			criteria.HoldConfirmations = tt.holdConfirm
 			criteria.HoldPartialResponses = tt.holdPartial
 			criteria.HoldEscalationResponses = tt.holdEscalation
-			
+
 			evaluator := NewHoldDecisionEvaluator(criteria)
-			
+
 			decisionContext := HoldDecisionContext{
 				OriginalEmail: &inbox.Email{
 					ID:      "test-id",
@@ -182,9 +182,9 @@ func TestHoldDecisionEvaluator_EvaluateResponseType(t *testing.T) {
 				UserEmail: "test@example.com",
 				Timestamp: time.Now(),
 			}
-			
+
 			decision := evaluator.EvaluateHoldDecision(context.Background(), decisionContext)
-			
+
 			if decision.ShouldHold != tt.shouldHold {
 				t.Errorf("Expected shouldHold %v, got %v", tt.shouldHold, decision.ShouldHold)
 			}
@@ -200,9 +200,9 @@ func TestHoldDecisionEvaluator_EvaluateUserEmail(t *testing.T) {
 	criteria.Enabled = true
 	criteria.HoldAll = false
 	criteria.HoldUserEmails = []string{"hold@example.com", "another@example.com"}
-	
+
 	evaluator := NewHoldDecisionEvaluator(criteria)
-	
+
 	tests := []struct {
 		name       string
 		userEmail  string
@@ -212,7 +212,7 @@ func TestHoldDecisionEvaluator_EvaluateUserEmail(t *testing.T) {
 		{"hold another listed email", "another@example.com", true},
 		{"don't hold unlisted email", "normal@example.com", false},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			decisionContext := HoldDecisionContext{
@@ -230,9 +230,9 @@ func TestHoldDecisionEvaluator_EvaluateUserEmail(t *testing.T) {
 				UserEmail: tt.userEmail,
 				Timestamp: time.Now(),
 			}
-			
+
 			decision := evaluator.EvaluateHoldDecision(context.Background(), decisionContext)
-			
+
 			if decision.ShouldHold != tt.shouldHold {
 				t.Errorf("Expected shouldHold %v, got %v", tt.shouldHold, decision.ShouldHold)
 			}
@@ -248,9 +248,9 @@ func TestHoldDecisionEvaluator_EvaluateKeywords(t *testing.T) {
 	criteria.Enabled = true
 	criteria.HoldAll = false
 	criteria.HoldKeywords = []string{"urgent", "important", "ASAP"}
-	
+
 	evaluator := NewHoldDecisionEvaluator(criteria)
-	
+
 	tests := []struct {
 		name         string
 		responseBody string
@@ -263,7 +263,7 @@ func TestHoldDecisionEvaluator_EvaluateKeywords(t *testing.T) {
 		{"hold different keyword", "This is important", "", true},
 		{"don't hold without keywords", "This is normal", "", false},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			decisionContext := HoldDecisionContext{
@@ -274,17 +274,17 @@ func TestHoldDecisionEvaluator_EvaluateKeywords(t *testing.T) {
 					Body:    "Test Body",
 				},
 				Response: &inbox.EmailResponse{
-					Type:        inbox.ResponseTypeConfirmation,
-					Subject:     "RE: Test Subject",
-					Body:        tt.responseBody,
-					HTMLBody:    tt.htmlBody,
+					Type:     inbox.ResponseTypeConfirmation,
+					Subject:  "RE: Test Subject",
+					Body:     tt.responseBody,
+					HTMLBody: tt.htmlBody,
 				},
 				UserEmail: "test@example.com",
 				Timestamp: time.Now(),
 			}
-			
+
 			decision := evaluator.EvaluateHoldDecision(context.Background(), decisionContext)
-			
+
 			if decision.ShouldHold != tt.shouldHold {
 				t.Errorf("Expected shouldHold %v, got %v", tt.shouldHold, decision.ShouldHold)
 			}
@@ -300,11 +300,11 @@ func TestHoldDecisionEvaluator_EvaluateBusinessHours(t *testing.T) {
 	criteria.Enabled = true
 	criteria.HoldAll = false
 	criteria.HoldAfterHours = true
-	criteria.BusinessHoursStart = 9  // 9 AM
-	criteria.BusinessHoursEnd = 17   // 5 PM
-	
+	criteria.BusinessHoursStart = 9 // 9 AM
+	criteria.BusinessHoursEnd = 17  // 5 PM
+
 	evaluator := NewHoldDecisionEvaluator(criteria)
-	
+
 	tests := []struct {
 		name       string
 		hour       int
@@ -317,11 +317,11 @@ func TestHoldDecisionEvaluator_EvaluateBusinessHours(t *testing.T) {
 		{"hold after business hours", 17, true},
 		{"hold evening", 22, true},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			timestamp := time.Date(2023, 1, 1, tt.hour, 0, 0, 0, time.UTC)
-			
+
 			decisionContext := HoldDecisionContext{
 				OriginalEmail: &inbox.Email{
 					ID:      "test-id",
@@ -337,9 +337,9 @@ func TestHoldDecisionEvaluator_EvaluateBusinessHours(t *testing.T) {
 				UserEmail: "test@example.com",
 				Timestamp: timestamp,
 			}
-			
+
 			decision := evaluator.EvaluateHoldDecision(context.Background(), decisionContext)
-			
+
 			if decision.ShouldHold != tt.shouldHold {
 				t.Errorf("Expected shouldHold %v, got %v", tt.shouldHold, decision.ShouldHold)
 			}
@@ -355,9 +355,9 @@ func TestHoldDecisionEvaluator_EvaluateEscalations(t *testing.T) {
 	criteria.Enabled = true
 	criteria.HoldAll = false
 	criteria.HoldEscalations = true
-	
+
 	evaluator := NewHoldDecisionEvaluator(criteria)
-	
+
 	tests := []struct {
 		name           string
 		escalatedItems []string
@@ -367,7 +367,7 @@ func TestHoldDecisionEvaluator_EvaluateEscalations(t *testing.T) {
 		{"don't hold when no escalated items", []string{}, false},
 		{"don't hold when nil escalated items", nil, false},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			decisionContext := HoldDecisionContext{
@@ -386,9 +386,9 @@ func TestHoldDecisionEvaluator_EvaluateEscalations(t *testing.T) {
 				UserEmail: "test@example.com",
 				Timestamp: time.Now(),
 			}
-			
+
 			decision := evaluator.EvaluateHoldDecision(context.Background(), decisionContext)
-			
+
 			if decision.ShouldHold != tt.shouldHold {
 				t.Errorf("Expected shouldHold %v, got %v", tt.shouldHold, decision.ShouldHold)
 			}
@@ -410,9 +410,9 @@ func TestHoldDecisionEvaluator_NoMatch(t *testing.T) {
 	criteria.HoldAfterHours = false
 	criteria.HoldUserEmails = []string{}
 	criteria.HoldKeywords = []string{}
-	
+
 	evaluator := NewHoldDecisionEvaluator(criteria)
-	
+
 	decisionContext := HoldDecisionContext{
 		OriginalEmail: &inbox.Email{
 			ID:      "test-id",
@@ -428,9 +428,9 @@ func TestHoldDecisionEvaluator_NoMatch(t *testing.T) {
 		UserEmail: "test@example.com",
 		Timestamp: time.Now(),
 	}
-	
+
 	decision := evaluator.EvaluateHoldDecision(context.Background(), decisionContext)
-	
+
 	if decision.ShouldHold {
 		t.Error("Expected decision to not hold when no criteria match")
 	}
@@ -457,7 +457,7 @@ func TestContains(t *testing.T) {
 		{"empty haystack", "", "test", false},
 		{"both empty", "", "", false},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := contains(tt.haystack, tt.needle); got != tt.want {
@@ -480,7 +480,7 @@ func TestToLower(t *testing.T) {
 		{"digit", '5', '5'},
 		{"special char", '!', '!'},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := toLower(tt.c); got != tt.want {

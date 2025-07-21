@@ -150,8 +150,8 @@ Google Cloud service account credentials.`,
 		if err != nil {
 			// Delete the bad token so user doesn't get confused
 			os.Remove(gmailTokenPath)
-			return fmt.Errorf("❌ New token test failed: %w\n" +
-				"The token was created but doesn't work properly.\n" +
+			return fmt.Errorf("❌ New token test failed: %w\n"+
+				"The token was created but doesn't work properly.\n"+
 				"I've deleted the bad token. Please try running 'gmail setup' again.", err)
 		}
 

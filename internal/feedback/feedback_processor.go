@@ -210,8 +210,8 @@ func CleanupOrphanedFeedback(ctx context.Context, fs *internal.FirestoreClient, 
 		// Check if user exists
 		_, found, err := internal.GetUser(ctx, fs, userID)
 		if err != nil {
-			logger.Error("error checking user existence during cleanup", 
-				"user_id", userID, 
+			logger.Error("error checking user existence during cleanup",
+				"user_id", userID,
 				"error", err)
 			continue
 		}
@@ -224,20 +224,20 @@ func CleanupOrphanedFeedback(ctx context.Context, fs *internal.FirestoreClient, 
 			}
 
 			if err := internal.MarkFeedbackAsProcessed(ctx, fs, feedbackIDs, time.Now()); err != nil {
-				logger.Error("failed to mark orphaned feedback as processed during cleanup", 
-					"user_id", userID, 
+				logger.Error("failed to mark orphaned feedback as processed during cleanup",
+					"user_id", userID,
 					"feedback_count", len(feedbackIDs),
 					"error", err)
 			} else {
-				logger.Info("cleaned up orphaned feedback for deleted user", 
-					"user_id", userID, 
+				logger.Info("cleaned up orphaned feedback for deleted user",
+					"user_id", userID,
 					"feedback_count", len(feedbackIDs))
 				cleanedCount += len(feedbackIDs)
 			}
 		}
 	}
 
-	logger.Info("orphaned feedback cleanup completed", 
+	logger.Info("orphaned feedback cleanup completed",
 		"total_feedback_items", len(allFeedback),
 		"cleaned_items", cleanedCount)
 
@@ -285,13 +285,13 @@ func ProcessAllUsersFeedback(ctx context.Context, fs *internal.FirestoreClient, 
 					feedbackIDs = append(feedbackIDs, feedback.ID)
 				}
 				if markErr := internal.MarkFeedbackAsProcessed(ctx, fs, feedbackIDs, time.Now()); markErr != nil {
-					logger.Error("failed to mark orphaned feedback as processed", 
-						"user_id", userID, 
+					logger.Error("failed to mark orphaned feedback as processed",
+						"user_id", userID,
 						"feedback_count", len(feedbackIDs),
 						"error", markErr)
 				} else {
-					logger.Info("marked orphaned feedback as processed for deleted user", 
-						"user_id", userID, 
+					logger.Info("marked orphaned feedback as processed for deleted user",
+						"user_id", userID,
 						"feedback_count", len(feedbackIDs))
 				}
 				// Count as processed but not successful

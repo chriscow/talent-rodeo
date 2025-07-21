@@ -309,8 +309,6 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 	// Track job evaluation statistics
 	var totalJobsEvaluated int
 	var newJobsFound int
-	var rejectedJobsCount int
-	var qualityJobsFound int
 	evaluationStartTime := time.Now()
 
 	weekAgo := time.Now().Add(-7 * 24 * time.Hour)
@@ -360,13 +358,26 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 		now := time.Now()
 		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 
+		// Calculate cumulative statistics for quality and rejected jobs
+		cumulativeQualityJobs, err := internal.GetUserJobsQualityCount(ctx, fs, user.ID)
+		if err != nil {
+			logger.Warn("failed to get cumulative quality jobs count", "error", err)
+			cumulativeQualityJobs = 0
+		}
+
+		cumulativeRejectedJobs, err := internal.GetUserJobsRejectedCount(ctx, fs, user.ID)
+		if err != nil {
+			logger.Warn("failed to get cumulative rejected jobs count", "error", err)
+			cumulativeRejectedJobs = 0
+		}
+
 		err = internal.UpdateUser(ctx, fs, user.ID, map[string]any{
 			"LastJobEvaluationRun": evaluationStartTime,
 			"LastEvaluationDate":   today,
 			"TotalJobsEvaluated":   totalJobsEvaluated,
 			"NewJobsFound":         newJobsFound,
-			"RejectedJobsCount":    0,
-			"QualityJobsFound":     0,
+			"RejectedJobsCount":    cumulativeRejectedJobs,
+			"QualityJobsFound":     cumulativeQualityJobs,
 		})
 		if err != nil {
 			logger.Error("failed to update user job evaluation statistics", "error", err)
@@ -495,23 +506,17 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 	// Wait for all workers to finish processing all the jobs in the queue.
 	processor.Wait()
 
-	// After processing is complete, gather statistics and update user record
-	userJobsAfterProcessing, err := internal.ListUserJobs(ctx, fs, user.ID)
+	// After processing is complete, calculate cumulative statistics for quality and rejected jobs
+	cumulativeQualityJobs, err := internal.GetUserJobsQualityCount(ctx, fs, user.ID)
 	if err != nil {
-		logger.Error("failed to get user jobs after processing for statistics", "error", err)
-	} else {
-		// Count rejected and quality jobs from the newly processed jobs
-		for _, userJob := range userJobsAfterProcessing {
-			// Only count jobs that were part of this evaluation run
-			if slices.Contains(jobIDs, userJob.ID) {
-				if userJob.Rating < internal.QualityJobRatingThreshold || userJob.Status == internal.JobStatusArchived || userJob.Status == internal.JobStatusDismissed {
-					rejectedJobsCount++
-				}
-				if userJob.Rating >= internal.QualityJobRatingThreshold {
-					qualityJobsFound++
-				}
-			}
-		}
+		logger.Warn("failed to get cumulative quality jobs count", "error", err)
+		cumulativeQualityJobs = 0
+	}
+
+	cumulativeRejectedJobs, err := internal.GetUserJobsRejectedCount(ctx, fs, user.ID)
+	if err != nil {
+		logger.Warn("failed to get cumulative rejected jobs count", "error", err)
+		cumulativeRejectedJobs = 0
 	}
 
 	// Update user with job evaluation statistics
@@ -523,14 +528,14 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 		"LastEvaluationDate":   today,
 		"TotalJobsEvaluated":   totalJobsEvaluated,
 		"NewJobsFound":         newJobsFound,
-		"RejectedJobsCount":    rejectedJobsCount,
-		"QualityJobsFound":     qualityJobsFound,
+		"RejectedJobsCount":    cumulativeRejectedJobs,
+		"QualityJobsFound":     cumulativeQualityJobs,
 	})
 	if err != nil {
 		logger.Error("failed to update user job evaluation statistics", "error", err)
 	}
 
-	logger.Info("job evaluation completed", "totalEvaluated", totalJobsEvaluated, "newJobs", newJobsFound, "rejected", rejectedJobsCount, "quality", qualityJobsFound)
+	logger.Info("job evaluation completed", "totalEvaluated", totalJobsEvaluated, "newJobs", newJobsFound, "cumulativeRejected", cumulativeRejectedJobs, "cumulativeQuality", cumulativeQualityJobs)
 
 	return nil
 }

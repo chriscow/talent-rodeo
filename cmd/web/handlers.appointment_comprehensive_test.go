@@ -15,11 +15,11 @@ func TestComprehensiveSuccessEvaluationHandling(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name               string
-		endReason          string
-		successEvaluation  interface{}
-		expectedFailure    bool
-		description        string
+		name              string
+		endReason         string
+		successEvaluation interface{}
+		expectedFailure   bool
+		description       string
 	}{
 		// ========== VOICEMAIL CASES (always failure) ==========
 		{
@@ -188,7 +188,7 @@ func TestComprehensiveSuccessEvaluationHandling(t *testing.T) {
 				t.Errorf("   Success Evaluation: %v (%T)", tc.successEvaluation, tc.successEvaluation)
 				t.Errorf("   Expected Failure: %v", tc.expectedFailure)
 				t.Errorf("   Actual Failure: %v", shouldProcessFailure)
-				
+
 				if tc.expectedFailure {
 					t.Errorf("   ❌ This should result in FAILED appointment status")
 				} else {
@@ -263,7 +263,7 @@ func TestSpecificBugScenarios(t *testing.T) {
 	}
 
 	t.Logf("\n=== Testing Specific Bug Scenarios ===")
-	
+
 	for _, scenario := range bugScenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			report := &vapi.EndOfCallReport{
@@ -297,19 +297,19 @@ func TestFailureReasonToDescriptionMapping(t *testing.T) {
 	app := &application{}
 
 	mappings := map[string]string{
-		"voicemail":                        "the call went to voicemail",
-		"busy":                            "your phone was busy",
-		"no-answer":                       "there was no answer",
-		"failed":                          "the call failed to connect",
-		"cancelled":                       "the call was cancelled",
-		"dial-busy":                       "we couldn't connect the call",
-		"dial-failed":                     "we couldn't connect the call",
-		"pipeline-error-openai":           "there was a technical issue with our AI system",
-		"pipeline-error-deepgram":         "there was a technical issue with our AI system",
+		"voicemail":                          "the call went to voicemail",
+		"busy":                               "your phone was busy",
+		"no-answer":                          "there was no answer",
+		"failed":                             "the call failed to connect",
+		"cancelled":                          "the call was cancelled",
+		"dial-busy":                          "we couldn't connect the call",
+		"dial-failed":                        "we couldn't connect the call",
+		"pipeline-error-openai":              "there was a technical issue with our AI system",
+		"pipeline-error-deepgram":            "there was a technical issue with our AI system",
 		"call.start.error-vapifault-get-org": "there was a technical issue",
-		"random-error-code":               "there was a technical issue",
-		"unknown-failure":                 "the call did not complete successfully",
-		"":                                "there was an issue with the call",
+		"random-error-code":                  "there was a technical issue",
+		"unknown-failure":                    "the call did not complete successfully",
+		"":                                   "there was an issue with the call",
 	}
 
 	for endReason, expectedDescription := range mappings {

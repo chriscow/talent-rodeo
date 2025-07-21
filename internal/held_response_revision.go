@@ -93,7 +93,7 @@ func (rp *RevisionProcessor) processRevision(ctx context.Context, heldResponse *
 			"feedback", heldResponse.AdminFeedback,
 		)
 	}
-	
+
 	// NOTE: This is a placeholder - in production, this would:
 	// 1. Generate a revised response using the LLM with the admin feedback
 	// 2. Update the held response with the new content
@@ -136,4 +136,3 @@ func (rp *RevisionProcessor) createRevisionPrompt(heldResponse *HeldResponse) st
 
 	return promptBuilder.String()
 }
-

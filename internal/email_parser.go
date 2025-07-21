@@ -84,17 +84,17 @@ func (p *openAIEmailParser) ParseEmail(ctx context.Context, email *inbox.Email, 
 	prompt := p.buildParsingPrompt(email)
 
 	var resp openai.ChatCompletionResponse
-	
+
 	// Prepare default options
 	defaultOpts := []tools.Option{
 		tools.WantCompletionResponse(&resp),
 		tools.WithMaxTokens(8192),
 		tools.WithModel(tools.GPT41),
 	}
-	
+
 	// Append any additional options (e.g., for testing)
 	allOpts := append(defaultOpts, opts...)
-	
+
 	structure, err := tools.StructuredAsk[EmailStructure](ctx, prompt, allOpts...)
 	if err != nil {
 		p.logger.Error("failed to parse email", "error", err, "email_id", email.ID)

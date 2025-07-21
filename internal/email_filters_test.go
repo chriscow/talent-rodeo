@@ -76,8 +76,8 @@ func TestUserVerificationFilter(t *testing.T) {
 			expectError:    false,
 		},
 		{
-			name: "nil email should return error",
-			email: nil,
+			name:           "nil email should return error",
+			email:          nil,
 			expectedResult: false,
 			expectError:    true,
 		},
@@ -110,7 +110,7 @@ func TestUserVerificationFilter(t *testing.T) {
 func TestEmailFilterChain(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	
+
 	testEmail := &inbox.Email{
 		ID:      "test-email-001",
 		From:    "test@example.com",
@@ -121,11 +121,11 @@ func TestEmailFilterChain(t *testing.T) {
 	t.Run("empty chain should allow processing", func(t *testing.T) {
 		chain := NewEmailFilterChain(logger)
 		result, err := chain.ShouldProcess(ctx, testEmail)
-		
+
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
-		
+
 		if !result {
 			t.Error("Empty chain should allow processing")
 		}
@@ -133,7 +133,7 @@ func TestEmailFilterChain(t *testing.T) {
 
 	t.Run("chain with passing filters should allow processing", func(t *testing.T) {
 		chain := NewEmailFilterChain(logger)
-		
+
 		// Add filters that always pass
 		chain.AddFilter(EmailFiltererFunc(func(ctx context.Context, email *inbox.Email) (bool, error) {
 			return true, nil
@@ -141,13 +141,13 @@ func TestEmailFilterChain(t *testing.T) {
 		chain.AddFilter(EmailFiltererFunc(func(ctx context.Context, email *inbox.Email) (bool, error) {
 			return true, nil
 		}))
-		
+
 		result, err := chain.ShouldProcess(ctx, testEmail)
-		
+
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
-		
+
 		if !result {
 			t.Error("Chain with passing filters should allow processing")
 		}
@@ -155,7 +155,7 @@ func TestEmailFilterChain(t *testing.T) {
 
 	t.Run("chain with rejecting filter should reject processing", func(t *testing.T) {
 		chain := NewEmailFilterChain(logger)
-		
+
 		// Add one passing filter and one rejecting filter
 		chain.AddFilter(EmailFiltererFunc(func(ctx context.Context, email *inbox.Email) (bool, error) {
 			return true, nil
@@ -163,13 +163,13 @@ func TestEmailFilterChain(t *testing.T) {
 		chain.AddFilter(EmailFiltererFunc(func(ctx context.Context, email *inbox.Email) (bool, error) {
 			return false, nil
 		}))
-		
+
 		result, err := chain.ShouldProcess(ctx, testEmail)
-		
+
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
-		
+
 		if result {
 			t.Error("Chain with rejecting filter should reject processing")
 		}
@@ -177,7 +177,7 @@ func TestEmailFilterChain(t *testing.T) {
 
 	t.Run("chain with error should continue processing", func(t *testing.T) {
 		chain := NewEmailFilterChain(logger)
-		
+
 		// Add filter that returns error and then passing filter
 		chain.AddFilter(EmailFiltererFunc(func(ctx context.Context, email *inbox.Email) (bool, error) {
 			return false, errors.New("test error")
@@ -185,13 +185,13 @@ func TestEmailFilterChain(t *testing.T) {
 		chain.AddFilter(EmailFiltererFunc(func(ctx context.Context, email *inbox.Email) (bool, error) {
 			return true, nil
 		}))
-		
+
 		result, err := chain.ShouldProcess(ctx, testEmail)
-		
+
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
-		
+
 		if !result {
 			t.Error("Chain should continue processing after filter error")
 		}
@@ -199,15 +199,15 @@ func TestEmailFilterChain(t *testing.T) {
 
 	t.Run("filter count should be correct", func(t *testing.T) {
 		chain := NewEmailFilterChain(logger)
-		
+
 		if chain.GetFilterCount() != 0 {
 			t.Errorf("Expected filter count 0, got %d", chain.GetFilterCount())
 		}
-		
+
 		chain.AddFilter(EmailFiltererFunc(func(ctx context.Context, email *inbox.Email) (bool, error) {
 			return true, nil
 		}))
-		
+
 		if chain.GetFilterCount() != 1 {
 			t.Errorf("Expected filter count 1, got %d", chain.GetFilterCount())
 		}
@@ -217,7 +217,7 @@ func TestEmailFilterChain(t *testing.T) {
 // TestInboxDispatchFilterIntegration tests the integration of filters with InboxDispatch
 func TestInboxDispatchFilterIntegration(t *testing.T) {
 	ctx := context.Background()
-	
+
 	testEmail := &inbox.Email{
 		ID:      "test-email-001",
 		From:    "test@example.com",
@@ -227,7 +227,7 @@ func TestInboxDispatchFilterIntegration(t *testing.T) {
 
 	t.Run("dispatch with no filters should process email", func(t *testing.T) {
 		dispatch := NewInboxDispatch()
-		
+
 		// Add a test handler to verify processing
 		handlerCalled := false
 		dispatch.Register("test-handler", EmailHandlerFunc(func(ctx context.Context, email *inbox.Email) (*inbox.HandlingResult, error) {
@@ -237,13 +237,13 @@ func TestInboxDispatchFilterIntegration(t *testing.T) {
 				Summary: "Test handler",
 			}, nil
 		}))
-		
+
 		err := dispatch.HandleEmail(ctx, testEmail)
-		
+
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
-		
+
 		if !handlerCalled {
 			t.Error("Handler should have been called when no filters are registered")
 		}
@@ -251,12 +251,12 @@ func TestInboxDispatchFilterIntegration(t *testing.T) {
 
 	t.Run("dispatch with passing filter should process email", func(t *testing.T) {
 		dispatch := NewInboxDispatch()
-		
+
 		// Add a filter that always passes
 		dispatch.RegisterFilter("allow-filter", EmailFiltererFunc(func(ctx context.Context, email *inbox.Email) (bool, error) {
 			return true, nil
 		}))
-		
+
 		// Add a test handler to verify processing
 		handlerCalled := false
 		dispatch.Register("test-handler", EmailHandlerFunc(func(ctx context.Context, email *inbox.Email) (*inbox.HandlingResult, error) {
@@ -266,13 +266,13 @@ func TestInboxDispatchFilterIntegration(t *testing.T) {
 				Summary: "Test handler",
 			}, nil
 		}))
-		
+
 		err := dispatch.HandleEmail(ctx, testEmail)
-		
+
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
-		
+
 		if !handlerCalled {
 			t.Error("Handler should have been called when filter passes")
 		}
@@ -280,12 +280,12 @@ func TestInboxDispatchFilterIntegration(t *testing.T) {
 
 	t.Run("dispatch with rejecting filter should not process email", func(t *testing.T) {
 		dispatch := NewInboxDispatch()
-		
+
 		// Add a filter that always rejects
 		dispatch.RegisterFilter("reject-filter", EmailFiltererFunc(func(ctx context.Context, email *inbox.Email) (bool, error) {
 			return false, nil
 		}))
-		
+
 		// Add a test handler to verify it's not called
 		handlerCalled := false
 		dispatch.Register("test-handler", EmailHandlerFunc(func(ctx context.Context, email *inbox.Email) (*inbox.HandlingResult, error) {
@@ -295,13 +295,13 @@ func TestInboxDispatchFilterIntegration(t *testing.T) {
 				Summary: "Test handler",
 			}, nil
 		}))
-		
+
 		err := dispatch.HandleEmail(ctx, testEmail)
-		
+
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
-		
+
 		if handlerCalled {
 			t.Error("Handler should not have been called when filter rejects")
 		}
@@ -309,12 +309,12 @@ func TestInboxDispatchFilterIntegration(t *testing.T) {
 
 	t.Run("dispatch with filter error should continue processing", func(t *testing.T) {
 		dispatch := NewInboxDispatch()
-		
+
 		// Add a filter that returns error
 		dispatch.RegisterFilter("error-filter", EmailFiltererFunc(func(ctx context.Context, email *inbox.Email) (bool, error) {
 			return false, errors.New("test filter error")
 		}))
-		
+
 		// Add a test handler to verify processing continues
 		handlerCalled := false
 		dispatch.Register("test-handler", EmailHandlerFunc(func(ctx context.Context, email *inbox.Email) (*inbox.HandlingResult, error) {
@@ -324,13 +324,13 @@ func TestInboxDispatchFilterIntegration(t *testing.T) {
 				Summary: "Test handler",
 			}, nil
 		}))
-		
+
 		err := dispatch.HandleEmail(ctx, testEmail)
-		
+
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
-		
+
 		if !handlerCalled {
 			t.Error("Handler should have been called when filter has error (fail open)")
 		}
@@ -340,18 +340,18 @@ func TestInboxDispatchFilterIntegration(t *testing.T) {
 // TestFilterRegistration tests the filter registration and deregistration functionality
 func TestFilterRegistration(t *testing.T) {
 	dispatch := NewInboxDispatch()
-	
+
 	testFilter := EmailFiltererFunc(func(ctx context.Context, email *inbox.Email) (bool, error) {
 		return true, nil
 	})
 
 	t.Run("register valid filter should succeed", func(t *testing.T) {
 		err := dispatch.RegisterFilter("test-filter", testFilter)
-		
+
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
-		
+
 		if dispatch.GetFilterCount() != 1 {
 			t.Errorf("Expected filter count 1, got %d", dispatch.GetFilterCount())
 		}
@@ -359,7 +359,7 @@ func TestFilterRegistration(t *testing.T) {
 
 	t.Run("register filter with empty ID should fail", func(t *testing.T) {
 		err := dispatch.RegisterFilter("", testFilter)
-		
+
 		if err == nil {
 			t.Error("Expected error for empty filter ID")
 		}
@@ -367,7 +367,7 @@ func TestFilterRegistration(t *testing.T) {
 
 	t.Run("register nil filter should fail", func(t *testing.T) {
 		err := dispatch.RegisterFilter("nil-filter", nil)
-		
+
 		if err == nil {
 			t.Error("Expected error for nil filter")
 		}
@@ -376,9 +376,9 @@ func TestFilterRegistration(t *testing.T) {
 	t.Run("deregister existing filter should succeed", func(t *testing.T) {
 		// First register a filter
 		dispatch.RegisterFilter("temp-filter", testFilter)
-		
+
 		result := dispatch.DeregisterFilter("temp-filter")
-		
+
 		if !result {
 			t.Error("Expected deregister to return true for existing filter")
 		}
@@ -386,7 +386,7 @@ func TestFilterRegistration(t *testing.T) {
 
 	t.Run("deregister non-existing filter should return false", func(t *testing.T) {
 		result := dispatch.DeregisterFilter("non-existing-filter")
-		
+
 		if result {
 			t.Error("Expected deregister to return false for non-existing filter")
 		}
@@ -396,18 +396,18 @@ func TestFilterRegistration(t *testing.T) {
 		// Register first filter
 		dispatch.RegisterFilter("replaceable-filter", testFilter)
 		originalCount := dispatch.GetFilterCount()
-		
+
 		// Replace with new filter
 		newFilter := EmailFiltererFunc(func(ctx context.Context, email *inbox.Email) (bool, error) {
 			return false, nil
 		})
-		
+
 		err := dispatch.RegisterFilter("replaceable-filter", newFilter)
-		
+
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
-		
+
 		if dispatch.GetFilterCount() != originalCount {
 			t.Errorf("Expected filter count to remain %d, got %d", originalCount, dispatch.GetFilterCount())
 		}

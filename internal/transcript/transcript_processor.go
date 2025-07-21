@@ -464,8 +464,14 @@ func SendFailureEmail(ctx context.Context, fs *internal.FirestoreClient, user *i
 			"userID":         user.ID,
 			"appointment_id": appointment.ID,
 			"user_email":     user.Email,
-			"call_id":        func() string { if appointment.CallID != nil { return *appointment.CallID } else { return "nil" } }(),
-			"step":           "GenerateFailureEmail",
+			"call_id": func() string {
+				if appointment.CallID != nil {
+					return *appointment.CallID
+				} else {
+					return "nil"
+				}
+			}(),
+			"step": "GenerateFailureEmail",
 		})
 		return fmt.Errorf("SendFailureEmail: GenerateFailureEmail: %w", err)
 	}

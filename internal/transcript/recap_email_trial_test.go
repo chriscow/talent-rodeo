@@ -12,7 +12,7 @@ func TestGenerateRecapEmailWithTrialContext(t *testing.T) {
 	// Create a mock user with trial information
 	trialEnd := time.Now().Add(7 * 24 * time.Hour)
 	timezone := "America/New_York"
-	
+
 	user := &internal.User{
 		ID:              "test-user-123",
 		Name:            "John Doe",
@@ -70,7 +70,7 @@ func TestTrialContextDataPreparation(t *testing.T) {
 
 	// Test timezone formatting
 	now := time.Now()
-	
+
 	// Simulate what the function does
 	loc, err := time.LoadLocation(timezone)
 	if err != nil {

@@ -44,7 +44,7 @@ func NewGmailReader(config InboxConfig, logger *slog.Logger) (*GmailReader, erro
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse client secret file to config: %w", err)
 	}
-	
+
 	// Use out-of-band flow instead of localhost redirect
 	oauthConfig.RedirectURL = "urn:ietf:wg:oauth:2.0:oob"
 
