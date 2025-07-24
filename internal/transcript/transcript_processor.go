@@ -208,6 +208,29 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 	}
 
 	//
+	// Subscribe user to all search criteria at once (atomic transaction)
+	//
+	criteriaIDs := make([]string, len(searchCriteriaList))
+	for i, searchCriteria := range searchCriteriaList {
+		criteriaIDs[i] = searchCriteria.Criteria.ID
+	}
+	logger.Debug("subscribing user to all search criteria", "userID", user.ID, "criteria-count", len(criteriaIDs))
+	if err := internal.SubscribeToMultipleCriteria(ctx, fs, user.ID, criteriaIDs); err != nil {
+		logger.Error("failed to subscribe user to search criteria", "error", err, "userID", user.ID, "appointmentID", appointment.ID, "criteria-count", len(criteriaIDs))
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+			"userID":         user.ID,
+			"appointment_id": appointment.ID,
+			"user_email":     user.Email,
+			"call_id":        *appointment.CallID,
+			"criteria_count": fmt.Sprintf("%d", len(criteriaIDs)),
+			"step":           "SubscribeToMultipleCriteria",
+		})
+		internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
+		return
+	}
+	logger.Debug("user subscribed to all criteria", "name", user.Name, "userID", user.ID, "criteria-count", len(criteriaIDs))
+
+	//
 	// Get user statement
 	//
 	logger.Debug("getting user statement", "name", user.Name, "userID", user.ID, "appointmentID", appointment.ID)
@@ -275,23 +298,9 @@ func ProcessCompletedCall(hub *sentry.Hub, fs *internal.FirestoreClient, psh *pu
 			count = "search"
 		}
 		//
-		// Subscribe the user to the search criteria
+		// User is already subscribed to all criteria - no need to subscribe individually
 		//
-		logger.Debug("subscribing user to search criteria", "userID", user.ID, "criteria-id", searchCriteria.Criteria.ID)
-		if err := internal.SubscribeToCriteria(ctx, fs, user.ID, searchCriteria.Criteria.ID); err != nil {
-			logger.Error("failed to subscribe user to search criteria", "error", err, "userID", user.ID, "criteria-id", searchCriteria.Criteria.ID)
-			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-				"userID":         user.ID,
-				"appointment_id": appointment.ID,
-				"user_email":     user.Email,
-				"call_id":        *appointment.CallID,
-				"criteria_id":    searchCriteria.Criteria.ID,
-				"step":           "SubscribeToCriteria",
-			})
-			internal.ProcessAppointmentFailed(ctx, fs, user, appointment, err)
-			return
-		}
-		logger.Debug("user subscribed to criteria", "name", user.Name, "userID", user.ID, "criteria-id", searchCriteria.Criteria.ID)
+		logger.Debug("processing criteria", "userID", user.ID, "criteria-id", searchCriteria.Criteria.ID, "is-new", searchCriteria.IsNew)
 
 		if searchCriteria.IsNew {
 			if queue == nil {

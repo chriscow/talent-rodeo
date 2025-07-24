@@ -85,6 +85,81 @@ func SubscribeToCriteria(ctx context.Context, fs *FirestoreClient, userID, crite
 
 }
 
+// SubscribeToMultipleCriteria creates subscriptions for a user to multiple search criteria in a single transaction
+func SubscribeToMultipleCriteria(ctx context.Context, fs *FirestoreClient, userID string, criteriaIDs []string) error {
+	if fs == nil {
+		return fmt.Errorf("FirestoreClient is nil")
+	}
+
+	// Validate inputs
+	if userID == "" {
+		return fmt.Errorf("user ID is required")
+	}
+	if len(criteriaIDs) == 0 {
+		return fmt.Errorf("at least one criteria ID is required")
+	}
+
+	// Remove duplicates and validate each criteria ID
+	uniqueCriteriaIDs := make(map[string]bool)
+	validCriteriaIDs := make([]string, 0, len(criteriaIDs))
+	for _, criteriaID := range criteriaIDs {
+		if criteriaID == "" {
+			return fmt.Errorf("criteria ID cannot be empty")
+		}
+		if !uniqueCriteriaIDs[criteriaID] {
+			uniqueCriteriaIDs[criteriaID] = true
+			validCriteriaIDs = append(validCriteriaIDs, criteriaID)
+		}
+	}
+
+	// Check that all criteria exist
+	for _, criteriaID := range validCriteriaIDs {
+		_, found, err := GetSearchCriteria(ctx, fs, criteriaID)
+		if err != nil {
+			return fmt.Errorf("failed to check existence of criteria ID '%s': %w", criteriaID, err)
+		}
+		if !found {
+			return fmt.Errorf("criteria with ID '%s' not found", criteriaID)
+		}
+	}
+
+	// Use a transaction to update all subscriptions and increment subscriber counts
+	return fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		subscriptionTime := time.Now()
+
+		// Create all subscriptions and update subscriber counts
+		for _, criteriaID := range validCriteriaIDs {
+			// Create subscription document ID by combining user and criteria IDs
+			subscriptionID := funcs.Slugify(fmt.Sprintf("%s_%s", userID, criteriaID))
+
+			// Create the subscription
+			subscription := SearchCriteriaSubscription{
+				UserID:       userID,
+				CriteriaID:   criteriaID,
+				SubscribedAt: subscriptionTime,
+			}
+
+			// Create/update the subscription
+			subscriptionRef := fs.Collection(userCriteriaCollection).Doc(subscriptionID)
+			err := tx.Set(subscriptionRef, subscription)
+			if err != nil {
+				return fmt.Errorf("SubscribeToMultipleCriteria: failed to set subscription for criteria '%s': %w", criteriaID, err)
+			}
+
+			// Increment the subscriber count for the criteria
+			criteriaRef := fs.Collection(searchCriteriaCollection).Doc(criteriaID)
+			err = tx.Update(criteriaRef, []firestore.Update{
+				{Path: "SubscriberCount", Value: firestore.Increment(1)},
+			})
+			if err != nil {
+				return fmt.Errorf("SubscribeToMultipleCriteria: failed to increment subscriber count for criteria '%s': %w", criteriaID, err)
+			}
+		}
+
+		return nil
+	})
+}
+
 // UnsubscribeFromCriteria removes a user's subscription to a criteria
 func UnsubscribeFromCriteria(ctx context.Context, fs *FirestoreClient, userID, criteriaID string) error {
 	if fs == nil {
