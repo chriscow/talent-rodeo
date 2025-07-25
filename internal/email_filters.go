@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"talent-rodeo/internal/inbox"
 )
 
@@ -54,13 +55,27 @@ func (f *UserVerificationFilter) ShouldProcess(ctx context.Context, email *inbox
 		return false, nil
 	}
 
-	// Check if sender is a registered user
-	user, exists, err := GetUserByEmail(ctx, f.firestoreClient, email.From)
+	// Extract email address from "Name <email@domain.com>" format
+	userEmail := extractEmailFromField(email.From)
+	if userEmail == "" {
+		if f.logger != nil {
+			f.logger.Warn("could not extract email address from From field",
+				"email_from", email.From,
+				"email_id", email.ID,
+				"subject", email.Subject,
+			)
+		}
+		return false, nil
+	}
+
+	// Check if sender is a registered user using extracted email
+	user, exists, err := GetUserByEmail(ctx, f.firestoreClient, userEmail)
 	if err != nil {
 		// Log error but don't fail the processing - allow email through on database errors
 		if f.logger != nil {
 			f.logger.Error("failed to check user existence, allowing email through",
 				"email_from", email.From,
+				"extracted_email", userEmail,
 				"email_id", email.ID,
 				"error", err,
 			)
@@ -72,6 +87,7 @@ func (f *UserVerificationFilter) ShouldProcess(ctx context.Context, email *inbox
 		if f.logger != nil {
 			f.logger.Info("filtering out email from non-registered user",
 				"email_from", email.From,
+				"extracted_email", userEmail,
 				"email_id", email.ID,
 				"subject", email.Subject,
 			)
@@ -82,6 +98,7 @@ func (f *UserVerificationFilter) ShouldProcess(ctx context.Context, email *inbox
 	if f.logger != nil {
 		f.logger.Debug("email from registered user, allowing processing",
 			"email_from", email.From,
+			"extracted_email", userEmail,
 			"email_id", email.ID,
 			"user_id", user.ID,
 			"subject", email.Subject,
@@ -89,6 +106,21 @@ func (f *UserVerificationFilter) ShouldProcess(ctx context.Context, email *inbox
 	}
 
 	return true, nil
+}
+
+// extractEmailFromField extracts the email address from a "Name <email@domain.com>" format.
+func extractEmailFromField(fromField string) string {
+	// Handle "Name <email@domain.com>" format
+	if strings.Contains(fromField, "<") && strings.Contains(fromField, ">") {
+		start := strings.Index(fromField, "<")
+		end := strings.Index(fromField, ">")
+		if start < end {
+			return strings.TrimSpace(fromField[start+1 : end])
+		}
+	}
+
+	// Handle plain email address
+	return strings.TrimSpace(fromField)
 }
 
 // FilterResult represents the result of email filtering

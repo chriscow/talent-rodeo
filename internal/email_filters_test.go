@@ -104,6 +104,61 @@ func TestUserVerificationFilter(t *testing.T) {
 			}
 		})
 	}
+
+	// Clean up
+	err = DeleteUser(ctx, fs, testUserID)
+	if err != nil {
+		t.Fatalf("Failed to clean up test user: %v", err)
+	}
+}
+
+// TestExtractEmailFromField tests the email extraction function
+func TestExtractEmailFromField(t *testing.T) {
+	tests := []struct {
+		name      string
+		fromField string
+		expected  string
+	}{
+		{
+			name:      "name with email in brackets",
+			fromField: "Chris Cowherd <madcow@gmail.com>",
+			expected:  "madcow@gmail.com",
+		},
+		{
+			name:      "plain email address",
+			fromField: "madcow@gmail.com",
+			expected:  "madcow@gmail.com",
+		},
+		{
+			name:      "email with extra spaces",
+			fromField: "  user@example.com  ",
+			expected:  "user@example.com",
+		},
+		{
+			name:      "name with email and extra spaces",
+			fromField: "John Doe < john@example.com >",
+			expected:  "john@example.com",
+		},
+		{
+			name:      "empty string",
+			fromField: "",
+			expected:  "",
+		},
+		{
+			name:      "malformed brackets",
+			fromField: "John Doe >john@example.com<",
+			expected:  "John Doe >john@example.com<",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractEmailFromField(tt.fromField)
+			if result != tt.expected {
+				t.Errorf("extractEmailFromField(%q) = %q, want %q", tt.fromField, result, tt.expected)
+			}
+		})
+	}
 }
 
 // TestEmailFilterChain tests the EmailFilterChain functionality
