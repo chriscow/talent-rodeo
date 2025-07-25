@@ -1668,6 +1668,19 @@ func (app *application) adminHeldResponseStats(w http.ResponseWriter, r *http.Re
 		criteriaCounts[response.HoldCriteria]++
 	}
 
+	// Calculate percentages for criteria counts
+	criteriaCountsWithPercentages := make(map[string]map[string]interface{})
+	for criteria, count := range criteriaCounts {
+		percentage := 0.0
+		if totalResponses > 0 {
+			percentage = float64(count) / float64(totalResponses) * 100
+		}
+		criteriaCountsWithPercentages[criteria] = map[string]interface{}{
+			"count":      count,
+			"percentage": percentage,
+		}
+	}
+
 	// Get filtered email statistics
 	filteredEmailService := internal.NewFilteredEmailService(app.fs)
 	filteredStats, err := filteredEmailService.GetStats(ctx)
@@ -1691,6 +1704,7 @@ func (app *application) adminHeldResponseStats(w http.ResponseWriter, r *http.Re
 	data["RevisionPercentage"] = revisionPercentage
 	data["ExpiredPercentage"] = expiredPercentage
 	data["CriteriaCounts"] = criteriaCounts
+	data["CriteriaCountsWithPercentages"] = criteriaCountsWithPercentages
 
 	// Add filtered email stats with calculated percentages
 	data["FilteredEmailStats"] = filteredStats
