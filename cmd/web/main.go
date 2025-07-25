@@ -893,8 +893,11 @@ func (app *application) createInboxDispatch() (*internal.InboxDispatch, error) {
 	// Assign held response service to app for admin handlers
 	app.heldResponseService = heldResponseService
 
+	// Create filtered email service for tracking rejected emails
+	filteredEmailService := internal.NewFilteredEmailService(app.fs)
+
 	// Create enhanced dispatch with response capabilities
-	dispatch := internal.NewEnhancedInboxDispatch(responder, sender, escalationService, heldResponseService, app.logger)
+	dispatch := internal.NewEnhancedInboxDispatch(responder, sender, escalationService, heldResponseService, filteredEmailService, app.logger)
 
 	inboxFilter := internal.NewUserVerificationFilter(app.fs, app.logger)
 	if err := dispatch.RegisterFilter("user-verification", inboxFilter); err != nil {

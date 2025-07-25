@@ -10,8 +10,8 @@
         </ul>
     </nav>
 
-    <h1>Held Response Statistics</h1>
-    <p>Overview of held response system performance and usage</p>
+    <h1>Email Processing Statistics</h1>
+    <p>Overview of email processing, filtering, and response system performance</p>
     
     {{if .Error}}
     <article style="background-color: var(--pico-color-red-50); border-left: 4px solid var(--pico-color-red);">
@@ -24,7 +24,13 @@
         <article class="stat-card">
             <h3>{{.TotalResponses}}</h3>
             <p>Total Held Responses</p>
-            <small>All time</small>
+            <small>Made it to response generation</small>
+        </article>
+        
+        <article class="stat-card filtered">
+            <h3>{{.TotalFiltered}}</h3>
+            <p>Filtered Emails</p>
+            <small>Rejected before processing</small>
         </article>
         
         <article class="stat-card pending">
@@ -101,6 +107,57 @@
                     <span>Expired ({{.ExpiredCount}} - {{printf "%.1f" .ExpiredPercentage}}%)</span>
                 </div>
             </div>
+        </div>
+    </article>
+    {{end}}
+
+    <!-- Filtered Emails Breakdown -->
+    {{if .FilterCounts}}
+    <article>
+        <header>
+            <h3>Filtered Emails by Filter</h3>
+        </header>
+        
+        <div class="criteria-stats">
+            {{range $filter, $count := .FilterCounts}}
+            <div class="criteria-item">
+                <div class="criteria-header">
+                    <span class="hold-criteria hold-criteria-{{$filter}}">{{$filter}} filter</span>
+                    <span class="criteria-count">{{$count}} emails</span>
+                </div>
+                <div class="criteria-bar">
+                    <div class="criteria-fill hold-criteria-{{$filter}}" 
+                         style="width: {{div (mul $count 100) $.TotalFiltered}}%">
+                    </div>
+                </div>
+                <small>{{printf "%.1f" (div (mul (float64 $count) 100) (float64 $.TotalFiltered))}}% of filtered</small>
+            </div>
+            {{end}}
+        </div>
+    </article>
+    {{end}}
+    
+    {{if .ReasonCounts}}
+    <article>
+        <header>
+            <h3>Filtered Emails by Reason</h3>
+        </header>
+        
+        <div class="criteria-stats">
+            {{range $reason, $count := .ReasonCounts}}
+            <div class="criteria-item">
+                <div class="criteria-header">
+                    <span class="hold-criteria hold-criteria-{{$reason}}">{{$reason}}</span>
+                    <span class="criteria-count">{{$count}} emails</span>
+                </div>
+                <div class="criteria-bar">
+                    <div class="criteria-fill hold-criteria-{{$reason}}" 
+                         style="width: {{div (mul $count 100) $.TotalFiltered}}%">
+                    </div>
+                </div>
+                <small>{{printf "%.1f" (div (mul (float64 $count) 100) (float64 $.TotalFiltered))}}% of filtered</small>
+            </div>
+            {{end}}
         </div>
     </article>
     {{end}}

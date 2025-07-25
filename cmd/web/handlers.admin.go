@@ -1668,6 +1668,18 @@ func (app *application) adminHeldResponseStats(w http.ResponseWriter, r *http.Re
 		criteriaCounts[response.HoldCriteria]++
 	}
 
+	// Get filtered email statistics
+	filteredEmailService := internal.NewFilteredEmailService(app.fs)
+	filteredStats, err := filteredEmailService.GetStats(ctx)
+	if err != nil {
+		app.logger.Error("failed to get filtered email stats", "error", err)
+		filteredStats = map[string]interface{}{
+			"total_filtered": 0,
+			"by_filter":      make(map[string]int),
+			"by_reason":      make(map[string]int),
+		}
+	}
+
 	// Set template data
 	data["TotalResponses"] = totalResponses
 	data["PendingCount"] = len(pendingResponses)
@@ -1679,6 +1691,12 @@ func (app *application) adminHeldResponseStats(w http.ResponseWriter, r *http.Re
 	data["RevisionPercentage"] = revisionPercentage
 	data["ExpiredPercentage"] = expiredPercentage
 	data["CriteriaCounts"] = criteriaCounts
+
+	// Add filtered email stats
+	data["FilteredEmailStats"] = filteredStats
+	data["TotalFiltered"] = filteredStats["total_filtered"]
+	data["FilterCounts"] = filteredStats["by_filter"]
+	data["ReasonCounts"] = filteredStats["by_reason"]
 
 	if err := response.Page(w, http.StatusOK, data, "pages/admin/held-response-stats.html"); err != nil {
 		app.serverError(w, r, err)

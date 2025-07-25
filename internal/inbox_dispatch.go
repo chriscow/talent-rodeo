@@ -36,15 +36,16 @@ func (f EmailHandlerFunc) HandleEmail(ctx context.Context, email *inbox.Email) (
 // InboxDispatch implements EmailHandler and dispatches emails to multiple registered handlers.
 // It orchestrates the full email processing workflow including filtering, response generation and escalation.
 type InboxDispatch struct {
-	mu                  sync.RWMutex
-	handlers            map[string]EmailHandler
-	filters             map[string]EmailFilterer
-	emailResponder      EmailResponder
-	responseSender      ResponseSender
-	escalationService   EscalationService
-	heldResponseService *HeldResponseService
-	logger              *slog.Logger
-	responseEnabled     bool
+	mu                   sync.RWMutex
+	handlers             map[string]EmailHandler
+	filters              map[string]EmailFilterer
+	emailResponder       EmailResponder
+	responseSender       ResponseSender
+	escalationService    EscalationService
+	heldResponseService  *HeldResponseService
+	filteredEmailService *FilteredEmailService
+	logger               *slog.Logger
+	responseEnabled      bool
 }
 
 // NewInboxDispatch creates a new InboxDispatch instance with basic configuration.
@@ -62,17 +63,19 @@ func NewEnhancedInboxDispatch(
 	responseSender ResponseSender,
 	escalationService EscalationService,
 	heldResponseService *HeldResponseService,
+	filteredEmailService *FilteredEmailService,
 	logger *slog.Logger,
 ) *InboxDispatch {
 	return &InboxDispatch{
-		handlers:            make(map[string]EmailHandler),
-		filters:             make(map[string]EmailFilterer),
-		emailResponder:      emailResponder,
-		responseSender:      responseSender,
-		escalationService:   escalationService,
-		heldResponseService: heldResponseService,
-		logger:              logger,
-		responseEnabled:     true,
+		handlers:             make(map[string]EmailHandler),
+		filters:              make(map[string]EmailFilterer),
+		emailResponder:       emailResponder,
+		responseSender:       responseSender,
+		escalationService:    escalationService,
+		heldResponseService:  heldResponseService,
+		filteredEmailService: filteredEmailService,
+		logger:               logger,
+		responseEnabled:      true,
 	}
 }
 
@@ -333,6 +336,38 @@ func (id *InboxDispatch) processFilters(ctx context.Context, email *inbox.Email)
 					"from", email.From,
 				)
 			}
+
+			// Record the filtered email for admin visibility
+			if id.filteredEmailService != nil {
+				// Extract email for tracking
+				extractedEmail := extractEmailFromField(email.From)
+
+				// Determine the reason based on filter name
+				var reason FilteredEmailReason
+				switch filterName {
+				case "user-verification":
+					reason = FilteredEmailReasonUserNotFound
+				default:
+					reason = FilteredEmailReasonOther
+				}
+
+				reasonDetails := fmt.Sprintf("Email rejected by %s filter", filterName)
+				err := id.filteredEmailService.RecordFilteredEmail(ctx, email, filterName, reason, reasonDetails, extractedEmail)
+				if err != nil && id.logger != nil {
+					id.logger.Error("failed to record filtered email",
+						"filter_name", filterName,
+						"email_id", email.ID,
+						"error", err,
+					)
+				} else if id.logger != nil {
+					id.logger.Debug("filtered email recorded",
+						"filter_name", filterName,
+						"email_id", email.ID,
+						"reason", reason,
+					)
+				}
+			}
+
 			return false, nil
 		}
 
