@@ -69,22 +69,22 @@
             <div class="progress-chart">
                 {{if .PendingPercentage}}
                 <div class="progress-bar pending" style="width: {{.PendingPercentage}}%">
-                    {{if ge .PendingPercentage 10}}Pending ({{.PendingCount}}){{end}}
+                    {{if ge .PendingPercentage 10.0}}Pending ({{.PendingCount}}){{end}}
                 </div>
                 {{end}}
                 {{if .ApprovedPercentage}}
                 <div class="progress-bar approved" style="width: {{.ApprovedPercentage}}%">
-                    {{if ge .ApprovedPercentage 10}}Approved ({{.ApprovedCount}}){{end}}
+                    {{if ge .ApprovedPercentage 10.0}}Approved ({{.ApprovedCount}}){{end}}
                 </div>
                 {{end}}
                 {{if .RevisionPercentage}}
                 <div class="progress-bar revision" style="width: {{.RevisionPercentage}}%">
-                    {{if ge .RevisionPercentage 10}}Revision ({{.RevisionCount}}){{end}}
+                    {{if ge .RevisionPercentage 10.0}}Revision ({{.RevisionCount}}){{end}}
                 </div>
                 {{end}}
                 {{if .ExpiredPercentage}}
                 <div class="progress-bar expired" style="width: {{.ExpiredPercentage}}%">
-                    {{if ge .ExpiredPercentage 10}}Expired ({{.ExpiredCount}}){{end}}
+                    {{if ge .ExpiredPercentage 10.0}}Expired ({{.ExpiredCount}}){{end}}
                 </div>
                 {{end}}
             </div>
@@ -119,18 +119,18 @@
         </header>
         
         <div class="criteria-stats">
-            {{range $filter, $count := .FilterCounts}}
+            {{range $filter, $data := .FilterCountsWithPercentages}}
             <div class="criteria-item">
                 <div class="criteria-header">
                     <span class="hold-criteria hold-criteria-{{$filter}}">{{$filter}} filter</span>
-                    <span class="criteria-count">{{$count}} emails</span>
+                    <span class="criteria-count">{{$data.count}} emails</span>
                 </div>
                 <div class="criteria-bar">
                     <div class="criteria-fill hold-criteria-{{$filter}}" 
-                         style="width: {{div (mul $count 100) $.TotalFiltered}}%">
+                         style="width: {{$data.percentage}}%">
                     </div>
                 </div>
-                <small>{{printf "%.1f" (div (mul (float64 $count) 100) (float64 $.TotalFiltered))}}% of filtered</small>
+                <small>{{printf "%.1f" $data.percentage}}% of filtered</small>
             </div>
             {{end}}
         </div>
@@ -144,18 +144,18 @@
         </header>
         
         <div class="criteria-stats">
-            {{range $reason, $count := .ReasonCounts}}
+            {{range $reason, $data := .ReasonCountsWithPercentages}}
             <div class="criteria-item">
                 <div class="criteria-header">
                     <span class="hold-criteria hold-criteria-{{$reason}}">{{$reason}}</span>
-                    <span class="criteria-count">{{$count}} emails</span>
+                    <span class="criteria-count">{{$data.count}} emails</span>
                 </div>
                 <div class="criteria-bar">
                     <div class="criteria-fill hold-criteria-{{$reason}}" 
-                         style="width: {{div (mul $count 100) $.TotalFiltered}}%">
+                         style="width: {{$data.percentage}}%">
                     </div>
                 </div>
-                <small>{{printf "%.1f" (div (mul (float64 $count) 100) (float64 $.TotalFiltered))}}% of filtered</small>
+                <small>{{printf "%.1f" $data.percentage}}% of filtered</small>
             </div>
             {{end}}
         </div>

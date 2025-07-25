@@ -1692,11 +1692,44 @@ func (app *application) adminHeldResponseStats(w http.ResponseWriter, r *http.Re
 	data["ExpiredPercentage"] = expiredPercentage
 	data["CriteriaCounts"] = criteriaCounts
 
-	// Add filtered email stats
+	// Add filtered email stats with calculated percentages
 	data["FilteredEmailStats"] = filteredStats
 	data["TotalFiltered"] = filteredStats["total_filtered"]
-	data["FilterCounts"] = filteredStats["by_filter"]
-	data["ReasonCounts"] = filteredStats["by_reason"]
+
+	totalFiltered := filteredStats["total_filtered"].(int)
+	filterCounts := filteredStats["by_filter"].(map[string]int)
+	reasonCounts := filteredStats["by_reason"].(map[string]int)
+
+	// Calculate percentages for filter counts
+	filterCountsWithPercentages := make(map[string]map[string]interface{})
+	for filter, count := range filterCounts {
+		percentage := 0.0
+		if totalFiltered > 0 {
+			percentage = float64(count) / float64(totalFiltered) * 100
+		}
+		filterCountsWithPercentages[filter] = map[string]interface{}{
+			"count":      count,
+			"percentage": percentage,
+		}
+	}
+
+	// Calculate percentages for reason counts
+	reasonCountsWithPercentages := make(map[string]map[string]interface{})
+	for reason, count := range reasonCounts {
+		percentage := 0.0
+		if totalFiltered > 0 {
+			percentage = float64(count) / float64(totalFiltered) * 100
+		}
+		reasonCountsWithPercentages[reason] = map[string]interface{}{
+			"count":      count,
+			"percentage": percentage,
+		}
+	}
+
+	data["FilterCounts"] = filterCounts
+	data["ReasonCounts"] = reasonCounts
+	data["FilterCountsWithPercentages"] = filterCountsWithPercentages
+	data["ReasonCountsWithPercentages"] = reasonCountsWithPercentages
 
 	if err := response.Page(w, http.StatusOK, data, "pages/admin/held-response-stats.html"); err != nil {
 		app.serverError(w, r, err)
