@@ -35,8 +35,11 @@ func TestInboxDispatch_HeldResponseIntegration(t *testing.T) {
 		holdEvaluator := NewHoldDecisionEvaluator(holdCriteria)
 		heldResponseService := NewHeldResponseService(client, holdEvaluator, mockSender, nil)
 
+		// Create filtered email service for testing
+		filteredEmailService := NewFilteredEmailService(client)
+
 		// Create inbox dispatch
-		dispatch := NewEnhancedInboxDispatch(mockResponder, mockSender, mockEscalation, heldResponseService, nil)
+		dispatch := NewEnhancedInboxDispatch(mockResponder, mockSender, mockEscalation, heldResponseService, filteredEmailService, nil)
 
 		// Register a dummy handler to generate results
 		dummyHandler := EmailHandlerFunc(func(ctx context.Context, email *inbox.Email) (*inbox.HandlingResult, error) {
@@ -83,7 +86,7 @@ func TestInboxDispatch_HeldResponseIntegration(t *testing.T) {
 		heldResponseService := NewHeldResponseService(client, holdEvaluator, mockSender, nil)
 
 		// Create inbox dispatch
-		dispatch := NewEnhancedInboxDispatch(mockResponder, mockSender, mockEscalation, heldResponseService, nil)
+		dispatch := NewEnhancedInboxDispatch(mockResponder, mockSender, mockEscalation, heldResponseService, NewFilteredEmailService(client), nil)
 
 		// Register a dummy handler to generate results
 		dummyHandler := EmailHandlerFunc(func(ctx context.Context, email *inbox.Email) (*inbox.HandlingResult, error) {
@@ -139,7 +142,7 @@ func TestInboxDispatch_HeldResponseIntegration(t *testing.T) {
 		heldResponseService := NewHeldResponseService(client, holdEvaluator, mockSender, nil)
 
 		// Create inbox dispatch
-		dispatch := NewEnhancedInboxDispatch(mockResponder, mockSender, mockEscalation, heldResponseService, nil)
+		dispatch := NewEnhancedInboxDispatch(mockResponder, mockSender, mockEscalation, heldResponseService, NewFilteredEmailService(client), nil)
 
 		// Register a dummy handler to generate results
 		dummyHandler := EmailHandlerFunc(func(ctx context.Context, email *inbox.Email) (*inbox.HandlingResult, error) {
@@ -200,7 +203,7 @@ func TestInboxDispatch_HeldResponseIntegration(t *testing.T) {
 		heldResponseService := NewHeldResponseService(client, holdEvaluator, mockSender, nil)
 
 		// Create inbox dispatch
-		dispatch := NewEnhancedInboxDispatch(mockResponder, mockSender, mockEscalation, heldResponseService, nil)
+		dispatch := NewEnhancedInboxDispatch(mockResponder, mockSender, mockEscalation, heldResponseService, NewFilteredEmailService(client), nil)
 
 		// Register a dummy handler to generate results
 		dummyHandler := EmailHandlerFunc(func(ctx context.Context, email *inbox.Email) (*inbox.HandlingResult, error) {
@@ -259,7 +262,7 @@ func TestInboxDispatch_HeldResponseFailureScenarios(t *testing.T) {
 
 	t.Run("response sent when held response service is nil", func(t *testing.T) {
 		// Create inbox dispatch without held response service
-		dispatch := NewEnhancedInboxDispatch(mockResponder, mockSender, mockEscalation, nil, nil)
+		dispatch := NewEnhancedInboxDispatch(mockResponder, mockSender, mockEscalation, nil, NewFilteredEmailService(client), nil)
 
 		// Register a dummy handler to generate results
 		dummyHandler := EmailHandlerFunc(func(ctx context.Context, email *inbox.Email) (*inbox.HandlingResult, error) {
@@ -305,7 +308,7 @@ func TestInboxDispatch_HeldResponseFailureScenarios(t *testing.T) {
 		heldResponseService := NewHeldResponseService(nil, holdEvaluator, mockSender, nil)
 
 		// Create inbox dispatch
-		dispatch := NewEnhancedInboxDispatch(mockResponder, mockSender, mockEscalation, heldResponseService, nil)
+		dispatch := NewEnhancedInboxDispatch(mockResponder, mockSender, mockEscalation, heldResponseService, NewFilteredEmailService(client), nil)
 
 		// Register a dummy handler to generate results
 		dummyHandler := EmailHandlerFunc(func(ctx context.Context, email *inbox.Email) (*inbox.HandlingResult, error) {
