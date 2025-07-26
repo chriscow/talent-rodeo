@@ -279,6 +279,13 @@ func (ts *testServer) authenticatedGet(t *testing.T, urlPath string) (int, http.
 	return w.Code, w.Header(), w.Body.String()
 }
 
+func (ts *testServer) authenticatedGetAsUser(t *testing.T, urlPath string, user *internal.User) (int, http.Header, string) {
+	r := ts.authenticatedRequest(t, "GET", urlPath, user, nil)
+	w := httptest.NewRecorder()
+	ts.app.routes().ServeHTTP(w, r)
+	return w.Code, w.Header(), w.Body.String()
+}
+
 func (ts *testServer) Cleanup() {
 	internal.DeleteTestData(ts.T, ts.app.fs, "test-user-")
 	internal.DeleteTestData(ts.T, ts.app.fs, "test-resume-")

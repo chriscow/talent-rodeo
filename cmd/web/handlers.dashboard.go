@@ -408,6 +408,18 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 	data["RejectedJobsCount"] = user.RejectedJobsCount
 	data["QualityJobsFound"] = user.QualityJobsFound
 
+	// Check for expired subscription
+	isSubscriptionExpired := false
+	daysSinceLastEvaluation := 0
+	if user.SubscriptionEnd != nil && user.SubscriptionEnd.Before(time.Now()) {
+		isSubscriptionExpired = true
+		if user.LastEvaluationDate != nil {
+			daysSinceLastEvaluation = int(time.Since(*user.LastEvaluationDate).Hours() / 24)
+		}
+	}
+	data["IsSubscriptionExpired"] = isSubscriptionExpired
+	data["DaysSinceLastEvaluation"] = daysSinceLastEvaluation
+
 	// Convert jobs map to slice for template consumption and track filtering
 	jobsSlice := make([]JobWithDetails, 0, len(jobs))
 	hiddenJobsCount := 0
