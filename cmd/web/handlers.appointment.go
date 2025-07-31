@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -121,7 +122,8 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 		}
 
 		failureReason := app.getFailureReasonDescription(endReason)
-		go transcript.SendFailureEmail(r.Context(), app.fs, user, appt, failureReason, &cfg, app.logger)
+		// use a background context to avoid context cancellation when this method exists
+		go transcript.SendFailureEmail(context.Background(), app.fs, user, appt, failureReason, &cfg, app.logger)
 	} else {
 		var successEval any
 		if report.Analysis != nil {
@@ -141,9 +143,25 @@ func (app *application) processCompletedAppointment(r *http.Request, userID, app
 			From:     app.config.smtp.from,
 		}
 
-		go transcript.ProcessCompletedCall(hub, app.fs, app.pusher, app.searchProvider, app.logger, app.jobDispatch, user, appt, &cfg)
+		// Use ServiceDeps for unified completion processing
+		serviceDeps := internal.NewServiceDeps(
+			hub,
+			app.fs,
+			app.pusher,
+			app.logger,
+			app.searchProvider,
+			app.jobDispatch,
+			&cfg,
+		)
+
+		go processCompletedPhoneCall(serviceDeps, user, appt)
 	}
 	return nil
+}
+
+// processCompletedPhoneCall processes a completed phone call using ServiceDeps
+func processCompletedPhoneCall(deps *internal.ServiceDeps, user *internal.User, appointment *internal.Appointment) {
+	transcript.ProcessCompletedCall(deps, user, appointment)
 }
 
 // evaluateCallSuccess processes both the Analysis object and endReason from VAPI webhook
@@ -179,7 +197,7 @@ func (app *application) evaluateCallSuccess(report *vapi.EndOfCallReport, endRea
 
 	// First check endReason - only specific values indicate success
 	switch endReason {
-	case "assistant-ended-call", "customer-ended-call", "exceeded-max-duration":
+	case "assistant-ended-call", "customer-ended-call", "exceeded-max-duration", "completed":
 		// These are considered successful call completions
 		app.logger.Info("call completed successfully based on end reason", "end_reason", endReason)
 

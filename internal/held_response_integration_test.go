@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -52,6 +53,7 @@ func TestHeldResponseServiceWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create held response: %v", err)
 	}
+	defer DeleteHeldResponse(ctx, fs, heldResponse.ID)
 
 	if heldResponse.Status != HeldResponseStatusPending {
 		t.Errorf("Expected status 'pending', got %s", heldResponse.Status)
@@ -120,6 +122,7 @@ func TestHeldResponseRevisionWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test held response: %v", err)
 	}
+	defer DeleteHeldResponse(ctx, fs, heldResponse.ID)
 
 	// Create service
 	heldResponseService := NewHeldResponseService(fs, nil, nil, nil)
@@ -192,6 +195,7 @@ func TestHeldResponseExpiration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test held response: %v", err)
 	}
+	defer DeleteHeldResponse(ctx, fs, heldResponse.ID)
 
 	// Create service and mark expired
 	heldResponseService := NewHeldResponseService(fs, nil, nil, nil)
@@ -249,6 +253,7 @@ func TestHeldResponseAdminHandlers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test held response: %v", err)
 	}
+	defer DeleteHeldResponse(ctx, fs, heldResponse.ID)
 
 	// Mock application with held response service
 	mockApp := &MockApplication{
@@ -309,7 +314,9 @@ func TestHeldResponseAdminHandlers(t *testing.T) {
 
 // MockApplication provides a minimal mock of the web application for testing.
 type MockApplication struct {
-	fs                  *FirestoreClient
+	fs     *FirestoreClient
+	logger *slog.Logger
+
 	heldResponseService *HeldResponseService
 }
 

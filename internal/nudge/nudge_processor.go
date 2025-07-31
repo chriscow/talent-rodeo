@@ -780,7 +780,7 @@ func isTrialNudgeType(nudgeType NudgeType) bool {
 // isUserEligibleForTrialEmail performs trial-specific eligibility checks
 func isUserEligibleForTrialEmail(user *internal.User, nudgeType NudgeType, settings NudgeProcessorSettings) (bool, string) {
 	// Must have timezone and subscription end date
-	if user.Timezone == nil {
+	if user.Timezone == "" {
 		return false, fmt.Sprintf("no timezone set (user_id=%s)", user.ID)
 	}
 	if user.SubscriptionEnd == nil {

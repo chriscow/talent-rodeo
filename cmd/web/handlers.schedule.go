@@ -161,7 +161,6 @@ func (app *application) createAppointment(w http.ResponseWriter, r *http.Request
 		UserID:        user.ID,
 		Name:          "initial-call",
 		ScheduledTime: scheduledTime.UTC(),
-		Timezone:      timezone,
 		Status:        internal.AppointmentStatusScheduled,
 	}
 
@@ -394,7 +393,6 @@ func (app *application) callNow(w http.ResponseWriter, r *http.Request) {
 		UserID:        user.ID,
 		Name:          "initial-call",
 		ScheduledTime: scheduledTime,
-		Timezone:      "UTC", // Immediate calls don't need specific timezone
 		Status:        internal.AppointmentStatusScheduled,
 	}
 

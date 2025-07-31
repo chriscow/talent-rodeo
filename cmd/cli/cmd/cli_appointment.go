@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/search/providers/scrapingdog"
@@ -25,6 +26,7 @@ import (
 var completedAppt bool
 var sendRecap bool
 var allUsers bool
+var showChecklist bool
 
 func init() {
 	appointmentCmd.AddCommand(reprocessCmd)
@@ -32,6 +34,7 @@ func init() {
 	appointmentCmd.AddCommand(createApptCmd)
 	appointmentCmd.AddCommand(latestApptCmd)
 	appointmentCmd.AddCommand(sendRecapCmd)
+	appointmentCmd.AddCommand(chatCmd)
 	RootCmd.AddCommand(appointmentCmd)
 
 	createApptCmd.Flags().StringVarP(&userID, "user", "u", "", "User ID to create the appointment for")
@@ -50,10 +53,13 @@ func init() {
 	sendRecapCmd.Flags().StringVarP(&appointmentID, "appointment", "a", "", "Appointment ID to send recap email for")
 	sendRecapCmd.MarkFlagRequired("appointment")
 	sendRecapCmd.MarkFlagRequired("user")
+
+	chatCmd.Flags().BoolVarP(&jsonOutput, "json", "j", false, "Output in JSON format")
+	chatCmd.Flags().BoolVar(&showChecklist, "checklist", false, "Show conversation checklist details")
 }
 
-// Good appointment ids: 230bfc29-2ba0-42b8-90e9-f2288b96965f (Vijaya), 2b0a2620-5117-402d-ba13-daf6e501d8be (Vijaya original)
-// 2709318a-1b74-44da-9ba9-e1973804b6b9 (Chris)
+// Good user ids:
+// 6e2d7c96-2858-48c5-81f8-3ba3ccd3d4d3 (Chris)
 
 type jobEventHandler struct {
 	userID   string
@@ -329,7 +335,14 @@ Examples:
 					defer srp.Stop()
 
 					queue := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), logger, scrapingdog.WithJobEventHandler(dispatch))
-					transcript.ProcessCompletedCall(hub, fs, nil, queue, logger, dispatch, user, appt, nil)
+					deps := &internal.ServiceDeps{
+						Hub:      hub,
+						FS:       fs,
+						Logger:   logger,
+						Queue:    queue,
+						Dispatch: dispatch,
+					}
+					transcript.ProcessCompletedCall(deps, user, appt)
 					time.Sleep(5 * time.Second)
 					currentAppt, err := internal.GetAppointment(ctx, fs, user.ID, appt.ID)
 					if err != nil {
@@ -442,7 +455,15 @@ Examples:
 		dispatch.Register(userID, internal.NewSearchResultProcessor(fs, logger, nil, dispatch))
 		queue := scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), logger, scrapingdog.WithJobEventHandler(dispatch))
 
-		transcript.ProcessCompletedCall(hub, fs, nil, queue, logger, dispatch, user, appointment, cfg)
+		deps := &internal.ServiceDeps{
+			Hub:        hub,
+			FS:         fs,
+			Logger:     logger,
+			Queue:      queue,
+			Dispatch:   dispatch,
+			SMTPConfig: cfg,
+		}
+		transcript.ProcessCompletedCall(deps, user, appointment)
 		time.Sleep(5 * time.Second) // Wait for processing to start
 
 		currentAppt, err := internal.GetAppointment(ctx, fs, userID, appointmentID)
@@ -576,6 +597,110 @@ Examples:
 		}
 
 		fmt.Printf("Successfully sent recap email for appointment %s\n", appointmentID)
+		return nil
+	},
+}
+
+var chatCmd = &cobra.Command{
+	Use:   "chat <user-id> <appointment-id>",
+	Short: "View chat conversation for an appointment",
+	Long: `View the chat conversation messages for a specific appointment.
+
+This command displays the conversation history between the user and the assistant,
+including timestamps and message content. Useful for debugging chat sessions
+and understanding conversation flow.
+
+Examples:
+  trcli appointment chat user123 appt-456              # View chat messages
+  trcli appointment chat user123 appt-456 --json       # JSON output
+  trcli appointment chat user123 appt-456 --checklist  # Include checklist details`,
+	Args: cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := context.Background()
+		fs, err := internal.NewFirestoreClient(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to create firestore client: %w", err)
+		}
+		defer fs.Close()
+
+		userID := args[0]
+		appointmentID := args[1]
+
+		// Get the appointment
+		appointment, err := internal.GetAppointment(ctx, fs, userID, appointmentID)
+		if err != nil {
+			return fmt.Errorf("failed to get appointment: %w", err)
+		}
+
+		// Check if this is a chat appointment
+		if appointment.Type != internal.AppointmentTypeChat {
+			return fmt.Errorf("appointment %s is not a chat appointment (type: %s)", appointmentID, appointment.Type)
+		}
+
+		// Get chat messages
+		messages, err := internal.GetChatMessages(ctx, fs, userID, appointmentID)
+		if err != nil {
+			return fmt.Errorf("failed to get chat messages: %w", err)
+		}
+
+		if jsonOutput {
+			data := map[string]any{
+				"appointment_id": appointmentID,
+				"user_id":        userID,
+				"type":           appointment.Type,
+				"status":         appointment.Status,
+				"messages":       messages,
+			}
+
+			if showChecklist {
+				data["checklist"] = appointment.ConversationChecklist
+			}
+
+			output, err := json.MarshalIndent(data, "", "  ")
+			if err != nil {
+				return fmt.Errorf("failed to marshal chat data: %w", err)
+			}
+			fmt.Println(string(output))
+		} else {
+			// Display in human-readable format
+			fmt.Printf("Chat Conversation: %s\n", appointmentID)
+			fmt.Printf("User: %s\n", userID)
+			fmt.Printf("Status: %s\n", appointment.Status)
+			fmt.Printf("Messages: %d\n", len(messages))
+			fmt.Println("\n--- Conversation ---")
+
+			for i, msg := range messages {
+				timestamp := msg.Timestamp.Format("15:04:05")
+				fmt.Printf("[%s] %s: %s\n", timestamp, msg.Role, msg.Content)
+				if i < len(messages)-1 {
+					fmt.Println()
+				}
+			}
+
+			if showChecklist {
+				fmt.Println("\n--- Checklist Status ---")
+				checklist := appointment.ConversationChecklist
+				fmt.Printf("Overall Status: %s\n", checklist.OverallStatus)
+				fmt.Printf("Completion Attempts: %d\n", checklist.CompletionAttempts)
+				fmt.Printf("Message Count: %d\n", checklist.MessageCount)
+				fmt.Printf("Last Updated: %s\n", checklist.LastUpdated.Format("2006-01-02 15:04:05"))
+				fmt.Printf("Items: %d\n", len(checklist.Items))
+
+				for _, item := range checklist.Items {
+					status := strings.ToUpper(item.Status)
+					quality := strings.ToUpper(item.Quality)
+					required := ""
+					if item.Required {
+						required = " (REQUIRED)"
+					}
+					fmt.Printf("  - %s: %s [%s]%s\n", item.Topic, status, quality, required)
+					if item.ValidationNotes != "" {
+						fmt.Printf("    Notes: %s\n", item.ValidationNotes)
+					}
+				}
+			}
+		}
+
 		return nil
 	},
 }

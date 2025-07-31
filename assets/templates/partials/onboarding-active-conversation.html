@@ -1,0 +1,44 @@
+{{define "partial:onboarding-active-conversation"}}
+<div style="text-align: center; padding: 2rem;">
+    {{if eq .OnboardingSession.ConversationType "chat"}}
+        <h2>💬 Chat in Progress</h2>
+        <p>You have an active chat conversation with Shirely.</p>
+        
+        <div style="margin: 2rem 0;">
+            <a href="/chat?appointment_id={{.OnboardingSession.AppointmentID}}" 
+               style="display: inline-block; padding: 1rem 2rem; background: var(--pico-primary); color: var(--pico-primary-inverse); text-decoration: none; border-radius: var(--pico-border-radius);">
+                Continue Chat Conversation
+            </a>
+        </div>
+        
+        <p><em>Your conversation will continue where you left off.</em></p>
+    {{else}}
+        <h2>📞 Voice Call in Progress</h2>
+        <p>You have an active voice call scheduled or in progress with Shirely.</p>
+        
+        <div style="margin: 2rem 0;">
+            <a href="/dashboard" 
+               style="display: inline-block; padding: 1rem 2rem; background: var(--pico-primary); color: var(--pico-primary-inverse); text-decoration: none; border-radius: var(--pico-border-radius);">
+                View Call Status
+            </a>
+        </div>
+        
+        <p><em>Check your dashboard for call details and status updates.</em></p>
+    {{end}}
+    
+    <!-- <hr style="margin: 2rem 0;">
+    
+    <details>
+        <summary>Want to start over?</summary>
+        <div style="margin-top: 1rem;">
+            <p>If you'd like to reset your onboarding and start fresh, you can do so below.</p>
+            <form action="/onboarding/reset" method="POST" style="margin-top: 1rem;">
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                <button type="submit" class="secondary" onclick="return confirm('Are you sure you want to reset your onboarding? This will clear your current progress.')">
+                    Reset Onboarding
+                </button>
+            </form>
+        </div>
+    </details> -->
+</div>
+{{end}}

@@ -16,6 +16,7 @@ import (
 
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/auth"
+	"talent-rodeo/internal/chat"
 	"talent-rodeo/internal/feedback"
 	"talent-rodeo/internal/inbox"
 	"talent-rodeo/internal/nudge"
@@ -42,6 +43,7 @@ import (
 	"github.com/markbates/goth/providers/google"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/pusher/pusher-http-go/v5"
+	"github.com/sashabaranov/go-openai"
 	"github.com/stripe/stripe-go/v72/client"
 )
 
@@ -175,7 +177,9 @@ type application struct {
 	nudgeProcessor        *nudge.Processor
 	inboxProcessor        *inbox.Processor
 	stripeClient          *client.API
-	heldResponseService   *internal.HeldResponseService
+	chatService           chat.ChatService
+
+	heldResponseService *internal.HeldResponseService
 }
 
 func run(logger *slog.Logger) error {
@@ -482,7 +486,25 @@ func run(logger *slog.Logger) error {
 		return fmt.Errorf("failed to start services: %w", err)
 	}
 
-	if err := transcript.RecoverProcessingAppointments(sentry.CurrentHub(), FirestoreClient, pusherClient, logger, app.jobDispatch, app.searchProvider, &smtpCfg); err != nil {
+	// Initialize ServiceDeps after all services are started
+	serviceDeps := internal.NewServiceDeps(
+		sentry.CurrentHub(),
+		FirestoreClient,
+		pusherClient,
+		logger,
+		app.searchProvider,
+		app.jobDispatch,
+		&smtpCfg,
+	)
+
+	// Initialize chat service with OpenAI client
+	openAIClient := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
+
+	// Initialize chat service with ServiceDeps
+	chatService := chat.NewService(FirestoreClient, openAIClient, serviceDeps, logger)
+	app.chatService = chatService
+
+	if err := transcript.RecoverProcessingAppointments(serviceDeps); err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"error_type": "transcript_recovery",
 		})

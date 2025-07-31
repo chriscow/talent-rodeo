@@ -446,7 +446,7 @@ func predictNudgeForType(ctx context.Context, fs *internal.FirestoreClient, user
 	// For trial emails, use the same precise timing logic as the processor
 	if isTrialEmail(nudgeType) {
 		// Must have timezone and subscription end date
-		if user.Timezone == nil {
+		if user.Timezone == "" {
 			return nil // No timezone set
 		}
 		if user.SubscriptionEnd == nil {
@@ -670,7 +670,7 @@ func createTestUser(nudgeType nudge.NudgeType) *internal.User {
 		CreatedAt:       now.Add(-10 * 24 * time.Hour), // 10 days ago
 		LastAccessedAt:  now.Add(-2 * 24 * time.Hour),  // 2 days ago
 		StatusUpdatedAt: now.Add(-5 * 24 * time.Hour),  // 5 days ago
-		Timezone:        &timezone,
+		Timezone:        timezone,
 		Status:          internal.UserStatusCallCompleted,
 		NudgeTypeCount:  make(map[string]int),
 	}

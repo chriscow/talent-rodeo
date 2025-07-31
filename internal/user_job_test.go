@@ -45,13 +45,13 @@ func TestGetUserJobsQualityCount(t *testing.T) {
 		rating int
 		status JobStatus
 	}{
-		{"job-1", 5, JobStatusNew},      // Should count (5 stars)
-		{"job-2", 4, JobStatusNew},      // Should count (4 stars)
+		{"job-1", 5, JobStatusNew},      // Should count (5 stars, active status)
+		{"job-2", 4, JobStatusNew},      // Should count (4 stars, active status)
 		{"job-3", 3, JobStatusNew},      // Should NOT count (3 stars)
 		{"job-4", 2, JobStatusNew},      // Should NOT count (2 stars)
 		{"job-5", 1, JobStatusNew},      // Should NOT count (1 star)
-		{"job-6", 5, JobStatusSaved},    // Should count (5 stars, status irrelevant)
-		{"job-7", 4, JobStatusArchived}, // Should count (4 stars, status irrelevant)
+		{"job-6", 5, JobStatusSaved},    // Should count (5 stars, active status)
+		{"job-7", 4, JobStatusArchived}, // Should NOT count (archived, even with 4 stars)
 		{"job-8", 0, JobStatusNew},      // Should NOT count (0 stars)
 	}
 
@@ -83,8 +83,8 @@ func TestGetUserJobsQualityCount(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetUserJobsQualityCount() error = %v", err)
 		}
-		// Expected: job-1(5), job-2(4), job-6(5), job-7(4) = 4 total
-		expectedCount := int64(4)
+		// Expected: job-1(5), job-2(4), job-6(5) = 3 total (job-7 excluded due to archived status)
+		expectedCount := int64(3)
 		if count != expectedCount {
 			t.Errorf("GetUserJobsQualityCount() got = %v, want %v", count, expectedCount)
 		}

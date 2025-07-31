@@ -296,6 +296,7 @@ func GetJobsCount(ctx context.Context, fs *FirestoreClient, userID string, statu
 }
 
 // GetUserJobsQualityCount returns the count of all user jobs with rating >= QualityJobRatingThreshold (4 stars or higher)
+// and status is not archived or dismissed (quality jobs must be active)
 func GetUserJobsQualityCount(ctx context.Context, fs *FirestoreClient, userID string) (int64, error) {
 	if fs == nil {
 		return 0, fmt.Errorf("firestore client is nil")
@@ -304,8 +305,16 @@ func GetUserJobsQualityCount(ctx context.Context, fs *FirestoreClient, userID st
 		return 0, fmt.Errorf("user ID is required")
 	}
 
+	// Quality jobs are high-rated jobs that are not archived or dismissed
+	allowedStatuses := []string{
+		string(JobStatusNew),
+		string(JobStatusSaved),
+		string(JobStatusApplied),
+	}
+
 	query := fs.Collection(usersCollection).Doc(userID).Collection(userJobsCollection).
-		Where("Rating", ">=", QualityJobRatingThreshold)
+		Where("Rating", ">=", QualityJobRatingThreshold).
+		Where("Status", "in", allowedStatuses)
 
 	// Use the more efficient aggregation query
 	aggregationQuery := query.NewAggregationQuery().WithCount("count")

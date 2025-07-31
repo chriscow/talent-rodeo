@@ -30,7 +30,7 @@ func TestTrialEmailSequenceIntegration(t *testing.T) {
 		LastName:        "Johnson",
 		Name:            "Sarah Johnson",
 		Email:           "sarah@example.com",
-		Timezone:        &timezone,
+		Timezone:        timezone,
 		SubscriptionEnd: &trialEndTime,
 	}
 
@@ -209,7 +209,7 @@ func TestTrialEmailSequenceFlow(t *testing.T) {
 		LastName:        "Doe",
 		Name:            "John Doe",
 		Email:           "john@example.com",
-		Timezone:        &timezone,
+		Timezone:        timezone,
 		SubscriptionEnd: &trialEndTime,
 	}
 
@@ -297,7 +297,7 @@ func TestTrialEmailDataValidation(t *testing.T) {
 		LastName:        "User",
 		Name:            "Test User",
 		Email:           "test@example.com",
-		Timezone:        &timezone,
+		Timezone:        timezone,
 		SubscriptionEnd: &trialEndTime,
 	}
 

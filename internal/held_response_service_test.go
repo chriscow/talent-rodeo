@@ -287,6 +287,7 @@ func TestHeldResponseService_ApproveResponse(t *testing.T) {
 	if err := CreateHeldResponse(ctx, client, heldResponse); err != nil {
 		t.Fatalf("Failed to create test held response: %v", err)
 	}
+	defer DeleteHeldResponse(ctx, client, heldResponse.ID)
 
 	t.Run("successful approval", func(t *testing.T) {
 		err := service.ApproveResponse(ctx, heldResponse.ID, "admin-user-1")
@@ -358,6 +359,7 @@ func TestHeldResponseService_RequestRevision(t *testing.T) {
 	if err := CreateHeldResponse(ctx, client, heldResponse); err != nil {
 		t.Fatalf("Failed to create test held response: %v", err)
 	}
+	defer DeleteHeldResponse(ctx, client, heldResponse.ID)
 
 	t.Run("successful revision request", func(t *testing.T) {
 		feedback := "Please make the tone more professional and add more details about the process."
@@ -456,6 +458,11 @@ func TestHeldResponseService_MarkExpired(t *testing.T) {
 			t.Fatalf("Failed to create test held response: %v", err)
 		}
 	}
+	defer func() {
+		for _, response := range responses {
+			_ = DeleteHeldResponse(ctx, client, response.ID)
+		}
+	}()
 
 	t.Run("mark expired responses", func(t *testing.T) {
 		count, err := service.MarkExpired(ctx)

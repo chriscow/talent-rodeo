@@ -1,0 +1,1140 @@
+{{define "title"}}Chat with Shirely - Talent Rodeo{{end}}
+
+{{define "page:main"}}
+<main class="container-narrow">
+    <article>
+        <hgroup>
+            <h1>Chat with Shirely</h1>
+            <p>Tell me about your career preferences</p>
+        </hgroup>
+        
+        <!-- Full-page Chat Interface -->
+        <div id="chat-page-container" class="chat-page-container">
+            <div class="chat-page-window">
+                <div id="chat-messages" class="chat-page-messages">
+                    <!-- Messages will be added here -->
+                </div>
+                <div class="chat-page-input-container">
+                    <div class="chat-page-input-row">
+                        <div class="input-with-status">
+                            <textarea id="chat-input" placeholder="Type your message..." disabled rows="1"></textarea>
+                            <div id="chat-status-icon" class="chat-status-icon" title=""></div>
+                        </div>
+                        <button type="button" id="send-message-btn" class="chat-send-btn" disabled>Send</button>
+                    </div>
+                    <!-- Keep original status div hidden for fallback -->
+                    <div id="chat-status" class="chat-page-status" style="display: none;"></div>
+                </div>
+            </div>
+            
+            <!-- <div class="chat-page-actions">
+                <button type="button" id="end-chat-btn" class="secondary">End Conversation</button>
+                <button type="button" id="minimize-to-widget-btn" class="outline" onclick="window.location.href='/onboarding'">Continue in Background</button>
+            </div> -->
+        </div>
+    </article>
+
+    {{if .User.IsSuperUser}}
+    <div id="chat-session-info" style="display: none; margin-bottom: 2rem; padding: 1rem; background: var(--pico-card-background-color); border-radius: 0.5rem; border: 1px solid var(--pico-muted-border-color);">
+        <p><strong>Session ID:</strong> <span id="session-appointment-id"></span></p>
+        <p><strong>Status:</strong> <span id="session-status">Active</span></p>
+        <div style="margin-top: 1rem;">
+            <button id="fast-forward-btn" class="secondary" onclick="fastForwardChat()" style="margin-right: 1rem;">
+                ⏩ Fast Forward (Testing)
+            </button>
+            <small style="color: var(--pico-muted-color);">Injects transcript from test CallID for testing</small>
+        </div>
+    </div>
+    {{end}}
+</main>
+
+<style>
+    /* Full-page Chat Styles */
+    .chat-page-container {
+        width: 100%;
+        margin: 0 auto;
+    }
+    
+    .chat-page-window {
+        background: var(--pico-card-background-color);
+        border: 1px solid var(--pico-muted-border-color);
+        border-radius: 12px;
+        height: 60vh;
+        min-height: 500px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        box-shadow: var(--pico-card-box-shadow);
+    }
+    
+    .chat-page-messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px;
+        background: var(--pico-background-color);
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .chat-page-input-container {
+        padding: 20px;
+        border-top: 1px solid var(--pico-muted-border-color);
+        background: var(--pico-card-background-color);
+    }
+    
+    .chat-page-input-row {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        max-width: 600px;
+        margin: 0 auto;
+    }
+    
+    .input-with-status {
+        flex: 1;
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+    
+    #chat-input {
+        flex: 1;
+        border: 1px solid var(--pico-muted-border-color);
+        border-radius: 25px;
+        padding: 12px 50px 12px 20px; /* Add right padding for icon */
+        font-size: 16px;
+        outline: none;
+        background: var(--pico-background-color);
+        color: var(--pico-color);
+        transition: all 0.2s ease;
+        resize: none; /* Disable manual resize */
+        overflow-y: hidden; /* Hide scrollbar initially */
+        min-height: 20px;
+        max-height: 120px; /* Limit maximum height */
+        line-height: 1.4;
+        font-family: inherit;
+        word-wrap: break-word; /* Allow breaking long words */
+        word-break: break-word; /* More aggressive word breaking */
+        white-space: pre-wrap; /* Preserve whitespace and wrap text */
+        overflow-wrap: break-word; /* Modern property for word breaking */
+    }
+    
+    .chat-status-icon {
+        position: absolute;
+        right: 15px;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        transition: all 0.3s ease;
+        cursor: help;
+        display: none; /* Hidden by default */
+    }
+    
+    .chat-status-icon.connected {
+        background: var(--pico-ins-color);
+        display: block;
+        animation: pulse-success 2s infinite;
+    }
+    
+    .chat-status-icon.connecting {
+        background: var(--pico-primary-background);
+        display: block;
+        animation: pulse-info 1.5s infinite;
+    }
+    
+    .chat-status-icon.error {
+        background: var(--pico-del-color);
+        display: block;
+        animation: pulse-error 1s infinite;
+    }
+    
+    .chat-status-icon.sending {
+        background: var(--pico-primary-background);
+        display: block;
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes pulse-success {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.7; transform: scale(0.9); }
+    }
+    
+    @keyframes pulse-info {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.6; transform: scale(0.95); }
+    }
+    
+    @keyframes pulse-error {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        25%, 75% { opacity: 0.8; transform: scale(1.1); }
+        50% { opacity: 0.6; transform: scale(0.9); }
+    }
+    
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+    
+    #chat-input:focus {
+        border-color: var(--pico-primary-background);
+        box-shadow: 0 0 0 3px var(--pico-primary-focus);
+    }
+    
+    #chat-input:disabled {
+        background: var(--pico-muted-color);
+        color: var(--pico-muted-color);
+        cursor: not-allowed;
+    }
+    
+    .chat-send-btn {
+        background: var(--pico-primary-background);
+        color: var(--pico-primary-inverse);
+        border: none;
+        border-radius: 25px;
+        padding: 12px 24px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+    }
+    
+    .chat-send-btn:hover:not(:disabled) {
+        background: var(--pico-primary-hover-background);
+        transform: translateY(-1px);
+    }
+    
+    .chat-send-btn:disabled {
+        background: var(--pico-muted-color);
+        cursor: not-allowed;
+        transform: none;
+    }
+    
+    /* Message Styles with Modern Chat Patterns */
+    .message {
+        max-width: 70%;
+        padding: 12px 18px;
+        border-radius: 20px;
+        word-wrap: break-word;
+        line-height: 1.5;
+        font-size: 16px;
+        margin-bottom: 5px;
+        position: relative;
+        animation: messageSlideIn 0.3s ease-out;
+    }
+    
+    @keyframes messageSlideIn {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    .message.user {
+        background: var(--pico-primary-background);
+        color: var(--pico-primary-inverse);
+        align-self: flex-end;
+        border-bottom-right-radius: 8px;
+    }
+    
+    .message.assistant {
+        background: var(--pico-card-background-color);
+        color: var(--pico-color);
+        align-self: flex-start;
+        border-bottom-left-radius: 8px;
+        border: 1px solid var(--pico-muted-border-color);
+    }
+    
+    .message.typing {
+        background: var(--pico-muted-color);
+        color: var(--pico-color);
+        align-self: flex-start;
+        font-style: italic;
+        border-bottom-left-radius: 8px;
+        animation: pulse 1.5s infinite;
+    }
+    
+    .message.system {
+        background: var(--pico-primary-focus);
+        color: var(--pico-primary-background);
+        align-self: center;
+        border-radius: 12px;
+        font-size: 14px;
+        max-width: 90%;
+        text-align: center;
+        font-weight: 500;
+        border: 1px solid var(--pico-primary-background);
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+    }
+    
+    /* Status indicators with better colors */
+    .chat-page-status {
+        text-align: center;
+        font-size: 14px;
+        padding: 10px;
+        border-radius: 6px;
+        margin: 10px 20px 0;
+        transition: all 0.3s ease;
+    }
+    
+    .chat-page-status.success {
+        color: var(--pico-ins-color);
+        background: var(--pico-ins-background-color);
+    }
+    
+    .chat-page-status.error {
+        color: var(--pico-del-color);
+        background: var(--pico-del-background-color);
+    }
+    
+    .chat-page-status.info {
+        color: var(--pico-primary-background);
+        background: var(--pico-primary-focus);
+    }
+    
+    .chat-page-actions {
+        margin-top: 20px;
+        text-align: center;
+        display: flex;
+        gap: 15px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    
+    /* Enhanced Scrollbar Styling */
+    .chat-page-messages::-webkit-scrollbar {
+        width: 8px;
+    }
+    
+    .chat-page-messages::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    
+    .chat-page-messages::-webkit-scrollbar-thumb {
+        background: var(--pico-muted-color);
+        border-radius: 4px;
+        transition: background 0.2s ease;
+    }
+    
+    .chat-page-messages::-webkit-scrollbar-thumb:hover {
+        background: var(--pico-primary-background);
+    }
+    
+    /* Responsive Mobile Improvements */
+    @media (max-width: 768px) {
+        .chat-page-window {
+            height: 75vh;
+            border-radius: 8px;
+        }
+        
+        .message {
+            max-width: 85%;
+            font-size: 15px;
+        }
+        
+        .chat-page-input-row {
+            gap: 8px;
+        }
+        
+        #chat-input {
+            font-size: 16px; /* Prevent zoom on iOS */
+            padding: 10px 40px 10px 16px; /* Add right padding for icon */
+            max-height: 100px; /* Smaller max height on mobile */
+        }
+        
+        .chat-status-icon {
+            right: 12px;
+            width: 16px;
+            height: 16px;
+        }
+        
+        .chat-send-btn {
+            padding: 10px 20px;
+            font-size: 15px;
+        }
+        
+        .chat-page-actions {
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .chat-page-actions button {
+            width: 100%;
+            max-width: 300px;
+        }
+    }
+    
+    /* Loading state for better UX */
+    .loading-dots {
+        display: inline-block;
+    }
+    
+    .loading-dots::after {
+        content: '';
+        animation: loadingDots 1.5s linear infinite;
+    }
+    
+    @keyframes loadingDots {
+        0%, 20% { content: '.'; }
+        40%, 60% { content: '..'; }
+        80%, 100% { content: '...'; }
+    }
+    
+    /* Debug message styles for super users */
+    .debug-message {
+        background: var(--pico-muted-color) !important;
+        color: var(--pico-color) !important;
+        border: 1px solid var(--pico-muted-border-color) !important;
+        border-radius: 8px;
+        padding: 10px 15px;
+        font-size: 14px;
+        line-height: 1.4;
+        margin-bottom: 5px;
+        opacity: 0.8;
+    }
+
+    .debug-message .debug-prefix {
+        font-weight: bold;
+        color: var(--pico-primary-background);
+        margin-right: 8px;
+    }
+
+    .debug-message .debug-content {
+        display: inline-block;
+        font-family: monospace;
+        font-size: 13px;
+    }
+</style>
+
+<script>
+/**
+ * Modern Chat Interface Manager
+ * Modular, maintainable chat system with WebSocket streaming
+ */
+class ChatManager {
+    constructor() {
+        this.appointmentId = null;
+        this.webSocket = null;
+        this.isConnected = false;
+        this.reconnectAttempts = 0;
+        this.maxReconnectAttempts = 5;
+        this.reconnectInterval = 3000;
+        this.debugMode = false; // Set by server response
+        
+        // Streaming state
+        this.currentStreamingMessage = '';
+        this.streamingMessageId = null;
+        this.typingIndicatorId = null;
+        
+        // DOM elements cache
+        this.elements = {};
+        
+        // Initialize on DOM ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => this.init());
+        } else {
+            this.init();
+        }
+    }
+    
+    async init() {
+        // Get appointment ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        this.appointmentId = urlParams.get('appointment_id');
+        
+        if (!this.appointmentId) {
+            window.location.href = '/onboarding';
+            return;
+        }
+        
+        // Cache DOM elements
+        this.cacheElements();
+        
+        // Set up event listeners
+        this.setupEventListeners();
+        
+        // Initialize UI
+        this.initializeUI();
+        
+        // Load chat history (await to ensure it completes before continuing)
+        await this.loadChatHistory();
+        
+        // Connect WebSocket
+        this.connectWebSocket();
+        
+        // No need for addInitialMessageIfNeeded() - history loading handles initial messages
+    }
+    
+    cacheElements() {
+        this.elements = {
+            chatInput: document.getElementById('chat-input'),
+            sendButton: document.getElementById('send-message-btn'),
+            endChatButton: document.getElementById('end-chat-btn'),
+            messagesContainer: document.getElementById('chat-messages'),
+            statusElement: document.getElementById('chat-status'),
+            statusIcon: document.getElementById('chat-status-icon'),
+            sessionInfo: document.getElementById('chat-session-info'),
+            sessionId: document.getElementById('session-appointment-id')
+        };
+        
+        // Validate required elements
+        const requiredElements = ['chatInput', 'sendButton', 'messagesContainer', 'statusIcon'];
+        for (const key of requiredElements) {
+            if (!this.elements[key]) {
+                console.error(`Required element '${key}' not found`);
+            }
+        }
+    }
+    
+    setupEventListeners() {
+        // Send message on Enter key (but allow Shift+Enter for new lines)
+        this.elements.chatInput?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                this.sendMessage();
+            }
+        });
+        
+        // Auto-resize textarea as user types
+        this.elements.chatInput?.addEventListener('input', () => {
+            this.autoResizeTextarea();
+            this.handleTyping();
+        });
+        
+        // Also resize on keyup and paste events for immediate response
+        this.elements.chatInput?.addEventListener('keyup', () => {
+            this.autoResizeTextarea();
+        });
+        
+        this.elements.chatInput?.addEventListener('paste', () => {
+            // Use setTimeout to allow paste content to be processed first
+            setTimeout(() => this.autoResizeTextarea(), 0);
+        });
+        
+        // Send button click
+        this.elements.sendButton?.addEventListener('click', () => this.sendMessage());
+        
+        // End chat button
+        this.elements.endChatButton?.addEventListener('click', () => this.endChat());
+        
+        // Page unload cleanup
+        window.addEventListener('beforeunload', () => this.cleanup());
+        
+        // Focus management
+        this.elements.chatInput?.addEventListener('focus', () => this.scrollToBottom());
+    }
+    
+    initializeUI() {
+        // Update session info
+        if (this.elements.sessionId) {
+            this.elements.sessionId.textContent = this.appointmentId;
+        }
+        if (this.elements.sessionInfo) {
+            this.elements.sessionInfo.style.display = 'block';
+        }
+        
+        // Set initial status
+        this.updateStatus('Connecting...', 'info');
+        
+        // Disable inputs initially
+        this.setInputState(false);
+        
+        // Initialize textarea sizing
+        this.autoResizeTextarea();
+    }
+    
+    async loadChatHistory() {
+        try {
+            const response = await fetch(`/api/chat/history?appointment_id=${this.appointmentId}`);
+            if (response.ok) {
+                const data = await response.json();
+                const messages = data.messages || [];
+                
+                // Set debug mode from server response
+                this.debugMode = data.debug_mode || false;
+                
+                // Clear existing messages
+                this.clearMessages();
+                
+                // Add messages to UI with animation
+                for (const message of messages) {
+                    this.addMessageToUI(message.Role, message.Content, false, true);
+                }
+                
+                this.scrollToBottom();
+            } else {
+                console.error('Failed to load chat history:', response.statusText);
+                this.updateStatus('Failed to load chat history', 'error');
+            }
+        } catch (error) {
+            console.error('Error loading chat history:', error);
+            this.updateStatus('Error loading chat history', 'error');
+        }
+    }
+    
+    connectWebSocket() {
+        if (this.webSocket && this.webSocket.readyState === WebSocket.OPEN) {
+            return; // Already connected
+        }
+        
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/chat/ws?appointment_id=${this.appointmentId}`;
+        
+        this.webSocket = new WebSocket(wsUrl);
+        
+        this.webSocket.onopen = (event) => {
+            console.log('WebSocket connected');
+            this.isConnected = true;
+            this.reconnectAttempts = 0;
+            this.updateStatus('Connected', 'success');
+            this.setInputState(true);
+            this.elements.chatInput?.focus();
+        };
+        
+        this.webSocket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            this.handleWebSocketMessage(data);
+        };
+        
+        this.webSocket.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            this.updateStatus('Connection error', 'error');
+            this.isConnected = false;
+        };
+        
+        this.webSocket.onclose = (event) => {
+            console.log('WebSocket closed:', event.code, event.reason);
+            this.isConnected = false;
+            this.updateStatus('Disconnected', 'error');
+            this.setInputState(false);
+            
+            // Try to reconnect if not a normal closure
+            if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
+                this.reconnectAttempts++;
+                const delay = this.reconnectInterval * this.reconnectAttempts;
+                this.updateStatus(`Reconnecting... (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`, 'info');
+                
+                setTimeout(() => {
+                    console.log(`Reconnect attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
+                    this.connectWebSocket();
+                }, delay);
+            } else if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+                this.updateStatus('Connection failed. Please refresh the page.', 'error');
+            }
+        };
+    }
+    
+    sendMessage() {
+        const message = this.elements.chatInput?.value.trim();
+        
+        if (!message || !this.isConnected || !this.webSocket) return;
+        
+        // Add user message to UI with animation
+        this.addMessageToUI('user', message, false, false);
+        this.elements.chatInput.value = '';
+        
+        // Reset textarea height after clearing
+        this.autoResizeTextarea();
+        this.scrollToBottom();
+        
+        // Disable input while sending
+        this.setInputState(false, 'Sending...');
+        
+        // Add typing indicator
+        this.showTypingIndicator();
+        
+        try {
+            const wsMessage = {
+                type: 'user_message',
+                content: message
+            };
+            this.webSocket.send(JSON.stringify(wsMessage));
+        } catch (error) {
+            console.error('Error sending message:', error);
+            this.updateStatus('Error sending message', 'error');
+            this.setInputState(true);
+            this.hideTypingIndicator();
+        }
+    }
+    
+    handleWebSocketMessage(data) {
+        console.log('WebSocket message:', data);
+        
+        switch (data.type) {
+            case 'connected':
+                this.updateStatus('Ready to chat', 'success');
+                break;
+                
+            case 'content':
+                // Remove typing indicator on first content
+                if (!this.streamingMessageId) {
+                    this.hideTypingIndicator();
+                    // Start new streaming message
+                    this.currentStreamingMessage = data.content;
+                    this.streamingMessageId = this.addMessageToUI('assistant', this.currentStreamingMessage, false, false);
+                } else {
+                    // Append to existing streaming message
+                    this.currentStreamingMessage += data.content;
+                    const messageElement = document.getElementById(this.streamingMessageId);
+                    if (messageElement) {
+                        messageElement.textContent = this.currentStreamingMessage;
+                    }
+                }
+                this.scrollToBottom();
+                break;
+                
+            case 'tool_response':
+                // Handle tool response and execute UI actions
+                this.handleToolResponse(data.tool_response);
+                break;
+                
+            case 'done':
+                // Streaming complete
+                this.currentStreamingMessage = '';
+                this.streamingMessageId = null;
+                this.setInputState(true);
+                this.elements.chatInput?.focus();
+                this.updateStatus('', '');
+                break;
+                
+            case 'error':
+                console.error('WebSocket error response:', data.error);
+                this.updateStatus('Error: ' + data.error, 'error');
+                this.hideTypingIndicator();
+                this.setInputState(true);
+                break;
+                
+            default:
+                console.warn('Unknown WebSocket message type:', data.type);
+        }
+    }
+    
+    showTypingIndicator() {
+        if (this.typingIndicatorId) return; // Already showing
+        
+        this.typingIndicatorId = this.addMessageToUI('assistant', 'Shirely is typing', true, false);
+        
+        // Add loading dots animation to typing indicator
+        const typingElement = document.getElementById(this.typingIndicatorId);
+        if (typingElement) {
+            const dotsSpan = document.createElement('span');
+            dotsSpan.className = 'loading-dots';
+            typingElement.appendChild(dotsSpan);
+        }
+    }
+    
+    hideTypingIndicator() {
+        if (this.typingIndicatorId) {
+            const typingElement = document.getElementById(this.typingIndicatorId);
+            if (typingElement) {
+                typingElement.remove();
+            }
+            this.typingIndicatorId = null;
+        }
+    }
+    
+    addMessageToUI(role, content, isTyping = false, isHistoryLoad = false) {
+        const messageDiv = document.createElement('div');
+        const messageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        
+        messageDiv.id = messageId;
+        messageDiv.className = `message ${role}`;
+        if (isTyping) {
+            messageDiv.className += ' typing';
+        }
+        
+        // Check if this is a debug message - server already filtered them if user is not super user
+        const isDebugMessage = role === 'tool' || role === 'system' || 
+                              (role === 'assistant' && content.startsWith('TOOL_CALLS:'));
+        
+        if (isDebugMessage) {
+            // Only add debug styling if we're in debug mode (super user)
+            if (this.debugMode) {
+                messageDiv.className += ' debug-message';
+                
+                // Add a prefix based on the role
+                let prefix = '';
+                let displayContent = content;
+                
+                if (role === 'assistant' && content.startsWith('TOOL_CALLS:')) {
+                    prefix = '🔧 Tool Call: ';
+                    // Try to parse and format the JSON for better readability
+                    try {
+                        const jsonStr = content.substring('TOOL_CALLS:'.length);
+                        const toolCalls = JSON.parse(jsonStr);
+                        displayContent = toolCalls.map(tc => `${tc.function.name}(${tc.function.arguments})`).join(', ');
+                    } catch (e) {
+                        // Fallback to original content
+                        displayContent = content;
+                    }
+                } else if (role === 'tool') {
+                    prefix = '⚙️ Tool Response: ';
+                    // Try to parse and format the JSON for better readability
+                    if (content.startsWith('TOOL_RESPONSE:')) {
+                        try {
+                            const jsonStr = content.substring('TOOL_RESPONSE:'.length);
+                            const toolData = JSON.parse(jsonStr);
+                            displayContent = `${toolData.content}`;
+                        } catch (e) {
+                            // Fallback to original content
+                            displayContent = content;
+                        }
+                    }
+                } else if (role === 'system') {
+                    prefix = '🔧 System: ';
+                }
+                
+                messageDiv.innerHTML = `<span class="debug-prefix">${prefix}</span><span class="debug-content">${displayContent}</span>`;
+            } else {
+                // This shouldn't happen since server filters these, but just in case
+                return null;
+            }
+        } else {
+            messageDiv.textContent = content;
+        }
+        
+        // Add smooth animation for new messages
+        if (!isHistoryLoad) {
+            messageDiv.style.opacity = '0';
+            messageDiv.style.transform = 'translateY(20px)';
+        }
+        
+        this.elements.messagesContainer?.appendChild(messageDiv);
+        
+        // Trigger animation for new messages
+        if (!isHistoryLoad) {
+            requestAnimationFrame(() => {
+                messageDiv.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                messageDiv.style.opacity = '1';
+                messageDiv.style.transform = 'translateY(0)';
+            });
+        }
+        
+        this.scrollToBottom();
+        return messageId;
+    }
+    
+    
+    setInputState(enabled, statusText = '') {
+        if (this.elements.chatInput) {
+            this.elements.chatInput.disabled = !enabled;
+        }
+        if (this.elements.sendButton) {
+            this.elements.sendButton.disabled = !enabled;
+        }
+        
+        if (statusText) {
+            this.updateStatus(statusText, enabled ? 'success' : 'info');
+        }
+    }
+    
+    updateStatus(message, type = '') {
+        // Update the hidden text status element for fallback
+        if (this.elements.statusElement) {
+            this.elements.statusElement.textContent = message;
+            this.elements.statusElement.className = `chat-page-status ${type}`;
+        }
+        
+        // Update the status icon
+        if (this.elements.statusIcon) {
+            // Remove all status classes
+            this.elements.statusIcon.className = 'chat-status-icon';
+            
+            // Map status types to icon classes and set tooltip
+            let iconClass = '';
+            let tooltip = message;
+            
+            switch (type) {
+                case 'success':
+                    if (message.includes('Connected') || message.includes('Ready')) {
+                        iconClass = 'connected';
+                        tooltip = 'Connected and ready';
+                    }
+                    break;
+                case 'info':
+                    if (message.includes('Connecting')) {
+                        iconClass = 'connecting';
+                        tooltip = 'Connecting...';
+                    } else if (message.includes('Sending')) {
+                        iconClass = 'sending';
+                        tooltip = 'Sending message...';
+                    } else if (message.includes('Reconnecting')) {
+                        iconClass = 'connecting';
+                        tooltip = message;
+                    }
+                    break;
+                case 'error':
+                    iconClass = 'error';
+                    tooltip = message || 'Connection error';
+                    break;
+                default:
+                    // Hide icon for empty or unknown status
+                    if (!message) {
+                        iconClass = '';
+                        tooltip = '';
+                    }
+            }
+            
+            if (iconClass) {
+                this.elements.statusIcon.className = `chat-status-icon ${iconClass}`;
+            }
+            
+            this.elements.statusIcon.setAttribute('data-tooltip', tooltip);
+        }
+    }
+    
+    scrollToBottom() {
+        if (this.elements.messagesContainer) {
+            this.elements.messagesContainer.scrollTop = this.elements.messagesContainer.scrollHeight;
+        }
+    }
+    
+    clearMessages() {
+        if (this.elements.messagesContainer) {
+            this.elements.messagesContainer.innerHTML = '';
+        }
+    }
+    
+    autoResizeTextarea() {
+        const textarea = this.elements.chatInput;
+        if (!textarea) return;
+        
+        // Store current scroll position
+        const scrollTop = textarea.scrollTop;
+        
+        // Reset height to get accurate measurement
+        textarea.style.height = 'auto';
+        
+        // Calculate the desired height based on content
+        const scrollHeight = textarea.scrollHeight;
+        const minHeight = 44; // Minimum single line height
+        const maxHeight = 120; // Maximum height before scrolling
+        
+        let newHeight = Math.max(scrollHeight, minHeight);
+        
+        // Apply max height constraint
+        if (newHeight > maxHeight) {
+            newHeight = maxHeight;
+            textarea.style.overflowY = 'auto';
+        } else {
+            textarea.style.overflowY = 'hidden';
+        }
+        
+        // Set the new height
+        textarea.style.height = newHeight + 'px';
+        
+        // Restore scroll position if we're at max height
+        if (newHeight === maxHeight) {
+            textarea.scrollTop = scrollTop;
+        }
+    }
+    
+    handleTyping() {
+        // Future: Implement typing indicators to server
+        // For now, just a placeholder for the typing detection
+    }
+    
+    /**
+     * Handle tool response from the server
+     * @param {Object} toolResponse - The tool response data
+     */
+    handleToolResponse(toolResponse) {
+        console.log('Tool response received:', toolResponse);
+        
+        // Add tool response as a system message if it has content
+        if (toolResponse.content) {
+            this.addMessageToUI('system', `🔧 ${toolResponse.content}`, false, false);
+        }
+        
+        // Execute UI actions if present
+        if (toolResponse.ui_actions && Array.isArray(toolResponse.ui_actions)) {
+            for (const action of toolResponse.ui_actions) {
+                this.executeUIAction(action);
+            }
+        }
+        
+        // Log tool execution for debugging
+        console.log(`Tool "${toolResponse.name}" executed:`, {
+            success: toolResponse.success,
+            content: toolResponse.content,
+            ui_actions: toolResponse.ui_actions
+        });
+    }
+    
+    /**
+     * Execute a UI action with optional delay
+     * @param {Object} action - The UI action to execute
+     */
+    executeUIAction(action) {
+        const delay = action.delay || 0;
+        
+        setTimeout(() => {
+            switch (action.type) {
+                case 'show_message':
+                    this.showMessage(action.data.message, action.data.type || 'info');
+                    break;
+                    
+                case 'redirect':
+                    window.location.href = action.data.url;
+                    break;
+                    
+                case 'update_status':
+                    this.updateStatus(action.data.message || '', action.data.type || '');
+                    break;
+                    
+                case 'disable_input':
+                    this.setInputState(false, action.data.message || 'Chat completed');
+                    break;
+                    
+                case 'show_completion':
+                    this.showChatCompletion(action.data);
+                    break;
+                    
+                default:
+                    console.warn('Unknown UI action type:', action.type);
+            }
+        }, delay);
+    }
+    
+    /**
+     * Show a message to the user (using browser notification or status)
+     * @param {string} message - The message to show
+     * @param {string} type - The type of message (success, error, info, warning)
+     */
+    showMessage(message, type = 'info') {
+        // For now, we'll use the status area to show messages
+        // In the future, this could use toast notifications or other UI elements
+        this.updateStatus(message, type);
+        
+        // Auto-clear the message after a few seconds
+        setTimeout(() => {
+            this.updateStatus('', '');
+        }, 5000);
+    }
+    
+    /**
+     * Show chat completion UI
+     * @param {Object} data - Completion data
+     */
+    showChatCompletion(data) {
+        // Disable input
+        this.setInputState(false, 'Chat session completed');
+        
+        // Add a completion message
+        const completionMessage = data.message || 'Thank you for chatting with me! Your preferences have been saved.';
+        this.addMessageToUI('system', `✅ ${completionMessage}`, false, false);
+        
+        // Show next steps if provided
+        if (data.next_steps) {
+            this.addMessageToUI('system', `📋 Next steps: ${data.next_steps}`, false, false);
+        }
+        
+        this.scrollToBottom();
+    }
+    
+    async endChat() {
+        if (!this.appointmentId) return;
+        
+        try {
+            // Close WebSocket connection
+            this.cleanup();
+            
+            const response = await fetch(`/chat/end?appointment_id=${this.appointmentId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': this.getCSRFToken()
+                },
+                body: JSON.stringify({
+                    csrf_token: this.getCSRFToken()
+                })
+            });
+            
+            if (response.ok) {
+                window.location.href = '/onboarding';
+            } else {
+                console.error('Failed to end chat:', response.statusText);
+                this.updateStatus('Failed to end chat', 'error');
+            }
+        } catch (error) {
+            console.error('Error ending chat:', error);
+            this.updateStatus('Error ending chat', 'error');
+        }
+    }
+    
+    cleanup() {
+        if (this.webSocket && this.webSocket.readyState === WebSocket.OPEN) {
+            this.webSocket.close(1000, 'Chat ended by user');
+        }
+        this.isConnected = false;
+    }
+    
+    getCSRFToken() {
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.getAttribute('content') : '';
+    }
+}
+
+// Initialize the chat manager
+const chatManager = new ChatManager();
+
+// Fast forward function for testing (admin only)
+function fastForwardChat() {
+    if (!chatManager.appointmentId) {
+        alert('No appointment ID available');
+        return;
+    }
+    
+    // const confirmMsg = 'This will inject a test transcript into the current chat session. Continue?';
+    // if (!confirm(confirmMsg)) {
+    //     return;
+    // }
+    
+    // Disable the button during processing
+    const btn = document.getElementById('fast-forward-btn');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '⏳ Processing...';
+    
+    // Send request to fast-forward endpoint
+    fetch(`/chat/fast-forward?appointment_id=${chatManager.appointmentId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': chatManager.getCSRFToken()
+        },
+        body: JSON.stringify({
+            csrf_token: chatManager.getCSRFToken()
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Reload chat history to show injected messages
+            chatManager.loadChatHistory();
+            // alert('Chat fast-forwarded successfully!');
+        } else {
+            alert('Fast-forward failed: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Fast-forward error:', error);
+        alert('Fast-forward failed: ' + error.message);
+    })
+    .finally(() => {
+        // Re-enable the button
+        btn.disabled = false;
+        btn.textContent = originalText;
+    });
+}
+</script>
+{{end}}

@@ -77,7 +77,7 @@ func CreateTestAppointment(t *testing.T, client *FirestoreClient, user *User) *A
 		ID:            fmt.Sprintf("test-appointment-%d", now.UnixNano()),
 		UserID:        user.ID,
 		ScheduledTime: now.Add(24 * time.Hour).Round(time.Second),
-		Timezone:      "UTC",
+		Type:          AppointmentTypeChat,
 		Status:        AppointmentStatusScheduled,
 		CreatedAt:     now.Round(time.Second),
 		UpdatedAt:     now.Round(time.Second),

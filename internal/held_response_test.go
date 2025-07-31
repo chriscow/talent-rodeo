@@ -373,6 +373,15 @@ func TestListHeldResponses(t *testing.T) {
 	}
 	defer fs.Close()
 
+	// Clean up any existing held responses to ensure test isolation
+	existingResponses, err := ListHeldResponses(ctx, fs, "", 100, 0)
+	if err != nil {
+		t.Fatalf("Failed to list existing held responses: %v", err)
+	}
+	for _, hr := range existingResponses {
+		_ = DeleteHeldResponse(ctx, fs, hr.ID)
+	}
+
 	// Create test held responses
 	hr1 := &HeldResponse{
 		OriginalEmailID: "test-email-id-1",
@@ -442,6 +451,15 @@ func TestGetPendingHeldResponses(t *testing.T) {
 		t.Fatalf("Failed to create Firestore client: %v", err)
 	}
 	defer fs.Close()
+
+	// Clean up any existing held responses to ensure test isolation
+	existingResponses, err := ListHeldResponses(ctx, fs, "", 100, 0)
+	if err != nil {
+		t.Fatalf("Failed to list existing held responses: %v", err)
+	}
+	for _, hr := range existingResponses {
+		_ = DeleteHeldResponse(ctx, fs, hr.ID)
+	}
 
 	// Create test held responses
 	hr1 := &HeldResponse{

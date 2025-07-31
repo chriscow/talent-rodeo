@@ -216,9 +216,17 @@ func TestSearchResultProcessor_WorkerAndProgress(t *testing.T) {
 	t.Logf("[TEST] Queue length after queueing: %d", len(srp.queue))
 
 	// Wait for processing to happen and check queue draining
-	for i := 0; i < 10; i++ {
+	// Note: ExtractJobDetailData can take several seconds, so we need to wait longer
+	for i := 0; i < 120; i++ { // Increased from 10 to 120 (6 seconds total)
 		queueLen := len(srp.queue)
 		t.Logf("[TEST] Progress after %d ms: AllJobsQueued=%v, ProcessedJobs=%d, TotalJobs=%d, QueueLen=%d", i*50, progress.AllJobsQueued.Load(), progress.ProcessedJobs.Load(), progress.TotalJobs.Load(), queueLen)
+		
+		// Check if completion has been called - if so, we can exit early
+		if dispatch.allExtractionsCompleteCalled {
+			t.Logf("[TEST] OnAllExtractionsComplete called after %d ms, exiting early", i*50)
+			break
+		}
+		
 		time.Sleep(50 * time.Millisecond)
 	}
 

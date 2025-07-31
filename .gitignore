@@ -28,6 +28,7 @@ __pycache__
 **/.venv
 **/.weaviate
 **/.wrangler
+**/.local
 **/node_modules
 **/tmp
 **/*.backup

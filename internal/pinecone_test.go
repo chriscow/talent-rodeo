@@ -12,6 +12,10 @@ func TestGetSteeringVector(t *testing.T) {
 		t.Skip("PINECONE_API_KEY not set, skipping test")
 	}
 
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	tests := []struct {
 		name            string
 		query           string

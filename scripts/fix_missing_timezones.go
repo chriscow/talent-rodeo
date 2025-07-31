@@ -94,7 +94,7 @@ Examples:
 	var usersWithTimezone []*internal.User
 
 	for _, user := range users {
-		if user.Timezone == nil {
+		if user.Timezone == "" {
 			usersToUpdate = append(usersToUpdate, user)
 		} else {
 			usersWithTimezone = append(usersWithTimezone, user)

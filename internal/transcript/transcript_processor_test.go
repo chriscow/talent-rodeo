@@ -65,6 +65,7 @@ func TestRecoverProcessingAppointments(t *testing.T) {
 	appointment := &internal.Appointment{
 		ID:            "test-recovery-appointment",
 		UserID:        user.ID,
+		Type:          internal.AppointmentTypeVoice,
 		Name:          "Test Recovery Appointment",
 		ScheduledTime: time.Now(),
 		Status:        internal.AppointmentStatusScheduled,
@@ -114,7 +115,12 @@ func TestRecoverProcessingAppointments(t *testing.T) {
 
 	// Run the recovery process - note that this would normally complete asynchronously
 	// so we're just testing that it starts the background job without errors
-	err = RecoverProcessingAppointments(hub, client, nil, logger, nil, nil, nil)
+	deps := &internal.ServiceDeps{
+		Hub:    hub,
+		FS:     client,
+		Logger: logger,
+	}
+	err = RecoverProcessingAppointments(deps)
 	if err != nil {
 		t.Fatalf("RecoverProcessingAppointments() error = %v", err)
 	}
@@ -480,6 +486,7 @@ func TestProcessCompletedAppointmentErrorHandling(t *testing.T) {
 		appointment := &internal.Appointment{
 			ID:            "test-process-error-appointment-1",
 			UserID:        user.ID,
+			Type:          internal.AppointmentTypeVoice,
 			Name:          "Test Error Appointment",
 			ScheduledTime: time.Now(),
 			Status:        internal.AppointmentStatusScheduled,
@@ -494,7 +501,12 @@ func TestProcessCompletedAppointmentErrorHandling(t *testing.T) {
 		}
 
 		// This should not crash but should handle the error gracefully
-		ProcessCompletedCall(hub, client, nil, nil, logger, nil, user, appointment, nil)
+		deps := &internal.ServiceDeps{
+			Hub:    hub,
+			FS:     client,
+			Logger: logger,
+		}
+		ProcessCompletedCall(deps, user, appointment)
 
 		// Verify appointment status was not changed to processing since CallID was nil
 		updatedAppointment, err := internal.GetAppointment(ctx, client, user.ID, appointment.ID)
@@ -504,6 +516,54 @@ func TestProcessCompletedAppointmentErrorHandling(t *testing.T) {
 		if updatedAppointment.Status != internal.AppointmentStatusScheduled {
 			t.Errorf("ProcessCompletedAppointment() with nil CallID changed status to %v, want %v",
 				updatedAppointment.Status, internal.AppointmentStatusScheduled)
+		}
+	})
+
+	t.Run("chat appointment should not require CallID or be processed as voice", func(t *testing.T) {
+		user := internal.CreateTestUser(t, client, "Test Chat User", "test-chat@example.com", "+14251234599", false)
+		appointment := &internal.Appointment{
+			ID:            "test-process-error-appointment-chat-1",
+			UserID:        user.ID,
+			Type:          internal.AppointmentTypeChat,
+			Name:          "Test Chat Appointment",
+			ScheduledTime: time.Now(),
+			Status:        internal.AppointmentStatusScheduled,
+			CreatedAt:     time.Now(),
+			UpdatedAt:     time.Now(),
+			CallID:        nil, // Chat appointments do not use CallID
+		}
+
+		err = internal.CreateAppointment(ctx, client, user.ID, appointment)
+		if err != nil {
+			t.Fatalf("internal.CreateAppointment() error = %v", err)
+		}
+
+		deps := &internal.ServiceDeps{
+			Hub:    hub,
+			FS:     client,
+			Logger: logger,
+		}
+		// This should not crash or attempt to process as a voice appointment
+		ProcessCompletedCall(deps, user, appointment)
+
+		// Verify appointment status was not changed to processing or completed
+		updatedAppointment, err := internal.GetAppointment(ctx, client, user.ID, appointment.ID)
+		if err != nil {
+			t.Fatalf("internal.GetAppointment() error = %v", err)
+		}
+		if updatedAppointment.Status != internal.AppointmentStatusScheduled {
+			t.Errorf("ProcessCompletedAppointment() for chat changed status to %v, want %v", updatedAppointment.Status, internal.AppointmentStatusScheduled)
+		}
+
+		// Also verify it was not added to the processing collection
+		processingAppointments, err := internal.ListAppointmentsNeedingProcessing(ctx, client, logger)
+		if err != nil {
+			t.Fatalf("internal.ListAppointmentsNeedingProcessing() error = %v", err)
+		}
+		for _, a := range processingAppointments {
+			if a.ID == appointment.ID {
+				t.Error("Chat appointment should not be added to processing collection")
+			}
 		}
 	})
 
@@ -524,7 +584,12 @@ func TestProcessCompletedAppointmentErrorHandling(t *testing.T) {
 		}
 
 		// This should not crash but should handle the error gracefully
-		ProcessCompletedCall(hub, client, nil, nil, logger, nil, user, appointment, nil)
+		deps := &internal.ServiceDeps{
+			Hub:    hub,
+			FS:     client,
+			Logger: logger,
+		}
+		ProcessCompletedCall(deps, user, appointment)
 
 		// Since the user doesn't exist, the function should return early
 		// and not create any processing entries
@@ -582,7 +647,12 @@ func TestRecoverProcessingAppointmentsEdgeCases(t *testing.T) {
 			}
 		}
 
-		err = RecoverProcessingAppointments(hub, client, nil, logger, nil, nil, nil)
+		deps := &internal.ServiceDeps{
+			Hub:    hub,
+			FS:     client,
+			Logger: logger,
+		}
+		err = RecoverProcessingAppointments(deps)
 		if err != nil {
 			t.Errorf("RecoverProcessingAppointments() with empty list error = %v, want nil", err)
 		}
@@ -602,6 +672,7 @@ func TestRecoverProcessingAppointmentsEdgeCases(t *testing.T) {
 				Status:        internal.AppointmentStatusScheduled,
 				CreatedAt:     time.Now(),
 				UpdatedAt:     time.Now(),
+				Type:          internal.AppointmentTypeVoice,
 				CallID:        internal.StringPtr(fmt.Sprintf("test-call-%d", i)),
 				Summary:       internal.StringPtr(fmt.Sprintf("Test summary %d", i)),
 			}
@@ -620,7 +691,12 @@ func TestRecoverProcessingAppointmentsEdgeCases(t *testing.T) {
 		}
 
 		// Run recovery
-		err = RecoverProcessingAppointments(hub, client, nil, logger, nil, nil, nil)
+		deps := &internal.ServiceDeps{
+			Hub:    hub,
+			FS:     client,
+			Logger: logger,
+		}
+		err = RecoverProcessingAppointments(deps)
 		if err != nil {
 			t.Errorf("RecoverProcessingAppointments() with multiple appointments error = %v, want nil", err)
 		}

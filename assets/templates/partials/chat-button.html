@@ -1,0 +1,44 @@
+{{define "chat-button"}}
+<!-- Chat Button Component -->
+<button type="button" id="start-chat-btn" class="outline">💬 Chat with Shirely</button>
+
+<script>
+// Initialize chat button functionality
+(function() {
+    function initChatButton() {
+        const chatButton = document.getElementById('start-chat-btn');
+        if (chatButton && window.ChatInterface) {
+            chatButton.addEventListener('click', async function() {
+                this.disabled = true;
+                this.textContent = 'Starting chat...';
+                
+                const success = await window.ChatInterface.startChat();
+                
+                if (success) {
+                    this.textContent = 'Chat Active';
+                } else {
+                    this.disabled = false;
+                    this.textContent = '💬 Chat with Shirely';
+                }
+            });
+        }
+    }
+
+    // Initialize when both DOM and ChatInterface are ready
+    function checkAndInit() {
+        if (window.ChatInterface) {
+            initChatButton();
+        } else {
+            // Wait a bit for ChatInterface to load
+            setTimeout(checkAndInit, 100);
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', checkAndInit);
+    } else {
+        checkAndInit();
+    }
+})();
+</script>
+{{end}}

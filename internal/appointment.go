@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"strings"
 	"talent-rodeo/assets"
 	"talent-rodeo/internal/funcs"
 	"talent-rodeo/internal/utils"
@@ -19,6 +20,14 @@ import (
 	"github.com/samber/lo"
 	"github.com/sashabaranov/go-openai"
 	"google.golang.org/api/iterator"
+)
+
+// AppointmentType represents the different types of appointments
+type AppointmentType string
+
+const (
+	AppointmentTypeVoice AppointmentType = "voice"
+	AppointmentTypeChat  AppointmentType = "chat"
 )
 
 // AppointmentStatus represents the possible states of an appointment
@@ -38,13 +47,44 @@ const (
 	AppointmentStatusOther      AppointmentStatus = "other"
 )
 
-// Appointment represents a scheduled phone interview
+// ChatMessage represents a single message in a chat conversation
+type ChatMessage struct {
+	ID        string
+	Role      string
+	Content   string
+	Timestamp time.Time
+}
+
+// ConversationChecklist tracks the progress of gathering required information during chat
+type ConversationChecklist struct {
+	Items              []ChecklistItem
+	OverallStatus      string
+	CompletionAttempts int
+	LastUpdated        time.Time
+	MessageCount       int
+}
+
+// ChecklistItem represents a specific topic or piece of information to be gathered
+type ChecklistItem struct {
+	ID              string
+	Topic           string
+	Description     string
+	Status          string
+	Quality         string
+	RequiredInfo    []string
+	ExtractedInfo   map[string]interface{}
+	ValidationNotes string
+	Required        bool
+	LastUpdated     time.Time
+}
+
+// Appointment represents a scheduled phone interview or chat session
 type Appointment struct {
 	ID            string
 	Name          string
 	UserID        string
+	Type          AppointmentType // "voice" or "chat"
 	ScheduledTime time.Time
-	Timezone      string
 	Status        AppointmentStatus
 
 	// This is the end reason given by VAPI when we get the end of call report
@@ -61,6 +101,12 @@ type Appointment struct {
 	FailedAt    *time.Time
 	Notes       *string
 
+	// Chat-specific fields
+	ChatMessages []ChatMessage
+
+	// Conversation checklist for chat appointments
+	ConversationChecklist *ConversationChecklist
+
 	RecapSent bool // Whether the recap has been sent to the user
 }
 
@@ -76,6 +122,10 @@ func CreateAppointment(ctx context.Context, fs *FirestoreClient, userID string, 
 
 	if appointment.ID == "" {
 		appointment.ID = funcs.Slugify(fmt.Sprintf("%s-%d", appointment.Name, time.Now().UnixNano()))
+	}
+
+	if appointment.Type == "" {
+		return fmt.Errorf("appointment type is required")
 	}
 
 	appointment.UserID = userID
@@ -132,6 +182,31 @@ func GetLatestCompletedAppointment(ctx context.Context, fs *FirestoreClient, use
 			return nil, false, nil
 		}
 		return nil, false, fmt.Errorf("failed to get latest completed appointment: %w", err)
+	}
+
+	var appt Appointment
+	if err := doc.DataTo(&appt); err != nil {
+		return nil, false, fmt.Errorf("failed to unmarshal appointment data: %w", err)
+	}
+
+	return &appt, true, nil
+}
+
+// GetLatestRunningChatAppointment retrieves the latest running chat appointment for a user
+func GetLatestRunningChatAppointment(ctx context.Context, fs *FirestoreClient, userID string) (*Appointment, bool, error) {
+	iter := fs.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).
+		Where("Status", "==", AppointmentStatusRunning).
+		Where("Type", "==", AppointmentTypeChat).
+		OrderBy("CreatedAt", firestore.Desc).
+		Limit(1).
+		Documents(ctx)
+
+	doc, err := iter.Next()
+	if err != nil {
+		if err == iterator.Done {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("failed to get latest running chat appointment: %w", err)
 	}
 
 	var appt Appointment
@@ -311,6 +386,11 @@ func ProcessAppointmentStarted(ctx context.Context, fs *FirestoreClient, user *U
 // When processing is complete, remove from tracking collection
 func ProcessAppointmentComplete(ctx context.Context, fs *FirestoreClient, user *User, appointment *Appointment) error {
 	return fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+
+		if appointment == nil {
+			return fmt.Errorf("appointment cannot be nil")
+		}
+
 		// Update appointment status
 		appointment.Status = AppointmentStatusCompleted
 		appointment.UpdatedAt = time.Now()
@@ -334,13 +414,8 @@ func ProcessAppointmentComplete(ctx context.Context, fs *FirestoreClient, user *
 			return fmt.Errorf("failed to update user state: %w", err)
 		}
 
-		// Store user's timezone from appointment
-		if err := UpdateUserTimezoneTx(ctx, fs, tx, user, appointment.Timezone); err != nil {
-			return fmt.Errorf("failed to update user timezone: %w", err)
-		}
-
 		// Calculate trial end in user's timezone (11:59 PM on 7th day)
-		subscriptionEnd, err := utils.CalculateTrialEndDate(time.Now(), appointment.Timezone)
+		subscriptionEnd, err := utils.CalculateTrialEndDate(time.Now(), user.Timezone)
 		if err != nil {
 			// Fallback to 7 days UTC if timezone parsing fails
 			subscriptionEnd = time.Now().Add(7 * 24 * time.Hour)
@@ -489,7 +564,10 @@ func ListAppointmentsNeedingProcessing(ctx context.Context, fs *FirestoreClient,
 			continue
 		}
 
-		appointments = append(appointments, appointment)
+		// Include both voice and chat appointments now that processing is unified
+		if appointment.Type == AppointmentTypeVoice || appointment.Type == AppointmentTypeChat {
+			appointments = append(appointments, appointment)
+		}
 	}
 
 	// Clean up orphaned references synchronously
@@ -509,4 +587,742 @@ func cleanupOrphanedProcessingRefs(ctx context.Context, fs *FirestoreClient, log
 			logger.Error("failed to clean up orphaned processing reference", "refID", refID, "error", err)
 		}
 	}
+}
+
+// AddChatMessage adds a new message to a chat appointment
+func AddChatMessage(ctx context.Context, fs *FirestoreClient, appointment *Appointment, role, content string) error {
+	if appointment.Type != AppointmentTypeChat {
+		return fmt.Errorf("appointment is not a chat type")
+	}
+
+	message := ChatMessage{
+		ID:        funcs.Slugify(fmt.Sprintf("msg-%d", time.Now().UnixNano())),
+		Role:      role,
+		Content:   content,
+		Timestamp: time.Now(),
+	}
+
+	appointment.ChatMessages = append(appointment.ChatMessages, message)
+	appointment.UpdatedAt = time.Now()
+
+	// Auto-invoke checklist update based on message content
+	if appointment.ConversationChecklist != nil {
+		if err := UpdateChecklistFromMessage(appointment.ConversationChecklist, message); err != nil {
+			// Log error but don't fail the message save - checklist update is supplementary
+			// The error will be visible in logs for debugging
+			fmt.Printf("Warning: Failed to auto-update checklist from message: %v\n", err)
+		}
+	}
+
+	return UpdateAppointment(ctx, fs, appointment)
+}
+
+// AddChatMessageSafe adds a new message to a chat appointment using a transaction for thread safety
+// This ensures that concurrent updates don't overwrite each other
+func AddChatMessageSafe(ctx context.Context, fs *FirestoreClient, userID, appointmentID string, role, content string) error {
+	return fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		// Get the latest appointment data within the transaction
+		docRef := fs.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).Doc(appointmentID)
+		doc, err := tx.Get(docRef)
+		if err != nil {
+			return fmt.Errorf("failed to get appointment in transaction: %w", err)
+		}
+
+		var appointment Appointment
+		if err := doc.DataTo(&appointment); err != nil {
+			return fmt.Errorf("failed to unmarshal appointment in transaction: %w", err)
+		}
+
+		if appointment.Type != AppointmentTypeChat {
+			return fmt.Errorf("appointment is not a chat type")
+		}
+
+		// Create the new message
+		message := ChatMessage{
+			ID:        funcs.Slugify(fmt.Sprintf("msg-%d", time.Now().UnixNano())),
+			Role:      role,
+			Content:   content,
+			Timestamp: time.Now(),
+		}
+
+		// Append to the messages
+		appointment.ChatMessages = append(appointment.ChatMessages, message)
+		appointment.UpdatedAt = time.Now()
+
+		// Auto-invoke checklist update based on message content
+		if appointment.ConversationChecklist != nil {
+			if err := UpdateChecklistFromMessage(appointment.ConversationChecklist, message); err != nil {
+				// Log error but don't fail the message save - checklist update is supplementary
+				fmt.Printf("Warning: Failed to auto-update checklist from message: %v\n", err)
+			}
+		}
+
+		// Save within the transaction
+		return tx.Set(docRef, appointment)
+	})
+}
+
+// GetChatHistory returns the chat messages for a chat appointment
+func GetChatHistory(appointment *Appointment) ([]ChatMessage, error) {
+	if appointment.Type != AppointmentTypeChat {
+		return nil, fmt.Errorf("appointment is not a chat type")
+	}
+	return appointment.ChatMessages, nil
+}
+
+// GetChatMessages retrieves chat messages for an appointment by fetching the appointment first
+func GetChatMessages(ctx context.Context, fs *FirestoreClient, userID, appointmentID string) ([]ChatMessage, error) {
+	// Search through the appointments collection to find the appointment
+	query := fs.Collection(usersCollection).Doc(userID).Collection(appointmentsCollection).Where("ID", "==", appointmentID).Limit(1)
+
+	iter := query.Documents(ctx)
+	doc, err := iter.Next()
+	if err != nil {
+		if err == iterator.Done {
+			return nil, fmt.Errorf("appointment %s not found", appointmentID)
+		}
+		return nil, fmt.Errorf("failed to query appointment: %w", err)
+	}
+
+	var appointment Appointment
+	if err := doc.DataTo(&appointment); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal appointment: %w", err)
+	}
+
+	return GetChatHistory(&appointment)
+}
+
+// Constants for checklist management
+const (
+	ChecklistStatusInProgress         = "in_progress"
+	ChecklistStatusReadyForCompletion = "ready_for_completion"
+	ChecklistStatusCompleted          = "completed"
+
+	ChecklistItemStatusPending    = "pending"
+	ChecklistItemStatusInProgress = "in_progress"
+	ChecklistItemStatusCompleted  = "completed"
+
+	ChecklistItemQualityLow    = "low"
+	ChecklistItemQualityMedium = "medium"
+	ChecklistItemQualityHigh   = "high"
+
+	MaxConversationLength = 50
+	MaxCompletionAttempts = 3
+)
+
+// InitializeConversationChecklist creates a new checklist for a chat appointment
+func InitializeConversationChecklist() *ConversationChecklist {
+	now := time.Now()
+
+	items := []ChecklistItem{
+		{
+			ID:            "introduction",
+			Topic:         "Introduction and Verification",
+			Description:   "Basic introduction and verification of caller identity",
+			Status:        ChecklistItemStatusPending,
+			Quality:       ChecklistItemQualityLow,
+			RequiredInfo:  []string{"name_confirmed", "good_time_to_chat"},
+			ExtractedInfo: make(map[string]interface{}),
+			Required:      true,
+			LastUpdated:   now,
+		},
+		{
+			ID:            "warm_up",
+			Topic:         "Warm-Up and Resume Acknowledgment",
+			Description:   "Personal background exploration and resume discussion",
+			Status:        ChecklistItemStatusPending,
+			Quality:       ChecklistItemQualityLow,
+			RequiredInfo:  []string{"career_background", "personal_insights", "achievements"},
+			ExtractedInfo: make(map[string]interface{}),
+			Required:      true,
+			LastUpdated:   now,
+		},
+		{
+			ID:            "deal_breakers",
+			Topic:         "Identifying What They Want to Avoid",
+			Description:   "Understanding work experiences and environments to avoid",
+			Status:        ChecklistItemStatusPending,
+			Quality:       ChecklistItemQualityLow,
+			RequiredInfo:  []string{"work_dislikes", "management_style_dislikes", "company_culture_dislikes"},
+			ExtractedInfo: make(map[string]interface{}),
+			Required:      true,
+			LastUpdated:   now,
+		},
+		{
+			ID:            "search_strategy",
+			Topic:         "Determine Search Strategy",
+			Description:   "Primary search terms, skills, and job focus areas",
+			Status:        ChecklistItemStatusPending,
+			Quality:       ChecklistItemQualityLow,
+			RequiredInfo:  []string{"primary_search_terms", "additional_skills", "things_to_avoid"},
+			ExtractedInfo: make(map[string]interface{}),
+			Required:      true,
+			LastUpdated:   now,
+		},
+		{
+			ID:            "work_environment",
+			Topic:         "Work Environment Preferences",
+			Description:   "Company type, work motivation, and collaboration style",
+			Status:        ChecklistItemStatusPending,
+			Quality:       ChecklistItemQualityLow,
+			RequiredInfo:  []string{"company_type_preference", "work_motivation", "collaboration_style"},
+			ExtractedInfo: make(map[string]interface{}),
+			Required:      true,
+			LastUpdated:   now,
+		},
+		{
+			ID:            "location_preferences",
+			Topic:         "Preferred Work Location",
+			Description:   "Geographic location and remote/hybrid preferences",
+			Status:        ChecklistItemStatusPending,
+			Quality:       ChecklistItemQualityLow,
+			RequiredInfo:  []string{"current_location", "work_location_preference", "flexibility"},
+			ExtractedInfo: make(map[string]interface{}),
+			Required:      true,
+			LastUpdated:   now,
+		},
+		{
+			ID:            "validation",
+			Topic:         "Clarifying and Validating Statements",
+			Description:   "Clarification of vague or inconsistent responses",
+			Status:        ChecklistItemStatusPending,
+			Quality:       ChecklistItemQualityLow,
+			RequiredInfo:  []string{"clarifications_complete", "consistency_verified"},
+			ExtractedInfo: make(map[string]interface{}),
+			Required:      false, // Optional - depends on conversation quality
+			LastUpdated:   now,
+		},
+		{
+			ID:            "final_confirmation",
+			Topic:         "Closing and Confirming Understanding",
+			Description:   "Final validation of all gathered information",
+			Status:        ChecklistItemStatusPending,
+			Quality:       ChecklistItemQualityLow,
+			RequiredInfo:  []string{"summary_confirmed", "additional_info_requested"},
+			ExtractedInfo: make(map[string]interface{}),
+			Required:      true,
+			LastUpdated:   now,
+		},
+	}
+
+	return &ConversationChecklist{
+		Items:              items,
+		OverallStatus:      ChecklistStatusInProgress,
+		CompletionAttempts: 0,
+		LastUpdated:        now,
+		MessageCount:       0,
+	}
+}
+
+// UpdateChecklistItem updates a specific checklist item
+func UpdateChecklistItem(checklist *ConversationChecklist, itemID string, status string, quality string, extractedInfo map[string]interface{}, notes string) error {
+	for i := range checklist.Items {
+		if checklist.Items[i].ID == itemID {
+			checklist.Items[i].Status = status
+			checklist.Items[i].Quality = quality
+			checklist.Items[i].ValidationNotes = notes
+			checklist.Items[i].LastUpdated = time.Now()
+
+			// Merge extracted info
+			if extractedInfo != nil {
+				for key, value := range extractedInfo {
+					checklist.Items[i].ExtractedInfo[key] = value
+				}
+			}
+
+			checklist.LastUpdated = time.Now()
+			return nil
+		}
+	}
+	return fmt.Errorf("checklist item with ID %s not found", itemID)
+}
+
+// GetChecklistItem retrieves a specific checklist item
+func GetChecklistItem(checklist *ConversationChecklist, itemID string) (*ChecklistItem, error) {
+	for i := range checklist.Items {
+		if checklist.Items[i].ID == itemID {
+			return &checklist.Items[i], nil
+		}
+	}
+	return nil, fmt.Errorf("checklist item with ID %s not found", itemID)
+}
+
+// ValidateChecklistCompletion checks if the checklist is ready for completion
+func ValidateChecklistCompletion(checklist *ConversationChecklist) (bool, []string, error) {
+	if checklist == nil {
+		return false, []string{"checklist not initialized"}, nil
+	}
+
+	var missingItems []string
+	var qualityIssues []string
+
+	// Check if we've exceeded maximum attempts
+	if checklist.CompletionAttempts >= MaxCompletionAttempts {
+		// Allow completion with lower quality after max attempts
+		return ValidateChecklistCompletionWithLowerThreshold(checklist)
+	}
+
+	// Check if conversation is too long
+	if checklist.MessageCount >= MaxConversationLength {
+		return ValidateChecklistCompletionWithLowerThreshold(checklist)
+	}
+
+	// Check required items
+	for _, item := range checklist.Items {
+		if item.Required {
+			if item.Status != ChecklistItemStatusCompleted {
+				missingItems = append(missingItems, fmt.Sprintf("%s: %s", item.Topic, "not completed"))
+			} else if item.Quality == ChecklistItemQualityLow {
+				qualityIssues = append(qualityIssues, fmt.Sprintf("%s: %s", item.Topic, "low quality information"))
+			}
+		}
+	}
+
+	if len(missingItems) > 0 || len(qualityIssues) > 0 {
+		var allIssues []string
+		allIssues = append(allIssues, missingItems...)
+		allIssues = append(allIssues, qualityIssues...)
+		return false, allIssues, nil
+	}
+
+	return true, nil, nil
+}
+
+// ValidateChecklistCompletionWithLowerThreshold allows completion with lower quality thresholds
+func ValidateChecklistCompletionWithLowerThreshold(checklist *ConversationChecklist) (bool, []string, error) {
+	var missingItems []string
+
+	// Only check that required items are at least started
+	for _, item := range checklist.Items {
+		if item.Required && item.Status == ChecklistItemStatusPending {
+			missingItems = append(missingItems, fmt.Sprintf("%s: %s", item.Topic, "not started"))
+		}
+	}
+
+	if len(missingItems) > 0 {
+		return false, missingItems, nil
+	}
+
+	return true, nil, nil
+}
+
+// IncrementCompletionAttempt increments the completion attempt counter
+func IncrementCompletionAttempt(checklist *ConversationChecklist) {
+	checklist.CompletionAttempts++
+	checklist.LastUpdated = time.Now()
+}
+
+// IncrementMessageCount increments the message counter
+func IncrementMessageCount(checklist *ConversationChecklist) {
+	checklist.MessageCount++
+	checklist.LastUpdated = time.Now()
+}
+
+// GetChecklistSummary returns a summary of the checklist status
+func GetChecklistSummary(checklist *ConversationChecklist) map[string]interface{} {
+	if checklist == nil {
+		return map[string]interface{}{
+			"error": "checklist not initialized",
+		}
+	}
+
+	completedCount := 0
+	highQualityCount := 0
+	requiredCount := 0
+
+	for _, item := range checklist.Items {
+		if item.Required {
+			requiredCount++
+		}
+		if item.Status == ChecklistItemStatusCompleted {
+			completedCount++
+		}
+		if item.Quality == ChecklistItemQualityHigh {
+			highQualityCount++
+		}
+	}
+
+	canComplete, issues, _ := ValidateChecklistCompletion(checklist)
+
+	return map[string]interface{}{
+		"overall_status":      checklist.OverallStatus,
+		"completion_attempts": checklist.CompletionAttempts,
+		"message_count":       checklist.MessageCount,
+		"total_items":         len(checklist.Items),
+		"required_items":      requiredCount,
+		"completed_items":     completedCount,
+		"high_quality_items":  highQualityCount,
+		"can_complete":        canComplete,
+		"issues":              issues,
+		"items":               checklist.Items,
+		"last_updated":        checklist.LastUpdated,
+	}
+}
+
+// UpdateChecklistFromMessage automatically updates checklist based on message content
+// This provides a lightweight guard to ensure every message pushes checklist state forward
+func UpdateChecklistFromMessage(checklist *ConversationChecklist, message ChatMessage) error {
+	if checklist == nil {
+		return fmt.Errorf("checklist is nil")
+	}
+
+	// Skip system messages and tool calls
+	if message.Role == "system" || message.Role == "tool" {
+		return nil
+	}
+
+	// Skip messages with empty content
+	if message.Content == "" {
+		return nil
+	}
+
+	// Skip tool call messages (these are handled by explicit tool calls)
+	if message.Role == "assistant" && (strings.Contains(message.Content, "TOOL_CALLS:") || strings.Contains(message.Content, "TOOL_RESPONSE:")) {
+		return nil
+	}
+
+	return nil
+}
+
+// autoUpdateChecklistItem updates a checklist item only if it improves the current state
+func autoUpdateChecklistItem(checklist *ConversationChecklist, itemID string, status string, quality string) error {
+	item, err := GetChecklistItem(checklist, itemID)
+	if err != nil {
+		return err
+	}
+
+	// Only update if the new status is an improvement
+	shouldUpdate := false
+	if item.Status == ChecklistItemStatusPending && status != ChecklistItemStatusPending {
+		shouldUpdate = true
+	} else if item.Status == ChecklistItemStatusInProgress && status == ChecklistItemStatusCompleted {
+		shouldUpdate = true
+	}
+
+	// Also update if quality is improving
+	if item.Quality == ChecklistItemQualityLow && quality != ChecklistItemQualityLow {
+		shouldUpdate = true
+	} else if item.Quality == ChecklistItemQualityMedium && quality == ChecklistItemQualityHigh {
+		shouldUpdate = true
+	}
+
+	if shouldUpdate {
+		extractedInfo := map[string]interface{}{
+			"auto_detected":  true,
+			"detection_time": time.Now(),
+			"source":         "message_analysis",
+		}
+		return UpdateChecklistItem(checklist, itemID, status, quality, extractedInfo, "Auto-detected from message content")
+	}
+
+	return nil
+}
+
+// Pattern matching functions for different checklist topics
+func checkIntroductionPatterns(content string) bool {
+	patterns := []string{
+		"my name is", "i'm", "yes this is", "speaking", "good time to talk", "good time to chat",
+		"thanks for calling", "hi", "hello", "yes that's me", "correct", "that's right",
+	}
+	return containsAnyPattern(content, patterns)
+}
+
+func checkBackgroundPatterns(content string) bool {
+	patterns := []string{
+		"background", "experience", "worked at", "current role", "previous", "career", "resume",
+		"graduated", "degree", "university", "college", "skills", "expertise", "accomplishment",
+		"achievement", "project", "responsibility", "manager", "team", "years", "developed",
+	}
+	return containsAnyPattern(content, patterns)
+}
+
+func checkDealBreakerPatterns(content string) bool {
+	patterns := []string{
+		"don't want", "avoid", "not interested", "dislike", "hate", "never again", "terrible",
+		"worst", "bad experience", "nightmare", "toxic", "micromanag", "bureaucracy",
+		"politics", "overtime", "weekend", "on-call", "travel", "relocate", "commute",
+	}
+	return containsAnyPattern(content, patterns)
+}
+
+func checkWorkEnvironmentPatterns(content string) bool {
+	patterns := []string{
+		"company", "startup", "corporation", "team", "culture", "environment", "atmosphere",
+		"collaboration", "independent", "autonomous", "structured", "flexible", "formal",
+		"casual", "fast-paced", "slow", "innovative", "traditional", "creative", "analytical",
+	}
+	return containsAnyPattern(content, patterns)
+}
+
+func checkLocationPatterns(content string) bool {
+	patterns := []string{
+		"location", "remote", "hybrid", "office", "work from home", "wfh", "onsite", "in-person",
+		"commute", "travel", "relocate", "move", "city", "state", "country", "timezone",
+		"flexible", "anywhere", "local", "nearby", "distance",
+	}
+	return containsAnyPattern(content, patterns)
+}
+
+func checkSearchStrategyPatterns(content string) bool {
+	patterns := []string{
+		"looking for", "searching", "interested in", "want to", "hoping", "ideal", "perfect",
+		"title", "role", "position", "job", "opportunity", "skills", "technology", "language",
+		"framework", "industry", "domain", "field", "focus", "specialize", "expertise",
+	}
+	return containsAnyPattern(content, patterns)
+}
+
+// containsAnyPattern checks if the content contains any of the given patterns
+func containsAnyPattern(content string, patterns []string) bool {
+	for _, pattern := range patterns {
+		if strings.Contains(content, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+// CompletionStatus represents the different types of completion readiness
+type CompletionStatus struct {
+	CanComplete     bool
+	SoftComplete    bool
+	HardComplete    bool
+	CompletionScore float64
+	Issues          []string
+	MissingCritical []string
+	QualityMetrics  QualityMetrics
+	Guidance        string
+}
+
+// QualityMetrics provides detailed completion quality information
+type QualityMetrics struct {
+	TotalItems       int
+	RequiredItems    int
+	CompletedItems   int
+	HighQualityItems int
+	CompletionRate   float64
+	QualityRate      float64
+	AttemptNumber    int
+	MessageCount     int
+}
+
+// GetHybridCompletionStatus provides both soft and hard completion assessment
+func GetHybridCompletionStatus(checklist *ConversationChecklist) *CompletionStatus {
+	if checklist == nil {
+		return &CompletionStatus{
+			CanComplete:     false,
+			SoftComplete:    false,
+			HardComplete:    false,
+			CompletionScore: 0.0,
+			Issues:          []string{"checklist not initialized"},
+			Guidance:        "Please initialize the conversation checklist.",
+		}
+	}
+
+	// Calculate quality metrics
+	metrics := calculateQualityMetrics(checklist)
+
+	// Determine hard completion (strict requirements)
+	hardComplete, hardIssues := checkHardCompletion(checklist)
+
+	// Determine soft completion (flexible requirements)
+	softComplete, softIssues := checkSoftCompletion(checklist, metrics)
+
+	// Calculate completion score (0.0 to 1.0)
+	completionScore := calculateCompletionScore(metrics)
+
+	// Determine if we can complete (soft OR hard, with escalation rules)
+	canComplete := softComplete || hardComplete
+
+	// Apply escalation rules based on attempts and message count
+	if !canComplete {
+		canComplete = shouldAllowEscalatedCompletion(checklist, metrics)
+	}
+
+	// Generate guidance based on current state
+	guidance := generateCompletionGuidance(checklist, metrics, hardComplete, softComplete)
+
+	// Combine issues
+	allIssues := append(hardIssues, softIssues...)
+	criticalIssues := findCriticalIssues(checklist, metrics)
+
+	return &CompletionStatus{
+		CanComplete:     canComplete,
+		SoftComplete:    softComplete,
+		HardComplete:    hardComplete,
+		CompletionScore: completionScore,
+		Issues:          allIssues,
+		MissingCritical: criticalIssues,
+		QualityMetrics:  metrics,
+		Guidance:        guidance,
+	}
+}
+
+// calculateQualityMetrics computes detailed completion metrics
+func calculateQualityMetrics(checklist *ConversationChecklist) QualityMetrics {
+	totalItems := len(checklist.Items)
+	requiredItems := 0
+	completedItems := 0
+	highQualityItems := 0
+
+	for _, item := range checklist.Items {
+		if item.Required {
+			requiredItems++
+		}
+		if item.Status == ChecklistItemStatusCompleted {
+			completedItems++
+		}
+		if item.Quality == ChecklistItemQualityHigh {
+			highQualityItems++
+		}
+	}
+
+	var completionRate, qualityRate float64
+	if requiredItems > 0 {
+		completionRate = float64(completedItems) / float64(requiredItems)
+	}
+	if totalItems > 0 {
+		qualityRate = float64(highQualityItems) / float64(totalItems)
+	}
+
+	return QualityMetrics{
+		TotalItems:       totalItems,
+		RequiredItems:    requiredItems,
+		CompletedItems:   completedItems,
+		HighQualityItems: highQualityItems,
+		CompletionRate:   completionRate,
+		QualityRate:      qualityRate,
+		AttemptNumber:    checklist.CompletionAttempts,
+		MessageCount:     checklist.MessageCount,
+	}
+}
+
+// checkHardCompletion enforces strict completion requirements
+func checkHardCompletion(checklist *ConversationChecklist) (bool, []string) {
+	var issues []string
+
+	for _, item := range checklist.Items {
+		if item.Required {
+			if item.Status != ChecklistItemStatusCompleted {
+				issues = append(issues, fmt.Sprintf("%s: not completed", item.Topic))
+			} else if item.Quality == ChecklistItemQualityLow {
+				issues = append(issues, fmt.Sprintf("%s: low quality information", item.Topic))
+			}
+		}
+	}
+
+	return len(issues) == 0, issues
+}
+
+// checkSoftCompletion allows more flexible completion criteria
+func checkSoftCompletion(checklist *ConversationChecklist, metrics QualityMetrics) (bool, []string) {
+	var issues []string
+
+	// Soft completion criteria:
+	// - At least 75% of required items completed
+	// - OR at least 50% completion with high conversation engagement (20+ messages)
+	// - OR multiple completion attempts with reasonable progress
+
+	if metrics.CompletionRate >= 0.75 {
+		return true, issues
+	}
+
+	if metrics.CompletionRate >= 0.5 && metrics.MessageCount >= 20 {
+		return true, issues
+	}
+
+	if metrics.AttemptNumber >= 2 && metrics.CompletionRate >= 0.5 {
+		return true, issues
+	}
+
+	// If none of the soft criteria are met, list the gaps
+	for _, item := range checklist.Items {
+		if item.Required && item.Status == ChecklistItemStatusPending {
+			issues = append(issues, fmt.Sprintf("%s: not started", item.Topic))
+		}
+	}
+
+	return false, issues
+}
+
+// shouldAllowEscalatedCompletion handles edge cases for completion
+func shouldAllowEscalatedCompletion(checklist *ConversationChecklist, metrics QualityMetrics) bool {
+	// Force allow completion if we've hit limits
+	if metrics.AttemptNumber >= MaxCompletionAttempts {
+		return true
+	}
+
+	if metrics.MessageCount >= MaxConversationLength {
+		return true
+	}
+
+	// Allow completion if we have some progress and user seems engaged
+	if metrics.CompletionRate >= 0.3 && metrics.MessageCount >= 15 {
+		return true
+	}
+
+	return false
+}
+
+// calculateCompletionScore provides a numeric score (0.0 to 1.0)
+func calculateCompletionScore(metrics QualityMetrics) float64 {
+	// Weighted score based on completion rate, quality, and engagement
+	completionWeight := 0.5
+	qualityWeight := 0.3
+	engagementWeight := 0.2
+
+	// Engagement score based on message count (normalized to 0-1)
+	engagementScore := float64(metrics.MessageCount) / float64(MaxConversationLength)
+	if engagementScore > 1.0 {
+		engagementScore = 1.0
+	}
+
+	score := (completionWeight * metrics.CompletionRate) +
+		(qualityWeight * metrics.QualityRate) +
+		(engagementWeight * engagementScore)
+
+	return score
+}
+
+// generateCompletionGuidance provides contextual guidance for the AI
+func generateCompletionGuidance(checklist *ConversationChecklist, metrics QualityMetrics, hardComplete, softComplete bool) string {
+	if hardComplete {
+		return "All requirements met. Ready for immediate completion."
+	}
+
+	if softComplete {
+		return "Sufficient information gathered. Can complete with natural conversation ending."
+	}
+
+	// Progressive guidance based on attempt number
+	if metrics.AttemptNumber == 0 {
+		return "Focus on gathering required information naturally through conversation."
+	} else if metrics.AttemptNumber == 1 {
+		return "Some information still needed. Try to address gaps while maintaining conversation flow."
+	} else if metrics.AttemptNumber >= 2 {
+		return "Multiple attempts made. Consider completing with available information to avoid user frustration."
+	}
+
+	return "Continue gathering information as conversation allows."
+}
+
+// findCriticalIssues identifies the most important missing items
+func findCriticalIssues(checklist *ConversationChecklist, metrics QualityMetrics) []string {
+	var critical []string
+
+	// Prioritize core topics that are still pending
+	priorityTopics := []string{"deal_breakers", "search_strategy", "work_environment"}
+
+	for _, item := range checklist.Items {
+		if item.Required && item.Status == ChecklistItemStatusPending {
+			for _, priority := range priorityTopics {
+				if item.ID == priority {
+					critical = append(critical, item.Topic)
+					break
+				}
+			}
+		}
+	}
+
+	return critical
 }
