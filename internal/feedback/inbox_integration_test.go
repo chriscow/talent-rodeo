@@ -2,6 +2,7 @@ package feedback
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"testing"
@@ -96,7 +97,7 @@ func TestFeedbackProcessingWithRealFirestore(t *testing.T) {
 	realLLMClient := NewMindsClient()
 
 	// Create the processor with read-only store
-	processor := newLLMProcessor(readOnlyStore, firestoreClient, logger, realLLMClient)
+	processor := newFeedbackProcessor(readOnlyStore, firestoreClient, logger, realLLMClient)
 
 	// Test processing
 	t.Logf("Processing feedback for user %s...", userID)
@@ -185,6 +186,31 @@ func (r *readOnlyFeedbackStore) GetUserSteeringQuery(ctx context.Context, userID
 	return r.real.GetUserSteeringQuery(ctx, userID)
 }
 
+func (r *readOnlyFeedbackStore) CreateStatementVersionFromFeedback(ctx context.Context, userID string, feedbackData map[string]any, promptFile string) (*internal.UserStatementVersion, error) {
+	// Create a fake version for read-only mode
+	version := &internal.UserStatementVersion{
+		ID:                fmt.Sprintf("%s_v%d", userID, 2), // Assume this is version 2
+		VersionNumber:     2,
+		IsLatest:          true,
+		StatementText:     "Enhanced statement based on feedback (read-only mode)",
+		GeneratedBy:       "feedback",
+		GenerationReason:  "Enhanced statement based on user feedback",
+		PromptFile:        promptFile,
+		SourceData:        feedbackData,
+		CreatedAt:         time.Now(),
+		ChangeType:        "feedback_driven",
+		SignificantChange: true,
+	}
+
+	r.capturedStatement = &version.StatementText
+	r.logger.Info("Captured statement version creation (read-only mode)",
+		"userID", userID,
+		"versionID", version.ID,
+		"length", len(version.StatementText))
+
+	return version, nil
+}
+
 // TestFeedbackProcessingIntegration tests the complete feedback processing pipeline
 // with real LLM calls. This test is tagged with "integration" to avoid running
 // during normal test runs since it makes real API calls.
@@ -214,7 +240,7 @@ func TestFeedbackProcessingIntegration(t *testing.T) {
 	}
 
 	// Create the processor
-	processor := newLLMProcessor(mockStore, firestoreClient, logger, realLLMClient)
+	processor := newFeedbackProcessor(mockStore, firestoreClient, logger, realLLMClient)
 
 	// Test processing
 	userID := "test-user-123"
@@ -265,7 +291,7 @@ func TestStatementUpdateWithRealLLM(t *testing.T) {
 
 	// Create statement updater with real LLM
 	realLLMClient := NewMindsClient()
-	updater := newStatementUpdater(realLLMClient, logger)
+	updater := NewStatementGenerator(nil, realLLMClient, logger)
 
 	// Create test analysis data
 	analysis := &SemanticFeedbackAnalysis{

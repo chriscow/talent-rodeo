@@ -216,6 +216,13 @@ type UserService interface {
 	// Takes the user ID and new statement as parameters.
 	// Returns an error if the update fails.
 	SetUserStatement(ctx context.Context, userID, statement string) error
+
+	// CreateStatementVersionFromFeedback creates a new statement version from application feedback.
+	// Uses the versioning system to properly track changes and maintain audit trail.
+	CreateStatementVersionFromFeedback(ctx context.Context, userID string, feedbackData map[string]any, promptFile string) (*internal.UserStatementVersion, error)
+	// CreateStatementVersionFromInboxFeedback creates a new statement version from inbox email feedback.
+	// Uses inbox-specific processing with raw email content and adjustment requests.
+	CreateStatementVersionFromInboxFeedback(ctx context.Context, userID, emailContent, adjustmentRequest, userEmail, promptFile string) (*internal.UserStatementVersion, error)
 }
 
 // firestoreUserService implements UserService using Firestore.
@@ -229,6 +236,14 @@ func (f *firestoreUserService) GetUserByEmail(ctx context.Context, email string)
 
 func (f *firestoreUserService) SetUserStatement(ctx context.Context, userID, statement string) error {
 	return internal.SetUserStatement(ctx, f.fsClient, userID, statement)
+}
+
+func (f *firestoreUserService) CreateStatementVersionFromFeedback(ctx context.Context, userID string, feedbackData map[string]any, promptFile string) (*internal.UserStatementVersion, error) {
+	return internal.EnhanceStatementWithAppFeedback(ctx, f.fsClient, userID, feedbackData, promptFile)
+}
+
+func (f *firestoreUserService) CreateStatementVersionFromInboxFeedback(ctx context.Context, userID, emailContent, adjustmentRequest, userEmail, promptFile string) (*internal.UserStatementVersion, error) {
+	return internal.EnhanceStatementWithInboxFeedback(ctx, f.fsClient, userID, emailContent, adjustmentRequest, userEmail, promptFile)
 }
 
 // SearchAdjustmentEmailData represents the data used in search adjustment notification emails.
@@ -450,10 +465,6 @@ func (h *InboxFeedbackHandler) processSearchAdjustment(ctx context.Context, emai
 	return nil
 }
 
-// getUserByEmail retrieves a user by their email address.
-func (h *InboxFeedbackHandler) getUserByEmail(ctx context.Context, email string) (*internal.User, bool, error) {
-	return h.userService.GetUserByEmail(ctx, email)
-}
 
 // updateUserStatement updates the user's statement based on the email request.
 func (h *InboxFeedbackHandler) updateUserStatement(ctx context.Context, user *internal.User, emailContent, adjustmentRequest string) error {
@@ -464,7 +475,7 @@ func (h *InboxFeedbackHandler) updateUserStatement(ctx context.Context, user *in
 		"adjustment_request", adjustmentRequest,
 	)
 
-	// Get current statement
+	// Get current statement for logging and notification purposes
 	currentStatement := ""
 	if user.Statement != nil {
 		currentStatement = *user.Statement
@@ -476,45 +487,34 @@ func (h *InboxFeedbackHandler) updateUserStatement(ctx context.Context, user *in
 		"has_statement", user.Statement != nil,
 	)
 
-	// Update the statement using OpenAI
-	updatedStatement, err := h.openAIClient.UpdateStatement(ctx, currentStatement, emailContent, adjustmentRequest)
-	if err != nil {
-		h.logger.Error("OpenAI statement update failed",
-			"user_id", user.ID,
-			"error", err,
-		)
-		return fmt.Errorf("failed to update statement with OpenAI: %w", err)
-	}
-
-	h.logger.Info("OpenAI statement update",
+	h.logger.Debug("creating statement version from inbox email feedback",
 		"user_id", user.ID,
-		"old_length", len(currentStatement),
-		"new_length", len(updatedStatement),
-		"first_100_chars", func() string {
-			if len(updatedStatement) > 100 {
-				return updatedStatement[:100] + "..."
-			}
-			return updatedStatement
-		}())
-
-	// Save the updated statement
-	h.logger.Debug("saving updated statement to database",
-		"user_id", user.ID,
-		"statement_length", len(updatedStatement),
+		"email_content_length", len(emailContent),
+		"adjustment_request", adjustmentRequest,
 	)
 
-	if err := h.userService.SetUserStatement(ctx, user.ID, updatedStatement); err != nil {
-		h.logger.Error("failed to save statement to database",
+	// Use inbox-specific versioning system to create new statement version
+	newVersion, err := h.userService.CreateStatementVersionFromInboxFeedback(ctx, user.ID, emailContent, adjustmentRequest, user.Email, "inbox-feedback.v001.txt")
+	if err != nil {
+		h.logger.Error("failed to create statement version from email feedback",
 			"user_id", user.ID,
 			"error", err,
 		)
-		return fmt.Errorf("failed to save updated statement: %w", err)
+		return fmt.Errorf("failed to create statement version from feedback: %w", err)
 	}
 
-	h.logger.Info("user statement updated successfully",
+	h.logger.Info("statement version created from email feedback",
 		"user_id", user.ID,
-		"email", user.Email,
-		"statement_length", len(updatedStatement))
+		"version_id", newVersion.ID,
+		"version_number", newVersion.VersionNumber,
+		"old_length", len(currentStatement),
+		"new_length", len(newVersion.StatementText),
+		"first_100_chars", func() string {
+			if len(newVersion.StatementText) > 100 {
+				return newVersion.StatementText[:100] + "..."
+			}
+			return newVersion.StatementText
+		}())
 
 	// Send notification email if enabled
 	h.logger.Debug("attempting to send search adjustment notification",
@@ -524,7 +524,7 @@ func (h *InboxFeedbackHandler) updateUserStatement(ctx context.Context, user *in
 		"has_mailer", h.mailer != nil,
 	)
 
-	if err := h.sendSearchAdjustmentNotification(ctx, user, emailContent, currentStatement, updatedStatement, adjustmentRequest); err != nil {
+	if err := h.sendSearchAdjustmentNotification(ctx, user, emailContent, currentStatement, newVersion.StatementText, adjustmentRequest); err != nil {
 		// Log the error but don't fail the processing
 		h.logger.Warn("failed to send search adjustment notification",
 			"error", err,
@@ -533,6 +533,15 @@ func (h *InboxFeedbackHandler) updateUserStatement(ctx context.Context, user *in
 	}
 
 	return nil
+}
+
+// getMapKeys returns the keys of a map as a slice for logging purposes
+func getMapKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 // sendSearchAdjustmentNotification sends an email notification about the search adjustment.

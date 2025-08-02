@@ -66,6 +66,10 @@ type User struct {
 	LocationPreference *string
 	Statement          *string // first person statement of work preferences
 
+	// Statement versioning integration
+	CurrentStatementVersionID *string    // Points to latest version
+	StatementLastUpdated      *time.Time // Cache for quick checks
+
 	FollowupQuestionsSentAt *time.Time // When the last set of follow up questions were sent to the user
 
 	// Nudge Email Tracking

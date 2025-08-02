@@ -214,6 +214,62 @@ Examples:
 	},
 }
 
+var userStatementCmd = &cobra.Command{
+	Use:   "statement <user-id>",
+	Short: "View user's current statement",
+	Long: `View the current statement for a user.
+
+Shows the user's current statement text that is used for job matching.
+Use --full flag to see the complete statement, otherwise shows a preview.
+
+Examples:
+  trcli users statement user123                        # View statement preview
+  trcli users statement user123 --full                # View full statement`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := context.Background()
+		fs, err := internal.NewFirestoreClient(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to create Firestore client: %w", err)
+		}
+		defer fs.Close()
+
+		userID := args[0]
+
+		// Get the user first
+		user, found, err := internal.GetUser(ctx, fs, userID)
+		if err != nil {
+			return fmt.Errorf("failed to get user: %w", err)
+		}
+		if !found {
+			return fmt.Errorf("user not found: %s", userID)
+		}
+
+		fullFlag, _ := cmd.Flags().GetBool("full")
+
+		fmt.Printf("User: %s (%s)\n", user.Name, userID)
+		fmt.Printf("Email: %s\n", user.Email)
+		
+		if user.Statement == nil {
+			fmt.Printf("Statement: [No statement set]\n")
+			return nil
+		}
+
+		statement := *user.Statement
+		fmt.Printf("Statement Length: %d characters\n", len(statement))
+		
+		if fullFlag || len(statement) <= 200 {
+			fmt.Printf("\nFull Statement:\n%s\n", statement)
+		} else {
+			preview := statement[:200] + "..."
+			fmt.Printf("\nStatement Preview (first 200 chars):\n%s\n", preview)
+			fmt.Printf("\nUse --full flag to see complete statement.\n")
+		}
+
+		return nil
+	},
+}
+
 func init() {
 	// Add users command
 	RootCmd.AddCommand(usersCmd)
@@ -228,6 +284,7 @@ func init() {
 	usersCmd.AddCommand(userSubscribeCmd)
 	usersCmd.AddCommand(userSubscriptionCmd)
 	usersCmd.AddCommand(userTimezoneCmd)
+	usersCmd.AddCommand(userStatementCmd)
 
 	// Add flags
 	listUsersCmd.Flags().IntP("limit", "l", 100, "Maximum number of users to return per page")
@@ -262,6 +319,8 @@ func init() {
 	userSubscriptionCmd.Flags().IntVar(&extendDays, "extend", 0, "Number of days to extend subscription from today (optional - shows current info if not provided)")
 
 	userTimezoneCmd.Flags().String("set", "", "Set a new timezone for the user")
+
+	userStatementCmd.Flags().BoolP("full", "f", false, "Show full statement text (otherwise shows truncated preview)")
 }
 
 var usersCmd = &cobra.Command{

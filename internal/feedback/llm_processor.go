@@ -51,25 +51,25 @@ type FeedbackItem struct {
 	Date     string
 }
 
-type llmProcessor struct {
+type feedbackProcessor struct {
 	store                FeedbackStore
 	fs                   *internal.FirestoreClient
 	logger               *slog.Logger
 	analysisChain        *analyzer
 	queryUpdateChain     *queryUpdater
-	statementUpdateChain *StatementUpdateChain
+	statementUpdateChain *StatementGenerator
 	validationChain      *validator
 	metrics              *MetricsCollector
 }
 
-func newLLMProcessor(store FeedbackStore, fs *internal.FirestoreClient, logger *slog.Logger, llm LLMClient) *llmProcessor {
-	return &llmProcessor{
+func newFeedbackProcessor(store FeedbackStore, fs *internal.FirestoreClient, logger *slog.Logger, llm LLMClient) *feedbackProcessor {
+	return &feedbackProcessor{
 		store:                store,
 		fs:                   fs,
 		logger:               logger.With("component", "llm_feedback_processor"),
 		analysisChain:        newAnalyzer(llm, logger),
 		queryUpdateChain:     newQueryUpdater(llm, logger),
-		statementUpdateChain: newStatementUpdater(llm, logger),
+		statementUpdateChain: NewStatementGenerator(store, llm, logger),
 		validationChain:      newValidator(llm, logger),
 		metrics:              NewMetricsCollector(logger),
 	}
@@ -77,7 +77,7 @@ func newLLMProcessor(store FeedbackStore, fs *internal.FirestoreClient, logger *
 
 // ProcessUserFeedback processes user feedback to update both statement and steering query.
 // Statement updates are prioritized as the primary function.
-func (p *llmProcessor) ProcessUserFeedback(ctx context.Context, userID string) error {
+func (p *feedbackProcessor) ProcessUserFeedback(ctx context.Context, userID string) error {
 	startTime := time.Now()
 
 	// Get unprocessed feedback
@@ -178,32 +178,40 @@ func (p *llmProcessor) ProcessUserFeedback(ctx context.Context, userID string) e
 	// Phase 2a: Update user statement (primary function)
 	// (currentStatement already retrieved above for logging)
 
-	updatedStatement, err := p.statementUpdateChain.Run(ctx, currentStatement, analysis)
-	if err != nil {
-		finalErr = fmt.Errorf("failed to update user statement: %w", err)
-		return finalErr
+	// Create source data for versioning system
+	feedbackData := prepareFeedbackData(feedbacks)
+	feedbackSourceData := map[string]any{
+		"semantic_analysis": analysis,
+		"feedback_items":    convertFeedbackDataToMap(feedbackData),
+		"confidence_score":  analysis.ConfidenceScore,
+		"reasoning":         analysis.Reasoning,
+		"processor_version": "v1.0",
+		"liked_themes":      analysis.LikedThemes(),
+		"disliked_themes":   analysis.DislikedThemes(),
 	}
 
-	// Save updated statement
-	if err := p.store.SetUserStatement(ctx, userID, updatedStatement); err != nil {
+	// Use versioning system to create enhanced statement version
+	newVersion, err := p.store.CreateStatementVersionFromFeedback(ctx, userID, feedbackSourceData, "statement-update.v001.txt")
+	if err != nil {
 		// Check if this is a "user not found" error (user was deleted)
-		if strings.Contains(err.Error(), "user not found") {
-			p.logger.Warn("skipping statement update for deleted user",
+		if strings.Contains(err.Error(), "user not found") || strings.Contains(err.Error(), "no existing statement") {
+			p.logger.Warn("skipping statement update for deleted user or user without statement",
 				"user_id", userID,
 				"feedback_count", len(feedbacks),
 				"error", err)
-			// Mark feedback as processed even though user is deleted
+			// Mark feedback as processed even though user is deleted or has no statement
 			// This prevents infinite retry loops for orphaned feedback
-			finalErr = fmt.Errorf("user deleted: %w", err)
+			finalErr = fmt.Errorf("user deleted or no statement: %w", err)
 			return finalErr
 		}
-		finalErr = fmt.Errorf("failed to save updated statement: %w", err)
+		finalErr = fmt.Errorf("failed to create statement version from feedback: %w", err)
 		return finalErr
 	}
 	statementUpdated = true
 
-	// Record the updated statement for logging
-	processingLog.StatementAfter = updatedStatement
+	// Record the new version for logging
+	processingLog.StatementAfter = newVersion.StatementText
+	processingLog.StatementVersionID = newVersion.ID
 
 	// Phase 2b: Update steering query (secondary function for backwards compatibility)
 	/*
@@ -238,7 +246,8 @@ func (p *llmProcessor) ProcessUserFeedback(ctx context.Context, userID string) e
 		"feedback_count", len(feedbacks),
 		"confidence_score", analysis.ConfidenceScore,
 		"statement_updated", statementUpdated,
-		"statement_length", len(updatedStatement),
+		"statement_length", len(processingLog.StatementAfter),
+		"statement_version_id", processingLog.StatementVersionID,
 	)
 
 	return nil
@@ -267,4 +276,33 @@ func prepareFeedbackData(feedbacks []*internal.UserFeedback) FeedbackData {
 	}
 
 	return data
+}
+
+// convertFeedbackDataToMap converts FeedbackData struct to map format for source data storage
+func convertFeedbackDataToMap(feedbackData FeedbackData) map[string]any {
+	likedItems := make([]map[string]any, len(feedbackData.LikedItems))
+	for i, item := range feedbackData.LikedItems {
+		likedItems[i] = map[string]any{
+			"job_id":    item.JobID,
+			"item_id":   item.ItemID,
+			"item_text": item.ItemText,
+			"date":      item.Date,
+		}
+	}
+
+	dislikedItems := make([]map[string]any, len(feedbackData.DislikedItems))
+	for i, item := range feedbackData.DislikedItems {
+		dislikedItems[i] = map[string]any{
+			"job_id":    item.JobID,
+			"item_id":   item.ItemID,
+			"item_text": item.ItemText,
+			"date":      item.Date,
+		}
+	}
+
+	return map[string]any{
+		"liked_items":    likedItems,
+		"disliked_items": dislikedItems,
+		"total_count":    feedbackData.TotalCount,
+	}
 }

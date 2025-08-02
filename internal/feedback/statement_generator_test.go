@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestStatementUpdateChain_Run(t *testing.T) {
+func TestStatementGenerator_Run(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
@@ -23,17 +23,17 @@ func TestStatementUpdateChain_Run(t *testing.T) {
 				if !strings.Contains(prompt, currentStatement) {
 					t.Errorf("prompt should contain current statement")
 				}
-				if !strings.Contains(prompt, "kubernetes") {
+				if !strings.Contains(prompt, "- kubernetes (keywords: k8s, containers)") {
 					t.Errorf("prompt should contain liked themes")
 				}
-				if !strings.Contains(prompt, "legacy systems") {
+				if !strings.Contains(prompt, "- legacy systems (keywords: old, legacy)") {
 					t.Errorf("prompt should contain disliked themes")
 				}
 				return expectedUpdate, nil
 			},
 		}
 
-		chain := newStatementUpdater(mockClient, logger)
+		chain := NewStatementGenerator(nil, mockClient, logger)
 
 		analysis := &SemanticFeedbackAnalysis{
 			SemanticThemes: struct {
@@ -74,7 +74,7 @@ func TestStatementUpdateChain_Run(t *testing.T) {
 			},
 		}
 
-		chain := newStatementUpdater(mockClient, logger)
+		chain := NewStatementGenerator(nil, mockClient, logger)
 
 		analysis := &SemanticFeedbackAnalysis{
 			SemanticThemes: struct {
@@ -110,7 +110,7 @@ func TestStatementUpdateChain_Run(t *testing.T) {
 			},
 		}
 
-		chain := newStatementUpdater(mockClient, logger)
+		chain := NewStatementGenerator(nil, mockClient, logger)
 		statement := "test statement"
 		analysis := &SemanticFeedbackAnalysis{}
 
@@ -131,17 +131,17 @@ func TestStatementUpdateChain_Run(t *testing.T) {
 		mockClient := &mockLLMClient{
 			updateStatementFunc: func(ctx context.Context, prompt string) (string, error) {
 				// Should contain "No liked themes" and "No disliked themes"
-				if !strings.Contains(prompt, "No liked themes") {
+				if !strings.Contains(prompt, "No liked themes identified.") {
 					t.Errorf("prompt should handle empty liked themes")
 				}
-				if !strings.Contains(prompt, "No disliked themes") {
+				if !strings.Contains(prompt, "No disliked themes identified.") {
 					t.Errorf("prompt should handle empty disliked themes")
 				}
 				return expectedUpdate, nil
 			},
 		}
 
-		chain := newStatementUpdater(mockClient, logger)
+		chain := NewStatementGenerator(nil, mockClient, logger)
 
 		analysis := &SemanticFeedbackAnalysis{
 			SemanticThemes: struct {
@@ -166,8 +166,8 @@ func TestStatementUpdateChain_Run(t *testing.T) {
 	})
 }
 
-func TestStatementUpdateChain_buildThemesText(t *testing.T) {
-	chain := &StatementUpdateChain{}
+func TestStatementGenerator_buildThemesText(t *testing.T) {
+	chain := &StatementGenerator{}
 
 	t.Run("empty themes", func(t *testing.T) {
 		result := chain.buildThemesText([]SemanticTheme{}, "LIKED")

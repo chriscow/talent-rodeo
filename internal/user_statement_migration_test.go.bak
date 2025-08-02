@@ -1,0 +1,370 @@
+package internal
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"testing"
+	"time"
+
+	"cloud.google.com/go/firestore"
+	"github.com/chriscow/minds"
+)
+
+func TestMigrateExistingStatements(t *testing.T) {
+	ctx := context.Background()
+
+	client, err := NewTestFirestoreClient(ctx)
+	if err != nil {
+		t.Fatalf("NewTestFirestoreClient() error = %v", err)
+	}
+
+	// Clean up before and after tests
+	testPrefix := "test-migration-"
+	DeleteTestData(t, client, testPrefix)
+	t.Cleanup(func() {
+		DeleteTestData(t, client, testPrefix)
+		client.Close()
+	})
+
+	t.Run("DryRunMigration", func(t *testing.T) {
+		// Create users with legacy statements
+		user1 := CreateTestUserWithLegacyStatement(t, client, "User 1", "test1@example.com", "I am a software engineer with 5 years of experience.")
+		user2 := CreateTestUserWithLegacyStatement(t, client, "User 2", "test2@example.com", "I am looking for backend roles in startups.")
+		user3 := CreateTestUserWithoutStatement(t, client, "User 3", "test3@example.com")
+
+		// Run dry run migration
+		result, err := MigrateExistingStatements(ctx, client, true)
+		if err != nil {
+			t.Fatalf("MigrateExistingStatements() error = %v", err)
+		}
+
+		// Validate dry run results
+		if !result.DryRun {
+			t.Error("Expected DryRun to be true")
+		}
+
+		// Check that our test users are in the migration list
+		var foundUser1, foundUser2 bool
+		for _, userInfo := range result.UsersToMigrate {
+			if userInfo.UserID == user1.ID {
+				foundUser1 = true
+			}
+			if userInfo.UserID == user2.ID {
+				foundUser2 = true
+			}
+		}
+		if !foundUser1 || !foundUser2 {
+			t.Error("Expected both test users to be in migration list")
+		}
+
+		if result.Migrated != 0 {
+			t.Errorf("Expected 0 migrated in dry run, got %d", result.Migrated)
+		}
+
+		// Verify dry run info contains our users
+		var foundDryRunInfo bool
+		for _, info := range result.DryRunInfo {
+			if strings.Contains(info, user1.ID) || strings.Contains(info, user2.ID) {
+				foundDryRunInfo = true
+				break
+			}
+		}
+		if !foundDryRunInfo {
+			t.Error("Expected dry run info to contain our test users")
+		}
+
+		// Verify no actual migration occurred for our test users
+		latest1, err1 := GetLatestStatement(ctx, client, user1.ID)
+		latest2, err2 := GetLatestStatement(ctx, client, user2.ID)
+		if err1 == nil && latest1 != nil {
+			t.Errorf("Unexpected statement version found for user %s during dry run", user1.ID)
+		}
+		if err2 == nil && latest2 != nil {
+			t.Errorf("Unexpected statement version found for user %s during dry run", user2.ID)
+		}
+
+		// Clean up test users
+		DeleteTestData(t, client, user1.ID)
+		DeleteTestData(t, client, user2.ID)
+		DeleteTestData(t, client, user3.ID)
+	})
+
+	t.Run("ActualMigration", func(t *testing.T) {
+		// Create users with legacy statements
+		user1 := CreateTestUserWithLegacyStatement(t, client, "User 1", "test1@example.com", "I am a senior software engineer.")
+		user2 := CreateTestUserWithLegacyStatement(t, client, "User 2", "test2@example.com", "I am seeking remote opportunities.")
+
+		// Run actual migration
+		result, err := MigrateExistingStatements(ctx, client, false)
+		if err != nil {
+			t.Fatalf("MigrateExistingStatements() error = %v", err)
+		}
+
+		// Validate migration results
+		if result.DryRun {
+			t.Error("Expected DryRun to be false")
+		}
+		if result.Migrated != 2 {
+			t.Errorf("Expected 2 migrated users, got %d", result.Migrated)
+		}
+		if result.Failed != 0 {
+			t.Errorf("Expected 0 failed migrations, got %d", result.Failed)
+		}
+
+		// Verify migrations
+		for _, userInfo := range result.UsersToMigrate {
+			// Check that statement version was created
+			latest, err := GetLatestStatement(ctx, client, userInfo.UserID)
+			if err != nil {
+				t.Errorf("Failed to get latest statement for migrated user %s: %v", userInfo.UserID, err)
+				continue
+			}
+			if latest == nil {
+				t.Errorf("No statement version found for migrated user %s", userInfo.UserID)
+				continue
+			}
+
+			// Validate version content
+			if latest.StatementText != userInfo.StatementText {
+				t.Errorf("Migrated statement text mismatch for user %s: expected %s, got %s",
+					userInfo.UserID, userInfo.StatementText, latest.StatementText)
+			}
+			if latest.GeneratedBy != "migration" {
+				t.Errorf("Expected GeneratedBy 'migration', got %s", latest.GeneratedBy)
+			}
+			if latest.VersionNumber != 1 {
+				t.Errorf("Expected version number 1, got %d", latest.VersionNumber)
+			}
+			if !latest.IsLatest {
+				t.Error("Expected migrated version to be marked as latest")
+			}
+
+			// Validate source data
+			if latest.SourceData == nil {
+				t.Error("Expected source data to be populated")
+			} else {
+				if migrationType, ok := latest.SourceData["migration_type"]; !ok || migrationType != "legacy_statement" {
+					t.Error("Expected migration_type to be 'legacy_statement'")
+				}
+				if originalStatement, ok := latest.SourceData["original_statement"]; !ok || originalStatement != userInfo.StatementText {
+					t.Error("Expected original_statement to match user statement")
+				}
+			}
+
+			// Validate transformation steps
+			if len(latest.TransformationSteps) != 1 {
+				t.Errorf("Expected 1 transformation step, got %d", len(latest.TransformationSteps))
+			} else {
+				step := latest.TransformationSteps[0]
+				if step.TransformationType != "legacy_migration" {
+					t.Errorf("Expected transformation type 'legacy_migration', got %s", step.TransformationType)
+				}
+			}
+
+			// Validate User field sync
+			user, exists, err := GetUser(ctx, client, userInfo.UserID)
+			if err != nil {
+				t.Errorf("Failed to get user after migration: %v", err)
+				continue
+			}
+			if !exists {
+				t.Error("User not found after migration")
+				continue
+			}
+			if user.CurrentStatementVersionID == nil || *user.CurrentStatementVersionID != latest.ID {
+				t.Error("Expected CurrentStatementVersionID to be set to migrated version")
+			}
+		}
+
+		// Clean up test users
+		DeleteTestData(t, client, user1.ID)
+		DeleteTestData(t, client, user2.ID)
+	})
+
+	t.Run("SkipExistingVersions", func(t *testing.T) {
+		// Create user with legacy statement
+		user := CreateTestUserWithLegacyStatement(t, client, "User", "test@example.com", "I am a developer.")
+
+		// Create a statement version manually
+		transcript := &Transcript{
+			Messages: []minds.Message{
+				{Role: minds.RoleUser, Content: "I am a developer."},
+			},
+		}
+		_, err := CreateInitialStatement(ctx, client, user.ID, transcript, "test.v001.txt")
+		if err != nil {
+			t.Fatalf("Failed to create initial statement: %v", err)
+		}
+
+		// Run migration
+		result, err := MigrateExistingStatements(ctx, client, false)
+		if err != nil {
+			t.Fatalf("MigrateExistingStatements() error = %v", err)
+		}
+
+		// Should skip the user since they already have versions
+		if result.Migrated > 0 {
+			t.Errorf("Expected 0 migrated users (should skip existing versions), got %d", result.Migrated)
+		}
+
+		// Clean up test user
+		DeleteTestData(t, client, user.ID)
+	})
+}
+
+func TestValidateMigration(t *testing.T) {
+	ctx := context.Background()
+
+	client, err := NewTestFirestoreClient(ctx)
+	if err != nil {
+		t.Fatalf("NewTestFirestoreClient() error = %v", err)
+	}
+
+	// Clean up before and after tests
+	testPrefix := "test-validation-"
+	DeleteTestData(t, client, testPrefix)
+	t.Cleanup(func() {
+		DeleteTestData(t, client, testPrefix)
+		client.Close()
+	})
+
+	t.Run("ValidMigration", func(t *testing.T) {
+		// Create user with statement and migrate
+		user := CreateTestUserWithLegacyStatement(t, client, "User", "test@example.com", "I am a software engineer.")
+
+		// Migrate
+		_, err := MigrateExistingStatements(ctx, client, false)
+		if err != nil {
+			t.Fatalf("MigrateExistingStatements() error = %v", err)
+		}
+
+		// Validate migration - we don't check total counts since there may be other users in the database
+		// Instead, validate that our specific test user was migrated correctly
+
+		// Get the user and check synchronization
+		updatedUser, exists, err := GetUser(ctx, client, user.ID)
+		if err != nil {
+			t.Fatalf("Failed to get user after migration: %v", err)
+		}
+		if !exists {
+			t.Fatal("User not found after migration")
+		}
+
+		latest, err := GetLatestStatement(ctx, client, user.ID)
+		if err != nil {
+			t.Fatalf("Failed to get latest statement: %v", err)
+		}
+		if latest == nil {
+			t.Fatal("No statement version found after migration")
+		}
+
+		// Validate synchronization
+		if updatedUser.Statement == nil || *updatedUser.Statement != latest.StatementText {
+			t.Error("User.Statement should match latest version text")
+		}
+		if updatedUser.CurrentStatementVersionID == nil || *updatedUser.CurrentStatementVersionID != latest.ID {
+			t.Error("User.CurrentStatementVersionID should match latest version ID")
+		}
+
+		// Clean up test user
+		DeleteTestData(t, client, user.ID)
+	})
+
+	t.Run("DetectMismatch", func(t *testing.T) {
+		// Create user with statement
+		user := CreateTestUserWithLegacyStatement(t, client, "User", "test@example.com", "Original statement.")
+
+		// Migrate
+		_, err := MigrateExistingStatements(ctx, client, false)
+		if err != nil {
+			t.Fatalf("MigrateExistingStatements() error = %v", err)
+		}
+
+		// Manually update User.Statement to create mismatch
+		if err := UpdateUserStatement(ctx, client, user.ID, "Modified statement."); err != nil {
+			t.Fatalf("Failed to update user statement: %v", err)
+		}
+
+		// Validate migration
+		result, err := ValidateMigration(ctx, client)
+		if err != nil {
+			t.Fatalf("ValidateMigration() error = %v", err)
+		}
+
+		if len(result.Mismatches) != 1 {
+			t.Errorf("Expected 1 mismatch, got %d", len(result.Mismatches))
+		} else {
+			mismatch := result.Mismatches[0]
+			if mismatch.UserID != user.ID {
+				t.Errorf("Expected mismatch for user %s, got %s", user.ID, mismatch.UserID)
+			}
+			if mismatch.Issue != "User.Statement does not match latest version" {
+				t.Errorf("Unexpected mismatch issue: %s", mismatch.Issue)
+			}
+		}
+
+		// Clean up test user
+		DeleteTestData(t, client, user.ID)
+	})
+}
+
+// Helper function to create test user with legacy statement
+func CreateTestUserWithLegacyStatement(t *testing.T, client *FirestoreClient, name, email, statement string) *User {
+	t.Helper()
+
+	timestamp := time.Now().UnixNano()
+	user := &User{
+		ID:                   fmt.Sprintf("test-migration-%d", timestamp),
+		CreatedAt:            time.Now(),
+		Email:                email,
+		Name:                 name,
+		Statement:            &statement,
+		StatementLastUpdated: timePtr(time.Now()),
+		Status:               UserStatusPendingResumeUpload,
+		StatusUpdatedAt:      time.Now(),
+	}
+
+	if err := CreateUser(context.Background(), client, user); err != nil {
+		t.Fatalf("Failed to create test user with legacy statement: %v", err)
+	}
+
+	return user
+}
+
+// Helper function to create test user without statement
+func CreateTestUserWithoutStatement(t *testing.T, client *FirestoreClient, name, email string) *User {
+	t.Helper()
+
+	timestamp := time.Now().UnixNano()
+	user := &User{
+		ID:              fmt.Sprintf("test-migration-%d", timestamp),
+		CreatedAt:       time.Now(),
+		Email:           email,
+		Name:            name,
+		Statement:       nil,
+		Status:          UserStatusPendingResumeUpload,
+		StatusUpdatedAt: time.Now(),
+	}
+
+	if err := CreateUser(context.Background(), client, user); err != nil {
+		t.Fatalf("Failed to create test user without statement: %v", err)
+	}
+
+	return user
+}
+
+// Helper function to update user statement for testing mismatches
+func UpdateUserStatement(ctx context.Context, fs *FirestoreClient, userID, newStatement string) error {
+	userRef := fs.Collection(usersCollection).Doc(userID)
+	_, err := userRef.Update(ctx, []firestore.Update{
+		{Path: "Statement", Value: newStatement},
+		{Path: "StatementLastUpdated", Value: time.Now()},
+	})
+	return err
+}
+
+// Helper function for time pointer
+func timePtr(t time.Time) *time.Time {
+	return &t
+}

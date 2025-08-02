@@ -99,6 +99,39 @@ func (g *GmailReader) GetUnreadEmails(ctx context.Context, maxResults int) ([]*E
 	return emails, nil
 }
 
+// GetAllEmails retrieves all emails (both read and unread) from Gmail inbox
+func (g *GmailReader) GetAllEmails(ctx context.Context, maxResults int) ([]*Email, error) {
+	g.logger.Debug("fetching all emails", "max_results", maxResults)
+	// Search for all emails in inbox (no query filter)
+	req := g.service.Users.Messages.List("me")
+	if maxResults > 0 {
+		req = req.MaxResults(int64(maxResults))
+	}
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, fmt.Errorf("unable to retrieve messages: %w", err)
+	}
+
+	if len(resp.Messages) == 0 {
+		g.logger.Debug("no emails found")
+		return []*Email{}, nil
+	}
+
+	emails := make([]*Email, 0, len(resp.Messages))
+	for _, msg := range resp.Messages {
+		email, err := g.convertMessage(ctx, msg.Id)
+		if err != nil {
+			g.logger.Error("failed to convert message", "message_id", msg.Id, "error", err)
+			continue
+		}
+		emails = append(emails, email)
+	}
+
+	g.logger.Info("retrieved all emails", "count", len(emails))
+	return emails, nil
+}
+
 // MarkAsRead marks an email as read in Gmail
 func (g *GmailReader) MarkAsRead(ctx context.Context, emailID string) error {
 	g.logger.Debug("marking email as read", "email_id", emailID)

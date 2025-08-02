@@ -26,19 +26,19 @@ Your task is to update the user's statement to incorporate the new information f
 8. **Reasonable Length**: Keep it comprehensive but concise (aim for 200-800 words)
 
 ## Current Statement:
-{{CURRENT_STATEMENT}}
+{{.CURRENT_STATEMENT}}
 
 ## Feedback Analysis:
 
 ### Liked Themes (add to preferences):
-{{LIKED_THEMES}}
+{{.LIKED_THEMES}}
 
 ### Disliked Themes (add to avoid section):
-{{DISLIKED_THEMES}}
+{{.DISLIKED_THEMES}}
 
 ### Analysis Details:
-- Confidence Score: {{CONFIDENCE_SCORE}}
-- Reasoning: {{REASONING}}
+- Confidence Score: {{.CONFIDENCE_SCORE}}
+- Reasoning: {{.REASONING}}
 
 ## Instructions:
 Update the statement to incorporate this feedback. Return ONLY the updated statement text, with no preamble or explanation. Structure it to be maximally useful for LLM job evaluation. 

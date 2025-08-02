@@ -416,12 +416,60 @@ Useful for integration with other tools or scripts.`,
 	},
 }
 
+var gmailListAllCmd = &cobra.Command{
+	Use:   "list-all",
+	Short: "List all emails (read and unread) in JSON format",
+	Long: `List all emails from Gmail in JSON format, including both read and unread emails.
+Useful for checking historical emails that might contain search adjustment requests.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if os.Getenv("GMAIL_READER_CREDENTIALS") == "" {
+			return fmt.Errorf("GMAIL_READER_CREDENTIALS environment variable is required")
+		}
+
+		logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+			Level: slog.LevelWarn, // Only show warnings/errors on stderr
+		}))
+
+		config := inbox.InboxConfig{
+			TokenPath: gmailTokenPath,
+		}
+
+		reader, err := inbox.NewGmailReader(config, logger)
+		if err != nil {
+			return fmt.Errorf("failed to create Gmail reader: %w", err)
+		}
+		defer reader.Close()
+
+		ctx := context.Background()
+		emails, err := reader.GetAllEmails(ctx, gmailMaxEmails)
+		if err != nil {
+			return fmt.Errorf("failed to get all emails: %w", err)
+		}
+
+		// Output JSON to stdout
+		if jsonOutput {
+			encoder := json.NewEncoder(os.Stdout)
+			encoder.SetIndent("", "  ")
+			return encoder.Encode(emails)
+		} else {
+			// Simple text output
+			for _, email := range emails {
+				fmt.Printf("ID: %s | From: %s | Subject: %s | Date: %s\n",
+					email.ID, email.From, email.Subject, email.Date.Format("2006-01-02 15:04:05"))
+			}
+		}
+
+		return nil
+	},
+}
+
 func init() {
 	RootCmd.AddCommand(gmailCmd)
 
 	gmailCmd.AddCommand(gmailSetupCmd)
 	gmailCmd.AddCommand(gmailTestCmd)
 	gmailCmd.AddCommand(gmailListCmd)
+	gmailCmd.AddCommand(gmailListAllCmd)
 
 	// Flags for all gmail commands
 	gmailCmd.PersistentFlags().StringVar(&gmailTokenPath, "token", "gmail_token.json", "Path to Gmail OAuth token file")
@@ -429,4 +477,5 @@ func init() {
 	// Flags for test and list commands
 	gmailTestCmd.Flags().IntVar(&gmailMaxEmails, "max", 5, "Maximum number of emails to fetch")
 	gmailListCmd.Flags().IntVar(&gmailMaxEmails, "max", 10, "Maximum number of emails to fetch")
+	gmailListAllCmd.Flags().IntVar(&gmailMaxEmails, "max", 20, "Maximum number of emails to fetch")
 }

@@ -1,0 +1,361 @@
+package internal
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"cloud.google.com/go/firestore"
+	"github.com/chriscow/minds"
+	"google.golang.org/api/iterator"
+)
+
+// MigrateExistingStatements migrates existing user statements to the versioning system
+func MigrateExistingStatements(ctx context.Context, fs *FirestoreClient, dryRun bool) (*MigrationResult, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("firestore client is nil")
+	}
+
+	result := &MigrationResult{
+		StartTime: time.Now(),
+		DryRun:    dryRun,
+	}
+
+	// Query all users with statements but no statement versions
+	iter := fs.Collection(usersCollection).Documents(ctx)
+	defer iter.Stop()
+
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("Failed to iterate users: %v", err))
+			continue
+		}
+
+		var user User
+		if err := doc.DataTo(&user); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("Failed to unmarshal user %s: %v", doc.Ref.ID, err))
+			continue
+		}
+
+		// Skip users without statements
+		if user.Statement == nil || *user.Statement == "" {
+			result.Skipped++
+			continue
+		}
+
+		// Check if user already has statement versions
+		existing, err := GetLatestStatement(ctx, fs, user.ID)
+		if err == nil && existing != nil {
+			// User already has versioned statements, skip
+			result.Skipped++
+			continue
+		}
+
+		// User has a statement but no versions - needs migration
+		result.UsersToMigrate = append(result.UsersToMigrate, UserMigrationInfo{
+			UserID:        user.ID,
+			StatementText: *user.Statement,
+			LastUpdated:   user.StatementLastUpdated,
+		})
+	}
+
+	// Process migrations
+	for _, userInfo := range result.UsersToMigrate {
+		if dryRun {
+			result.DryRunInfo = append(result.DryRunInfo, fmt.Sprintf("Would migrate user %s with statement: %s", userInfo.UserID, truncateString(userInfo.StatementText, 100)))
+			continue
+		}
+
+		if err := migrateUserStatement(ctx, fs, userInfo); err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("Failed to migrate user %s: %v", userInfo.UserID, err))
+		} else {
+			result.Migrated++
+		}
+	}
+
+	result.EndTime = time.Now()
+	result.Duration = result.EndTime.Sub(result.StartTime)
+
+	return result, nil
+}
+
+// migrateUserStatement migrates a single user's statement to the versioning system
+func migrateUserStatement(ctx context.Context, fs *FirestoreClient, userInfo UserMigrationInfo) error {
+	// Create a synthetic transcript for the migration
+	transcript := &Transcript{
+		Messages: []minds.Message{
+			{
+				Role:    minds.RoleSystem,
+				Content: "This is a migrated statement from the legacy User.Statement field.",
+			},
+			{
+				Role:    minds.RoleUser,
+				Content: "This statement was created before the versioning system was implemented.",
+			},
+		},
+	}
+
+	// Extract prompt version from a standard migration prompt
+	promptFile := "migration.legacy-statement.v001.txt"
+	promptVersion := ExtractPromptVersion(promptFile)
+
+	// Create source data for migration
+	sourceData := map[string]any{
+		"migration_type":      "legacy_statement",
+		"original_statement":  userInfo.StatementText,
+		"migration_timestamp": time.Now(),
+		"legacy_last_updated": userInfo.LastUpdated,
+		"transcript_text":     "Legacy statement migration - no original transcript available",
+		"messages":            transcript.Messages,
+	}
+
+	// Create transformation steps for migration
+	transformationSteps := []TransformationStep{
+		{
+			StepNumber:         1,
+			TransformationType: "legacy_migration",
+			InputData: map[string]any{
+				"original_statement": userInfo.StatementText,
+				"migration_reason":   "Migrating from User.Statement field to versioning system",
+			},
+			OutputData: map[string]any{
+				"statement_text": userInfo.StatementText,
+			},
+			PromptUsed:  "Migration: Preserving existing statement text",
+			ProcessedAt: time.Now(),
+		},
+	}
+
+	// Generate statement hash
+	statementHash := generateStatementHash(userInfo.StatementText)
+
+	// Create the version
+	version := &UserStatementVersion{
+		ID:                  fmt.Sprintf("%s_v%d", userInfo.UserID, 1),
+		VersionNumber:       1,
+		IsLatest:            true,
+		StatementText:       userInfo.StatementText,
+		StatementHash:       statementHash,
+		GeneratedBy:         "migration",
+		GenerationReason:    "Migrated from legacy User.Statement field",
+		PromptFile:          promptFile,
+		PromptVersion:       promptVersion,
+		LLMModel:            "migration",
+		LLMTokensUsed:       nil,
+		SourceData:          sourceData,
+		TransformationSteps: transformationSteps,
+		CreatedAt:           getCreatedAtForMigration(userInfo.LastUpdated),
+		CreatedBy:           nil, // System migration
+		PreviousVersionID:   nil, // First version
+		ChangeType:          "initial",
+		ChangeSummary:       StringPtr("Migrated from legacy statement storage"),
+		SignificantChange:   true,
+	}
+
+	// Use transaction to ensure atomicity
+	return fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		// Store the version in subcollection
+		versionRef := fs.Collection(usersCollection).Doc(userInfo.UserID).Collection(userStatementsCollection).Doc(version.ID)
+		if err := tx.Set(versionRef, version); err != nil {
+			return fmt.Errorf("failed to create migrated statement version: %w", err)
+		}
+
+		// Update User fields to reference the new version
+		userRef := fs.Collection(usersCollection).Doc(userInfo.UserID)
+		updates := []firestore.Update{
+			{Path: "CurrentStatementVersionID", Value: version.ID},
+			{Path: "StatementLastUpdated", Value: version.CreatedAt},
+			// Note: We preserve the existing Statement field for backward compatibility
+		}
+		if err := tx.Update(userRef, updates); err != nil {
+			return fmt.Errorf("failed to update user with migrated statement version: %w", err)
+		}
+
+		return nil
+	})
+}
+
+// getCreatedAtForMigration determines the creation time for migrated statements
+func getCreatedAtForMigration(lastUpdated *time.Time) time.Time {
+	if lastUpdated != nil {
+		return *lastUpdated
+	}
+	// If no last updated time, use a timestamp that indicates it's a migration
+	return time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+}
+
+// truncateString truncates a string to maxLen characters
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
+// MigrationResult contains the results of a statement migration operation
+type MigrationResult struct {
+	StartTime      time.Time
+	EndTime        time.Time
+	Duration       time.Duration
+	DryRun         bool
+	UsersToMigrate []UserMigrationInfo
+	Migrated       int
+	Failed         int
+	Skipped        int
+	Errors         []string
+	DryRunInfo     []string
+}
+
+// UserMigrationInfo contains information about a user statement to be migrated
+type UserMigrationInfo struct {
+	UserID        string
+	StatementText string
+	LastUpdated   *time.Time
+}
+
+// LogSummary logs a summary of the migration results
+func (r *MigrationResult) LogSummary(logger *slog.Logger) {
+	logger.Info("Statement migration completed",
+		"duration", r.Duration,
+		"dry_run", r.DryRun,
+		"users_to_migrate", len(r.UsersToMigrate),
+		"migrated", r.Migrated,
+		"failed", r.Failed,
+		"skipped", r.Skipped,
+		"errors", len(r.Errors))
+
+	if len(r.Errors) > 0 {
+		for _, err := range r.Errors {
+			logger.Error("Migration error", "error", err)
+		}
+	}
+
+	if r.DryRun && len(r.DryRunInfo) > 0 {
+		for _, info := range r.DryRunInfo {
+			logger.Info("Dry run", "info", info)
+		}
+	}
+}
+
+// ValidateMigration validates that migrated statements match their originals
+func ValidateMigration(ctx context.Context, fs *FirestoreClient) (*ValidationResult, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("firestore client is nil")
+	}
+
+	result := &ValidationResult{
+		StartTime: time.Now(),
+	}
+
+	// Query all users and compare User.Statement with latest version
+	iter := fs.Collection(usersCollection).Documents(ctx)
+	defer iter.Stop()
+
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("Failed to iterate users: %v", err))
+			continue
+		}
+
+		var user User
+		if err := doc.DataTo(&user); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("Failed to unmarshal user %s: %v", doc.Ref.ID, err))
+			continue
+		}
+
+		// Skip users without statements
+		if user.Statement == nil {
+			result.Skipped++
+			continue
+		}
+
+		// Get latest statement version
+		latest, err := GetLatestStatement(ctx, fs, user.ID)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("Failed to get latest statement for user %s: %v", user.ID, err))
+			continue
+		}
+
+		if latest == nil {
+			result.Mismatches = append(result.Mismatches, ValidationMismatch{
+				UserID:      user.ID,
+				Issue:       "User has statement but no versioned statement",
+				UserText:    *user.Statement,
+				VersionText: "",
+			})
+			continue
+		}
+
+		// Compare texts
+		if *user.Statement != latest.StatementText {
+			result.Mismatches = append(result.Mismatches, ValidationMismatch{
+				UserID:      user.ID,
+				Issue:       "User.Statement does not match latest version",
+				UserText:    *user.Statement,
+				VersionText: latest.StatementText,
+			})
+		} else {
+			result.Validated++
+		}
+	}
+
+	result.EndTime = time.Now()
+	result.Duration = result.EndTime.Sub(result.StartTime)
+
+	return result, nil
+}
+
+// ValidationResult contains the results of migration validation
+type ValidationResult struct {
+	StartTime  time.Time
+	EndTime    time.Time
+	Duration   time.Duration
+	Validated  int
+	Skipped    int
+	Mismatches []ValidationMismatch
+	Errors     []string
+}
+
+// ValidationMismatch represents a mismatch between User.Statement and versioned statement
+type ValidationMismatch struct {
+	UserID      string
+	Issue       string
+	UserText    string
+	VersionText string
+}
+
+// LogSummary logs a summary of the validation results
+func (r *ValidationResult) LogSummary(logger *slog.Logger) {
+	logger.Info("Migration validation completed",
+		"duration", r.Duration,
+		"validated", r.Validated,
+		"skipped", r.Skipped,
+		"mismatches", len(r.Mismatches),
+		"errors", len(r.Errors))
+
+	if len(r.Errors) > 0 {
+		for _, err := range r.Errors {
+			logger.Error("Validation error", "error", err)
+		}
+	}
+
+	if len(r.Mismatches) > 0 {
+		for _, mismatch := range r.Mismatches {
+			logger.Warn("Validation mismatch",
+				"user_id", mismatch.UserID,
+				"issue", mismatch.Issue,
+				"user_text_length", len(mismatch.UserText),
+				"version_text_length", len(mismatch.VersionText))
+		}
+	}
+}

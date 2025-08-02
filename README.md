@@ -1319,3 +1319,18 @@ This MCP server enables Claude Code to take screenshots for documentation and vi
 
 https://jobcopilot.com/pricing/
 
+
+# Redix Key Value Store
+
+```bash
+# Create the volume once
+docker volume create redix-data
+
+# Run the container with the named volume
+docker run -p 6380:6380 \
+  -v redix-data:/redix-data \
+  ghcr.io/alash3al/redix:latest \
+  -engine badger \
+  -storage /redix-data \
+  -resp-addr :6380
+```

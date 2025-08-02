@@ -176,6 +176,7 @@ type application struct {
 	inboxProcessor        *inbox.Processor
 	stripeClient          *client.API
 	heldResponseService   *internal.HeldResponseService
+	regeneratorRegistry   *internal.StatementGeneratorRegistry
 }
 
 func run(logger *slog.Logger) error {
@@ -462,6 +463,9 @@ func run(logger *slog.Logger) error {
 		// searchScheduler: searchScheduler,
 		// jobProcessor:    jobProcessor,
 	}
+
+	// Initialize statement regenerator registry and register system-specific regenerators
+	app.setupStatementRegenerators()
 
 	// Start the task processor
 	go func() {
@@ -922,4 +926,26 @@ func (app *application) createInboxDispatch() (*internal.InboxDispatch, error) {
 
 	app.logger.Info("✅ Inbox feedback handler registered successfully")
 	return dispatch, nil
+}
+
+// setupStatementRegenerators initializes the statement regenerator registry
+// and registers system-specific regenerators for the versioning system.
+func (app *application) setupStatementRegenerators() {
+	app.regeneratorRegistry = internal.NewStatementGeneratorRegistry(app.logger)
+
+	// Register transcript system regenerator
+	transcriptRegenerator := transcript.NewStatementGenerator(app.fs, app.logger)
+	app.regeneratorRegistry.Register("transcript", transcriptRegenerator)
+
+	// Register feedback system regenerator
+	// First create the feedback components needed for the regenerator
+	feedbackStore := feedback.NewFeedbackStore(app.fs)
+	feedbackLLMClient := feedback.NewMindsClient()
+	feedbackRegenerator := feedback.NewStatementGenerator(feedbackStore, feedbackLLMClient, app.logger)
+	app.regeneratorRegistry.Register("feedback", feedbackRegenerator)
+
+	// Log registered systems for debugging
+	registeredSystems := app.regeneratorRegistry.ListRegisteredSystems()
+	app.logger.Info("statement regenerator registry initialized",
+		"registeredSystems", registeredSystems)
 }

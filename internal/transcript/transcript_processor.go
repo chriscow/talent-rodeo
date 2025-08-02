@@ -963,42 +963,27 @@ func getWorkPreferences(ctx context.Context, fs *internal.FirestoreClient, logge
 // }
 
 func GetUserStatement(ctx context.Context, user *internal.User, transcript *internal.Transcript, fs *internal.FirestoreClient, logger *slog.Logger) error {
-	logger.Debug("generating user statement", "userID", user.ID)
-	tmpl, err := assets.EmbeddedFiles.ReadFile("prompts/transcript.user-statement.v001.txt")
-	if err != nil {
-		return fmt.Errorf("failed to read user statement prompt: %w", err)
+	// Check if user already has statement versions
+	existing, err := internal.GetLatestStatement(ctx, fs, user.ID)
+	if err == nil && existing != nil {
+		logger.Debug("user already has statement, skipping transcript generation", "userID", user.ID, "currentVersion", existing.VersionNumber)
+		return nil
 	}
-
-	prompt, err := tools.GeneratePrompt(tmpl, map[string]any{
-		"Transcript":         transcript.String(),
-		"LocationPreference": user.LocationPreference,
-		"SteeringQuery":      user.SteeringQuery,
-	})
-	if err != nil {
-		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
-		return fmt.Errorf("failed to generate prompt: %w", err)
-	}
-
-	// Ask LLM to generate user statement
-	resp := openai.ChatCompletionResponse{}
-	statement, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat), tools.WithMaxTokens(8192), tools.WantCompletionResponse(&resp))
+	
+	logger.Debug("generating initial user statement using versioning system", "userID", user.ID)
+	
+	// Use versioning system to create initial statement
+	promptFile := "transcript.user-statement.v001.txt"
+	version, err := internal.CreateInitialStatement(ctx, fs, user.ID, transcript, promptFile)
 	if err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
-		return fmt.Errorf("failed to ask LLM: %w", err)
+		return fmt.Errorf("failed to create initial statement: %w", err)
 	}
-
-	// Record LLM cost for user statement generation
-	if err := internal.RecordLLMCost(ctx, fs, &user.ID, tools.DeepSeekChat, resp, "user_statement_generation", nil); err != nil {
-		// Log error but don't fail the operation
-		logger.Error("failed to record LLM cost for user statement generation", "error", err)
-	}
-
-	user.Statement = &statement
-	if err := internal.SetUserStatement(ctx, fs, user.ID, statement); err != nil {
-		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
-		return fmt.Errorf("failed to set user statement: %w", err)
-	}
-
+	
+	// Update user object with new statement for immediate use in this session
+	user.Statement = &version.StatementText
+	
+	logger.Debug("created initial statement version", "userID", user.ID, "versionID", version.ID, "versionNumber", version.VersionNumber)
 	return nil
 }
 

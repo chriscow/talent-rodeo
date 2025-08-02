@@ -2,6 +2,7 @@ package feedback
 
 import (
 	"context"
+	"fmt"
 	"talent-rodeo/internal"
 	"time"
 )
@@ -77,6 +78,31 @@ func (m *mockFeedbackStore) SetUserStatement(ctx context.Context, userID string,
 	}
 	m.statements[userID] = &statement
 	return nil
+}
+
+func (m *mockFeedbackStore) CreateStatementVersionFromFeedback(ctx context.Context, userID string, feedbackData map[string]any, promptFile string) (*internal.UserStatementVersion, error) {
+	// Mock implementation - create a fake version
+	version := &internal.UserStatementVersion{
+		ID:                fmt.Sprintf("%s_v%d", userID, 2), // Assume this is version 2
+		VersionNumber:     2,
+		IsLatest:          true,
+		StatementText:     "Enhanced statement based on feedback",
+		GeneratedBy:       "feedback",
+		GenerationReason:  "Enhanced statement based on user feedback",
+		PromptFile:        promptFile,
+		SourceData:        feedbackData,
+		CreatedAt:         time.Now(),
+		ChangeType:        "feedback_driven",
+		SignificantChange: true,
+	}
+
+	// Update the mock store's statement
+	if m.statements == nil {
+		m.statements = make(map[string]*string)
+	}
+	m.statements[userID] = &version.StatementText
+
+	return version, nil
 }
 
 func (m *mockFeedbackStore) MarkFeedbackAsProcessed(ctx context.Context, feedbackIDs []string, processedAt time.Time) error {

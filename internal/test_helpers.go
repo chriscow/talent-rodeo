@@ -385,3 +385,60 @@ func CleanupTestUsers(ctx context.Context, fs *FirestoreClient) {
 	// Reset the slice
 	testUserIDs = []string{}
 }
+
+// DeleteTestStatementVersions removes all statement versions for a given user during test cleanup.
+func DeleteTestStatementVersions(t *testing.T, fs *FirestoreClient, userID string) {
+	t.Helper()
+
+	ctx := context.Background()
+	iter := fs.Collection(usersCollection).Doc(userID).Collection(userStatementsCollection).Documents(ctx)
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			t.Logf("Failed to iterate over statement versions: %v", err)
+			continue
+		}
+
+		if _, err := doc.Ref.Delete(ctx); err != nil {
+			t.Logf("Failed to delete statement version %s: %v", doc.Ref.ID, err)
+		} else {
+			t.Logf("Deleted test statement version %s", doc.Ref.ID)
+		}
+	}
+}
+
+// ValidateStatementSync ensures User.Statement field matches latest statement version.
+func ValidateStatementSync(t *testing.T, fs *FirestoreClient, userID string) {
+	t.Helper()
+
+	ctx := context.Background()
+	user, exists, err := GetUser(ctx, fs, userID)
+	if err != nil {
+		t.Fatalf("Failed to get user for sync validation: %v", err)
+	}
+	if !exists {
+		t.Fatal("User not found for sync validation")
+	}
+
+	latest, err := GetLatestStatement(ctx, fs, userID)
+	if err != nil {
+		t.Fatalf("Failed to get latest statement for sync validation: %v", err)
+	}
+
+	if latest == nil {
+		if user.Statement != nil || user.CurrentStatementVersionID != nil {
+			t.Error("User fields should be nil when no statement versions exist")
+		}
+		return
+	}
+
+	if user.Statement == nil || *user.Statement != latest.StatementText {
+		t.Error("User.Statement should match latest version text")
+	}
+	if user.CurrentStatementVersionID == nil || *user.CurrentStatementVersionID != latest.ID {
+		t.Error("User.CurrentStatementVersionID should match latest version ID")
+	}
+}

@@ -29,6 +29,7 @@ type FeedbackProcessingLog struct {
 	// What Changed
 	StatementBefore      string
 	StatementAfter       string
+	StatementVersionID   string // Version ID from statement versioning system
 	StatementUpdated     bool
 	SteeringQueryUpdated bool
 

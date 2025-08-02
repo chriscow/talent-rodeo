@@ -34,8 +34,10 @@ func (m *mockOpenAIClient) UpdateStatement(ctx context.Context, currentStatement
 
 // mockUserService implements UserService for testing.
 type mockUserService struct {
-	getUserByEmailFunc   func(ctx context.Context, email string) (*internal.User, bool, error)
-	setUserStatementFunc func(ctx context.Context, userID, statement string) error
+	getUserByEmailFunc                         func(ctx context.Context, email string) (*internal.User, bool, error)
+	setUserStatementFunc                       func(ctx context.Context, userID, statement string) error
+	createStatementVersionFromFeedbackFunc    func(ctx context.Context, userID string, feedbackData map[string]any, promptFile string) (*internal.UserStatementVersion, error)
+	createStatementVersionFromInboxFeedbackFunc func(ctx context.Context, userID, emailContent, adjustmentRequest, userEmail, promptFile string) (*internal.UserStatementVersion, error)
 }
 
 func (m *mockUserService) GetUserByEmail(ctx context.Context, email string) (*internal.User, bool, error) {
@@ -50,6 +52,34 @@ func (m *mockUserService) SetUserStatement(ctx context.Context, userID, statemen
 		return m.setUserStatementFunc(ctx, userID, statement)
 	}
 	return nil
+}
+
+func (m *mockUserService) CreateStatementVersionFromFeedback(ctx context.Context, userID string, feedbackData map[string]any, promptFile string) (*internal.UserStatementVersion, error) {
+	if m.createStatementVersionFromFeedbackFunc != nil {
+		return m.createStatementVersionFromFeedbackFunc(ctx, userID, feedbackData, promptFile)
+	}
+	// Return a mock version for tests
+	return &internal.UserStatementVersion{
+		ID:            userID + "_v1",
+		VersionNumber: 1,
+		StatementText: "Updated statement from application feedback",
+		GeneratedBy:   "feedback",
+		PromptFile:    promptFile,
+	}, nil
+}
+
+func (m *mockUserService) CreateStatementVersionFromInboxFeedback(ctx context.Context, userID, emailContent, adjustmentRequest, userEmail, promptFile string) (*internal.UserStatementVersion, error) {
+	if m.createStatementVersionFromInboxFeedbackFunc != nil {
+		return m.createStatementVersionFromInboxFeedbackFunc(ctx, userID, emailContent, adjustmentRequest, userEmail, promptFile)
+	}
+	// Return a mock version for tests
+	return &internal.UserStatementVersion{
+		ID:            userID + "_v1",
+		VersionNumber: 1,
+		StatementText: "Updated statement from inbox email feedback",
+		GeneratedBy:   "feedback",
+		PromptFile:    promptFile,
+	}, nil
 }
 
 // mockMailer implements smtp.Mailer for testing.
@@ -153,7 +183,9 @@ func TestInboxFeedbackHandler_HandleEmail_SearchRequest(t *testing.T) {
 		},
 	}
 
-	var capturedUserID, capturedStatement string
+	var capturedUserID string
+	var capturedFeedbackData map[string]any
+	var capturedPromptFile string
 	mockUserSvc := &mockUserService{
 		getUserByEmailFunc: func(ctx context.Context, email string) (*internal.User, bool, error) {
 			if email == "user@example.com" {
@@ -161,10 +193,17 @@ func TestInboxFeedbackHandler_HandleEmail_SearchRequest(t *testing.T) {
 			}
 			return nil, false, nil
 		},
-		setUserStatementFunc: func(ctx context.Context, userID, statement string) error {
+		createStatementVersionFromFeedbackFunc: func(ctx context.Context, userID string, feedbackData map[string]any, promptFile string) (*internal.UserStatementVersion, error) {
 			capturedUserID = userID
-			capturedStatement = statement
-			return nil
+			capturedFeedbackData = feedbackData
+			capturedPromptFile = promptFile
+			return &internal.UserStatementVersion{
+				ID:            userID + "_v2",
+				VersionNumber: 2,
+				StatementText: "I am looking for software engineering roles in New York or remote positions.",
+				GeneratedBy:   "feedback",
+				PromptFile:    promptFile,
+			}, nil
 		},
 	}
 
@@ -182,14 +221,26 @@ func TestInboxFeedbackHandler_HandleEmail_SearchRequest(t *testing.T) {
 		t.Errorf("HandleEmail() error = %v, wantErr false", err)
 	}
 
-	// Verify the user statement was updated
+	// Verify the versioning system was called correctly
 	if capturedUserID != testUser.ID {
 		t.Errorf("Expected user ID %s, got %s", testUser.ID, capturedUserID)
 	}
 
-	expectedStatement := "I am looking for software engineering roles in New York or remote positions."
-	if capturedStatement != expectedStatement {
-		t.Errorf("Expected statement %q, got %q", expectedStatement, capturedStatement)
+	// Verify feedback data structure was created correctly
+	if capturedFeedbackData == nil {
+		t.Errorf("Expected feedback data to be captured, got nil")
+	} else {
+		if capturedFeedbackData["source_type"] != "email_feedback" {
+			t.Errorf("Expected source_type 'email_feedback', got %v", capturedFeedbackData["source_type"])
+		}
+		if capturedFeedbackData["user_email"] != "user@example.com" {
+			t.Errorf("Expected user_email 'user@example.com', got %v", capturedFeedbackData["user_email"])
+		}
+	}
+
+	// Verify correct prompt file was used
+	if capturedPromptFile != "inbox-feedback.v001.txt" {
+		t.Errorf("Expected prompt file 'inbox-feedback.v001.txt', got %s", capturedPromptFile)
 	}
 }
 
@@ -271,6 +322,9 @@ func TestInboxFeedbackHandler_HandleEmail_StatementUpdateError(t *testing.T) {
 		getUserByEmailFunc: func(ctx context.Context, email string) (*internal.User, bool, error) {
 			return testUser, true, nil
 		},
+		createStatementVersionFromFeedbackFunc: func(ctx context.Context, userID string, feedbackData map[string]any, promptFile string) (*internal.UserStatementVersion, error) {
+			return nil, errors.New("failed to create statement version from feedback")
+		},
 	}
 
 	handler := NewInboxFeedbackHandlerWithServices(mockOpenAI, mockUserSvc, &mockMailer{}, "admin@example.com", slog.New(slog.NewTextHandler(os.Stdout, nil)))
@@ -287,8 +341,8 @@ func TestInboxFeedbackHandler_HandleEmail_StatementUpdateError(t *testing.T) {
 		t.Error("HandleEmail() error = nil, wantErr true")
 	}
 
-	if !strings.Contains(err.Error(), "failed to process search adjustment") {
-		t.Errorf("Expected error to contain 'failed to process search adjustment', got: %v", err)
+	if !strings.Contains(err.Error(), "failed to create statement version from feedback") {
+		t.Errorf("Expected error to contain 'failed to create statement version from feedback', got: %v", err)
 	}
 }
 
@@ -311,14 +365,20 @@ func TestInboxFeedbackHandler_HandleEmail_NilStatement(t *testing.T) {
 		},
 	}
 
-	var capturedStatement string
+	var capturedFeedbackData map[string]any
 	mockUserSvc := &mockUserService{
 		getUserByEmailFunc: func(ctx context.Context, email string) (*internal.User, bool, error) {
 			return testUser, true, nil
 		},
-		setUserStatementFunc: func(ctx context.Context, userID, statement string) error {
-			capturedStatement = statement
-			return nil
+		createStatementVersionFromFeedbackFunc: func(ctx context.Context, userID string, feedbackData map[string]any, promptFile string) (*internal.UserStatementVersion, error) {
+			capturedFeedbackData = feedbackData
+			return &internal.UserStatementVersion{
+				ID:            userID + "_v1",
+				VersionNumber: 1,
+				StatementText: "I am looking for remote work opportunities.",
+				GeneratedBy:   "feedback",
+				PromptFile:    promptFile,
+			}, nil
 		},
 	}
 
@@ -336,9 +396,13 @@ func TestInboxFeedbackHandler_HandleEmail_NilStatement(t *testing.T) {
 		t.Errorf("HandleEmail() error = %v, wantErr false", err)
 	}
 
-	expectedStatement := "I am looking for remote work opportunities."
-	if capturedStatement != expectedStatement {
-		t.Errorf("Expected statement %q, got %q", expectedStatement, capturedStatement)
+	// Verify the versioning system was called
+	if capturedFeedbackData == nil {
+		t.Errorf("Expected feedback data to be captured, got nil")
+	} else {
+		if capturedFeedbackData["source_type"] != "email_feedback" {
+			t.Errorf("Expected source_type 'email_feedback', got %v", capturedFeedbackData["source_type"])
+		}
 	}
 }
 
@@ -538,8 +602,14 @@ func TestInboxFeedbackHandler_EmailNotification(t *testing.T) {
 			}
 			return nil, false, nil
 		},
-		setUserStatementFunc: func(ctx context.Context, userID, statement string) error {
-			return nil
+		createStatementVersionFromFeedbackFunc: func(ctx context.Context, userID string, feedbackData map[string]any, promptFile string) (*internal.UserStatementVersion, error) {
+			return &internal.UserStatementVersion{
+				ID:            userID + "_v2",
+				VersionNumber: 2,
+				StatementText: "I am looking for software engineering roles in New York or remote positions.",
+				GeneratedBy:   "feedback",
+				PromptFile:    promptFile,
+			}, nil
 		},
 	}
 
@@ -626,8 +696,14 @@ func TestInboxFeedbackHandler_EmailNotificationDisabled(t *testing.T) {
 		getUserByEmailFunc: func(ctx context.Context, email string) (*internal.User, bool, error) {
 			return testUser, true, nil
 		},
-		setUserStatementFunc: func(ctx context.Context, userID, statement string) error {
-			return nil
+		createStatementVersionFromFeedbackFunc: func(ctx context.Context, userID string, feedbackData map[string]any, promptFile string) (*internal.UserStatementVersion, error) {
+			return &internal.UserStatementVersion{
+				ID:            userID + "_v2",
+				VersionNumber: 2,
+				StatementText: "Updated statement",
+				GeneratedBy:   "feedback",
+				PromptFile:    promptFile,
+			}, nil
 		},
 	}
 

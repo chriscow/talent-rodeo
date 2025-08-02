@@ -43,6 +43,8 @@ build-errors.log
 
 # binaries
 **/bin/
-trcli
+/trcli
+/cli
 
 .config/
+.claude/

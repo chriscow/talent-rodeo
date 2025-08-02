@@ -217,21 +217,93 @@
             </div>
         </section>
 
-        <!-- Statement -->
+        <!-- Statement & Version History -->
         {{if .User.Statement}}
         <section class="info-section statement-section">
-            <h3>Statement</h3>
+            <h3>User Statement & Version History</h3>
             <div class="statement-container">
                 <div class="statement-header">
-                    <label>Work Preferences Statement:</label>
-                    <button type="button" class="copy-btn" onclick="copyStatement()">
-                        <i data-feather="copy"></i>
-                    </button>
+                    <div class="statement-info">
+                        <label>Current Statement:</label>
+                        {{if .User.CurrentStatementVersionID}}
+                        <span class="version-info">Version: <code>{{.User.CurrentStatementVersionID}}</code></span>
+                        {{end}}
+                        {{if .User.StatementLastUpdated}}
+                        <span class="last-updated">Updated: {{.User.StatementLastUpdated.Format "2006-01-02 15:04:05"}}</span>
+                        {{end}}
+                    </div>
+                    <div class="statement-actions">
+                        <button type="button" class="copy-btn" onclick="copyStatement()">
+                            <i data-feather="copy"></i>
+                            <span class="copy-text">Copy</span>
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="loadVersionHistory()">
+                            <i data-feather="clock"></i>
+                            <span>View History</span>
+                        </button>
+                        <button type="button" class="btn btn-primary" onclick="showRegenerateModal()">
+                            <i data-feather="refresh-cw"></i>
+                            <span>Regenerate</span>
+                        </button>
+                    </div>
                 </div>
                 <textarea id="statement-textarea" class="statement-text" readonly>{{.User.Statement}}</textarea>
+                
+                <!-- Version History Panel (initially hidden) -->
+                <div id="version-history-panel" class="version-history-panel" style="display: none;">
+                    <div class="panel-header">
+                        <h4>Statement Version History</h4>
+                        <button type="button" class="close-btn" onclick="hideVersionHistory()">
+                            <i data-feather="x"></i>
+                        </button>
+                    </div>
+                    <div id="version-history-content" class="version-history-content">
+                        <div class="loading-spinner">Loading version history...</div>
+                    </div>
+                </div>
             </div>
         </section>
         {{end}}
+
+        <!-- Regenerate Statement Modal -->
+        <div id="regenerate-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4>Regenerate Statement</h4>
+                    <button type="button" class="close-btn" onclick="hideRegenerateModal()">
+                        <i data-feather="x"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="regenerate-version">Select Version to Regenerate:</label>
+                        <select id="regenerate-version" class="form-control">
+                            <option value="">Loading versions...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="regenerate-prompt">Prompt File:</label>
+                        <select id="regenerate-prompt" class="form-control">
+                            <option value="transcript.user-statement.v001.txt">transcript.user-statement.v001.txt</option>
+                            <option value="statement-update.v001.txt">statement-update.v001.txt</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="dry-run-check" checked>
+                            Dry Run (preview only)
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="hideRegenerateModal()">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="regenerateStatement()">
+                        <span id="regenerate-btn-text">Regenerate</span>
+                        <div id="regenerate-spinner" class="spinner" style="display: none;"></div>
+                    </button>
+                </div>
+            </div>
+        </div>
 
         <!-- Error Information -->
         {{if .User.Error}}
@@ -424,16 +496,79 @@
     .statement-header {
         display: flex;
         justify-content: space-between;
-        align-items: center;
+        align-items: flex-start;
         margin-bottom: 1rem;
+        gap: 1rem;
     }
     
-    .statement-header label {
+    .statement-info {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .statement-info label {
         font-weight: 600;
         color: var(--color);
         font-size: 0.875rem;
         text-transform: uppercase;
         letter-spacing: 0.05em;
+    }
+    
+    .version-info {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+        color: var(--muted-color);
+    }
+    
+    .last-updated {
+        font-size: 0.875rem;
+        color: var(--muted-color);
+    }
+    
+    .statement-actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    
+    .btn {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        border: 1px solid transparent;
+        border-radius: calc(var(--border-radius) / 2);
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+    
+    .btn-primary {
+        background: var(--primary);
+        color: var(--primary-inverse);
+        border-color: var(--primary);
+    }
+    
+    .btn-primary:hover {
+        background: var(--primary-hover);
+        transform: translateY(-1px);
+    }
+    
+    .btn-secondary {
+        background: var(--secondary);
+        color: var(--secondary-inverse);
+        border-color: var(--secondary);
+    }
+    
+    .btn-secondary:hover {
+        background: var(--secondary-hover);
+        transform: translateY(-1px);
     }
     
     .copy-btn {
@@ -522,6 +657,229 @@
         color: var(--error-color, #dc2626);
         font-weight: 500;
         margin: 0;
+    }
+    
+    /* Version History Panel */
+    .version-history-panel {
+        margin-top: 1.5rem;
+        border: 1px solid var(--muted-border-color);
+        border-radius: var(--border-radius);
+        background: var(--card-background-color);
+    }
+    
+    .panel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem;
+        border-bottom: 1px solid var(--muted-border-color);
+        background: var(--card-sectionning-background-color);
+        border-radius: var(--border-radius) var(--border-radius) 0 0;
+    }
+    
+    .panel-header h4 {
+        margin: 0;
+        color: var(--primary);
+        font-size: 1rem;
+    }
+    
+    .close-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 2rem;
+        height: 2rem;
+        padding: 0;
+        background: none;
+        border: none;
+        color: var(--muted-color);
+        cursor: pointer;
+        border-radius: 50%;
+        transition: all 0.2s ease;
+    }
+    
+    .close-btn:hover {
+        background: var(--muted-border-color);
+        color: var(--color);
+    }
+    
+    .version-history-content {
+        padding: 1rem;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    
+    .version-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding: 1rem;
+        border: 1px solid var(--muted-border-color);
+        border-radius: calc(var(--border-radius) / 2);
+        margin-bottom: 1rem;
+        background: var(--card-sectionning-background-color);
+        transition: all 0.2s ease;
+    }
+    
+    .version-item:hover {
+        border-color: var(--primary);
+        transform: translateY(-1px);
+    }
+    
+    .version-item.current {
+        border-color: var(--primary);
+        background: var(--primary-focus);
+    }
+    
+    .version-details {
+        flex: 1;
+    }
+    
+    .version-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .version-number {
+        font-weight: 600;
+        color: var(--primary);
+    }
+    
+    .version-badge {
+        padding: 0.125rem 0.5rem;
+        border-radius: calc(var(--border-radius) / 2);
+        font-size: 0.75rem;
+        font-weight: 500;
+        text-transform: uppercase;
+    }
+    
+    .badge-current {
+        background: var(--primary);
+        color: var(--primary-inverse);
+    }
+    
+    .badge-regenerated {
+        background: var(--secondary);
+        color: var(--secondary-inverse);
+    }
+    
+    .version-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        font-size: 0.875rem;
+        color: var(--muted-color);
+    }
+    
+    .version-actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-shrink: 0;
+    }
+    
+    .btn-small {
+        padding: 0.25rem 0.75rem;
+        font-size: 0.75rem;
+    }
+    
+    /* Modal Styles */
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+    
+    .modal-content {
+        background: var(--card-background-color);
+        border-radius: var(--border-radius);
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        max-width: 500px;
+        width: 90%;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.5rem;
+        border-bottom: 1px solid var(--muted-border-color);
+    }
+    
+    .modal-header h4 {
+        margin: 0;
+        color: var(--primary);
+    }
+    
+    .modal-body {
+        padding: 1.5rem;
+    }
+    
+    .modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 1rem;
+        padding: 1.5rem;
+        border-top: 1px solid var(--muted-border-color);
+    }
+    
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+    
+    .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+        color: var(--color);
+    }
+    
+    .form-control {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid var(--muted-border-color);
+        border-radius: calc(var(--border-radius) / 2);
+        background: var(--card-sectionning-background-color);
+        font-family: inherit;
+        font-size: 0.875rem;
+    }
+    
+    .form-control:focus {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+        border-color: var(--primary);
+    }
+    
+    .loading-spinner {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        color: var(--muted-color);
+    }
+    
+    .spinner {
+        width: 1rem;
+        height: 1rem;
+        border: 2px solid var(--muted-border-color);
+        border-top: 2px solid var(--primary);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
     }
     
     @media (max-width: 768px) {
@@ -624,5 +982,237 @@
             }
         }
     }
+    
+    // Version History Functions
+    async function loadVersionHistory() {
+        const panel = document.getElementById('version-history-panel');
+        const content = document.getElementById('version-history-content');
+        const userID = document.getElementById('user-id-code').textContent;
+        
+        // Show panel and reset content
+        panel.style.display = 'block';
+        content.innerHTML = '<div class="loading-spinner">Loading version history...</div>';
+        
+        try {
+            const response = await fetch(`/admin/api/users/${userID}/statement-versions`);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const versions = await response.json();
+            
+            if (versions.length === 0) {
+                content.innerHTML = '<div class="loading-spinner">No version history found</div>';
+                return;
+            }
+            
+            renderVersionHistory(versions);
+            
+        } catch (error) {
+            console.error('Failed to load version history:', error);
+            content.innerHTML = `<div class="loading-spinner">Error loading history: ${error.message}</div>`;
+        }
+    }
+    
+    function renderVersionHistory(versions) {
+        const content = document.getElementById('version-history-content');
+        const currentVersionID = document.querySelector('.version-info code')?.textContent;
+        
+        const html = versions.map(version => {
+            const isCurrent = version.id === currentVersionID;
+            const badgeClass = isCurrent ? 'badge-current' : 
+                              version.change_type === 'regeneration' ? 'badge-regenerated' : '';
+            const badgeText = isCurrent ? 'Current' : 
+                             version.change_type === 'regeneration' ? 'Regenerated' : 
+                             version.generated_by || 'Unknown';
+            
+            return `
+                <div class="version-item ${isCurrent ? 'current' : ''}">
+                    <div class="version-details">
+                        <div class="version-header">
+                            <span class="version-number">Version ${version.version_number}</span>
+                            <span class="version-badge ${badgeClass}">${badgeText}</span>
+                        </div>
+                        <div class="version-meta">
+                            <span>Created: ${new Date(version.created_at).toLocaleString()}</span>
+                            <span>Generated by: ${version.generated_by}</span>
+                            <span>Prompt: ${version.prompt_file}</span>
+                            <span>Length: ${version.statement_text?.length || 0} chars</span>
+                        </div>
+                    </div>
+                    <div class="version-actions">
+                        <button type="button" class="btn btn-secondary btn-small" onclick="viewVersion('${version.id}')">
+                            <i data-feather="eye"></i>
+                            View
+                        </button>
+                        ${!isCurrent ? `
+                            <button type="button" class="btn btn-primary btn-small" onclick="activateVersion('${version.id}')">
+                                <i data-feather="check"></i>
+                                Activate
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        content.innerHTML = html;
+        
+        // Re-initialize feather icons for new elements
+        if (window.feather) {
+            feather.replace();
+        }
+    }
+    
+    function hideVersionHistory() {
+        document.getElementById('version-history-panel').style.display = 'none';
+    }
+    
+    async function viewVersion(versionID) {
+        const userID = document.getElementById('user-id-code').textContent;
+        const textarea = document.getElementById('statement-textarea');
+        
+        try {
+            const response = await fetch(`/admin/api/users/${userID}/statement-versions/${versionID}`);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const version = await response.json();
+            textarea.value = version.statement_text;
+            textarea.style.borderColor = 'var(--secondary)';
+            textarea.style.background = 'var(--secondary-focus)';
+            
+            // Reset after 3 seconds
+            setTimeout(() => {
+                textarea.style.borderColor = '';
+                textarea.style.background = '';
+            }, 3000);
+            
+        } catch (error) {
+            console.error('Failed to load version:', error);
+            alert(`Error loading version: ${error.message}`);
+        }
+    }
+    
+    async function activateVersion(versionID) {
+        if (!confirm('Are you sure you want to activate this version? This will update the user\'s current statement.')) {
+            return;
+        }
+        
+        const userID = document.getElementById('user-id-code').textContent;
+        
+        try {
+            const response = await fetch(`/admin/api/users/${userID}/statement-versions/${versionID}/activate`, {
+                method: 'POST'
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            // Reload the page to reflect changes
+            window.location.reload();
+            
+        } catch (error) {
+            console.error('Failed to activate version:', error);
+            alert(`Error activating version: ${error.message}`);
+        }
+    }
+    
+    // Regeneration Functions
+    async function showRegenerateModal() {
+        const modal = document.getElementById('regenerate-modal');
+        const versionSelect = document.getElementById('regenerate-version');
+        const userID = document.getElementById('user-id-code').textContent;
+        
+        // Show modal
+        modal.style.display = 'flex';
+        
+        // Load versions for regeneration
+        try {
+            const response = await fetch(`/admin/api/users/${userID}/statement-versions`);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const versions = await response.json();
+            
+            versionSelect.innerHTML = versions.map(version => 
+                `<option value="${version.id}">Version ${version.version_number} (${version.generated_by})</option>`
+            ).join('');
+            
+        } catch (error) {
+            console.error('Failed to load versions:', error);
+            versionSelect.innerHTML = '<option value="">Error loading versions</option>';
+        }
+    }
+    
+    function hideRegenerateModal() {
+        document.getElementById('regenerate-modal').style.display = 'none';
+    }
+    
+    async function regenerateStatement() {
+        const versionID = document.getElementById('regenerate-version').value;
+        const promptFile = document.getElementById('regenerate-prompt').value;
+        const dryRun = document.getElementById('dry-run-check').checked;
+        const userID = document.getElementById('user-id-code').textContent;
+        
+        if (!versionID) {
+            alert('Please select a version to regenerate');
+            return;
+        }
+        
+        const btnText = document.getElementById('regenerate-btn-text');
+        const spinner = document.getElementById('regenerate-spinner');
+        
+        // Show loading state
+        btnText.style.display = 'none';
+        spinner.style.display = 'inline-block';
+        
+        try {
+            const response = await fetch(`/admin/api/users/${userID}/statement-versions/${versionID}/regenerate`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    prompt_file: promptFile,
+                    dry_run: dryRun
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const result = await response.json();
+            
+            if (dryRun) {
+                alert(`Dry run completed successfully. Would regenerate with prompt: ${promptFile}`);
+            } else {
+                alert(`Statement regenerated successfully! New version: ${result.new_version_id}`);
+                // Reload the page to show new version
+                window.location.reload();
+            }
+            
+        } catch (error) {
+            console.error('Failed to regenerate statement:', error);
+            alert(`Error regenerating statement: ${error.message}`);
+        } finally {
+            // Reset button state
+            btnText.style.display = 'inline';
+            spinner.style.display = 'none';
+            hideRegenerateModal();
+        }
+    }
+    
+    // Close modals when clicking outside
+    window.addEventListener('click', function(event) {
+        const regenerateModal = document.getElementById('regenerate-modal');
+        if (event.target === regenerateModal) {
+            hideRegenerateModal();
+        }
+    });
 </script>
 {{end}}

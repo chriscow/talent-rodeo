@@ -13,7 +13,7 @@ type FeedbackStore interface {
 	GetUserSteeringQuery(ctx context.Context, userID string) (*internal.SteeringQuery, error)
 	SetUserSteeringQuery(ctx context.Context, userID string, sq internal.SteeringQuery) error
 	GetUserStatement(ctx context.Context, userID string) (*string, error)
-	SetUserStatement(ctx context.Context, userID string, statement string) error
+	CreateStatementVersionFromFeedback(ctx context.Context, userID string, feedbackData map[string]any, promptFile string) (*internal.UserStatementVersion, error)
 	MarkFeedbackAsProcessed(ctx context.Context, feedbackIDs []string, processedAt time.Time) error
 }
 
@@ -22,8 +22,13 @@ type firestoreStore struct {
 	fs *internal.FirestoreClient
 }
 
-// NewFirestoreStore creates a new firestoreStore.
+// newFeedbackStore creates a new firestoreStore (internal use).
 func newFeedbackStore(fs *internal.FirestoreClient) FeedbackStore {
+	return &firestoreStore{fs: fs}
+}
+
+// NewFeedbackStore creates a new firestoreStore (exported for external use).
+func NewFeedbackStore(fs *internal.FirestoreClient) FeedbackStore {
 	return &firestoreStore{fs: fs}
 }
 
@@ -50,8 +55,8 @@ func (s *firestoreStore) GetUserStatement(ctx context.Context, userID string) (*
 	return user.Statement, nil
 }
 
-func (s *firestoreStore) SetUserStatement(ctx context.Context, userID string, statement string) error {
-	return internal.SetUserStatement(ctx, s.fs, userID, statement)
+func (s *firestoreStore) CreateStatementVersionFromFeedback(ctx context.Context, userID string, feedbackData map[string]any, promptFile string) (*internal.UserStatementVersion, error) {
+	return internal.EnhanceStatementWithAppFeedback(ctx, s.fs, userID, feedbackData, promptFile)
 }
 
 func (s *firestoreStore) MarkFeedbackAsProcessed(ctx context.Context, feedbackIDs []string, processedAt time.Time) error {

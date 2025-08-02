@@ -1107,6 +1107,62 @@ func (d *dryRunUserService) SetUserStatement(ctx context.Context, userID, statem
 	return nil
 }
 
+func (d *dryRunUserService) CreateStatementVersionFromFeedback(ctx context.Context, userID string, feedbackData map[string]any, promptFile string) (*internal.UserStatementVersion, error) {
+	// Simulate creating statement version without actually updating database
+	d.logger.Info("DRY-RUN: Would create statement version from feedback",
+		"userID", userID,
+		"promptFile", promptFile,
+		"feedbackKeys", getMapKeys(feedbackData))
+
+	fmt.Printf("DRY-RUN VERSION CREATION:\n")
+	fmt.Printf("User ID: %s\n", userID)
+	fmt.Printf("Prompt File: %s\n", promptFile)
+	fmt.Printf("Feedback Data Keys: %v\n\n", getMapKeys(feedbackData))
+
+	// Return a mock version for dry run
+	return &internal.UserStatementVersion{
+		ID:            userID + "_v1",
+		VersionNumber: 1,
+		StatementText: "DRY-RUN: Would create updated statement from feedback",
+		GeneratedBy:   "feedback",
+		PromptFile:    promptFile,
+	}, nil
+}
+
+func (d *dryRunUserService) CreateStatementVersionFromInboxFeedback(ctx context.Context, userID, emailContent, adjustmentRequest, userEmail, promptFile string) (*internal.UserStatementVersion, error) {
+	// Simulate creating statement version from inbox feedback without actually updating database
+	d.logger.Info("DRY-RUN: Would create statement version from inbox feedback",
+		"userID", userID,
+		"promptFile", promptFile,
+		"adjustmentRequest", adjustmentRequest,
+		"userEmail", userEmail)
+
+	fmt.Printf("DRY-RUN INBOX VERSION CREATION:\n")
+	fmt.Printf("User ID: %s\n", userID)
+	fmt.Printf("Email Content Length: %d\n", len(emailContent))
+	fmt.Printf("Adjustment Request: %s\n", adjustmentRequest)
+	fmt.Printf("User Email: %s\n", userEmail)
+	fmt.Printf("Prompt File: %s\n\n", promptFile)
+
+	// Return a mock version for dry run
+	return &internal.UserStatementVersion{
+		ID:            userID + "_v1",
+		VersionNumber: 1,
+		StatementText: "DRY-RUN: Would create updated statement from inbox feedback",
+		GeneratedBy:   "feedback",
+		PromptFile:    promptFile,
+	}, nil
+}
+
+// getMapKeys returns the keys of a map as a slice
+func getMapKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 // dryRunMailer simulates email sending without actually sending
 type dryRunMailer struct {
 	logger *slog.Logger
@@ -1149,6 +1205,14 @@ func (f *firestoreUserService) GetUserByEmail(ctx context.Context, email string)
 
 func (f *firestoreUserService) SetUserStatement(ctx context.Context, userID, statement string) error {
 	return internal.SetUserStatement(ctx, f.client, userID, statement)
+}
+
+func (f *firestoreUserService) CreateStatementVersionFromFeedback(ctx context.Context, userID string, feedbackData map[string]any, promptFile string) (*internal.UserStatementVersion, error) {
+	return internal.EnhanceStatementWithAppFeedback(ctx, f.client, userID, feedbackData, promptFile)
+}
+
+func (f *firestoreUserService) CreateStatementVersionFromInboxFeedback(ctx context.Context, userID, emailContent, adjustmentRequest, userEmail, promptFile string) (*internal.UserStatementVersion, error) {
+	return internal.EnhanceStatementWithInboxFeedback(ctx, f.client, userID, emailContent, adjustmentRequest, userEmail, promptFile)
 }
 
 // stringPtr is a helper function to create string pointers
