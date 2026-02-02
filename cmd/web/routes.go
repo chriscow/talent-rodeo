@@ -35,7 +35,8 @@ func (app *application) routes() http.Handler {
 	mux.HandleFunc("/health/gmail", app.gmailHealth, "GET")
 
 	// VAPI webhook endpoint
-	mux.HandleFunc("/vapi/outbound-call", app.makeOutboundCall, "POST")
+	// SUNSET: Outbound calls disabled
+	// mux.HandleFunc("/vapi/outbound-call", app.makeOutboundCall, "POST")
 	mux.HandleFunc("/webhooks/vapi", app.handleVapiWebhook, "POST")
 
 	// Stripe webhook endpoint (no CSRF protection needed)
@@ -74,39 +75,35 @@ func (app *application) routes() http.Handler {
 			// - StepPreferencesExtracted: profile-job-search.html
 			// - StepJobSearchStarted/Complete: profile-jobs.html
 			mux.HandleFunc("/profile", app.showProfilePage, "GET")
-			mux.HandleFunc("/profile/onboarding/reset", app.resetOnboardingState, "POST")
-			mux.HandleFunc("/profile/resume/:resumeID", app.deleteResume, "DELETE")
 
-			// Direct resume upload route - always shows the resume upload form regardless of onboarding state
-			// Used for:
-			// - Direct access to resume upload
-			// - Uploading a different resume
-			// - Resetting onboarding process
-			mux.HandleFunc("/profile/resume/upload", app.showUploadPage, "GET")
-			mux.HandleFunc("/profile/resume/upload", app.createResume, "POST")
+			// SUNSET: Onboarding disabled
+			// mux.HandleFunc("/profile/onboarding/reset", app.resetOnboardingState, "POST")
+			// mux.HandleFunc("/profile/resume/:resumeID", app.deleteResume, "DELETE")
+			// mux.HandleFunc("/profile/resume/upload", app.showUploadPage, "GET")
+			// mux.HandleFunc("/profile/resume/upload", app.createResume, "POST")
 
-			mux.HandleFunc("/profile/schedule", app.showSchedulePage, "GET")
-
-			mux.HandleFunc("/profile/schedule/appointment", app.createAppointment, "POST")
-			mux.HandleFunc("/profile/schedule/appointment/:id", app.cancelAppointment, "DELETE")
-			mux.HandleFunc("/profile/schedule/reschedule", app.rescheduleAppointment, "POST")
-			mux.HandleFunc("/profile/schedule/call-now", app.callNow, "POST")
+			// SUNSET: Scheduling/calls disabled
+			// mux.HandleFunc("/profile/schedule", app.showSchedulePage, "GET")
+			// mux.HandleFunc("/profile/schedule/appointment", app.createAppointment, "POST")
+			// mux.HandleFunc("/profile/schedule/appointment/:id", app.cancelAppointment, "DELETE")
+			// mux.HandleFunc("/profile/schedule/reschedule", app.rescheduleAppointment, "POST")
+			// mux.HandleFunc("/profile/schedule/call-now", app.callNow, "POST")
 
 			mux.HandleFunc("/account/delete", app.deleteAccount, "POST")
 
 			mux.HandleFunc("/dashboard", app.showDashboard, "GET", "POST")
 
-			// Payment and subscription routes
-			mux.HandleFunc("/upgrade", app.upgradeGet, "GET")
-			mux.HandleFunc("/billing", app.billingGet, "GET")
-			mux.HandleFunc("/payment/create-checkout-session", app.createCheckoutSessionPost, "POST")
-			mux.HandleFunc("/payment/success", app.paymentSuccessGet, "GET")
-			mux.HandleFunc("/payment/cancel", app.paymentCancelGet, "GET")
+			// SUNSET: Payments disabled
+			// mux.HandleFunc("/upgrade", app.upgradeGet, "GET")
+			// mux.HandleFunc("/billing", app.billingGet, "GET")
+			// mux.HandleFunc("/payment/create-checkout-session", app.createCheckoutSessionPost, "POST")
+			// mux.HandleFunc("/payment/success", app.paymentSuccessGet, "GET")
+			// mux.HandleFunc("/payment/cancel", app.paymentCancelGet, "GET")
 
-			// Feedback routes
-			mux.HandleFunc("/feedback/job", app.handleJobFeedback, "POST")
-			mux.HandleFunc("/feedback/job/dismiss", app.handleJobDismiss, "POST")
-			mux.HandleFunc("/feedback/job/title", app.handleJobTitleAction, "POST")
+			// SUNSET: Job feedback disabled
+			// mux.HandleFunc("/feedback/job", app.handleJobFeedback, "POST")
+			// mux.HandleFunc("/feedback/job/dismiss", app.handleJobDismiss, "POST")
+			// mux.HandleFunc("/feedback/job/title", app.handleJobTitleAction, "POST")
 
 			mux.HandleFunc("/testing/reset-user-state", app.handleTestingResetUserState, "POST")
 

@@ -49,19 +49,7 @@
             </form>
         </li>
         {{end}}
-        {{if eq .User.Tier "free"}}
-        <li>
-            <form method="GET" action="/upgrade" style="margin: 0;">
-                <button type="submit" class="outline secondary" style="margin: 0;">Upgrade to Pro</button>
-            </form>
-        </li>
-        {{else if eq .User.Tier "pro"}}
-        <li>
-            <form method="GET" action="/billing" style="margin: 0;">
-                <button type="submit" class="outline secondary" style="margin: 0;">Billing</button>
-            </form>
-        </li>
-        {{end}}
+        {{/* SUNSET: Upgrade/Billing buttons hidden - payments disabled */}}
         <li>
             <form method="POST" action="/logout" style="margin: 0;">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
