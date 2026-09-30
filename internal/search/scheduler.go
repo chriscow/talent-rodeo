@@ -231,6 +231,11 @@ func (s *Scheduler) IsWithinAllowedHours() bool {
 
 // StartCriteriaSearch finds criteria that need searches performed
 func (s *Scheduler) StartCriteriaSearch(ctx context.Context) {
+	if s.settings.Paused {
+		s.logger.Info("search scheduler is paused, skipping criteria scan")
+		return
+	}
+
 	items, err := internal.GetSearchCriteriaNeedsSearch(ctx, s.fs)
 	if err != nil {
 		s.logger.Error("error getting search criteria", "error", err)

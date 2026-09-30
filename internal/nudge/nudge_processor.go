@@ -193,6 +193,11 @@ func (p *Processor) processLoop(ctx context.Context) {
 
 // runProcessingCycle executes one complete processing cycle
 func (p *Processor) runProcessingCycle(ctx context.Context) {
+	if p.settings.Paused {
+		p.logger.Debug("nudge processor is paused, skipping cycle")
+		return
+	}
+
 	p.logger.Debug("starting nudge processing cycle")
 	startTime := time.Now()
 
