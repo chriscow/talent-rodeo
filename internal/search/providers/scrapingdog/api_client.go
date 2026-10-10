@@ -3,6 +3,7 @@ package scrapingdog
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -128,8 +129,12 @@ func (c *APIClient) SearchJobListings(ctx context.Context, query, geoid string, 
 	q.Set("geoid", geoid)
 	q.Set("sort_by", string(sortBy)) // day (last 24 hours), week (last 7 days), month (last 30 days)
 
-	q.Set("job_type", string(jobType))   // optional, can be empty
-	q.Set("exp_level", string(expLevel)) // optional, can be empty
+	if jobType != "" {
+		q.Set("work_type", string(jobType))
+	}
+	if expLevel != "" {
+		q.Set("exp_level", string(expLevel))
+	}
 
 	q.Set("page", strconv.Itoa(page))
 	baseURL.RawQuery = q.Encode()
@@ -199,8 +204,8 @@ func (c *APIClient) GetJobDetails(ctx context.Context, jobID string) (LinkedInJo
 		return LinkedInJobDetail{}, fmt.Errorf("failed to parse base URL: %w", err)
 	}
 
-	// Update the path to include the jobid endpoint
-	baseURL.Path = "/linkedinjobs"
+	// Search and overview requests use the same documented endpoint.
+	baseURL.Path = "/jobs"
 
 	params := url.Values{}
 	params.Add("api_key", c.apiKey)
@@ -286,6 +291,9 @@ func (c *APIClient) GetJobDetails(ctx context.Context, jobID string) (LinkedInJo
 		return LinkedInJobDetail{}, fmt.Errorf("failed to decode response: %w", err)
 	}
 
+	if len(items) == 0 {
+		return LinkedInJobDetail{}, fmt.Errorf("no job details returned for %s", jobID)
+	}
 	jobDetail := items[0]
 
 	// Set the ID from the input parameter
@@ -332,11 +340,17 @@ func (c *APIClient) doRequestWithRetry(ctx context.Context, req *http.Request) (
 				"attempt", i+1,
 				"max_retries", MaxRetries,
 				"backoff", backoffDelay,
-				"url", req.URL.String())
+				"url", requestLogURL(req))
 		}
 
 		// Execute the request
 		resp, err = c.client.Do(req)
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			safeErr := *urlErr
+			safeErr.URL = requestLogURL(req)
+			err = &safeErr
+		}
 
 		// If we encountered a network error, apply exponential backoff
 		if err != nil {
@@ -451,7 +465,7 @@ func (c *APIClient) doRequestWithRetry(ctx context.Context, req *http.Request) (
 		internal.SentryReportError(ctx, retryErr, sentry.LevelError, map[string]string{
 			"action":     "APIClient::doRequestWithRetry: exhausted all retries with error",
 			"maxRetries": fmt.Sprintf("%d", MaxRetries),
-			"url":        req.URL.String(),
+			"url":        requestLogURL(req),
 		})
 		return nil, retryErr
 	}
@@ -462,7 +476,20 @@ func (c *APIClient) doRequestWithRetry(ctx context.Context, req *http.Request) (
 		"action":     "APIClient::doRequestWithRetry: exhausted all retries with status code",
 		"maxRetries": fmt.Sprintf("%d", MaxRetries),
 		"statusCode": fmt.Sprintf("%d", statusCode),
-		"url":        req.URL.String(),
+		"url":        requestLogURL(req),
 	})
 	return nil, retryErr
+}
+
+// requestLogURL omits query parameters because Scrapingdog authenticates in the URL.
+func requestLogURL(req *http.Request) string {
+	if req == nil || req.URL == nil {
+		return ""
+	}
+	sanitized := *req.URL
+	sanitized.RawQuery = ""
+	sanitized.ForceQuery = false
+	sanitized.Fragment = ""
+	sanitized.User = nil
+	return sanitized.String()
 }

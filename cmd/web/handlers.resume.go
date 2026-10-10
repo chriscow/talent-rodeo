@@ -81,7 +81,8 @@ func (app *application) showUploadPage(w http.ResponseWriter, r *http.Request) {
 	app.logger.Info("showUploadPage", "method", r.Method, "url", r.URL.String())
 
 	data := app.newTemplateData(r)
-	if err := response.Page(w, http.StatusOK, data, "pages/profile-resume-upload.html"); err != nil {
+	data["Form"] = &resumeUploadForm{Validator: validator.Validator{}}
+	if err := response.Page(w, http.StatusOK, data, app.resumeUploadTemplate()); err != nil {
 		app.logger.Error("Failed to render resume upload page", "error", err)
 		app.serverError(w, r, fmt.Errorf("failed to render resume upload page: %w", err))
 		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
@@ -115,13 +116,17 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 	}
 	data["Form"] = form
 
-	if err := r.ParseMultipartForm(10 << 20); err != nil { // 10MB max
+	if app.mode.Personal {
+		// ParseMultipartForm's argument is a memory threshold, not a request limit.
+		r.Body = http.MaxBytesReader(w, r.Body, 11<<20)
+	}
+	if err := r.ParseMultipartForm(10 << 20); err != nil { // 10MB in-memory threshold
 		form.Validator.AddFieldError("resume", "File too large. Maximum size is 10MB")
 		internal.SentryReportError(r.Context(), err, sentry.LevelWarning, map[string]string{
 			"action":  "parseMultipartForm",
 			"maxSize": "10MB",
 		})
-		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
+		if err := response.Page(w, http.StatusUnprocessableEntity, data, app.resumeUploadTemplate()); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
 			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
 				"template": "pages/profile-resume-upload.html",
@@ -143,7 +148,7 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 			"action":    "getFormFile",
 			"fieldName": "resume",
 		})
-		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
+		if err := response.Page(w, http.StatusUnprocessableEntity, data, app.resumeUploadTemplate()); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
 			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
 				"template": "pages/profile-resume-upload.html",
@@ -153,22 +158,29 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
+	if app.mode.Personal && header.Size > 10<<20 {
+		form.Validator.AddFieldError("resume", "File too large. Maximum size is 10MB")
+		if err := response.Page(w, http.StatusUnprocessableEntity, data, app.resumeUploadTemplate()); err != nil {
+			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
+		}
+		return
+	}
 
 	form.Phone = r.FormValue("phone")
 
-	// Ensure phone number is prefixed with +1 (E.164 format)
-	if !strings.HasPrefix(form.Phone, "+1") && !strings.HasPrefix(form.Phone, "1") {
-		form.Phone = "+1" + form.Phone
+	if !app.mode.Personal {
+		// Voice onboarding needs a phone number in E.164 format.
+		if !strings.HasPrefix(form.Phone, "+1") && !strings.HasPrefix(form.Phone, "1") {
+			form.Phone = "+1" + form.Phone
+		}
+		phoneRegex := regexp.MustCompile(`^\+1\d{10}$`)
+		form.Validator.CheckField(validator.Matches(form.Phone, phoneRegex), "phone", "Invalid phone number. Please use the format +1XXXXXXXXXX.")
 	}
-
-	// Update regex to validate E.164 format
-	phoneRegex := regexp.MustCompile(`^\+1\d{10}$`)
-	form.Validator.CheckField(validator.Matches(form.Phone, phoneRegex), "phone", "Invalid phone number. Please use the format +1XXXXXXXXXX.")
 
 	form.Validator.CheckField(isValidFileType(header.Filename), "resume", "Invalid file type. Please upload a DOCX, PDF, or TXT file.")
 
 	if form.Validator.HasErrors() {
-		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
+		if err := response.Page(w, http.StatusUnprocessableEntity, data, app.resumeUploadTemplate()); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
 			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
 				"template": "pages/profile-resume-upload.html",
@@ -187,7 +199,7 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 			"action":   "os.CreateTemp",
 			"filename": header.Filename,
 		})
-		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
+		if err := response.Page(w, http.StatusUnprocessableEntity, data, app.resumeUploadTemplate()); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
 			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
 				"template": "pages/profile-resume-upload.html",
@@ -205,7 +217,7 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 			"action":   "copyFileToTemp",
 			"filename": header.Filename,
 		})
-		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
+		if err := response.Page(w, http.StatusUnprocessableEntity, data, app.resumeUploadTemplate()); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
 			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
 				"template": "pages/profile-resume-upload.html",
@@ -223,7 +235,7 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 			"filename": header.Filename,
 			"fileType": strings.ToLower(filepath.Ext(header.Filename)),
 		})
-		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
+		if err := response.Page(w, http.StatusUnprocessableEntity, data, app.resumeUploadTemplate()); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
 			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
 				"template": "pages/profile-resume-upload.html",
@@ -244,7 +256,7 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 			"userID":   user.ID,
 			"filename": header.Filename,
 		})
-		if err := response.Page(w, http.StatusUnprocessableEntity, data, "pages/profile-resume-upload.html"); err != nil {
+		if err := response.Page(w, http.StatusUnprocessableEntity, data, app.resumeUploadTemplate()); err != nil {
 			app.serverError(w, r, fmt.Errorf("failed to render form with error: %w", err))
 			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
 				"template": "pages/profile-resume-upload.html",
@@ -257,14 +269,15 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 	user.Status = internal.UserStatusProcessingResume
 	user.StatusUpdatedAt = time.Now()
 
-	user.Phone = &form.Phone
-
-	// Save the phone number and update state
-	if err := internal.UpdateUser(context.Background(), app.fs, user.ID, map[string]any{
-		"Phone":           form.Phone,
+	updates := map[string]any{
 		"Status":          user.Status,
 		"StatusUpdatedAt": user.StatusUpdatedAt,
-	}); err != nil {
+	}
+	if !app.mode.Personal {
+		user.Phone = &form.Phone
+		updates["Phone"] = form.Phone
+	}
+	if err := internal.UpdateUser(r.Context(), app.fs, user.ID, updates); err != nil {
 		app.serverError(w, r, fmt.Errorf("failed to update user: %w", err))
 		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
 			"action": "internal.UpdateUser",
@@ -284,18 +297,36 @@ func (app *application) createResume(w http.ResponseWriter, r *http.Request) {
 				"resumeID": resume.ID,
 			})
 		}
-		internal.SendPusherRedirect(app.pusher, user.ID, "/dashboard")
+		if app.mode.Personal {
+			internal.SendPusherRedirect(app.pusher, user.ID, "/profile/preferences")
+		} else {
+			internal.SendPusherRedirect(app.pusher, user.ID, "/dashboard")
+		}
 	}()
 
 	// Show processing page
 	data = app.newTemplateData(r)
-	if err := response.Page(w, http.StatusOK, data, "pages/profile-resume-processing.html"); err != nil {
+	if err := response.Page(w, http.StatusOK, data, app.resumeProcessingTemplate()); err != nil {
 		app.serverError(w, r, fmt.Errorf("failed to render processing page: %w", err))
 		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
 			"template": "pages/profile-resume-processing.html",
 			"action":   "renderTemplate",
 		})
 	}
+}
+
+func (app *application) resumeUploadTemplate() string {
+	if app.mode.Personal {
+		return "pages/personal-resume-upload.html"
+	}
+	return "pages/profile-resume-upload.html"
+}
+
+func (app *application) resumeProcessingTemplate() string {
+	if app.mode.Personal {
+		return "pages/personal-resume-processing.html"
+	}
+	return "pages/profile-resume-processing.html"
 }
 
 // Helper functions below

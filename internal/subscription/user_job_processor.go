@@ -3,33 +3,41 @@ package subscription
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"runtime/debug"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
 	"talent-rodeo/assets"
 	"talent-rodeo/internal"
+	tools "talent-rodeo/internal/llmtools"
 
 	"sync/atomic"
 
 	"cloud.google.com/go/firestore"
 	"github.com/chriscow/minds"
-	"github.com/chriscow/minds/tools"
 	"github.com/getsentry/sentry-go"
 	"github.com/lmittmann/tint"
 	"github.com/pusher/pusher-http-go/v5"
 	"github.com/sashabaranov/go-openai"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
 const (
 	userJobProcessorConcurrency = 15 // Number of concurrent workers
+	personalMatchPromptVersion  = "match-v1"
 )
+
+var errPersonalEvaluationStale = errors.New("personal evaluation inputs changed")
 
 type UserJobProcessor struct {
 	fs        *internal.FirestoreClient
@@ -50,6 +58,7 @@ type UserJobProcessor struct {
 	// Search context
 	searchCriteria *internal.SearchCriteria
 	jobProvider    internal.JobProvider
+	mode           internal.RuntimeMode
 }
 
 type userJobEvaluationTask struct {
@@ -58,6 +67,7 @@ type userJobEvaluationTask struct {
 	Messages      minds.Messages
 	Prompt        string
 	AnalysisModel string
+	Version       *internal.PersonalEvaluationVersion
 }
 
 func NewUserJobProcessor(fs *internal.FirestoreClient, psh *pusher.Client, logger *slog.Logger) *UserJobProcessor {
@@ -155,6 +165,10 @@ func (p *UserJobProcessor) evaluateJob(ctx context.Context, task userJobEvaluati
 	logger := p.logger.With("name", task.User.Name, "userID", p.userID, "jobID", task.Job.ID)
 
 	logger.Debug("evaluating job for user")
+	if err := p.admitPersonalUser(ctx, task.User.ID); err != nil {
+		logger.Warn("skipping ineligible personal job", "error", err)
+		return
+	}
 
 	resp := openai.ChatCompletionResponse{}
 	analysis, err := tools.Ask(ctx, task.Prompt, tools.WithMessages(task.Messages),
@@ -166,28 +180,42 @@ func (p *UserJobProcessor) evaluateJob(ctx context.Context, task userJobEvaluati
 			"jobID":  task.Job.ID,
 			"userID": p.userID,
 		})
+		if costErr := internal.RecordLLMCost(ctx, p.fs, &task.User.ID, task.AnalysisModel, resp, "job_analysis", &task.Job.ID); costErr != nil {
+			logger.Error("failed to record LLM cost for failed job analysis", "error", costErr)
+		}
 		return
 	}
-
 	// Record LLM cost for job analysis
 	if err := internal.RecordLLMCost(ctx, p.fs, &task.User.ID, task.AnalysisModel, resp, "job_analysis", &task.Job.ID); err != nil {
 		logger.Error("failed to record LLM cost for job analysis", "error", err)
 	}
+	if err := p.admitPersonalUser(ctx, task.User.ID); err != nil {
+		logger.Warn("stopping ineligible personal job analysis", "error", err)
+		return
+	}
 
 	structuredResp := openai.ChatCompletionResponse{}
 	matchAnalysis, err := tools.StructuredAsk[internal.JobMatchAnalysis](ctx, "Please extract this analysis into structured JSON data:\n"+analysis,
-		tools.WithModel(tools.GPT41Mini), tools.WithMaxTokens(8192), tools.WantCompletionResponse(&structuredResp))
+		tools.WithModel(tools.GPT6Luna), tools.WithMaxTokens(8192), tools.WantCompletionResponse(&structuredResp))
 	if err != nil {
 		logger.Error("failed to extract job match analysis", "error", err)
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"jobID":  task.Job.ID,
 			"userID": p.userID,
 		})
-	} else {
-		// Record LLM cost for structured extraction
-		if err := internal.RecordLLMCost(ctx, p.fs, &task.User.ID, tools.GPT41Mini, structuredResp, "job_analysis_extraction", &task.Job.ID); err != nil {
-			logger.Error("failed to record LLM cost for job analysis extraction", "error", err)
+		if costErr := internal.RecordLLMCost(ctx, p.fs, &task.User.ID, tools.GPT6Luna, structuredResp, "job_analysis_extraction", &task.Job.ID); costErr != nil {
+			logger.Error("failed to record LLM cost for failed extraction", "error", costErr)
 		}
+		return
+	}
+	// Record LLM cost for structured extraction before validating its content.
+	if err := internal.RecordLLMCost(ctx, p.fs, &task.User.ID, tools.GPT6Luna, structuredResp, "job_analysis_extraction", &task.Job.ID); err != nil {
+		logger.Error("failed to record LLM cost for job analysis extraction", "error", err)
+	}
+	if err := validateMatchAnalysis(matchAnalysis); err != nil {
+		logger.Error("invalid structured job match analysis", "error", err)
+		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{"jobID": task.Job.ID, "userID": p.userID})
+		return
 	}
 
 	matchAnalysis.RawAnalysis = analysis
@@ -202,29 +230,94 @@ func (p *UserJobProcessor) evaluateJob(ctx context.Context, task userJobEvaluati
 		status = internal.JobStatusArchived
 	}
 
+	now := time.Now()
 	userJob := internal.UserJob{
-		ID:               task.Job.ID,
-		UserID:           p.userID,
-		CreatedAt:        time.Now(),
-		Status:           status,
-		Rating:           matchAnalysis.Rating.NumericRating,
-		JobMatchAnalysis: matchAnalysis,
-		JobRef:           p.fs.Collection(internal.JobDetailsCollection).Doc(task.Job.ID),
+		ID:                       task.Job.ID,
+		UserID:                   p.userID,
+		CreatedAt:                now,
+		UpdatedAt:                now,
+		Status:                   status,
+		Rating:                   matchAnalysis.Rating.NumericRating,
+		AutoArchivedByEvaluation: status == internal.JobStatusArchived,
+		JobMatchAnalysis:         matchAnalysis,
+		PersonalEvaluation:       task.Version,
+		JobRef:                   p.fs.Collection(internal.JobDetailsCollection).Doc(task.Job.ID),
+	}
+	if status == internal.JobStatusArchived {
+		userJob.ArchivedAt = &now
 	}
 
-	if _, err := internal.CreateUserJob(ctx, p.fs, userJob.UserID, userJob.ID); err != nil {
-		logger.Error("failed to create user job", "error", err)
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"jobID":  task.Job.ID,
-			"userID": p.userID,
-		})
-		return // Return after logging the error
+	if err := p.admitPersonalUser(ctx, task.User.ID); err != nil {
+		logger.Warn("skipping ineligible personal job result", "error", err)
+		return
 	}
 
-	// Update the job with the analysis data separately
+	// Read and update the job in one transaction so manual statuses survive reevaluation.
 	err = p.fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		if err := internal.UpdateUserJobStatusTx(ctx, p.fs, tx, userJob.UserID, userJob.ID, status); err != nil {
-			return fmt.Errorf("failed to update user job status: %w", err)
+		if p.mode.Personal {
+			if task.Version == nil || p.searchCriteria == nil {
+				return errPersonalEvaluationStale
+			}
+			ownerDoc, err := tx.Get(p.fs.Collection("users").Doc(p.mode.UserID))
+			if grpcstatus.Code(err) == codes.NotFound {
+				return errPersonalEvaluationStale
+			}
+			if err != nil {
+				return fmt.Errorf("read personal owner before match write: %w", err)
+			}
+			var owner internal.User
+			if err := ownerDoc.DataTo(&owner); err != nil {
+				return fmt.Errorf("decode personal owner before match write: %w", err)
+			}
+			if !p.mode.CanMatch(&owner, time.Now()) || owner.PersonalSearchStartedAt == nil ||
+				!owner.PersonalSearchStartedAt.Equal(task.Version.Activation) || owner.CurrentStatementVersionID == nil ||
+				*owner.CurrentStatementVersionID != task.Version.StatementVersionID || owner.Statement == nil ||
+				fmt.Sprintf("%x", sha256.Sum256([]byte(*owner.Statement))) != task.Version.StatementHash {
+				return errPersonalEvaluationStale
+			}
+			jobDoc, err := tx.Get(p.fs.Collection(internal.JobDetailsCollection).Doc(task.Job.ID))
+			if grpcstatus.Code(err) == codes.NotFound {
+				return errPersonalEvaluationStale
+			}
+			if err != nil {
+				return fmt.Errorf("read personal job detail before match write: %w", err)
+			}
+			var currentJob internal.JobDetail
+			if err := jobDoc.DataTo(&currentJob); err != nil {
+				return fmt.Errorf("decode personal job detail before match write: %w", err)
+			}
+			if personalJobInputHash(currentJob) != task.Version.JobInputHash {
+				return errPersonalEvaluationStale
+			}
+		}
+		ref := p.fs.Collection("users").Doc(userJob.UserID).Collection("user_jobs").Doc(userJob.ID)
+		doc, err := tx.Get(ref)
+		if grpcstatus.Code(err) == codes.NotFound {
+			return tx.Set(ref, userJob)
+		}
+		if err != nil {
+			return fmt.Errorf("read existing user job: %w", err)
+		}
+		var existing internal.UserJob
+		if err := doc.DataTo(&existing); err != nil {
+			return fmt.Errorf("decode existing user job: %w", err)
+		}
+		if mayUpdateEvaluatedStatus(existing) {
+			// The status helper marks explicit user changes; reset that marker for an evaluation update.
+			if err := internal.UpdateUserJobStatusTx(ctx, p.fs, tx, userJob.UserID, userJob.ID, userJob.Status); err != nil {
+				return fmt.Errorf("update user job status: %w", err)
+			}
+			if err := tx.Update(ref, []firestore.Update{
+				{Path: "AutoArchivedByEvaluation", Value: userJob.AutoArchivedByEvaluation},
+				{Path: "StatusManuallySet", Value: false},
+			}); err != nil {
+				return fmt.Errorf("update automatic archive marker: %w", err)
+			}
+			if existing.Status == internal.JobStatusArchived && userJob.Status == internal.JobStatusNew {
+				if err := tx.Update(ref, []firestore.Update{{Path: "ArchivedAt", Value: nil}}); err != nil {
+					return fmt.Errorf("clear automatic archive timestamp: %w", err)
+				}
+			}
 		}
 		if err := internal.UpdateUserJobAnalysisTx(ctx, p.fs, tx, userJob.UserID, userJob.ID, matchAnalysis); err != nil {
 			return fmt.Errorf("failed to update user job: %w", err)
@@ -232,14 +325,24 @@ func (p *UserJobProcessor) evaluateJob(ctx context.Context, task userJobEvaluati
 		if err := internal.UpdateUserJobRatingTx(ctx, p.fs, tx, userJob.UserID, userJob.ID, matchAnalysis.Rating.NumericRating); err != nil {
 			return fmt.Errorf("failed to update user job rating: %w", err)
 		}
+		if p.mode.Personal {
+			if err := tx.Update(ref, []firestore.Update{{Path: "PersonalEvaluation", Value: task.Version}}); err != nil {
+				return fmt.Errorf("update personal evaluation version: %w", err)
+			}
+		}
 		return nil
 	})
 	if err != nil {
+		if errors.Is(err, errPersonalEvaluationStale) {
+			logger.Info("discarding match analysis for changed personal profile or criteria", "jobID", task.Job.ID)
+			return
+		}
 		logger.Error("failed to update user job", "error", err)
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"jobID":  task.Job.ID,
 			"userID": p.userID,
 		})
+		return
 	}
 
 	onDashboard, _ := p.checkUserOnDashboard()
@@ -276,6 +379,108 @@ func (p *UserJobProcessor) evaluateJob(ctx context.Context, task userJobEvaluati
 	}
 }
 
+func (p *UserJobProcessor) admitPersonalUser(ctx context.Context, userID string) error {
+	if !p.mode.Personal {
+		return nil
+	}
+	if !p.mode.AllowsUser(userID) {
+		return fmt.Errorf("user is outside personal mode")
+	}
+	owner, err := internal.GetPersonalSearchOwner(ctx, p.fs, p.mode.UserID)
+	if err != nil {
+		return err
+	}
+	if !p.mode.CanMatch(owner, time.Now()) {
+		return fmt.Errorf("personal owner is not ready for matching")
+	}
+	return nil
+}
+
+func personalJobInputHash(job internal.JobDetail) string {
+	input := fmt.Sprintf("%s\x00%s\x00%s\x00%+v", job.Description, job.WorkplaceType, job.Location, job.SalaryInfo)
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(input)))
+}
+
+func newPersonalEvaluationVersion(user internal.User, job internal.JobDetail, prompt []byte, analysisModel, extractionModel string) *internal.PersonalEvaluationVersion {
+	statementHash := sha256.Sum256([]byte(*user.Statement))
+	promptHash := sha256.Sum256(append(append([]byte(nil), prompt...), []byte(personalMatchPromptVersion)...))
+	return &internal.PersonalEvaluationVersion{
+		Activation:         *user.PersonalSearchStartedAt,
+		StatementVersionID: *user.CurrentStatementVersionID,
+		StatementHash:      fmt.Sprintf("%x", statementHash),
+		JobInputHash:       personalJobInputHash(job),
+		AnalysisModel:      analysisModel,
+		ExtractionModel:    extractionModel,
+		PromptVersion:      fmt.Sprintf("%x", promptHash),
+	}
+}
+
+func personalEvaluationMatches(actual, expected *internal.PersonalEvaluationVersion) bool {
+	return actual != nil && expected != nil && actual.Activation.Equal(expected.Activation) &&
+		actual.StatementVersionID == expected.StatementVersionID && actual.StatementHash == expected.StatementHash &&
+		actual.JobInputHash == expected.JobInputHash && actual.AnalysisModel == expected.AnalysisModel &&
+		actual.ExtractionModel == expected.ExtractionModel && actual.PromptVersion == expected.PromptVersion
+}
+
+func validateMatchAnalysis(analysis internal.JobMatchAnalysis) error {
+	if analysis.Rating.NumericRating < 1 || analysis.Rating.NumericRating > 5 {
+		return fmt.Errorf("job match rating must be between 1 and 5")
+	}
+	if strings.TrimSpace(analysis.Summary) == "" || strings.TrimSpace(analysis.Strengths) == "" ||
+		strings.TrimSpace(analysis.Concerns) == "" || strings.TrimSpace(analysis.Rating.RatingExplanation) == "" {
+		return fmt.Errorf("job match analysis is missing required rationale")
+	}
+	return nil
+}
+
+func mayUpdateEvaluatedStatus(job internal.UserJob) bool {
+	return !job.StatusManuallySet && (job.Status == internal.JobStatusUnprocessed || job.Status == internal.JobStatusNew ||
+		(job.Status == internal.JobStatusArchived && job.AutoArchivedByEvaluation))
+}
+
+func resolvePersonalCanonicalJobs(ctx context.Context, fs *internal.FirestoreClient, jobs []internal.JobDetail) ([]internal.JobDetail, error) {
+	var canonicalIDs []string
+	seenCanonical := make(map[string]struct{})
+	for _, job := range jobs {
+		if job.CanonicalJobID == nil {
+			continue
+		}
+		id := *job.CanonicalJobID
+		if id == "" || id == job.ID {
+			return nil, fmt.Errorf("invalid canonical job ID for %s", job.ID)
+		}
+		if _, found := seenCanonical[id]; !found {
+			seenCanonical[id] = struct{}{}
+			canonicalIDs = append(canonicalIDs, id)
+		}
+	}
+	canonicals, err := internal.GetJobDetailsByIDs(ctx, fs, canonicalIDs)
+	if err != nil {
+		return nil, fmt.Errorf("get canonical personal jobs: %w", err)
+	}
+	byID := make(map[string]internal.JobDetail, len(canonicals))
+	for _, job := range canonicals {
+		byID[job.ID] = job
+	}
+	var result []internal.JobDetail
+	seenJobs := make(map[string]struct{})
+	for _, job := range jobs {
+		if job.CanonicalJobID != nil {
+			canonical, found := byID[*job.CanonicalJobID]
+			if !found || canonical.CanonicalJobID != nil {
+				return nil, fmt.Errorf("canonical job %s unavailable", *job.CanonicalJobID)
+			}
+			job = canonical
+		}
+		if _, found := seenJobs[job.ID]; found {
+			continue
+		}
+		seenJobs[job.ID] = struct{}{}
+		result = append(result, job)
+	}
+	return result, nil
+}
+
 func (p *UserJobProcessor) checkUserOnDashboard() (bool, error) {
 	onDashboard, err := internal.IsPusherUserPresent(p.psh, p.userID)
 	if err != nil {
@@ -288,7 +493,21 @@ func (p *UserJobProcessor) checkUserOnDashboard() (bool, error) {
 }
 
 // RefreshUserJobs evaluates new jobs for a user against their preferences.
-func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pusher.Client, logger *slog.Logger, user internal.User, criteria internal.SearchCriteria) error {
+func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pusher.Client, logger *slog.Logger, user internal.User, criteria internal.SearchCriteria, modes ...internal.RuntimeMode) error {
+	var mode internal.RuntimeMode
+	if len(modes) > 0 {
+		mode = modes[0]
+	}
+	if mode.Personal {
+		owner, err := internal.GetPersonalSearchOwner(ctx, fs, mode.UserID)
+		if err != nil {
+			return err
+		}
+		if user.ID != owner.ID || !mode.CanMatch(owner, time.Now()) {
+			return nil
+		}
+		user = *owner
+	}
 	if logger == nil {
 		// Create a silent logger (discards all output) or stderr logger based on environment
 		// Set REFRESH_USER_JOBS_LOG=stderr to log to stderr, otherwise logs are discarded
@@ -310,9 +529,26 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 	var totalJobsEvaluated int
 	var newJobsFound int
 	evaluationStartTime := time.Now()
+	var sysPrompt []byte
+	if mode.Personal {
+		if user.Statement == nil || strings.TrimSpace(*user.Statement) == "" || user.CurrentStatementVersionID == nil {
+			return fmt.Errorf("personal profile is not ready for job matching")
+		}
+		var err error
+		sysPrompt, err = assets.EmbeddedFiles.ReadFile("prompts/jobdetail.match-analysis.v001.txt")
+		if err != nil {
+			return fmt.Errorf("read match prompt: %w", err)
+		}
+	}
 
 	weekAgo := time.Now().Add(-7 * 24 * time.Hour)
-	jobIDs, err := internal.GetJobIDsForCriteriaCreatedAfter(ctx, fs, criteria.ID, weekAgo)
+	var jobIDs []string
+	var err error
+	if mode.Personal {
+		jobIDs, err = internal.GetPersonalSearchJobIDs(ctx, fs, criteria.ID, user.ID, *user.PersonalSearchStartedAt)
+	} else {
+		jobIDs, err = internal.GetJobIDsForCriteriaCreatedAfter(ctx, fs, criteria.ID, weekAgo)
+	}
 	if err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"action":     "RefreshUserJobs: failed to get job IDs for criteria",
@@ -324,6 +560,17 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 	}
 
 	totalJobsEvaluated = len(jobIDs)
+	var personalJobs []internal.JobDetail
+	if mode.Personal && len(jobIDs) > 0 {
+		personalJobs, err = internal.GetJobDetailsByIDs(ctx, fs, jobIDs)
+		if err != nil {
+			return fmt.Errorf("get personal job details: %w", err)
+		}
+		personalJobs, err = resolvePersonalCanonicalJobs(ctx, fs, personalJobs)
+		if err != nil {
+			return err
+		}
+	}
 
 	userJobs, err := internal.ListUserJobs(ctx, fs, user.ID)
 	if err != nil {
@@ -334,9 +581,31 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 		return fmt.Errorf("failed to get user jobs: %w", err)
 	}
 
-	// remove job IDs that the user already has
-	for _, job := range userJobs {
-		if slices.Contains(jobIDs, job.ID) {
+	if mode.Personal {
+		seen := make(map[string]*internal.UserJob, len(userJobs))
+		for i := range userJobs {
+			job := &userJobs[i]
+			seen[job.ID] = job
+		}
+		var pendingJobs []internal.JobDetail
+		var pendingIDs []string
+		for _, job := range personalJobs {
+			expected := newPersonalEvaluationVersion(user, job, sysPrompt, tools.DeepSeekFlash, tools.GPT6Luna)
+			if existing := seen[job.ID]; existing != nil && existing.JobMatchAnalysis.ProcessingComplete &&
+				personalEvaluationMatches(existing.PersonalEvaluation, expected) {
+				continue
+			}
+			pendingJobs = append(pendingJobs, job)
+			pendingIDs = append(pendingIDs, job.ID)
+		}
+		personalJobs = pendingJobs
+		jobIDs = pendingIDs
+	} else {
+		// Regular mode keeps its existing one-time evaluation behavior.
+		for _, job := range userJobs {
+			if !slices.Contains(jobIDs, job.ID) {
+				continue
+			}
 			// Delete removes the elements s[i:j] from s, returning the modified
 			// slice. Delete panics if j > len(s) or s[i:j] is not a valid slice
 			// of s. Delete is O(len(s)-i), so if many items must be deleted, it
@@ -390,13 +659,15 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 	logger.Info(internal.HiBGCyan("RefreshUserJobs started"), "jobCount", len(jobIDs))
 
 	// 2. Prepare LLM conversation
-	sysPrompt, err := assets.EmbeddedFiles.ReadFile("prompts/jobdetail.match-analysis.v001.txt")
-	if err != nil {
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"action": "RefreshUserJobs: failed to read match prompt",
-			"userID": user.ID,
-		})
-		return fmt.Errorf("failed to read match prompt: %w", err)
+	if !mode.Personal {
+		sysPrompt, err = assets.EmbeddedFiles.ReadFile("prompts/jobdetail.match-analysis.v001.txt")
+		if err != nil {
+			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+				"action": "RefreshUserJobs: failed to read match prompt",
+				"userID": user.ID,
+			})
+			return fmt.Errorf("failed to read match prompt: %w", err)
+		}
 	}
 
 	resume, found, err := internal.GetLatestResume(ctx, fs, user.ID)
@@ -409,6 +680,10 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 	}
 	if !found {
 		logger.Warn("no resume found for user, proceeding without it")
+	}
+	resumeText := ""
+	if found && resume != nil {
+		resumeText = resume.RawText
 	}
 
 	if user.Statement == nil || *user.Statement == "" {
@@ -423,22 +698,26 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 
 	msgs := minds.Messages{
 		{Role: minds.RoleSystem, Content: string(sysPrompt)},
-		{Role: minds.RoleUser, Content: fmt.Sprintf("My name is %s.\n\n%s\n\nHere is my latest resume:\n%s\n\nI will send the job description next.", user.FirstName, *user.Statement, resume.RawText)},
+		{Role: minds.RoleUser, Content: fmt.Sprintf("My name is %s.\n\n%s\n\nHere is my latest resume:\n%s\n\nI will send the job description next.", user.FirstName, *user.Statement, resumeText)},
 		{Role: minds.RoleAssistant, Content: "Ready for the first job description."},
 	}
 
-	jobs, err := internal.GetJobDetailsByIDs(ctx, fs, jobIDs)
-	if err != nil {
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"action":     "RefreshUserJobs: failed to get job details",
-			"userID":     user.ID,
-			"jobIDCount": fmt.Sprintf("%d", len(jobIDs)),
-		})
-		return fmt.Errorf("failed to get job details for IDs %v: %w", jobIDs, err)
+	jobs := personalJobs
+	if !mode.Personal {
+		jobs, err = internal.GetJobDetailsByIDs(ctx, fs, jobIDs)
+		if err != nil {
+			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+				"action":     "RefreshUserJobs: failed to get job details",
+				"userID":     user.ID,
+				"jobIDCount": fmt.Sprintf("%d", len(jobIDs)),
+			})
+			return fmt.Errorf("failed to get job details for IDs %v: %w", jobIDs, err)
+		}
 	}
 
 	// 4. Queue jobs for evaluation
 	processor := NewUserJobProcessor(fs, psh, logger)
+	processor.mode = mode
 
 	processor.userID = user.ID
 	processor.totalJobs = len(jobs)
@@ -463,7 +742,12 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 		workType := ""
 		location := ""
 
-		if criteria.WorkType == internal.WorkTypeRemote {
+		if mode.Personal {
+			if strings.TrimSpace(job.WorkplaceType) != "" {
+				workType = fmt.Sprintf("<work_type>%s</work_type>", job.WorkplaceType)
+			}
+			location = fmt.Sprintf("<job_location>%s</job_location>", job.Location)
+		} else if criteria.WorkType == internal.WorkTypeRemote {
 			workType = "<work_type>remote position</work_type>"
 			location = fmt.Sprintf("<job_location>%s</job_location>", job.Location)
 			processor.logger.Debug("criteria.WorkType is remote", "jobID", job.ID, "location", job.Location)
@@ -487,12 +771,17 @@ func RefreshUserJobs(ctx context.Context, fs *internal.FirestoreClient, psh *pus
 			prompt += fmt.Sprintf("\n\nThe salary range is %s.", string(salary))
 		}
 
+		var version *internal.PersonalEvaluationVersion
+		if mode.Personal {
+			version = newPersonalEvaluationVersion(user, job, sysPrompt, tools.DeepSeekFlash, tools.GPT6Luna)
+		}
 		task := userJobEvaluationTask{
 			User:          user,
 			Job:           job,
 			Messages:      msgs,
 			Prompt:        prompt,
-			AnalysisModel: tools.DeepSeekChat,
+			AnalysisModel: tools.DeepSeekFlash,
+			Version:       version,
 		}
 		processor.queue <- task
 	}

@@ -14,11 +14,11 @@ import (
 	"sort"
 
 	"cloud.google.com/go/firestore"
-	"github.com/chriscow/minds/tools"
 	"github.com/chriscow/vapi-go"
 	"github.com/samber/lo"
 	"github.com/sashabaranov/go-openai"
 	"google.golang.org/api/iterator"
+	tools "talent-rodeo/internal/llmtools"
 )
 
 // AppointmentStatus represents the possible states of an appointment
@@ -432,13 +432,13 @@ func GenerateJobDescription(ctx context.Context, fs *FirestoreClient, logger *sl
 
 	const maxTokens = 8192
 	resp := openai.ChatCompletionResponse{}
-	desc, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat), tools.WithMaxTokens(maxTokens), tools.WantCompletionResponse(&resp))
+	desc, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekFlash), tools.WithMaxTokens(maxTokens), tools.WantCompletionResponse(&resp))
 	if err != nil {
 		return "", fmt.Errorf("failed to generate job description: %w", err)
 	}
 
 	// Record LLM cost for job description generation
-	if err := RecordLLMCost(ctx, fs, &userID, tools.DeepSeekChat, resp, "job_description_generation", nil); err != nil {
+	if err := RecordLLMCost(ctx, fs, &userID, tools.DeepSeekFlash, resp, "job_description_generation", nil); err != nil {
 		// Log error but don't fail the operation
 		logger.Error("failed to record LLM cost for job description generation", "error", err)
 	}

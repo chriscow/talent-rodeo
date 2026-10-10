@@ -56,12 +56,17 @@ type Processor struct {
 	cancelFunc context.CancelFunc        // Function to cancel the processing context
 	kv         *cloudflare.KV            // Cloudflare KV client for feature flags
 	settings   ProcessorSettings         // Settings for the processor, including interval and enabled state
+	mode       internal.RuntimeMode
 }
 
 // NewProcessor creates a new subscription processor with the provided Firestore client and logger.
 // If no logger is provided, it creates a default logger that writes to stdout.
 // The Firestore client is required and the function will panic if nil is provided.
-func NewProcessor(fs *internal.FirestoreClient, psh *pusher.Client, logger *slog.Logger) *Processor {
+func NewProcessor(fs *internal.FirestoreClient, psh *pusher.Client, logger *slog.Logger, modes ...internal.RuntimeMode) *Processor {
+	var mode internal.RuntimeMode
+	if len(modes) > 0 {
+		mode = modes[0]
+	}
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 	}
@@ -81,6 +86,7 @@ func NewProcessor(fs *internal.FirestoreClient, psh *pusher.Client, logger *slog
 		psh:      psh,
 		done:     make(chan bool),
 		settings: settings,
+		mode:     mode,
 	}
 }
 
@@ -181,6 +187,24 @@ func (p *Processor) initCloudflareKV() error {
 
 func (p *Processor) RefreshSettings() error {
 	var settings ProcessorSettings
+	if p.mode.Personal {
+		p.settings = ProcessorSettings{Paused: true, Interval: DefaultTickInterval}
+		if p.kv == nil {
+			return fmt.Errorf("personal subscription settings unavailable")
+		}
+		if err := p.kv.Get(SubscriptionProcessorKey, &settings); err != nil {
+			return fmt.Errorf("read personal subscription settings: %w", err)
+		}
+		if settings.Interval <= 0 {
+			settings.Interval = DefaultTickInterval
+		}
+		p.settings = settings
+		return nil
+	}
+	if p.kv == nil {
+		p.settings = DefaultSettings
+		return nil
+	}
 	if err := p.kv.Get(SubscriptionProcessorKey, &settings); err != nil {
 		if err != cloudflare.ErrNotFound {
 			p.logger.Error("failed to get subscription processor settings from Cloudflare KV", "key", SubscriptionProcessorKey, "error", err)
@@ -250,7 +274,9 @@ func (p *Processor) Stop() {
 // Errors during processing of individual criteria are logged and reported to Sentry,
 // but do not stop the processing of other criteria.
 func (p *Processor) process(ctx context.Context) error {
-	p.RefreshSettings()
+	if err := p.RefreshSettings(); err != nil {
+		return err
+	}
 	if p.settings.Paused {
 		p.logger.Info("subscription processor is paused, skipping processing")
 		return nil
@@ -267,7 +293,32 @@ func (p *Processor) process(ctx context.Context) error {
 	p.logger.Info("processing search criteria subscriptions...")
 
 	// Get all criteria
-	allCriteria, err := internal.ListSearchCriteria(ctx, p.fs)
+	var allCriteria []internal.SearchCriteria
+	var err error
+	if p.mode.Personal {
+		owner, ownerErr := internal.GetPersonalSearchOwner(ctx, p.fs, p.mode.UserID)
+		if ownerErr != nil {
+			return ownerErr
+		}
+		if !p.mode.CanMatch(owner, time.Now()) {
+			return nil
+		}
+		subs, subErr := internal.GetSubscriptionsForUser(ctx, p.fs, owner.ID)
+		if subErr != nil {
+			return subErr
+		}
+		for _, sub := range subs {
+			criteria, found, getErr := internal.GetSearchCriteria(ctx, p.fs, sub.CriteriaID)
+			if getErr != nil {
+				return getErr
+			}
+			if found {
+				allCriteria = append(allCriteria, *criteria)
+			}
+		}
+	} else {
+		allCriteria, err = internal.ListSearchCriteria(ctx, p.fs)
+	}
 	if err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"action": "Processor::process: failed to list search criteria",
@@ -286,12 +337,25 @@ func (p *Processor) process(ctx context.Context) error {
 	for _, criteria := range allCriteria {
 
 		// Must have been searched recently
-		if criteria.LastSearchedAt == nil || criteria.LastSearchedAt.Before(twentyFourHoursAgo) {
+		if !p.mode.Personal && (criteria.LastSearchedAt == nil || criteria.LastSearchedAt.Before(twentyFourHoursAgo)) {
 			continue
+		}
+		if p.mode.Personal {
+			owner, ownerErr := internal.GetPersonalSearchOwner(ctx, p.fs, p.mode.UserID)
+			if ownerErr != nil || !p.mode.CanMatch(owner, time.Now()) {
+				continue
+			}
+			searched, searchErr := internal.PersonalSearchCompletedSince(ctx, p.fs, criteria.ID, owner.ID, *owner.PersonalSearchStartedAt, twentyFourHoursAgo)
+			if searchErr != nil {
+				return searchErr
+			}
+			if !searched {
+				continue
+			}
 		}
 
 		// Must not have been published recently
-		if criteria.LastPublishedAt != nil && criteria.LastPublishedAt.After(twoHoursAgo) {
+		if !p.mode.Personal && criteria.LastPublishedAt != nil && criteria.LastPublishedAt.After(twoHoursAgo) {
 			continue
 		}
 
@@ -352,9 +416,14 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 	}
 
 	// Extract user IDs from subscriptions
-	userIDs := make([]string, len(subscribers))
-	for i, sub := range subscribers {
-		userIDs[i] = sub.UserID
+	userIDs := make([]string, 0, len(subscribers))
+	for _, sub := range subscribers {
+		if p.mode.AllowsUser(sub.UserID) {
+			userIDs = append(userIDs, sub.UserID)
+		}
+	}
+	if len(userIDs) == 0 {
+		return nil
 	}
 
 	p.logger.Info("found new jobs for criteria", "id", criteria.ID, "user-count", len(userIDs))
@@ -372,7 +441,11 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 	var activeUsers []*internal.User
 	nowForFilter := time.Now()
 	for _, user := range users {
-		if user.SubscriptionEnd != nil && user.SubscriptionEnd.After(nowForFilter) {
+		if p.mode.Personal {
+			if p.mode.CanMatch(user, nowForFilter) {
+				activeUsers = append(activeUsers, user)
+			}
+		} else if user.SubscriptionEnd != nil && user.SubscriptionEnd.After(nowForFilter) {
 			activeUsers = append(activeUsers, user)
 		} else {
 			p.logger.Info("user subscription has lapsed, skipping for publication", "userID", user.ID)
@@ -380,6 +453,9 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 	}
 
 	if len(activeUsers) == 0 {
+		if p.mode.Personal {
+			return nil
+		}
 		p.logger.Info("no active subscribers found for criteria, skipping publication", "id", criteria.ID)
 		// Update LastPublishedAt for this criteria so we don't check it again immediately
 		publishedTime := time.Now()
@@ -407,7 +483,7 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 				wg.Done()
 			}()
 			p.logger.Info("refreshing user jobs", "user-id", user.ID, "criteria-id", criteria.ID)
-			if err := RefreshUserJobs(ctx, p.fs, p.psh, p.logger, *user, criteria); err != nil {
+			if err := RefreshUserJobs(ctx, p.fs, p.psh, p.logger, *user, criteria, p.mode); err != nil {
 				// Log error but continue with other users
 				p.logger.Error("Error processing jobs for user", "user-id", user.ID, "error", err)
 				internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
@@ -421,6 +497,9 @@ func (p *Processor) processCriteria(ctx context.Context, criteria internal.Searc
 
 	wg.Wait()
 
+	if p.mode.Personal {
+		return nil
+	}
 	// Update LastPublishedAt for this criteria
 	now := time.Now()
 	criteria.LastPublishedAt = &now

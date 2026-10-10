@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
-	"github.com/chriscow/minds/tools"
 	"github.com/google/uuid"
 	"github.com/sashabaranov/go-openai"
+	tools "talent-rodeo/internal/llmtools"
 )
 
 const (
@@ -63,12 +63,17 @@ type ModelPricing struct {
 // GetModelPricing returns the pricing information for a given model
 func GetModelPricing(model string) (ModelPricing, error) {
 	pricing := map[string]ModelPricing{
+		tools.GPT6Luna: {
+			InputCostPer1M:       0.10,
+			OutputCostPer1M:      0.50,
+			CachedInputCostPer1M: 0.01,
+		},
 		tools.GPT41Nano: {
 			InputCostPer1M:       0.10,
 			OutputCostPer1M:      0.40,
 			CachedInputCostPer1M: 0.025,
 		},
-		tools.GPT41Mini: {
+		"gpt-4.1-mini": {
 			InputCostPer1M:       0.40,
 			OutputCostPer1M:      1.60,
 			CachedInputCostPer1M: 0.10,
@@ -93,7 +98,12 @@ func GetModelPricing(model string) (ModelPricing, error) {
 			OutputCostPer1M:      4.40,
 			CachedInputCostPer1M: 0.55,
 		},
-		tools.DeepSeekChat: {
+		tools.DeepSeekFlash: {
+			InputCostPer1M:       0.30,
+			OutputCostPer1M:      1.20,
+			CachedInputCostPer1M: 0.006,
+		},
+		"deepseek-chat": {
 			InputCostPer1M:       0.27,
 			OutputCostPer1M:      1.10,
 			CachedInputCostPer1M: 0.07,
@@ -117,9 +127,21 @@ func IsDiscountPeriod(model string, t time.Time) (bool, int) {
 	// Convert to UTC for discount time checking
 	utc := t.UTC()
 	hour := utc.Hour()
+	if model == tools.DeepSeekFlash {
+		// Flash off-peak is outside weekday 01:00-04:00 and 06:00-10:00 UTC.
+		// DeepSeek also treats Chinese public holidays as off-peak; those dates
+		// cannot be identified from the timestamp alone.
+		weekday := utc.Weekday()
+		peak := weekday != time.Saturday && weekday != time.Sunday &&
+			((hour >= 1 && hour < 4) || (hour >= 6 && hour < 10))
+		if !peak {
+			return true, 50
+		}
+		return false, 0
+	}
 
-	// DeepSeek models have discount periods UTC 16:30-00:30 (next day)
-	if tools.IsDeepSeekModel(model) {
+	// Historical DeepSeek Chat and Reasoner prices used the old UTC window.
+	if model == "deepseek-chat" || model == tools.DeepSeekReasoner {
 		// Between 16:30 (4:30 PM) and 23:59 (11:59 PM) same day
 		// OR between 00:00 (midnight) and 00:30 (12:30 AM) next day
 		isInDiscountPeriod := (hour >= 16 && (utc.Minute() >= 30 || hour > 16)) ||
@@ -127,7 +149,7 @@ func IsDiscountPeriod(model string, t time.Time) (bool, int) {
 
 		if isInDiscountPeriod {
 			switch model {
-			case tools.DeepSeekChat:
+			case "deepseek-chat":
 				return true, 50 // 50% off
 			case tools.DeepSeekReasoner:
 				return true, 75 // 75% off
@@ -206,6 +228,24 @@ func RecordLLMCost(ctx context.Context, fs *FirestoreClient, userID *string, mod
 	)
 	if err != nil {
 		return fmt.Errorf("failed to calculate LLM cost: %w", err)
+	}
+	if response.Usage.PromptTokensDetails != nil {
+		cachedTokens := response.Usage.PromptTokensDetails.CachedTokens
+		if cachedTokens > response.Usage.PromptTokens {
+			cachedTokens = response.Usage.PromptTokens
+		}
+		if cachedTokens > 0 {
+			pricing, err := GetModelPricing(model)
+			if err != nil {
+				return fmt.Errorf("failed to price cached input: %w", err)
+			}
+			savings := float64(cachedTokens) / 1_000_000 *
+				(pricing.InputCostPer1M - pricing.CachedInputCostPer1M)
+			if discountApplied {
+				savings *= 1 - float64(discountPercent)/100
+			}
+			cost -= savings
+		}
 	}
 
 	description := fmt.Sprintf("LLM call - %s (%d input + %d output tokens)",

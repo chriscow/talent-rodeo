@@ -7,8 +7,8 @@ import (
 	"strings"
 	"talent-rodeo/internal/inbox"
 
-	"github.com/chriscow/minds/tools"
 	"github.com/sashabaranov/go-openai"
+	tools "talent-rodeo/internal/llmtools"
 )
 
 // Look into: https://github.com/nlpodyssey/openai-agents-go

@@ -8,9 +8,9 @@ import (
 	"talent-rodeo/assets"
 
 	"github.com/chriscow/minds"
-	"github.com/chriscow/minds/tools"
 	"github.com/chriscow/vapi-go"
 	"github.com/sashabaranov/go-openai"
+	tools "talent-rodeo/internal/llmtools"
 )
 
 // Transcript represents a conversation transcript
@@ -79,13 +79,13 @@ func (t *Transcript) Summarize(ctx context.Context, fs *FirestoreClient, logger 
 	}
 
 	resp := openai.ChatCompletionResponse{}
-	result, err := tools.Ask(ctx, t.String(), tools.WithMessages(msgs), tools.WithModel(tools.DeepSeekChat), tools.WantCompletionResponse(&resp))
+	result, err := tools.Ask(ctx, t.String(), tools.WithMessages(msgs), tools.WithModel(tools.DeepSeekFlash), tools.WantCompletionResponse(&resp))
 	if err != nil {
 		return "", err
 	}
 
 	// Record LLM cost for transcript summarization
-	if err := RecordLLMCost(ctx, fs, &userID, string(tools.DeepSeekChat), resp, "transcript_summarization", nil); err != nil {
+	if err := RecordLLMCost(ctx, fs, &userID, string(tools.DeepSeekFlash), resp, "transcript_summarization", nil); err != nil {
 		logger.Error("failed to record LLM cost for transcript summarization", "error", err)
 	}
 

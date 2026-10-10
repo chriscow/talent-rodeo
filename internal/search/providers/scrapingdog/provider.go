@@ -63,10 +63,21 @@ type Provider struct {
 	apiKey        string
 	fs            *internal.FirestoreClient
 	kvClient      *cloudflare.KV
+	mode          internal.RuntimeMode
 }
 
 // ProviderOption configures the Provider
 type ProviderOption func(*Provider)
+
+// WithFirestore supplies persisted owner state for personal task admission.
+func WithFirestore(fs *internal.FirestoreClient) ProviderOption {
+	return func(p *Provider) { p.fs = fs }
+}
+
+// WithRuntimeMode restricts queued work to the personal search owner when enabled.
+func WithRuntimeMode(mode internal.RuntimeMode) ProviderOption {
+	return func(p *Provider) { p.mode = mode }
+}
 
 // WithBaseURL sets a custom base URL for the provider
 func WithBaseURL(url string) ProviderOption {
@@ -136,7 +147,9 @@ func NewProvider(apiKey string, logger *slog.Logger, opts ...ProviderOption) *Pr
 			"action": "NewProvider: failed to create KV client",
 		})
 		logger.Error("failed to create KV client", "error", err)
-		panic(fmt.Sprintf("failed to create KV client: %v", err))
+		if !provider.mode.Personal {
+			panic(fmt.Sprintf("failed to create KV client: %v", err))
+		}
 	}
 
 	// Set KV client and settings key
@@ -151,7 +164,11 @@ func NewProvider(apiKey string, logger *slog.Logger, opts ...ProviderOption) *Pr
 			DefaultQueueSize,
 			withWorkerLogger(logger),
 			withEventHandler(provider.eventHandler),
+			withWorkerRuntimeMode(provider.mode, provider.fs),
 		)
+	}
+	if provider.mode.Personal {
+		provider.workerManager.Pause(true)
 	}
 
 	return provider
@@ -292,6 +309,15 @@ func (p *Provider) GetJobDetails(ctx context.Context, userID *string, jobID stri
 
 // QueueSearch adds a search to the background processing queue
 func (p *Provider) QueueSearch(ctx context.Context, searchJob internal.SearchTask) error {
+	if p.mode.Personal {
+		owner, err := internal.GetPersonalSearchOwner(ctx, p.fs, p.mode.UserID)
+		if err != nil {
+			return err
+		}
+		if !p.mode.CanMatch(owner, time.Now()) || !internal.PersonalSearchTaskEligible(&searchJob, p.mode.UserID, *owner.PersonalSearchStartedAt) {
+			return fmt.Errorf("search task is outside personal activation")
+		}
+	}
 	userID := ""
 	if searchJob.UserID != nil {
 		userID = *searchJob.UserID
@@ -315,12 +341,19 @@ func (p *Provider) GetQueueDepth(ctx context.Context) (int, error) {
 func (p *Provider) getWorkerSettings(_ context.Context) (*WorkerSettings, error) {
 	// If no KV client configured, return default settings (not paused)
 	if p.kvClient == nil {
+		if p.mode.Personal {
+			return &WorkerSettings{Paused: true}, nil
+		}
 		return &WorkerSettings{Paused: false}, nil
 	}
 
 	// Read the scrapingdog flag from KV - when disabled, workers should be paused
 	var settings WorkerSettings
 	if err := p.kvClient.Get("scrapingdog", &settings); err != nil {
+		if p.mode.Personal {
+			p.logger.Warn("personal worker settings unavailable; remaining paused", "error", err)
+			return &WorkerSettings{Paused: true}, nil
+		}
 		if err == cloudflare.ErrNotFound {
 			// Return default settings if key doesn't exist (enabled by default)
 			return &WorkerSettings{Paused: false}, nil

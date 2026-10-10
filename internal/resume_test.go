@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/chriscow/minds/tools"
+	tools "talent-rodeo/internal/llmtools"
 )
 
 // Helper function to reset mock LLM values

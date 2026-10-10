@@ -112,7 +112,7 @@ func (p *feedbackProcessor) ProcessUserFeedback(ctx context.Context, userID stri
 		ProcessedAt:      time.Now(),
 		FeedbackCount:    len(feedbacks),
 		ProcessorVersion: "v1.0",
-		LLMModel:         "deepseek-chat",
+		LLMModel:         "deepseek-flash",
 	}
 
 	// Collect feedback IDs

@@ -1,0 +1,16 @@
+{{define "title"}}Preparing your resume{{end}}
+
+{{define "page:main"}}
+<main class="container-narrow">
+    <article>
+        <h1>Preparing your resume</h1>
+        <p>We’re reading your resume. Once it is ready, you can write and confirm your search preferences.</p>
+        <progress></progress>
+        <p><a href="/profile">Check progress</a></p>
+    </article>
+</main>
+{{end}}
+
+{{define "page:scripts"}}
+<script>setTimeout(() => { window.location.href = '/profile'; }, 5000);</script>
+{{end}}

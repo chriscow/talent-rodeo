@@ -82,6 +82,10 @@ type User struct {
 	CompletedAt     *time.Time
 	SubscriptionEnd *time.Time
 
+	// PersonalSearchStartedAt is set only after personal preferences are confirmed.
+	// It scopes personal tasks without extending or modifying a paid subscription.
+	PersonalSearchStartedAt *time.Time
+
 	// Trial tracking
 	TrialAppointmentID *string    // ID of the appointment that started the trial
 	TrialStartedAt     *time.Time // When the trial period started

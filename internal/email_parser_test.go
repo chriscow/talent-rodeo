@@ -11,7 +11,7 @@ import (
 
 	"talent-rodeo/internal/inbox"
 
-	"github.com/chriscow/minds/tools"
+	tools "talent-rodeo/internal/llmtools"
 )
 
 // mockEmailParser implements EmailParser for testing

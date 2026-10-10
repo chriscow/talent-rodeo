@@ -151,6 +151,11 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 			return
 		}
 
+		if !app.mode.AllowsUser(userID) {
+			app.sessionManager.Remove(r.Context(), "UserID")
+			http.Error(w, "This instance is restricted to its owner.", http.StatusForbidden)
+			return
+		}
 		// Get user from database
 		user, found, err := internal.GetUser(r.Context(), app.fs, userID)
 		if err != nil {

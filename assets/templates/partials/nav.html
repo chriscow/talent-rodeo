@@ -42,14 +42,23 @@
             </form>
         </li>
         {{end}}
-        {{if .User.IsSuperUser}}
+        {{if and .User.IsSuperUser (not .PersonalMode)}}
         <li>
             <form method="GET" action="/admin" style="margin: 0;">
                 <button type="submit" class="outline secondary" style="margin: 0;">Admin</button>
             </form>
         </li>
         {{end}}
-        {{/* SUNSET: Upgrade/Billing buttons hidden - payments disabled */}}
+        {{if .PersonalMode}}
+        <li><a href="/dashboard">Jobs</a></li>
+        <li><a href="/profile/preferences">Search preferences</a></li>
+        {{else}}
+        {{if eq .User.Tier "free"}}
+        <li><a href="/upgrade" role="button" class="outline secondary">Upgrade to Pro</a></li>
+        {{else if eq .User.Tier "pro"}}
+        <li><a href="/billing" role="button" class="outline secondary">Billing</a></li>
+        {{end}}
+        {{end}}
         <li>
             <form method="POST" action="/logout" style="margin: 0;">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">

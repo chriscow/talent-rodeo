@@ -1,0 +1,60 @@
+{{define "title"}}Your search preferences{{end}}
+
+{{define "page:main"}}
+<main class="container-narrow">
+    <article>
+        <header>
+            <h1>Your search preferences</h1>
+            <p>Tell us what roles to look for. Your search starts only after you review and confirm these choices.</p>
+        </header>
+        {{with index .Form.Errors "preferences"}}<p role="alert">{{.}}</p>{{end}}
+        <form method="post" action="/profile/preferences">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <label for="target-roles">Target roles
+                <textarea id="target-roles" name="target_roles" rows="4" required maxlength="500" aria-describedby="target-roles-help">{{.Form.TargetRoles}}</textarea>
+            </label>
+            <small id="target-roles-help">Enter one role per line, up to five.</small>
+
+            <label for="locations">Locations
+                <input id="locations" name="locations" type="text" required maxlength="300" value="{{.Form.Locations}}" placeholder="Phoenix, AZ; remote in the US">
+            </label>
+
+            <fieldset>
+                <legend>Work arrangements</legend>
+                <label><input type="checkbox" name="work_types" value="remote" {{if .Form.HasWorkType "remote"}}checked{{end}}> Remote</label>
+                <label><input type="checkbox" name="work_types" value="hybrid" {{if .Form.HasWorkType "hybrid"}}checked{{end}}> Hybrid</label>
+                <label><input type="checkbox" name="work_types" value="at_work" {{if .Form.HasWorkType "at_work"}}checked{{end}}> On-site</label>
+            </fieldset>
+
+            <label for="seniority">Seniority
+                <select id="seniority" name="seniority" required>
+                    <option value="">Choose a level</option>
+                    <option value="internship" {{if eq .Form.Seniority "internship"}}selected{{end}}>Internship</option>
+                    <option value="entry_level" {{if eq .Form.Seniority "entry_level"}}selected{{end}}>Entry level</option>
+                    <option value="associate" {{if eq .Form.Seniority "associate"}}selected{{end}}>Associate</option>
+                    <option value="mid_senior_level" {{if eq .Form.Seniority "mid_senior_level"}}selected{{end}}>Mid or senior level</option>
+                    <option value="director" {{if eq .Form.Seniority "director"}}selected{{end}}>Director</option>
+                </select>
+            </label>
+
+            <label for="desired-traits">What would make a role a good fit?
+                <textarea id="desired-traits" name="desired_traits" rows="4" maxlength="2000" placeholder="The responsibilities, team, industry, or culture you want">{{.Form.DesiredTraits}}</textarea>
+            </label>
+            <label for="avoided-traits">What would you like to avoid? (optional)
+                <textarea id="avoided-traits" name="avoided_traits" rows="3" maxlength="2000" placeholder="Leave blank if there are no exclusions">{{.Form.AvoidedTraits}}</textarea>
+            </label>
+            <label for="timezone">Your timezone
+                <input id="timezone" name="timezone" type="text" required value="{{.Form.Timezone}}" placeholder="America/Phoenix" autocomplete="off">
+            </label>
+            <small>Use a timezone such as America/Phoenix or America/New_York.</small>
+
+            <label for="confirm">
+                <input id="confirm" name="confirm" type="checkbox" required>
+                I have reviewed these preferences and want to start my search.
+            </label>
+            {{with index .Form.Errors "confirm"}}<small role="alert">{{.}}</small>{{end}}
+            <button type="submit">Confirm and start search</button>
+        </form>
+    </article>
+</main>
+{{end}}

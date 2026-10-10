@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"talent-rodeo/internal"
 
-	"github.com/chriscow/minds/tools"
 	"github.com/sashabaranov/go-openai"
+	tools "talent-rodeo/internal/llmtools"
 )
 
 // LLMPromptProcessor implements PromptProcessor using the LLM tools
@@ -31,13 +31,13 @@ func (p *LLMPromptProcessor) GeneratePrompt(template []byte, data *NudgeEmailDat
 func (p *LLMPromptProcessor) ProcessPrompt(ctx context.Context, fs *internal.FirestoreClient, logger *slog.Logger, userID string, prompt string) (string, error) {
 	const maxTokens = 2048
 	resp := openai.ChatCompletionResponse{}
-	response, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat), tools.WithMaxTokens(maxTokens), tools.WantCompletionResponse(&resp))
+	response, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekFlash), tools.WithMaxTokens(maxTokens), tools.WantCompletionResponse(&resp))
 	if err != nil {
 		return "", fmt.Errorf("failed to process prompt with LLM: %w", err)
 	}
 
 	// Record LLM cost for nudge email generation
-	if err := internal.RecordLLMCost(ctx, fs, &userID, string(tools.DeepSeekChat), resp, "nudge_email_generation", nil); err != nil {
+	if err := internal.RecordLLMCost(ctx, fs, &userID, string(tools.DeepSeekFlash), resp, "nudge_email_generation", nil); err != nil {
 		logger.Error("failed to record LLM cost for nudge email generation", "error", err)
 	}
 

@@ -24,6 +24,7 @@ const (
 	UserStatusJobSearchScheduled                    // 10
 	UserStatusJobSearchStarted                      // 11
 	UserStatusJobSearchComplete                     // 12
+	UserStatusProfilePreparing                      // 13
 )
 
 // type UserState struct {
@@ -123,6 +124,8 @@ func (s UserStatus) String() string {
 		return "Job Search Started"
 	case UserStatusJobSearchComplete:
 		return "Job Search Complete"
+	case UserStatusProfilePreparing:
+		return "Preparing Profile"
 	default:
 		return "Unknown Status"
 	}
@@ -156,6 +159,8 @@ func (s UserStatus) Description() string {
 		return "The job search has started."
 	case UserStatusJobSearchComplete:
 		return "The job search has been completed."
+	case UserStatusProfilePreparing:
+		return "We are preparing your search preferences from your resume."
 	default:
 		return "No description available for this status."
 	}
@@ -165,6 +170,7 @@ func (s UserStatus) Description() string {
 // This includes processing resume, call analysis, and call completion states
 func (s UserStatus) IsOnboarding() bool {
 	return s == UserStatusProcessingResume ||
+		s == UserStatusProfilePreparing ||
 		s == UserStatusCallScheduled ||
 		s == UserStatusCallStarted ||
 		s == UserStatusCallAnalysisStarted ||

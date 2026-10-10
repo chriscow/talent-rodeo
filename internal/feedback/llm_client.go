@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"talent-rodeo/internal"
 
-	"github.com/chriscow/minds/tools"
+	tools "talent-rodeo/internal/llmtools"
 )
 
 // LLMClient defines the interface for interacting with a Large Language Model
@@ -27,7 +27,7 @@ func NewMindsClient() LLMClient {
 // AnalyzeFeedback uses a structured LLM call to analyze user feedback.
 func (c *mindsClient) AnalyzeFeedback(ctx context.Context, prompt string) (*SemanticFeedbackAnalysis, error) {
 	analysis, err := tools.StructuredAsk[SemanticFeedbackAnalysis](ctx, prompt,
-		tools.WithModel(tools.DeepSeekChat),
+		tools.WithModel(tools.DeepSeekFlash),
 		tools.WithMaxTokens(8192),
 	)
 	if err != nil {
@@ -39,7 +39,7 @@ func (c *mindsClient) AnalyzeFeedback(ctx context.Context, prompt string) (*Sema
 // UpdateSteeringQuery uses a structured LLM call to update a steering query.
 func (c *mindsClient) UpdateSteeringQuery(ctx context.Context, prompt string) (*internal.SteeringQuery, error) {
 	updatedSQ, err := tools.StructuredAsk[internal.SteeringQuery](ctx, prompt,
-		tools.WithModel(tools.DeepSeekChat),
+		tools.WithModel(tools.DeepSeekFlash),
 		tools.WithMaxTokens(2048),
 	)
 	if err != nil {
@@ -51,7 +51,7 @@ func (c *mindsClient) UpdateSteeringQuery(ctx context.Context, prompt string) (*
 // UpdateStatement uses an LLM call to update a user statement based on feedback.
 func (c *mindsClient) UpdateStatement(ctx context.Context, prompt string) (string, error) {
 	response, err := tools.Ask(ctx, prompt,
-		tools.WithModel(tools.DeepSeekChat),
+		tools.WithModel(tools.DeepSeekFlash),
 		tools.WithMaxTokens(4096),
 	)
 	if err != nil {

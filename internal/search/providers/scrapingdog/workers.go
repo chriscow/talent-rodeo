@@ -85,10 +85,21 @@ type WorkerManager struct {
 	shutdownFlag int32
 	eventHandler internal.JobEventHandler
 	pausedFlag   int32 // 0 = not paused, 1 = paused
+	mode         internal.RuntimeMode
+	fs           *internal.FirestoreClient
+	queuedMu     sync.Mutex
+	queuedSearch map[string]struct{}
 }
 
 // WorkerOption configures the WorkerManager
 type WorkerOption func(*WorkerManager)
+
+func withWorkerRuntimeMode(mode internal.RuntimeMode, fs *internal.FirestoreClient) WorkerOption {
+	return func(wm *WorkerManager) {
+		wm.mode = mode
+		wm.fs = fs
+	}
+}
 
 // WithWorkerLogger sets a custom logger for the worker manager
 func withWorkerLogger(logger *slog.Logger) WorkerOption {
@@ -116,6 +127,7 @@ func NewWorkerManager(provider SearchProvider, maxConcurrent int, queueSize int,
 		shutdownCtx:  ctx,
 		shutdownFunc: cancel,
 		shutdownFlag: 0,
+		queuedSearch: make(map[string]struct{}),
 	}
 
 	for _, opt := range opts {
@@ -174,6 +186,39 @@ func (wm *WorkerManager) Shutdown(ctx context.Context) error {
 // QueueTask adds a WorkerTask to the shared queue
 func (wm *WorkerManager) QueueTask(ctx context.Context, task WorkerTask) error {
 	wm.logger.Debug(internal.Cyan("QueueTask"), "task", fmt.Sprintf("%+v", task))
+	if err := wm.admitPersonalTask(ctx, task); err != nil {
+		return err
+	}
+	if atomic.LoadInt32(&wm.shutdownFlag) == 1 {
+		return fmt.Errorf("worker manager is shutting down")
+	}
+	if wm.mode.Personal && task.SearchTask != nil {
+		if task.SearchTask.ID == "" {
+			return fmt.Errorf("personal search task ID is required")
+		}
+		wm.queuedMu.Lock()
+		if _, found := wm.queuedSearch[task.SearchTask.ID]; found {
+			wm.queuedMu.Unlock()
+			return nil
+		}
+		wm.queuedSearch[task.SearchTask.ID] = struct{}{}
+		wm.queuedMu.Unlock()
+		queued := false
+		defer func() {
+			if !queued {
+				wm.forgetPersonalSearch(task.SearchTask.ID)
+			}
+		}()
+		select {
+		case wm.taskQueue <- task:
+			queued = true
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			return fmt.Errorf("task queue is full")
+		}
+	}
 
 	// Check if we're shutting down
 	if atomic.LoadInt32(&wm.shutdownFlag) == 1 {
@@ -273,6 +318,14 @@ func (wm *WorkerManager) startWorker(ctx context.Context, workerID int) {
 			}
 
 			// Process the task
+			if err := wm.admitPersonalTask(ctx, task); err != nil {
+				logger.Warn("skipping ineligible personal task", "error", err)
+				if wm.mode.Personal && task.SearchTask != nil {
+					wm.forgetPersonalSearch(task.SearchTask.ID)
+				}
+				<-wm.semaphore
+				continue
+			}
 			startTime := time.Now()
 			wm.processWorkerTask(ctx, task)
 
@@ -291,9 +344,33 @@ func (wm *WorkerManager) startWorker(ctx context.Context, workerID int) {
 	}
 }
 
+func (wm *WorkerManager) admitPersonalTask(ctx context.Context, task WorkerTask) error {
+	if !wm.mode.Personal {
+		return nil
+	}
+	owner, err := internal.GetPersonalSearchOwner(ctx, wm.fs, wm.mode.UserID)
+	if err != nil {
+		return err
+	}
+	if !wm.mode.CanMatch(owner, time.Now()) {
+		return fmt.Errorf("personal owner is not ready for matching")
+	}
+	searchTask := task.SearchTask
+	if task.JobDetailTask != nil {
+		searchTask = &task.JobDetailTask.SearchTask
+	}
+	if !internal.PersonalSearchTaskEligible(searchTask, wm.mode.UserID, *owner.PersonalSearchStartedAt) {
+		return fmt.Errorf("task is outside personal activation")
+	}
+	return nil
+}
+
 // processWorkerTask dispatches a WorkerTask by type
 func (wm *WorkerManager) processWorkerTask(ctx context.Context, task WorkerTask) {
 	wm.logger.Debug(internal.Cyan("processWorkerTask"), "task", fmt.Sprintf("%+v", task))
+	if wm.mode.Personal && task.SearchTask != nil {
+		defer wm.forgetPersonalSearch(task.SearchTask.ID)
+	}
 
 	if task.SearchTask != nil {
 		wm.handleSearchTask(ctx, task)
@@ -301,6 +378,12 @@ func (wm *WorkerManager) processWorkerTask(ctx context.Context, task WorkerTask)
 	if task.JobDetailTask != nil {
 		wm.handleJobDetailTask(ctx, task)
 	}
+}
+
+func (wm *WorkerManager) forgetPersonalSearch(id string) {
+	wm.queuedMu.Lock()
+	delete(wm.queuedSearch, id)
+	wm.queuedMu.Unlock()
 }
 
 // handleSearchTask Worsses a SearchTask (pagination, enqueues job detail tasks)
@@ -326,6 +409,10 @@ func (wm *WorkerManager) handleSearchTask(ctx context.Context, wt WorkerTask) {
 		searchJob.Criteria.MaxPages = internal.DefaultMaxPages
 	}
 	for page := searchJob.PagesCompleted + 1; page <= searchJob.Criteria.MaxPages; page++ {
+		if err := wm.admitPersonalTask(ctx, wt); err != nil {
+			logger.Warn("stopping ineligible personal search", "error", err)
+			return
+		}
 		select {
 		case <-ctx.Done():
 			logger.Warn("context cancelled during search task", "criteriaID", searchJob.Criteria.ID)
@@ -420,6 +507,10 @@ func (wm *WorkerManager) handleJobDetailTask(ctx context.Context, wt WorkerTask)
 		return
 	}
 
+	if err := wm.admitPersonalTask(ctx, wt); err != nil {
+		logger.Warn("skipping ineligible personal job detail", "error", err)
+		return
+	}
 	jobDetail, err := wm.provider.GetJobDetails(ctx, wt.UserID, task.JobListing.ProviderJobID)
 	if err != nil {
 		logger.Error("failed to fetch job details", "jobID", task.JobListing.ProviderJobID, "error", err)

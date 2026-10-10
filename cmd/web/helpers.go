@@ -10,6 +10,7 @@ import (
 
 func (app *application) newTemplateData(r *http.Request) map[string]any {
 	data := map[string]any{
+		"PersonalMode":  app.mode.Personal,
 		"CSRFToken":     nosurf.Token(r),
 		"TestingMode":   os.Getenv("TESTING_MODE") == "true",
 		"PusherKey":     os.Getenv("PUSHER_KEY"),
@@ -52,7 +53,7 @@ func (app *application) backgroundTask(r *http.Request, fn func() error) {
 }
 
 func (app *application) sendNotification(templateName string, data map[string]any) error {
-	if app.config.notifications.email == "" {
+	if app.mode.Personal || app.config.notifications.email == "" {
 		app.logger.Debug("notification email not configured, skipping notification")
 		return nil
 	}

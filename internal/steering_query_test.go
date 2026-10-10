@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/chriscow/minds/tools"
 	"github.com/chriscow/vapi-go"
+	tools "talent-rodeo/internal/llmtools"
 )
 
 func TestSteeringQueryFromTranscript(t *testing.T) {

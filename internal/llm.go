@@ -4,8 +4,8 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/chriscow/minds/tools"
 	"github.com/sashabaranov/go-openai"
+	tools "talent-rodeo/internal/llmtools"
 )
 
 func AskBool(ctx context.Context, prompt string, fs *FirestoreClient, userID *string) (bool, error) {

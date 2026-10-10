@@ -9,7 +9,7 @@ import (
 	"talent-rodeo/assets"
 	"talent-rodeo/internal"
 
-	"github.com/chriscow/minds/tools"
+	tools "talent-rodeo/internal/llmtools"
 )
 
 type analyzer struct {

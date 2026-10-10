@@ -66,6 +66,7 @@ type SearchResultProcessor struct {
 	logger        *slog.Logger
 	pusherClient  *pusher.Client
 	eventDispatch JobEventHandler
+	mode          RuntimeMode
 
 	queue     chan ExtractionTask
 	stopCh    chan struct{}
@@ -80,7 +81,7 @@ type SearchResultProcessor struct {
 	progressTrackers sync.Map
 }
 
-func NewSearchResultProcessor(fs *FirestoreClient, logger *slog.Logger, psh *pusher.Client, dispatch JobEventHandler) *SearchResultProcessor {
+func NewSearchResultProcessor(fs *FirestoreClient, logger *slog.Logger, psh *pusher.Client, dispatch JobEventHandler, modes ...RuntimeMode) *SearchResultProcessor {
 	if fs == nil {
 		panic("firestore client cannot be nil")
 	}
@@ -88,15 +89,62 @@ func NewSearchResultProcessor(fs *FirestoreClient, logger *slog.Logger, psh *pus
 		panic("logger cannot be nil")
 	}
 	logger = logger.With("pkg", "SearchResultProcessor")
+	var mode RuntimeMode
+	if len(modes) > 0 {
+		mode = modes[0]
+	}
 	return &SearchResultProcessor{
 		fs:            fs,
 		logger:        logger,
 		pusherClient:  psh,
 		eventDispatch: dispatch,
+		mode:          mode,
 		queue:         make(chan ExtractionTask, JobDetailExtractionQueueSize),
 		stopCh:        make(chan struct{}),
 		stoppedCh:     make(chan struct{}),
 	}
+}
+
+func (s *SearchResultProcessor) admitPersonalSearch(ctx context.Context, task SearchTask, userID *string) bool {
+	if !s.mode.Personal {
+		return true
+	}
+	if userID == nil || !s.mode.AllowsUser(*userID) {
+		return false
+	}
+	owner, err := GetPersonalSearchOwner(ctx, s.fs, s.mode.UserID)
+	if err != nil {
+		s.logger.Warn("cannot admit personal search", "searchTaskID", task.ID, "error", err)
+		return false
+	}
+	return s.mode.CanMatch(owner, time.Now()) &&
+		PersonalSearchTaskEligible(&task, s.mode.UserID, *owner.PersonalSearchStartedAt)
+}
+
+func (s *SearchResultProcessor) admitPersonalExtraction(ctx context.Context, task ExtractionTask) bool {
+	if !s.mode.Personal {
+		return true
+	}
+	if task.UserID == nil || !s.mode.AllowsUser(*task.UserID) || task.SearchTaskID == "" {
+		return false
+	}
+	doc, err := s.fs.Collection(SearchTaskCollection).Doc(task.SearchTaskID).Get(ctx)
+	if err != nil {
+		s.logger.Warn("cannot read personal extraction task", "searchTaskID", task.SearchTaskID, "error", err)
+		return false
+	}
+	var searchTask SearchTask
+	if err := doc.DataTo(&searchTask); err != nil {
+		s.logger.Warn("cannot decode personal extraction task", "searchTaskID", task.SearchTaskID, "error", err)
+		return false
+	}
+	return s.admitPersonalSearch(ctx, searchTask, task.UserID)
+}
+
+func (s *SearchResultProcessor) linkJobToTask(ctx context.Context, searchTaskID, jobID string) error {
+	return s.fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		return LinkJobDetailToSearchTaskTx(ctx, s.fs, tx, searchTaskID, jobID)
+	})
 }
 
 // Start launches worker goroutines and periodic queue monitoring/requeueing.
@@ -147,6 +195,9 @@ func (s *SearchResultProcessor) worker() {
 			if !ok {
 				return
 			}
+			if !s.admitPersonalExtraction(context.Background(), task) {
+				continue
+			}
 			updatedTask, err := s.processJobDetail(task)
 			if err != nil {
 				s.logger.Error("failed to extract job detail data (async)", "error", err, "jobID", task.JobDetail.ID)
@@ -156,7 +207,9 @@ func (s *SearchResultProcessor) worker() {
 				continue
 			}
 			s.saveExtractedJobDetail(context.Background(), &updatedTask.JobDetail)
-			s.notifyUserExtractProgress(*updatedTask)
+			if s.admitPersonalExtraction(context.Background(), *updatedTask) {
+				s.notifyUserExtractProgress(*updatedTask)
+			}
 
 		case <-s.stopCh:
 			return
@@ -299,6 +352,9 @@ func (s *SearchResultProcessor) periodicRequeue() {
 
 // requeueUnprocessedJobDetails fetches JobDetails with nil ExtractedData and queues them.
 func (s *SearchResultProcessor) requeueUnprocessedJobDetails() {
+	if s.mode.Personal {
+		return // The global backlog may contain jobs from historical users.
+	}
 	if s.fs == nil {
 		s.logger.Error("firestore client is nil, cannot requeue unprocessed job details")
 		return
@@ -332,6 +388,9 @@ func (s *SearchResultProcessor) tryQueueExtractionTask(task ExtractionTask) bool
 
 // OnJobDetail runs the transaction block synchronously, then queues extraction async.
 func (s *SearchResultProcessor) OnJobDetail(jobSearch SearchTask, listing JobListing, jobDetail JobDetail, userID *string) {
+	if !s.admitPersonalSearch(context.Background(), jobSearch, userID) {
+		return
+	}
 	if s.fs == nil {
 		s.logger.Error("firestore client is nil, cannot process job detail")
 		return
@@ -395,6 +454,9 @@ func (s *SearchResultProcessor) HandleDuplicateAndSave(ctx context.Context, jobS
 		s.logger.Debug("job detail already exists in database", "jobID", jobDetail.ID)
 		// If it has been extracted or is a known duplicate, we're done.
 		if existingDetail.ExtractedData != nil || existingDetail.CanonicalJobID != nil {
+			if s.mode.Personal {
+				return false, s.linkJobToTask(ctx, jobSearch.ID, jobDetail.ID)
+			}
 			return false, nil
 		}
 		// Otherwise, it's an existing job that needs processing; overwrite our in-memory one.
@@ -468,6 +530,9 @@ func (s *SearchResultProcessor) HandleDuplicateAndSave(ctx context.Context, jobS
 		if err := LinkJobDetailToSearchTaskTx(ctx, s.fs, tx, jobSearch.ID, jobDetail.ID); err != nil {
 			return fmt.Errorf("failed to add job detail to search task: %w", err)
 		}
+		if s.mode.Personal {
+			return nil
+		}
 		return LinkJobDetailToCriteriaTx(ctx, s.fs, tx, jobSearch.Criteria.ID, jobDetail.ID)
 	})
 
@@ -507,6 +572,9 @@ func (s *SearchResultProcessor) saveAndLinkJobDetail(ctx context.Context, jobSea
 			return fmt.Errorf("failed to add job detail to search task: %w", err)
 		}
 
+		if s.mode.Personal {
+			return nil
+		}
 		if err := LinkJobDetailToCriteriaTx(ctx, s.fs, tx, jobSearch.Criteria.ID, jobDetail.ID); err != nil {
 			s.logger.Error("failed to link job detail to criteria", "error", err, "jobID", jobDetail.ID, "criteriaID", jobSearch.Criteria.ID)
 			SentryReportError(ctx, err, sentry.LevelError, map[string]string{
@@ -521,6 +589,9 @@ func (s *SearchResultProcessor) saveAndLinkJobDetail(ctx context.Context, jobSea
 }
 
 func (s *SearchResultProcessor) OnSearchStarted(jobSearch SearchTask, userID *string) {
+	if !s.admitPersonalSearch(context.Background(), jobSearch, userID) {
+		return
+	}
 	s.logger.Debug("OnSearchStarted", "criteria", jobSearch.Criteria.ID)
 
 	if userID != nil && *userID != "" {
@@ -541,6 +612,9 @@ func (s *SearchResultProcessor) OnSearchStarted(jobSearch SearchTask, userID *st
 
 // search.JobEventHandler implementation
 func (s *SearchResultProcessor) OnJobListing(jobSearch *SearchTask, job JobListing, userID *string) bool {
+	if jobSearch == nil || !s.admitPersonalSearch(context.Background(), *jobSearch, userID) {
+		return false
+	}
 	// Use a background context for the link operation, as it should not block the main search flow
 	ctx := context.Background()
 
@@ -559,14 +633,20 @@ func (s *SearchResultProcessor) OnJobListing(jobSearch *SearchTask, job JobListi
 
 	if exists {
 		jobSearch.DuplicateListings++
-		// The job already exists, but we need to ensure it's linked to the current search criteria.
+		// A known detail still belongs to this search task, so personal matching can see it.
 		err := s.fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+			if s.mode.Personal {
+				return LinkJobDetailToSearchTaskTx(ctx, s.fs, tx, jobSearch.ID, job.ID)
+			}
 			return LinkJobDetailToCriteriaTx(ctx, s.fs, tx, jobSearch.Criteria.ID, job.ID)
 		})
 
 		// If the link already exists, that's fine. Any other error should be logged.
 		if err != nil && status.Code(err) != codes.AlreadyExists {
-			s.logger.Error("failed to link existing job detail to criteria", "jobID", job.ID, "criteriaID", jobSearch.Criteria.ID, "error", err)
+			s.logger.Error("failed to link existing job detail", "jobID", job.ID, "criteriaID", jobSearch.Criteria.ID, "searchTaskID", jobSearch.ID, "error", err)
+			if s.mode.Personal {
+				return true // Retry through OnJobDetail so the owner task can retain the job.
+			}
 		}
 		// Job already exists, no need to fetch details again.
 		return false
@@ -577,6 +657,9 @@ func (s *SearchResultProcessor) OnJobListing(jobSearch *SearchTask, job JobListi
 }
 
 func (s *SearchResultProcessor) OnPageComplete(jobSearch SearchTask, page int, jobsFound int, errors []error, userID *string) {
+	if !s.admitPersonalSearch(context.Background(), jobSearch, userID) {
+		return
+	}
 	if s.fs == nil {
 		s.logger.Error("firestore client is nil, cannot process page completion")
 		return
@@ -601,11 +684,17 @@ func (s *SearchResultProcessor) OnPageComplete(jobSearch SearchTask, page int, j
 }
 
 func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJobs int, errors []error, userID *string) {
+	if !s.admitPersonalSearch(context.Background(), jobSearch, userID) {
+		return
+	}
 	if s.fs == nil {
 		s.logger.Error("firestore client is nil, cannot process search completion")
 		return
 	}
 	s.logger.Info("OnSearchCompleted", "jobID", jobSearch.ID, "criteria", jobSearch.Criteria.ID, "totalJobs", totalJobs, "errors", errors)
+	if !s.updateSearchAndCriteria(jobSearch, errors) {
+		return
+	}
 
 	if val, ok := s.progressTrackers.Load(jobSearch.ID); ok {
 		progress := val.(*SearchProgress)
@@ -623,14 +712,13 @@ func (s *SearchResultProcessor) OnSearchCompleted(jobSearch SearchTask, totalJob
 		}
 	}
 
-	s.updateSearchAndCriteria(jobSearch, errors)
 }
 
 // updateSearchAndCriteria is an untestable wrapper for a Firestore transaction.
-func (s *SearchResultProcessor) updateSearchAndCriteria(jobSearch SearchTask, errors []error) {
+func (s *SearchResultProcessor) updateSearchAndCriteria(jobSearch SearchTask, errors []error) bool {
 	if s.fs == nil {
 		s.logger.Error("firestore client is nil, cannot process search completion")
-		return
+		return false
 	}
 
 	// join all the errors into a single string
@@ -647,6 +735,9 @@ func (s *SearchResultProcessor) updateSearchAndCriteria(jobSearch SearchTask, er
 		jobSearch.Status = SearchTaskStatusCompleted
 		if err := UpdateSearchTaskTx(ctx, s.fs, tx, &jobSearch); err != nil {
 			return fmt.Errorf("failed to update search task in transaction: %w", err)
+		}
+		if s.mode.Personal {
+			return nil
 		}
 
 		criteria := jobSearch.Criteria
@@ -665,7 +756,9 @@ func (s *SearchResultProcessor) updateSearchAndCriteria(jobSearch SearchTask, er
 			"errors":     strconv.Itoa(len(errors)),
 		})
 		s.logger.Error("failed to update search task and criteria", "error", err)
+		return false
 	}
+	return true
 }
 
 func (s *SearchResultProcessor) OnJobDetailExtractionComplete(task SearchTask, jobDetail JobDetail, userID *string) {
@@ -676,6 +769,9 @@ func (s *SearchResultProcessor) OnJobDetailExtractionComplete(task SearchTask, j
 }
 
 func (s *SearchResultProcessor) OnAllExtractionsComplete(task SearchTask, totalJobs int, userID *string) {
+	if s.mode.Personal && (userID == nil || !s.mode.AllowsUser(*userID)) {
+		return
+	}
 	if userID != nil && *userID != "" {
 		s.logger.Info("all extractions complete, sending redirect", "searchTaskID", task.ID, "user", *userID)
 		if s.pusherClient != nil {

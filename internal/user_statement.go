@@ -18,9 +18,9 @@ import (
 	"talent-rodeo/assets"
 
 	"github.com/chriscow/minds"
-	"github.com/chriscow/minds/tools"
 	"github.com/getsentry/sentry-go"
 	"github.com/sashabaranov/go-openai"
+	tools "talent-rodeo/internal/llmtools"
 )
 
 const (
@@ -38,7 +38,7 @@ type UserStatementVersion struct {
 	StatementHash string // SHA-256 hash for change detection
 
 	// Generation Metadata
-	GeneratedBy      string // "transcript", "feedback", "followup", "manual"
+	GeneratedBy      string // "transcript", "feedback", "followup", "manual", "profile"
 	GenerationReason string // Human-readable reason for change
 	PromptFile       string // Versioned prompt file used
 	PromptVersion    string // Extracted version from filename
@@ -64,6 +64,100 @@ type UserStatementVersion struct {
 	DependentVersionIDs []string // Versions that depend on this one
 	SystemType          string   // transcript, feedback, inbox, followup
 	IsReplacedVersion   bool     // True if this version was replaced during cascade
+}
+
+// RegenerateProfileStatement recreates a written-preferences statement from its
+// saved resume and form inputs, without inventing transcript or interview data.
+func RegenerateProfileStatement(version UserStatementVersion) (string, error) {
+	if version.GeneratedBy != "profile" || version.SourceData["source_type"] != "profile" {
+		return "", fmt.Errorf("statement version is not sourced from a profile")
+	}
+	resumeText, ok := version.SourceData["resume_raw_text"].(string)
+	if !ok || strings.TrimSpace(resumeText) == "" {
+		return "", fmt.Errorf("profile source has no resume text")
+	}
+	preferences, ok := version.SourceData["preferences"].(map[string]any)
+	if !ok {
+		return "", fmt.Errorf("profile source has no preferences")
+	}
+	roles, err := profileSourceStrings(preferences["target_roles"])
+	if err != nil {
+		return "", fmt.Errorf("decode target roles: %w", err)
+	}
+	workTypeNames, err := profileSourceStrings(preferences["work_types"])
+	if err != nil {
+		return "", fmt.Errorf("decode work arrangements: %w", err)
+	}
+	workTypes := make([]WorkType, 0, len(workTypeNames))
+	for _, name := range workTypeNames {
+		workTypes = append(workTypes, WorkType(name))
+	}
+	p := PersonalPreferences{
+		TargetRoles: roles, WorkTypes: workTypes,
+		Locations:     profileSourceString(preferences, "locations"),
+		Seniority:     ExperienceLevel(profileSourceString(preferences, "seniority")),
+		DesiredTraits: profileSourceString(preferences, "desired_traits"),
+		AvoidedTraits: profileSourceString(preferences, "avoided_traits"),
+		Timezone:      profileSourceString(preferences, "timezone"),
+	}
+	if err := p.Validate(); err != nil {
+		return "", fmt.Errorf("invalid profile source: %w", err)
+	}
+	resume := Resume{RawText: resumeText}
+	if value := profileSourceOptionalString(version.SourceData["resume_annotated"]); value != nil {
+		resume.Annotated = value
+	}
+	if value := profileSourceOptionalString(version.SourceData["resume_search_analysis"]); value != nil {
+		resume.SearchAnalysis = value
+	}
+	return personalStatement(resume, p), nil
+}
+
+func profileSourceString(source map[string]any, key string) string {
+	switch value := source[key].(type) {
+	case string:
+		return value
+	case ExperienceLevel:
+		return string(value)
+	default:
+		return ""
+	}
+}
+
+func profileSourceOptionalString(value any) *string {
+	switch source := value.(type) {
+	case string:
+		return &source
+	case *string:
+		return source
+	default:
+		return nil
+	}
+}
+
+func profileSourceStrings(value any) ([]string, error) {
+	switch items := value.(type) {
+	case []string:
+		return append([]string(nil), items...), nil
+	case []WorkType:
+		result := make([]string, 0, len(items))
+		for _, item := range items {
+			result = append(result, string(item))
+		}
+		return result, nil
+	case []any:
+		result := make([]string, 0, len(items))
+		for _, item := range items {
+			text, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf("non-string source value")
+			}
+			result = append(result, text)
+		}
+		return result, nil
+	default:
+		return nil, fmt.Errorf("missing string list")
+	}
 }
 
 // TransformationStep represents a single step in the statement generation process
@@ -773,7 +867,7 @@ func generateStatementFromTranscript(ctx context.Context, fs *FirestoreClient, t
 	}
 
 	// Record LLM cost for user statement generation
-	if err := RecordLLMCost(ctx, fs, &userID, tools.DeepSeekChat, resp, "user_statement_generation", nil); err != nil {
+	if err := RecordLLMCost(ctx, fs, &userID, tools.DeepSeekFlash, resp, "user_statement_generation", nil); err != nil {
 		// Log error but don't fail the operation
 		slog.Warn("Failed to record LLM cost for user statement generation", "error", err, "userID", userID)
 	}
@@ -1278,13 +1372,13 @@ func generateStatementHash(statementText string) string {
 }
 
 // getModelForContext returns the appropriate LLM model for the current context
-// Checks for test context override, otherwise uses DeepSeekChat
+// Checks for test context override, otherwise uses DeepSeekFlash.
 func getModelForContext(ctx context.Context) string {
 	// Check if we're in a test context with mock model preference
 	if ctx.Value("test_use_mock_model") != nil {
 		return tools.MockModel
 	}
-	return tools.DeepSeekChat
+	return tools.DeepSeekFlash
 }
 
 // RegenerateStatement recreates a statement version from its source data with a new prompt
@@ -2234,9 +2328,9 @@ func EnhanceStatementWithInboxFeedback(ctx context.Context, fs *FirestoreClient,
 		StepNumber:         len(transformationSteps) + 1,
 		TransformationType: "inbox_feedback_integration",
 		InputData: map[string]any{
-			"previous_statement":  previousVersion.StatementText,
-			"email_content":       emailContent,
-			"adjustment_request":  adjustmentRequest,
+			"previous_statement": previousVersion.StatementText,
+			"email_content":      emailContent,
+			"adjustment_request": adjustmentRequest,
 		},
 		OutputData: map[string]any{
 			"enhanced_statement": enhancedText,

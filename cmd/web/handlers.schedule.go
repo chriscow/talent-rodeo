@@ -178,12 +178,9 @@ func (app *application) createAppointment(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Create simple call request for webhook
-	callRequest := struct {
-		CustomerID string `json:"customer_id"`
-	}{
-		CustomerID: user.ID,
-	}
+	// The task carries only lookup identifiers. The outbound handler reads the
+	// persisted appointment before making a call.
+	callRequest := outboundCallRequest{AppointmentID: appointment.ID, UserID: user.ID}
 
 	body, err := json.Marshal(callRequest)
 	if err != nil {
@@ -205,11 +202,16 @@ func (app *application) createAppointment(w http.ResponseWriter, r *http.Request
 
 	// Create webhook payload
 	payload := handlers.WebhookPayload{
-		URL:    buildWebhookURL(os.Getenv("VAPI_START_CALL_PATH")),
-		Method: "POST",
-		Body:   body,
+		URL:     buildWebhookURL(os.Getenv("VAPI_START_CALL_PATH")),
+		Method:  "POST",
+		Headers: map[string]string{outboundSignatureHeader: signOutboundCall(body, app.config.session.secretKey)},
+		Body:    body,
 	}
-	payloadBytes, _ := json.Marshal(payload)
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		app.serverError(w, r, fmt.Errorf("marshal scheduled call task: %w", err))
+		return
+	}
 
 	_, err = app.processor.CreateAndEnqueueTask(r.Context(), handlers.TaskTypeWebhookCall, "initial-call", payloadBytes, scheduledTime.UTC())
 	if err != nil {
@@ -412,7 +414,7 @@ func (app *application) callNow(w http.ResponseWriter, r *http.Request) {
 
 	app.logger.Debug("handlers.schedule::callNow", "appointment", appointment)
 
-	body, err := json.Marshal(appointment)
+	body, err := json.Marshal(outboundCallRequest{AppointmentID: appointment.ID, UserID: user.ID})
 	if err != nil {
 		app.logger.Error("Failed to marshal call request", "error", err)
 		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
@@ -432,11 +434,16 @@ func (app *application) callNow(w http.ResponseWriter, r *http.Request) {
 
 	// Create webhook payload
 	payload := handlers.WebhookPayload{
-		URL:    buildWebhookURL(os.Getenv("VAPI_START_CALL_PATH")),
-		Method: "POST",
-		Body:   body,
+		URL:     buildWebhookURL(os.Getenv("VAPI_START_CALL_PATH")),
+		Method:  "POST",
+		Headers: map[string]string{outboundSignatureHeader: signOutboundCall(body, app.config.session.secretKey)},
+		Body:    body,
 	}
-	payloadBytes, _ := json.Marshal(payload)
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		app.serverError(w, r, fmt.Errorf("marshal immediate call task: %w", err))
+		return
+	}
 
 	_, err = app.processor.CreateAndEnqueueTask(r.Context(), handlers.TaskTypeWebhookCall, "initial-call", payloadBytes, scheduledTime)
 	if err != nil {

@@ -9,8 +9,8 @@ import (
 	"talent-rodeo/assets"
 
 	"github.com/chriscow/minds"
-	"github.com/chriscow/minds/tools"
 	"github.com/sashabaranov/go-openai"
+	tools "talent-rodeo/internal/llmtools"
 )
 
 const (
@@ -96,16 +96,14 @@ func (sq SteeringQuery) Validate() error {
 		return fmt.Errorf("MoveToward cannot be empty")
 	}
 
-	if sq.MoveAway == "" {
-		return fmt.Errorf("MoveAway cannot be empty")
-	}
-
 	if sq.RerankQuery == "" {
 		return fmt.Errorf("rerank query cannot be empty")
 	}
 
-	// Validate ForceAway only if MoveAway is set
-	if sq.ForceAway == 0 || sq.ForceAway > 1 {
+	if sq.MoveAway == "" && sq.ForceAway != 0 {
+		return fmt.Errorf("ForceAway must be zero when MoveAway is empty")
+	}
+	if sq.MoveAway != "" && (sq.ForceAway <= 0 || sq.ForceAway > 1) {
 		return fmt.Errorf("ForceAway must be between 0.0 and 1.0, got %f", sq.ForceAway)
 	}
 
@@ -172,7 +170,10 @@ func (q *SteeringQuery) GetDenseVector(ctx context.Context, p *Pinecone, model P
 	}
 
 	// Prepare input texts for embedding
-	texts := []string{q.MoveToward, q.MoveAway}
+	texts := []string{q.MoveToward}
+	if q.MoveAway != "" {
+		texts = append(texts, q.MoveAway)
+	}
 
 	// Request embeddings for MoveToward and MoveAway
 	embedResp, err := p.CreateEmbeddings(ctx, texts, model, PineconeInputTypeQuery)
@@ -185,11 +186,14 @@ func (q *SteeringQuery) GetDenseVector(ctx context.Context, p *Pinecone, model P
 
 	// Extract vectors from response
 	towardVec := *embedResp.Data[0].Values
-	awayVec := *embedResp.Data[1].Values
 
 	// Initialize the steering vector from MoveToward
 	steeredVec := make([]float32, len(towardVec))
 	copy(steeredVec, towardVec)
+	if q.MoveAway == "" {
+		return normalizeVector(steeredVec), nil
+	}
+	awayVec := *embedResp.Data[1].Values
 
 	// Normalize the away vector to get a unit vector
 	awayUnit := normalizeVector(awayVec)
@@ -250,7 +254,7 @@ func GenerateSteeringQuery(ctx context.Context, resume Resume, transcript Transc
 
 	resp := openai.ChatCompletionResponse{}
 	options := []tools.Option{
-		tools.WithModel(tools.DeepSeekChat),
+		tools.WithModel(tools.DeepSeekFlash),
 		tools.WithMaxTokens(8192),
 		tools.WithMessages(messages),
 		tools.WantCompletionResponse(&resp),
@@ -269,7 +273,7 @@ func GenerateSteeringQuery(ctx context.Context, resume Resume, transcript Transc
 
 	// TODO: Record LLM cost for steering query generation - we don't have userID or fs here
 	// This function is called from various contexts, would need to thread these through
-	slog.Default().Debug("steering query generation LLM call", "promptTokens", resp.Usage.PromptTokens, "completionTokens", resp.Usage.CompletionTokens, "model", tools.DeepSeekChat)
+	slog.Default().Debug("steering query generation LLM call", "promptTokens", resp.Usage.PromptTokens, "completionTokens", resp.Usage.CompletionTokens, "model", tools.DeepSeekFlash)
 
 	sq, err := extractSteeringQuery(ctx, origResp)
 	if err != nil {
@@ -340,23 +344,23 @@ Extract the data below into a JSON structure:
 %s`
 
 		resp1 := openai.ChatCompletionResponse{}
-		query, err = tools.StructuredAsk[SteeringQuery](ctx, fmt.Sprintf(prompt, err.Error(), string(jsonB), data), tools.WithModel(tools.GPT41Mini), tools.WantCompletionResponse(&resp1))
+		query, err = tools.StructuredAsk[SteeringQuery](ctx, fmt.Sprintf(prompt, err.Error(), string(jsonB), data), tools.WithModel(tools.GPT6Luna), tools.WantCompletionResponse(&resp1))
 		if err != nil {
 			return nil, fmt.Errorf("LLM failed to parse steering query: %w", err)
 		}
 
 		// TODO: Record LLM cost for steering query parsing - we don't have userID or fs here
-		slog.Default().Debug("steering query parsing LLM call (first attempt)", "promptTokens", resp1.Usage.PromptTokens, "completionTokens", resp1.Usage.CompletionTokens, "model", tools.GPT41Mini)
+		slog.Default().Debug("steering query parsing LLM call (first attempt)", "promptTokens", resp1.Usage.PromptTokens, "completionTokens", resp1.Usage.CompletionTokens, "model", tools.GPT6Luna)
 
 		if err := query.Validate(); err != nil {
 			resp2 := openai.ChatCompletionResponse{}
-			query, err = tools.StructuredAsk[SteeringQuery](ctx, fmt.Sprintf(prompt, err.Error(), string(jsonB), data), tools.WithModel(tools.GPT41Mini), tools.WantCompletionResponse(&resp2))
+			query, err = tools.StructuredAsk[SteeringQuery](ctx, fmt.Sprintf(prompt, err.Error(), string(jsonB), data), tools.WithModel(tools.GPT6Luna), tools.WantCompletionResponse(&resp2))
 			if err != nil {
 				return nil, fmt.Errorf("LLM failed to parse steering query: %w", err)
 			}
 
 			// TODO: Record LLM cost for steering query parsing - we don't have userID or fs here
-			slog.Default().Debug("steering query parsing LLM call (second attempt)", "promptTokens", resp2.Usage.PromptTokens, "completionTokens", resp2.Usage.CompletionTokens, "model", tools.GPT41Mini)
+			slog.Default().Debug("steering query parsing LLM call (second attempt)", "promptTokens", resp2.Usage.PromptTokens, "completionTokens", resp2.Usage.CompletionTokens, "model", tools.GPT6Luna)
 		}
 	}
 

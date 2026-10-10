@@ -122,8 +122,8 @@ func NewMockScrapingDogServer() *MockScrapingDogServer {
 			"path", r.URL.Path,
 			"query", r.URL.RawQuery)
 
-		// Check if this is a job details request by exact path match
-		if r.URL.Path == "/linkedinjobs" {
+		// Search and overview share the /jobs endpoint.
+		if r.URL.Query().Get("job_id") != "" {
 			jobID := r.URL.Query().Get("job_id")
 			m.requestedJobID = jobID
 			m.detailsRetrieved++

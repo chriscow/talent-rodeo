@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"talent-rodeo/internal"
 	"talent-rodeo/internal/response"
+	"time"
 
 	"github.com/getsentry/sentry-go"
 )
@@ -24,6 +25,28 @@ func (app *application) showProfilePage(w http.ResponseWriter, r *http.Request) 
 	user := contextGetAuthenticatedUser(r)
 
 	app.logger.Debug("showProfilePage", "name", user.Name, "userID", user.ID, "status", user.Status)
+	if app.mode.Personal {
+		switch user.Status {
+		case internal.UserStatusPendingResumeUpload:
+			app.showUploadPage(w, r)
+		case internal.UserStatusError:
+			http.Redirect(w, r, "/profile/preferences", http.StatusSeeOther)
+		case internal.UserStatusProcessingResume:
+			data := app.newTemplateData(r)
+			if err := response.Page(w, http.StatusOK, data, app.resumeProcessingTemplate()); err != nil {
+				app.serverError(w, r, fmt.Errorf("render personal resume processing page: %w", err))
+			}
+		case internal.UserStatusResumeUploaded, internal.UserStatusProfilePreparing:
+			http.Redirect(w, r, "/profile/preferences", http.StatusSeeOther)
+		default:
+			if app.mode.CanMatch(user, time.Now()) {
+				http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+				return
+			}
+			http.Redirect(w, r, "/profile/preferences", http.StatusSeeOther)
+		}
+		return
+	}
 
 	if user.Status >= internal.UserStatusCallScheduled {
 		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)

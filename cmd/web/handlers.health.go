@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 	"log/slog"
 	"net/http"
 	"os"
@@ -40,7 +42,7 @@ func (app *application) health(w http.ResponseWriter, r *http.Request) {
 		_, err := app.fs.Collection("health_check").Doc("ping").Get(ctx)
 		if err != nil {
 			// Document not found is OK - means connection works
-			if err.Error() != "not found" {
+			if grpcstatus.Code(err) != codes.NotFound {
 				status.Services["database"] = "unhealthy: " + err.Error()
 				status.Status = "degraded"
 			}
@@ -50,7 +52,11 @@ func (app *application) health(w http.ResponseWriter, r *http.Request) {
 		status.Status = "degraded"
 	}
 
-	w.WriteHeader(http.StatusOK)
+	if status.Status == "healthy" {
+		w.WriteHeader(http.StatusOK)
+	} else {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}
 	json.NewEncoder(w).Encode(status)
 }
 
@@ -74,7 +80,7 @@ func (app *application) healthDetailed(w http.ResponseWriter, r *http.Request) {
 
 		_, err := app.fs.Collection("health_check").Doc("ping").Get(ctx)
 		if err != nil {
-			if err.Error() != "not found" {
+			if grpcstatus.Code(err) != codes.NotFound {
 				status.Services["database"] = "unhealthy: " + err.Error()
 				status.Status = "degraded"
 			}
@@ -85,7 +91,9 @@ func (app *application) healthDetailed(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check Gmail connection
-	if os.Getenv("GMAIL_READER_CREDENTIALS") != "" {
+	if app.mode.Personal {
+		status.Services["gmail"] = "disabled"
+	} else if os.Getenv("GMAIL_READER_CREDENTIALS") != "" {
 		status.Services["gmail"] = app.checkGmailHealth(r.Context())
 		if status.Services["gmail"] != "healthy" && status.Status == "healthy" {
 			status.Status = "degraded"

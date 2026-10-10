@@ -208,7 +208,11 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if user.Status < internal.UserStatusCallCompleted {
+	if app.mode.Personal && !app.mode.CanMatch(user, time.Now()) {
+		http.Redirect(w, r, "/profile", http.StatusSeeOther)
+		return
+	}
+	if !app.mode.Personal && user.Status < internal.UserStatusCallCompleted {
 		app.showWaitingForCall(w, r, user)
 		return
 	}
@@ -354,27 +358,29 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 
 	// Calculate next search time
 	var nextSearchTime time.Time
-	subscriptions, err := internal.GetSubscriptionsForUser(r.Context(), app.fs, user.ID)
-	if err != nil {
-		app.logger.Error("failed to get user subscriptions", "error", err, "userID", user.ID)
-	} else {
-		for _, sub := range subscriptions {
-			criteria, found, err := internal.GetSearchCriteria(r.Context(), app.fs, sub.CriteriaID)
-			if err != nil {
-				app.logger.Warn("failed to get search criteria", "error", err, "criteria_id", sub.CriteriaID)
-				continue
-			}
-			if found && criteria.LastPublishedAt != nil {
-				t := criteria.LastPublishedAt.Add(24 * time.Hour)
-				if nextSearchTime.IsZero() || t.Before(nextSearchTime) {
-					// We always start searching at 17:00 UTC
-					nextSearchTime = time.Date(t.Year(), t.Month(), t.Day(), 17, 0, 0, 0, time.UTC)
+	if !app.mode.Personal {
+		subscriptions, err := internal.GetSubscriptionsForUser(r.Context(), app.fs, user.ID)
+		if err != nil {
+			app.logger.Error("failed to get user subscriptions", "error", err, "userID", user.ID)
+		} else {
+			for _, sub := range subscriptions {
+				criteria, found, err := internal.GetSearchCriteria(r.Context(), app.fs, sub.CriteriaID)
+				if err != nil {
+					app.logger.Warn("failed to get search criteria", "error", err, "criteria_id", sub.CriteriaID)
+					continue
+				}
+				if found && criteria.LastPublishedAt != nil {
+					t := criteria.LastPublishedAt.Add(24 * time.Hour)
+					if nextSearchTime.IsZero() || t.Before(nextSearchTime) {
+						// We always start searching at 17:00 UTC
+						nextSearchTime = time.Date(t.Year(), t.Month(), t.Day(), 17, 0, 0, 0, time.UTC)
+					}
 				}
 			}
 		}
-	}
 
-	if time.Until(nextSearchTime) < 0 {
+	}
+	if !app.mode.Personal && !nextSearchTime.IsZero() && time.Until(nextSearchTime) < 0 {
 		// it's in the past -- there is a delay or something else wrong
 		internal.SentryReportError(r.Context(), fmt.Errorf("next search time is in the past"), sentry.LevelError, map[string]string{
 			"error_type":  "database_retrieval",
@@ -398,6 +404,9 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 
 	// Add data to template
 	data["CurrentStatus"] = user.Status.Description()
+	if app.mode.Personal {
+		data["CurrentStatus"] = "Your search criteria are ready. We are finding matches."
+	}
 	data["CurrentTime"] = time.Now()
 
 	// Add daily job evaluation statistics
@@ -411,7 +420,7 @@ func (app *application) showDashboard(w http.ResponseWriter, r *http.Request) {
 	// Check for expired subscription
 	isSubscriptionExpired := false
 	daysSinceLastEvaluation := 0
-	if user.SubscriptionEnd != nil && user.SubscriptionEnd.Before(time.Now()) {
+	if !app.mode.Personal && user.SubscriptionEnd != nil && user.SubscriptionEnd.Before(time.Now()) {
 		isSubscriptionExpired = true
 		if user.LastEvaluationDate != nil {
 			daysSinceLastEvaluation = int(time.Since(*user.LastEvaluationDate).Hours() / 24)

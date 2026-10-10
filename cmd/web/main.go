@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
@@ -100,9 +101,11 @@ func (app *application) loadTestUser() (*internal.User, error) {
 }
 
 type config struct {
-	baseURL  string
-	httpPort int
-	nats     struct {
+	personal          bool
+	personalUserEmail string
+	baseURL           string
+	httpPort          int
+	nats              struct {
 		port     int
 		embedded bool
 		url      string
@@ -155,6 +158,7 @@ type config struct {
 }
 
 type application struct {
+	mode                  internal.RuntimeMode
 	config                config
 	logger                *slog.Logger
 	fs                    *internal.FirestoreClient
@@ -215,6 +219,8 @@ func run(logger *slog.Logger) error {
 	flag.StringVar(&cfg.linkedin.clientSecret, "linkedin-client-secret", "", "LinkedIn client secret")
 	flag.BoolVar(&cfg.testing, "testing", false, "enable testing mode")
 	flag.BoolVar(&cfg.gmailSetup, "gmail-setup", false, "run Gmail OAuth setup and exit")
+	flag.BoolVar(&cfg.personal, "personal", false, "run only the configured owner job search; default is full production")
+	flag.StringVar(&cfg.personalUserEmail, "personal-user-email", "", "existing owner email (or PERSONAL_USER_EMAIL)")
 	flag.BoolVar(&cfg.nudgeOnly, "nudge-only", false, "only start the nudge processor, skip other services")
 	showVersion := flag.Bool("version", false, "display version and exit")
 
@@ -224,14 +230,28 @@ func run(logger *slog.Logger) error {
 
 	// Parse flags ONCE
 	flag.Parse()
+	if cfg.personal && (cfg.gmailSetup || cfg.nudgeOnly) {
+		return fmt.Errorf("--personal cannot be combined with --gmail-setup or --nudge-only")
+	}
 
 	if err := nudge.LoadAndCacheTemplates(); err != nil {
 		return fmt.Errorf("failed to load nudge templates: %w", err)
 	}
 
 	// Load environment file
-	if err := checkEnv(logger, cfg.envFile); err != nil {
+	if err := checkEnv(logger, cfg.envFile, cfg.personal); err != nil {
 		return fmt.Errorf("error checking environment: %w", err)
+	}
+	if cfg.personal && (cfg.testing || os.Getenv("TESTING_MODE") == "true") {
+		return fmt.Errorf("personal mode cannot enable testing authentication bypasses")
+	}
+
+	if cfg.personalUserEmail == "" {
+		cfg.personalUserEmail = os.Getenv("PERSONAL_USER_EMAIL")
+	}
+	cfg.personalUserEmail = strings.TrimSpace(cfg.personalUserEmail)
+	if cfg.personal && cfg.personalUserEmail == "" {
+		return fmt.Errorf("personal mode requires --personal-user-email or PERSONAL_USER_EMAIL")
 	}
 
 	// Apply environment variable defaults to config fields that weren't set by flags
@@ -334,6 +354,18 @@ func run(logger *slog.Logger) error {
 		return fmt.Errorf("failed to create firestore client: %w", err)
 	}
 	defer FirestoreClient.Close()
+	mode := internal.RuntimeMode{Personal: cfg.personal}
+	if cfg.personal {
+		owner, found, err := internal.GetUserByEmail(ctx, FirestoreClient, cfg.personalUserEmail)
+		if err != nil {
+			return fmt.Errorf("resolve personal owner: %w", err)
+		}
+		if !found {
+			return fmt.Errorf("personal owner must be an existing user")
+		}
+		mode.UserID = owner.ID
+		logger.Info("personal mode enabled", "owner_id", owner.ID)
+	}
 
 	/*
 		var db *database.DB
@@ -350,12 +382,12 @@ func run(logger *slog.Logger) error {
 		}()
 	*/
 
-	mailer, err := smtp.NewMailSender(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.from)
-	if err != nil {
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"error_type": "smtp_mailer_new",
-		})
-		return fmt.Errorf("failed to create new mailer: %w", err)
+	var mailer smtp.Mailer = smtp.DisabledMailer{}
+	if !cfg.personal {
+		mailer, err = smtp.NewMailSender(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.from)
+		if err != nil {
+			return fmt.Errorf("create mailer: %w", err)
+		}
 	}
 
 	sessionManager, err := setupSessionManager(cfg, FirestoreClient, logger)
@@ -435,15 +467,18 @@ func run(logger *slog.Logger) error {
 	// 	return fmt.Errorf("failed to start job processor: %w", err)
 	// }
 
-	s3Client, err := initS3Client()
-	if err != nil {
-		return fmt.Errorf("failed to initialize S3 client: %w", err)
+	var s3Client *s3.S3
+	var stripeClient *client.API
+	if !cfg.personal {
+		s3Client, err = initS3Client()
+		if err != nil {
+			return fmt.Errorf("initialize S3 client: %w", err)
+		}
+		stripeClient = client.New(cfg.stripe.secretKey, nil)
 	}
 
-	// Initialize Stripe client
-	stripeClient := client.New(cfg.stripe.secretKey, nil)
-
 	app := &application{
+		mode:   mode,
 		config: cfg,
 		fs:     FirestoreClient,
 		s3:     s3Client,
@@ -467,13 +502,15 @@ func run(logger *slog.Logger) error {
 	// Initialize statement regenerator registry and register system-specific regenerators
 	app.setupStatementRegenerators()
 
-	// Start the task processor
-	go func() {
-		app.logger.Info("app: starting task processor")
-		if err := taskProcessor.Start(ctx); err != nil {
-			app.logger.Error("task processor error", "error", err)
-		}
-	}()
+	// Start scheduled calls only in full production.
+	if !cfg.personal {
+		go func() {
+			app.logger.Info("app: starting task processor")
+			if err := taskProcessor.Start(ctx); err != nil {
+				app.logger.Error("task processor error", "error", err)
+			}
+		}()
+	}
 
 	smtpCfg := smtp.Config{
 		Host:     app.config.smtp.host,
@@ -486,13 +523,15 @@ func run(logger *slog.Logger) error {
 		return fmt.Errorf("failed to start services: %w", err)
 	}
 
-	if err := transcript.RecoverProcessingAppointments(sentry.CurrentHub(), FirestoreClient, pusherClient, logger, app.jobDispatch, app.searchProvider, &smtpCfg); err != nil {
-		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-			"error_type": "transcript_recovery",
-		})
-		return fmt.Errorf("failed to recover processing appointments: %w", err)
-	}
+	if !cfg.personal {
+		if err := transcript.RecoverProcessingAppointments(sentry.CurrentHub(), FirestoreClient, pusherClient, logger, app.jobDispatch, app.searchProvider, &smtpCfg); err != nil {
+			internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
+				"error_type": "transcript_recovery",
+			})
+			return fmt.Errorf("failed to recover processing appointments: %w", err)
+		}
 
+	}
 	if cfg.autoHTTPS.domain != "" {
 		return app.serveAutoHTTPS()
 	}
@@ -501,8 +540,6 @@ func run(logger *slog.Logger) error {
 }
 
 func setupPusher(logger *slog.Logger) *pusher.Client {
-	logger.Debug("app:pusher config", "app_id", os.Getenv("PUSHER_APP_ID"), "key",
-		os.Getenv("PUSHER_KEY"), "secret", os.Getenv("PUSHER_SECRET"), "cluster", os.Getenv("PUSHER_CLUSTER"))
 
 	pusherClient := pusher.Client{
 		AppID:   os.Getenv("PUSHER_APP_ID"),
@@ -547,7 +584,7 @@ func initS3Client() (*s3.S3, error) {
 	return s3Client, nil
 }
 
-func checkEnv(logger *slog.Logger, envFile string) error {
+func checkEnv(logger *slog.Logger, envFile string, personalMode ...bool) error {
 	wd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("failed to get working directory: %w", err)
@@ -602,6 +639,16 @@ func checkEnv(logger *slog.Logger, envFile string) error {
 		"VAPI_PUBLIC_API_KEY",
 		"VAPI_WEBHOOK_URL",     // URL that will receive webhooks from VAPI
 		"VAPI_START_CALL_PATH", // URL that we will use to start a call (we will POST to this URL to start a call)
+	}
+
+	if len(personalMode) > 0 && personalMode[0] {
+		requiredKeys = []string{
+			"BASE_URL", "CLOUDFLARE_KV_API_TOKEN", "CLOUDFLARE_KV_NAMESPACE_ID", "CLOUDFLARE_ACCOUNT_ID",
+			"FIREBASE_PROJECT_ID", "FIREBASE_CREDENTIALS", "GOOGLE_AUTH_CLIENT_ID", "GOOGLE_AUTH_CLIENT_SECRET",
+			"LINKEDIN_AUTH_CLIENT_ID", "LINKEDIN_AUTH_CLIENT_SECRET", "JOB_ID_ENCRYPTION_KEY",
+			"OPENAI_API_KEY", "DEEPSEEK_API_KEY", "PUSHER_APP_ID", "PUSHER_KEY", "PUSHER_SECRET", "PUSHER_CLUSTER",
+			"SCRAPINGDOG_API_KEY", "SESSION_SECRET",
+		}
 	}
 
 	logger.Debug(internal.Blue("checkEnv: checking environment variables"), "VAPI_WEBHOOK_URL", os.Getenv("VAPI_WEBHOOK_URL"))
@@ -731,6 +778,9 @@ func (app *application) startServices(ctx context.Context, smtpCfg *smtp.Config)
 		return err
 	}
 
+	if app.mode.Personal {
+		return nil
+	}
 	if err := app.startNudgeProcessor(ctx, smtpCfg); err != nil {
 		return err
 	}
@@ -748,7 +798,7 @@ func (app *application) startCoreServices(ctx context.Context) error {
 	}
 
 	// Start feedback processor
-	app.feedbackProcessor = feedback.NewProcessor(app.fs, app.logger)
+	app.feedbackProcessor = feedback.NewProcessor(app.fs, app.logger, app.mode)
 	if err := app.feedbackProcessor.Start(ctx); err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"action": "startCoreServices: failed to start feedback processor",
@@ -757,7 +807,7 @@ func (app *application) startCoreServices(ctx context.Context) error {
 	}
 
 	// Start subscription processor
-	app.subscriptionProcessor = subscription.NewProcessor(app.fs, app.pusher, app.logger)
+	app.subscriptionProcessor = subscription.NewProcessor(app.fs, app.pusher, app.logger, app.mode)
 	if err := app.subscriptionProcessor.Start(ctx); err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"action": "startCoreServices: failed to start subscription processor",
@@ -766,13 +816,13 @@ func (app *application) startCoreServices(ctx context.Context) error {
 	}
 
 	// Setup job dispatch and search components
-	app.jobDispatch = internal.NewJobEventDispatch()
-	app.searchResultProcessor = internal.NewSearchResultProcessor(app.fs, app.logger, app.pusher, app.jobDispatch)
+	app.jobDispatch = internal.NewJobEventDispatch(app.mode)
+	app.searchResultProcessor = internal.NewSearchResultProcessor(app.fs, app.logger, app.pusher, app.jobDispatch, app.mode)
 	app.jobDispatch.Register("search-result-processor", app.searchResultProcessor)
 	app.searchResultProcessor.Start()
 
-	app.searchProvider = scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), app.logger, scrapingdog.WithJobEventHandler(app.jobDispatch))
-	app.searchScheduler = search.NewScheduler(app.fs, app.logger, app.searchProvider, app.mailer, app.config.notifications.email)
+	app.searchProvider = scrapingdog.NewProvider(os.Getenv("SCRAPINGDOG_API_KEY"), app.logger, scrapingdog.WithJobEventHandler(app.jobDispatch), scrapingdog.WithRuntimeMode(app.mode), scrapingdog.WithFirestore(app.fs))
+	app.searchScheduler = search.NewScheduler(app.fs, app.logger, app.searchProvider, app.mailer, app.config.notifications.email, app.mode)
 
 	// Start search provider and scheduler
 	if err := app.searchProvider.Start(ctx); err != nil {
@@ -932,6 +982,7 @@ func (app *application) createInboxDispatch() (*internal.InboxDispatch, error) {
 // and registers system-specific regenerators for the versioning system.
 func (app *application) setupStatementRegenerators() {
 	app.regeneratorRegistry = internal.NewStatementGeneratorRegistry(app.logger)
+	app.regeneratorRegistry.Register("profile", internal.ProfileStatementGenerator{})
 
 	// Register transcript system regenerator
 	transcriptRegenerator := transcript.NewStatementGenerator(app.fs, app.logger)

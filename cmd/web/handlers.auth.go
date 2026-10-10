@@ -85,12 +85,20 @@ func (app *application) completeSocialAuth(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	if app.mode.Personal && !strings.EqualFold(strings.TrimSpace(gothUser.Email), app.config.personalUserEmail) {
+		http.Error(w, "This instance is restricted to its owner.", http.StatusForbidden)
+		return
+	}
 	u, found, err := internal.GetUserByEmail(r.Context(), app.fs, gothUser.Email)
 	if err != nil {
 		app.serverError(w, r, err)
 		return
 	}
 
+	if app.mode.Personal && (!found || !app.mode.AllowsUser(u.ID)) {
+		http.Error(w, "Personal owner account is unavailable.", http.StatusForbidden)
+		return
+	}
 	if !found {
 		app.logger.Info("User not found, creating new user", "email", gothUser.Email)
 

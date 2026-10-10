@@ -21,13 +21,32 @@ type JobEventHandler interface {
 type JobEventDispatch struct {
 	mu       sync.RWMutex
 	handlers map[string]JobEventHandler
+	mode     RuntimeMode
 }
 
 // NewJobEventDispatch creates a new JobEventDispatch instance
-func NewJobEventDispatch() *JobEventDispatch {
+func NewJobEventDispatch(modes ...RuntimeMode) *JobEventDispatch {
+	var mode RuntimeMode
+	if len(modes) > 0 {
+		mode = modes[0]
+	}
 	return &JobEventDispatch{
 		handlers: make(map[string]JobEventHandler),
+		mode:     mode,
 	}
+}
+
+func (jed *JobEventDispatch) admits(task *SearchTask, userID *string, requireTaskOwner bool) bool {
+	if !jed.mode.Personal {
+		return true
+	}
+	if userID == nil || !jed.mode.AllowsUser(*userID) {
+		return false
+	}
+	if requireTaskOwner && (task == nil || task.UserID == nil || !jed.mode.AllowsUser(*task.UserID)) {
+		return false
+	}
+	return task == nil || task.UserID == nil || *task.UserID == *userID
 }
 
 // Register adds a new handler with the given ID.
@@ -68,6 +87,9 @@ func (jed *JobEventDispatch) GetHandlerCount() int {
 
 // OnSearchStarted implements JobEventHandler
 func (jed *JobEventDispatch) OnSearchStarted(task SearchTask, userID *string) {
+	if !jed.admits(&task, userID, true) {
+		return
+	}
 	jed.mu.RLock()
 	handlers := make([]JobEventHandler, 0, len(jed.handlers))
 	for _, handler := range jed.handlers {
@@ -89,6 +111,9 @@ func (jed *JobEventDispatch) OnSearchStarted(task SearchTask, userID *string) {
 
 // OnJobListing implements JobEventHandler
 func (jed *JobEventDispatch) OnJobListing(task *SearchTask, listing JobListing, userID *string) bool {
+	if !jed.admits(task, userID, true) {
+		return false
+	}
 	jed.mu.RLock()
 	handlers := make([]JobEventHandler, 0, len(jed.handlers))
 	for _, handler := range jed.handlers {
@@ -114,6 +139,9 @@ func (jed *JobEventDispatch) OnJobListing(task *SearchTask, listing JobListing, 
 
 // OnJobDetail implements JobEventHandler
 func (jed *JobEventDispatch) OnJobDetail(task SearchTask, listing JobListing, details JobDetail, userID *string) {
+	if !jed.admits(&task, userID, true) {
+		return
+	}
 	jed.mu.RLock()
 	handlers := make([]JobEventHandler, 0, len(jed.handlers))
 	for _, handler := range jed.handlers {
@@ -135,6 +163,9 @@ func (jed *JobEventDispatch) OnJobDetail(task SearchTask, listing JobListing, de
 
 // OnPageComplete implements JobEventHandler
 func (jed *JobEventDispatch) OnPageComplete(task SearchTask, page int, jobsFound int, errors []error, userID *string) {
+	if !jed.admits(&task, userID, true) {
+		return
+	}
 	jed.mu.RLock()
 	handlers := make([]JobEventHandler, 0, len(jed.handlers))
 	for _, handler := range jed.handlers {
@@ -156,9 +187,22 @@ func (jed *JobEventDispatch) OnPageComplete(task SearchTask, page int, jobsFound
 
 // OnSearchCompleted implements JobEventHandler
 func (jed *JobEventDispatch) OnSearchCompleted(task SearchTask, totalJobs int, errors []error, userID *string) {
+	if !jed.admits(&task, userID, true) {
+		return
+	}
 	jed.mu.RLock()
 	handlers := make([]JobEventHandler, 0, len(jed.handlers))
-	for _, handler := range jed.handlers {
+	// The result processor must persist task completion before handlers that
+	// refresh owner matches inspect completed task links.
+	if jed.mode.Personal {
+		if resultProcessor, ok := jed.handlers["search-result-processor"]; ok {
+			handlers = append(handlers, resultProcessor)
+		}
+	}
+	for id, handler := range jed.handlers {
+		if jed.mode.Personal && id == "search-result-processor" {
+			continue
+		}
 		handlers = append(handlers, handler)
 	}
 	jed.mu.RUnlock()
@@ -177,6 +221,9 @@ func (jed *JobEventDispatch) OnSearchCompleted(task SearchTask, totalJobs int, e
 
 // OnJobDetailExtractionComplete implements JobEventHandler
 func (jed *JobEventDispatch) OnJobDetailExtractionComplete(task SearchTask, jobDetail JobDetail, userID *string) {
+	if !jed.admits(&task, userID, false) {
+		return
+	}
 	jed.mu.RLock()
 	handlers := make([]JobEventHandler, 0, len(jed.handlers))
 	for _, handler := range jed.handlers {
@@ -198,6 +245,9 @@ func (jed *JobEventDispatch) OnJobDetailExtractionComplete(task SearchTask, jobD
 
 // OnAllExtractionsComplete implements JobEventHandler
 func (jed *JobEventDispatch) OnAllExtractionsComplete(task SearchTask, totalJobs int, userID *string) {
+	if !jed.admits(&task, userID, false) {
+		return
+	}
 	jed.mu.RLock()
 	handlers := make([]JobEventHandler, 0, len(jed.handlers))
 	for _, handler := range jed.handlers {

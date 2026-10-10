@@ -13,12 +13,12 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
-	"github.com/chriscow/minds/tools"
 	"github.com/samber/lo"
 	"github.com/sashabaranov/go-openai"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	tools "talent-rodeo/internal/llmtools"
 )
 
 const (
@@ -188,7 +188,7 @@ func ExtractJobDetailData(ctx context.Context, fs *FirestoreClient, userID *stri
 
 	resp := openai.ChatCompletionResponse{}
 	data, err := tools.StructuredAsk[JobDetailExtractedData](ctx, prompt,
-		tools.WithModel(tools.DeepSeekChat),
+		tools.WithModel(tools.DeepSeekFlash),
 		tools.WithMaxTokens(8192),
 		tools.WantCompletionResponse(&resp))
 	if err != nil {
@@ -196,7 +196,7 @@ func ExtractJobDetailData(ctx context.Context, fs *FirestoreClient, userID *stri
 	}
 
 	// Record LLM cost for job data extraction
-	if err := RecordLLMCost(ctx, fs, userID, string(tools.DeepSeekChat),
+	if err := RecordLLMCost(ctx, fs, userID, string(tools.DeepSeekFlash),
 		resp, "job_data_extraction", &job.ID); err != nil {
 		slog.Default().Error("failed to record LLM cost", "error", err, "userID", userID, "jobID", job.ID)
 	}

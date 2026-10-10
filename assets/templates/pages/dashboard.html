@@ -2,7 +2,7 @@
 <main class="container">
     
     <!-- Subscription Expired Alert -->
-    {{if .IsSubscriptionExpired}}
+    {{if and (not .PersonalMode) .IsSubscriptionExpired}}
     <section class="subscription-expired-alert">
         <article class="notice subscription-conversion">
             <header>
@@ -101,7 +101,7 @@
 
     <!-- Subscription processing status -->
     <div id="subscription-status-container" style="text-align: center; margin-bottom: 1rem;">
-        {{if .NextSearchTime}}
+        {{if and (not .PersonalMode) .NextSearchTime}}
             {{if lt .NextSearchTime.Unix (now.Unix)}}
                 <p id="next-search-time">Your job update is starting shortly.</p>
                 <progress style="width: 50%; margin: auto;"></progress>

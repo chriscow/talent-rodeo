@@ -177,7 +177,9 @@ func (app *application) serve(srv *http.Server) error {
 
 		// Stop the task processor first
 		app.logger.Info("app: stopping task processor")
-		app.processor.Stop()
+		if !app.mode.Personal {
+			app.processor.Stop()
+		}
 		app.logger.Info("app: task processor stopped")
 
 		err := srv.Shutdown(ctx)

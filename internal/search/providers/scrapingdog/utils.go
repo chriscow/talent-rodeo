@@ -13,8 +13,8 @@ import (
 	"talent-rodeo/assets"
 	"talent-rodeo/internal"
 
-	"github.com/chriscow/minds/tools"
 	"github.com/sashabaranov/go-openai"
+	tools "talent-rodeo/internal/llmtools"
 )
 
 // parseSalaryRange uses the LLM to extract a salary range from
@@ -194,7 +194,7 @@ func SummarizeJobDetails(ctx context.Context, fs *internal.FirestoreClient, logg
 	}
 
 	// Record LLM cost for job summary
-	if err := internal.RecordLLMCost(ctx, fs, userID, string(tools.DeepSeekChat), resp, "job_summary", nil); err != nil {
+	if err := internal.RecordLLMCost(ctx, fs, userID, string(tools.DeepSeekFlash), resp, "job_summary", nil); err != nil {
 		logger.Error("failed to record LLM cost for job summary", "error", err)
 	}
 

@@ -123,24 +123,17 @@
         </div>
     {{end}}
 
-    <!-- Sunset Banner -->
-    <section style="background: linear-gradient(135deg, #ff6b6b, #ee5a5a); color: white; padding: 2rem; border-radius: var(--pico-border-radius); margin-bottom: 2rem; text-align: center;">
-        <h2 style="color: white; margin-bottom: 1rem;">A Message from ShHIREly</h2>
-        <p style="font-size: 1.1rem; max-width: 700px; margin: 0 auto 1.5rem;">
-            Thank you for being part of the Talent Rodeo journey. We've made the difficult decision to sunset our service.
-            Existing users can still log in to view their data, but new signups, calls, and job searches are no longer available.
-        </p>
-        <p style="font-size: 0.9rem; opacity: 0.9;">
-            We're grateful for everyone who trusted us with their job search. Wishing you the best in your career journey!
-        </p>
-    </section>
-
     <!-- Hero Section -->
     <section class="hero">
+        {{if .PersonalMode}}
+        <h1>Your personal job search</h1>
+        <p>Sign in to review your resume, preferences, and matching jobs.</p>
+        {{else}}
         <h1>What If Your Next Job Found You?</h1>
         <p>Because your next career move deserves more<br />than just keyword matching</p>
+        {{end}}
         {{if .User}}
-            <a href="/profile" role="button">View Your Data</a>
+            <a href="/profile" role="button">View Your Jobs</a>
         {{else}}
             <button id="linkedin-signin" class="contrast" onclick="login('linkedin')">
                 <img src="/static/img/linkedin/retina/Sign-In-Large---Active.png" alt="LinkedIn Logo" />
@@ -154,10 +147,11 @@
             </section>
 
             <img id="loading-spinner" src="/static/img/puff.svg" style="opacity: 0" />
-            <p style="margin-top: 1rem; font-size: 0.9rem; opacity: 0.7;">Existing users only</p>
+            {{if .PersonalMode}}<p>This instance is available to its owner.</p>{{end}}
         {{end}}
     </section>
 
+    {{if not .PersonalMode}}
     <!-- Features Section -->
     <section class="features">
         <div class="grid">
@@ -209,6 +203,7 @@
             <a href="/profile" role="button">Continue to Dashboard</a>
         {{end}}
     </section>
+    {{end}}
 </main>
 {{end}}
 

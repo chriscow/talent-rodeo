@@ -32,15 +32,12 @@ func (app *application) routes() http.Handler {
 	// Health check endpoints (no auth required)
 	mux.HandleFunc("/health", app.health, "GET")
 	mux.HandleFunc("/health/detailed", app.healthDetailed, "GET")
-	mux.HandleFunc("/health/gmail", app.gmailHealth, "GET")
-
-	// VAPI webhook endpoint
-	// SUNSET: Outbound calls disabled
-	// mux.HandleFunc("/vapi/outbound-call", app.makeOutboundCall, "POST")
-	mux.HandleFunc("/webhooks/vapi", app.handleVapiWebhook, "POST")
-
-	// Stripe webhook endpoint (no CSRF protection needed)
-	mux.HandleFunc("/webhooks/stripe", app.stripeWebhookPost, "POST")
+	if !app.mode.Personal {
+		mux.HandleFunc("/health/gmail", app.gmailHealth, "GET")
+		mux.HandleFunc("/vapi/outbound-call", app.makeOutboundCall, "POST")
+		mux.HandleFunc("/webhooks/vapi", app.handleVapiWebhook, "POST")
+		mux.HandleFunc("/webhooks/stripe", app.stripeWebhookPost, "POST")
+	}
 
 	fileServer := http.FileServer(http.FS(assets.EmbeddedFiles))
 	mux.Handle("/static/...", fileServer, "GET")
@@ -76,36 +73,33 @@ func (app *application) routes() http.Handler {
 			// - StepJobSearchStarted/Complete: profile-jobs.html
 			mux.HandleFunc("/profile", app.showProfilePage, "GET")
 
-			// SUNSET: Onboarding disabled
-			// mux.HandleFunc("/profile/onboarding/reset", app.resetOnboardingState, "POST")
-			// mux.HandleFunc("/profile/resume/:resumeID", app.deleteResume, "DELETE")
-			// mux.HandleFunc("/profile/resume/upload", app.showUploadPage, "GET")
-			// mux.HandleFunc("/profile/resume/upload", app.createResume, "POST")
-
-			// SUNSET: Scheduling/calls disabled
-			// mux.HandleFunc("/profile/schedule", app.showSchedulePage, "GET")
-			// mux.HandleFunc("/profile/schedule/appointment", app.createAppointment, "POST")
-			// mux.HandleFunc("/profile/schedule/appointment/:id", app.cancelAppointment, "DELETE")
-			// mux.HandleFunc("/profile/schedule/reschedule", app.rescheduleAppointment, "POST")
-			// mux.HandleFunc("/profile/schedule/call-now", app.callNow, "POST")
-
-			mux.HandleFunc("/account/delete", app.deleteAccount, "POST")
-
+			mux.HandleFunc("/profile/resume/upload", app.showUploadPage, "GET")
+			mux.HandleFunc("/profile/resume/upload", app.createResume, "POST")
 			mux.HandleFunc("/dashboard", app.showDashboard, "GET", "POST")
-
-			// SUNSET: Payments disabled
-			// mux.HandleFunc("/upgrade", app.upgradeGet, "GET")
-			// mux.HandleFunc("/billing", app.billingGet, "GET")
-			// mux.HandleFunc("/payment/create-checkout-session", app.createCheckoutSessionPost, "POST")
-			// mux.HandleFunc("/payment/success", app.paymentSuccessGet, "GET")
-			// mux.HandleFunc("/payment/cancel", app.paymentCancelGet, "GET")
-
-			// SUNSET: Job feedback disabled
-			// mux.HandleFunc("/feedback/job", app.handleJobFeedback, "POST")
-			// mux.HandleFunc("/feedback/job/dismiss", app.handleJobDismiss, "POST")
-			// mux.HandleFunc("/feedback/job/title", app.handleJobTitleAction, "POST")
-
-			mux.HandleFunc("/testing/reset-user-state", app.handleTestingResetUserState, "POST")
+			mux.HandleFunc("/feedback/job", app.handleJobFeedback, "POST")
+			mux.HandleFunc("/feedback/job/dismiss", app.handleJobDismiss, "POST")
+			mux.HandleFunc("/feedback/job/title", app.handleJobTitleAction, "POST")
+			if app.mode.Personal {
+				mux.HandleFunc("/profile/preferences", app.personalPreferencesGet, "GET")
+				mux.HandleFunc("/profile/preferences", app.personalPreferencesPost, "POST")
+			} else {
+				mux.HandleFunc("/profile/onboarding/reset", app.resetOnboardingState, "POST")
+				mux.HandleFunc("/profile/resume/:resumeID", app.deleteResume, "DELETE")
+				mux.HandleFunc("/profile/schedule", app.showSchedulePage, "GET")
+				mux.HandleFunc("/profile/schedule/appointment", app.createAppointment, "POST")
+				mux.HandleFunc("/profile/schedule/appointment/:id", app.cancelAppointment, "DELETE")
+				mux.HandleFunc("/profile/schedule/reschedule", app.rescheduleAppointment, "POST")
+				mux.HandleFunc("/profile/schedule/call-now", app.callNow, "POST")
+				mux.HandleFunc("/account/delete", app.deleteAccount, "POST")
+				mux.HandleFunc("/upgrade", app.upgradeGet, "GET")
+				mux.HandleFunc("/billing", app.billingGet, "GET")
+				mux.HandleFunc("/payment/create-checkout-session", app.createCheckoutSessionPost, "POST")
+				mux.HandleFunc("/payment/success", app.paymentSuccessGet, "GET")
+				mux.HandleFunc("/payment/cancel", app.paymentCancelGet, "GET")
+			}
+			if app.config.testing && !app.mode.Personal {
+				mux.HandleFunc("/testing/reset-user-state", app.handleTestingResetUserState, "POST")
+			}
 
 			mux.HandleFunc("/logout", app.logoutUser, "POST")
 
@@ -113,55 +107,57 @@ func (app *application) routes() http.Handler {
 			mux.HandleFunc("/pusher/auth", app.pusherAuth, "POST")
 		})
 
-		mux.Group(func(mux *flow.Mux) {
-			mux.Use(app.requireSuperUser)
-			// Admin index page
-			mux.HandleFunc("/admin", app.adminIndex, "GET")
+		if !app.mode.Personal {
+			mux.Group(func(mux *flow.Mux) {
+				mux.Use(app.requireSuperUser)
+				// Admin index page
+				mux.HandleFunc("/admin", app.adminIndex, "GET")
 
-			// Add tasks routes
-			mux.HandleFunc("/admin/search-tasks", app.showSearchTasksPage, "GET", "POST")
-			mux.HandleFunc("/admin/search-tasks/partial", app.getSearchTasksPartial, "GET")
-			mux.HandleFunc("/admin/search-task-analytics", app.adminSearchTaskAnalytics, "GET")
+				// Add tasks routes
+				mux.HandleFunc("/admin/search-tasks", app.showSearchTasksPage, "GET", "POST")
+				mux.HandleFunc("/admin/search-tasks/partial", app.getSearchTasksPartial, "GET")
+				mux.HandleFunc("/admin/search-task-analytics", app.adminSearchTaskAnalytics, "GET")
 
-			mux.HandleFunc("/admin/voice", app.adminVoice, "GET", "POST")
+				mux.HandleFunc("/admin/voice", app.adminVoice, "GET", "POST")
 
-			// Add feature flags admin page
-			mux.HandleFunc("/admin/feature-flags", app.adminFeatureFlags, "GET", "POST")
+				// Add feature flags admin page
+				mux.HandleFunc("/admin/feature-flags", app.adminFeatureFlags, "GET", "POST")
 
-			// Add user dashboard admin page
-			mux.HandleFunc("/admin/user-dashboard", app.adminUserDashboard, "GET", "POST")
+				// Add user dashboard admin page
+				mux.HandleFunc("/admin/user-dashboard", app.adminUserDashboard, "GET", "POST")
 
-			// Add subscription management admin page
-			mux.HandleFunc("/admin/subscriptions", app.adminSubscriptions, "GET", "POST")
+				// Add subscription management admin page
+				mux.HandleFunc("/admin/subscriptions", app.adminSubscriptions, "GET", "POST")
 
-			// Add upload resume for user admin page
-			mux.HandleFunc("/admin/upload-resume", app.adminUploadResume, "GET", "POST")
+				// Add upload resume for user admin page
+				mux.HandleFunc("/admin/upload-resume", app.adminUploadResume, "GET", "POST")
 
-			// Add search criteria management page
-			mux.HandleFunc("/admin/search-criteria", app.adminSearchCriteria, "GET", "POST")
+				// Add search criteria management page
+				mux.HandleFunc("/admin/search-criteria", app.adminSearchCriteria, "GET", "POST")
 
-			// Add appointment management page
-			mux.HandleFunc("/admin/appointments", app.adminAppointments, "GET", "POST")
+				// Add appointment management page
+				mux.HandleFunc("/admin/appointments", app.adminAppointments, "GET", "POST")
 
-			// Add users management page
-			mux.HandleFunc("/admin/users", app.adminUsers, "GET")
+				// Add users management page
+				mux.HandleFunc("/admin/users", app.adminUsers, "GET")
 
-			// Add user detail page
-			mux.HandleFunc("/admin/users/:id", app.adminUserDetail, "GET")
+				// Add user detail page
+				mux.HandleFunc("/admin/users/:id", app.adminUserDetail, "GET")
 
-			// Add feedback processing dashboard
-			mux.HandleFunc("/admin/feedback-dashboard", app.showFeedbackDashboard, "GET")
+				// Add feedback processing dashboard
+				mux.HandleFunc("/admin/feedback-dashboard", app.showFeedbackDashboard, "GET")
 
-			// Admin held response management
-			mux.HandleFunc("/admin/held-responses", app.adminHeldResponses, "GET")
-			mux.HandleFunc("/admin/held-responses/:id", app.adminHeldResponseDetail, "GET", "POST")
-			mux.HandleFunc("/admin/held-response-stats", app.adminHeldResponseStats, "GET")
+				// Admin held response management
+				mux.HandleFunc("/admin/held-responses", app.adminHeldResponses, "GET")
+				mux.HandleFunc("/admin/held-responses/:id", app.adminHeldResponseDetail, "GET", "POST")
+				mux.HandleFunc("/admin/held-response-stats", app.adminHeldResponseStats, "GET")
 
-		})
+			})
+		}
 	})
 
 	// Testing routes - only enabled in test mode
-	if os.Getenv("TESTING_MODE") == "true" {
+	if os.Getenv("TESTING_MODE") == "true" && !app.mode.Personal {
 		app.logger.Info(internal.Red("TESTING_MODE is true - setting up testing routes"))
 		mux.HandleFunc("/testing/authenticate", app.handleTestingAuthenticate, "POST")
 		mux.HandleFunc("/testing/reset", app.handleTestingResetUserState, "POST")

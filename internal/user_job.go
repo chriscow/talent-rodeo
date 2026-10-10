@@ -59,9 +59,11 @@ type UserJob struct {
 	ID     string
 	UserID string
 
-	Status JobStatus
-	Score  float64 // Semantic search score, if applicable
-	Rating int     // Analysis rating for the job, if applicable
+	Status                   JobStatus
+	Score                    float64 // Semantic search score, if applicable
+	Rating                   int     // Analysis rating for the job, if applicable
+	AutoArchivedByEvaluation bool    // True only while an evaluation owns archived status.
+	StatusManuallySet        bool    // True after an explicit user status change.
 
 	// User interaction metadata
 	SavedAt    *time.Time
@@ -73,6 +75,9 @@ type UserJob struct {
 	JobRef *firestore.DocumentRef
 
 	JobMatchAnalysis JobMatchAnalysis
+	// PersonalEvaluation identifies the profile, job input, models, and prompt used
+	// for the last personal match analysis. A nil value marks older evaluations.
+	PersonalEvaluation *PersonalEvaluationVersion
 
 	// Search context
 	// SearchHash string
@@ -80,6 +85,17 @@ type UserJob struct {
 	UpdatedAt time.Time
 
 	FiveStarNudgeSentAt *time.Time
+}
+
+// PersonalEvaluationVersion identifies the inputs that can change a personal match.
+type PersonalEvaluationVersion struct {
+	Activation         time.Time
+	StatementVersionID string
+	StatementHash      string
+	JobInputHash       string
+	AnalysisModel      string
+	ExtractionModel    string
+	PromptVersion      string
 }
 
 type JobMatchAnalysis struct {
@@ -576,6 +592,8 @@ func UpdateUserJobStatus(ctx context.Context, fs *FirestoreClient, userID, jobID
 	updates := []firestore.Update{
 		{Path: "Status", Value: status},
 		{Path: "UpdatedAt", Value: now},
+		{Path: "AutoArchivedByEvaluation", Value: false},
+		{Path: "StatusManuallySet", Value: true},
 	}
 
 	// Add timestamp based on status
@@ -614,6 +632,8 @@ func UpdateUserJobStatusTx(ctx context.Context, fs *FirestoreClient, tx *firesto
 	updates := []firestore.Update{
 		{Path: "Status", Value: status},
 		{Path: "UpdatedAt", Value: time.Now()},
+		{Path: "AutoArchivedByEvaluation", Value: false},
+		{Path: "StatusManuallySet", Value: true},
 	}
 
 	// Add timestamp based on status

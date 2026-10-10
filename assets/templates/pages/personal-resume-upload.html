@@ -1,0 +1,29 @@
+{{define "title"}}Upload your resume{{end}}
+
+{{define "page:main"}}
+<main class="container-narrow">
+    <article>
+        <header>
+            <h1>Start with your resume</h1>
+            <p>We’ll use your resume and the preferences you write next to prepare your job search.</p>
+        </header>
+        {{if .Form.Validator.HasErrors}}
+        <p role="alert">Please correct the errors below.</p>
+        {{end}}
+        <form method="post" action="/profile/resume/upload" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <label for="resume">Resume (PDF, DOCX, or TXT)
+                <input type="file" id="resume" name="resume" required accept=".pdf,.docx,.txt" {{with .Form.Validator.FieldErrors.resume}}aria-invalid="true" aria-describedby="resume-error"{{end}}>
+            </label>
+            {{with .Form.Validator.FieldErrors.resume}}<small id="resume-error" role="alert">{{.}}</small>{{end}}
+            <small>Maximum size: 10 MB.</small>
+            <label for="terms">
+                <input type="checkbox" id="terms" name="terms" required>
+                I agree to the <a href="/terms" target="_blank">Terms of Service</a>
+            </label>
+            {{with .Form.Validator.FieldErrors.terms}}<small role="alert">{{.}}</small>{{end}}
+            <button type="submit">Continue to preferences</button>
+        </form>
+    </article>
+</main>
+{{end}}

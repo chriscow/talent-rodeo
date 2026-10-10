@@ -28,6 +28,10 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 			"name", user.Name,
 			"status", user.Status)
 
+		if app.mode.Personal {
+			http.Redirect(w, r, "/profile", http.StatusSeeOther)
+			return
+		}
 		state := user.Status
 
 		// Redirect to profile if onboarding is not complete

@@ -7,7 +7,7 @@ import (
 const (
 	SearchProviderName = "scrapingdog"
 	JobProviderName    = "linkedin"
-	DefaultBaseURL     = "https://api.scrapingdog.com/linkedinjobs"
+	DefaultBaseURL     = "https://api.scrapingdog.com/jobs"
 	MaxRetries         = 10
 	RetryDelay         = 5 * time.Second
 	DefaultConcurrency = 20

@@ -1,348 +1,290 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"time"
+
 	"talent-rodeo/cmd/web/simulate"
 	"talent-rodeo/internal"
-	"talent-rodeo/internal/response"
 
 	"cloud.google.com/go/firestore"
 	"github.com/chriscow/vapi-go"
 	"github.com/getsentry/sentry-go"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
-// makeOutboundCall handles a scheduled webhook task to make an outbound call with VAPI.
-// When an appointment is created, we also schedule a task to make a webhook
-// call to this endpoint at the time of the appointment.  This endpoint calls
-// the VAPI API to create a call and then updates the appointment with the call
-// ID.
+var (
+	errOutboundNotScheduled = errors.New("appointment is not scheduled")
+	errOutboundNotDue       = errors.New("appointment is not due")
+	errOutboundExpired      = errors.New("appointment call window has expired")
+)
+
+const maxOutboundRequestBytes = 4096
+const outboundCallWindow = 15 * time.Minute
+
+// makeOutboundCall accepts only signed scheduled tasks and claims the saved
+// appointment before attempting the external call.
 func (app *application) makeOutboundCall(w http.ResponseWriter, r *http.Request) {
-	app.logger.Debug("handleMakeOutboundVapiCall (handle scheduled outbound call)", "method", r.Method, "url", r.URL.String())
-
-	// Only accept POST requests
+	if app.mode.Personal {
+		http.NotFound(w, r)
+		return
+	}
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	var appointment *internal.Appointment
-	var user *internal.User
-	var apptErr error
-
-	defer func() {
-		// We need to update the appointment status with the result of this function
-		/*
-			AppointmentStatusCompleted AppointmentStatus = "completed"
-			AppointmentStatusCancelled AppointmentStatus = "cancelled"
-			AppointmentStatusFailed    AppointmentStatus = "failed"
-			AppointmentStatusOther     AppointmentStatus = "other"
-		*/
-		if apptErr != nil {
-			errStr := apptErr.Error()
-			appointment.Error = &errStr
-			appointment.Status = internal.AppointmentStatusFailed
-			user.Status = internal.UserStatusError
-			user.Error = &errStr
-			app.fs.RunTransaction(r.Context(), func(ctx context.Context, tx *firestore.Transaction) error {
-				if err := internal.UpdateUserStatusTx(ctx, app.fs, tx, user, internal.UserStatusError); err != nil {
-					internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-						"action": "update_user_status_tx",
-						"userID": user.ID,
-						"status": errStr,
-					})
-					return fmt.Errorf("failed to update user: %w", err)
-				}
-
-				if err := internal.UpdateAppointmentTx(ctx, app.fs, tx, appointment); err != nil {
-					internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
-						"action": "update_appointment_tx",
-						"userID": user.ID,
-						"status": string(internal.AppointmentStatusFailed),
-						"error":  errStr,
-					})
-					return fmt.Errorf("failed to update appointment: %w", err)
-				}
-				return nil
-			})
-		}
-	}()
-
-	// verify all env vars are set
-	if os.Getenv("VAPI_ASSISTANT_ID") == "" || os.Getenv("VAPI_OUTBOUND_PHONE_ID") == "" {
-		apptErr = fmt.Errorf("missing required environment variables")
-		internal.SentryReportError(r.Context(), apptErr, sentry.LevelError, map[string]string{
-			"action":                 "missing_required_environment_variables",
-			"VAPI_ASSISTANT_ID":      os.Getenv("VAPI_ASSISTANT_ID"),
-			"VAPI_OUTBOUND_PHONE_ID": os.Getenv("VAPI_OUTBOUND_PHONE_ID"),
-		})
-		app.logger.Error("Missing required environment variables",
-			"assistant_id", os.Getenv("VAPI_ASSISTANT_ID") == "",
-			"phone_id", os.Getenv("VAPI_OUTBOUND_PHONE_ID") == "")
-
-		app.reportServerError(r, apptErr)
-		response.JSON(w, http.StatusInternalServerError, map[string]string{
-			"error": "missing required environment variables",
-		})
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxOutboundRequestBytes+1))
+	if err != nil || len(body) > maxOutboundRequestBytes {
+		http.Error(w, "invalid call request", http.StatusBadRequest)
+		return
+	}
+	if !verifyOutboundCallSignature(body, r.Header.Get(outboundSignatureHeader), app.config.session.secretKey) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var callRequest outboundCallRequest
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&callRequest); err != nil || callRequest.AppointmentID == "" || callRequest.UserID == "" {
+		http.Error(w, "invalid call request", http.StatusBadRequest)
+		return
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		http.Error(w, "invalid call request", http.StatusBadRequest)
 		return
 	}
 
-	// Get assistant and phone IDs from environment
-	assistantID := os.Getenv("VAPI_ASSISTANT_ID")
-	outboundPhoneID := os.Getenv("VAPI_OUTBOUND_PHONE_ID")
-
-	if assistantID == "" || outboundPhoneID == "" {
-		apptErr = fmt.Errorf("missing required environment variables")
-		internal.SentryReportError(r.Context(), apptErr, sentry.LevelError, map[string]string{
-			"action":       "missing_required_environment_variables",
-			"assistant_id": assistantID,
-			"phone_id":     outboundPhoneID,
-		})
-		app.logger.Error("Missing required environment variables",
-			"assistant_id", assistantID == "",
-			"phone_id", outboundPhoneID == "")
-
-		app.reportServerError(r, apptErr)
-		response.JSON(w, http.StatusInternalServerError, map[string]string{
-			"error": "missing required environment variables",
-		})
-		return
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&appointment); err != nil {
-		apptErr = fmt.Errorf("failed to decode request body: %w", err)
-		internal.SentryReportError(r.Context(), apptErr, sentry.LevelError, map[string]string{
-			"action": "failed_to_decode_request_body",
-			"error":  err.Error(),
-		})
-		app.logger.Error("Failed to decode request body", "error", apptErr)
-		app.reportServerError(r, apptErr)
-
-		// This is likely our problem, so we don't want to retry
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	// validate that none of the fields are empty
-	if appointment.UserID == "" {
-		apptErr = fmt.Errorf("missing required fields: UserID")
-		internal.SentryReportError(r.Context(), apptErr, sentry.LevelError, map[string]string{
-			"action":          "missing_required_fields",
-			"user_id_missing": appointment.UserID,
-		})
-		app.logger.Error("outbound call: missing required fields", "user_id_missing", appointment.UserID == "")
-		app.reportServerError(r, apptErr)
-
-		// This is likely our problem, so we don't want to retry
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	var found bool
-	user, found, apptErr = internal.GetUser(r.Context(), app.fs, appointment.UserID)
-	if apptErr != nil {
-		apptErr = fmt.Errorf("failed to get user: %w", apptErr)
-		internal.SentryReportError(r.Context(), apptErr, sentry.LevelError, map[string]string{
-			"action":  "failed_to_get_user",
-			"user_id": appointment.UserID,
-		})
-		app.logger.Error("Failed to get user", "error", apptErr)
-		app.reportServerError(r, apptErr)
-
-		// this might just be a transient error, so we want to retry
-		response.JSON(w, http.StatusInternalServerError, map[string]string{
-			"error": "failed to get user",
-		})
-		return
-	}
-
-	if !found {
-		apptErr = fmt.Errorf("user not found: %s", appointment.UserID)
-		internal.SentryReportError(r.Context(), apptErr, sentry.LevelError, map[string]string{
-			"action":  "user_not_found",
-			"user_id": appointment.UserID,
-		})
-		app.logger.Error("User not found", "user_id", appointment.UserID)
-		app.reportServerError(r, apptErr)
-
-		// this is likely our problem, so we don't want to retry
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	if user.Phone == nil || *user.Phone == "" {
-		apptErr = fmt.Errorf("user has no phone number: %s", appointment.UserID)
-		internal.SentryReportError(r.Context(), apptErr, sentry.LevelError, map[string]string{
-			"action":  "user_has_no_phone_number",
-			"user_id": appointment.UserID,
-		})
-		app.logger.Error("User has no phone number", "user_id", appointment.UserID)
-		app.reportServerError(r, apptErr)
-
-		// this is likely our problem, so we don't want to retry
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	if user.Status == internal.UserStatusError {
-		apptErr = fmt.Errorf("user is in error state: %s", appointment.UserID)
-		userError := ""
-		if user.Error != nil {
-			userError = *user.Error
-		}
-		internal.SentryReportError(r.Context(), apptErr, sentry.LevelError, map[string]string{
-			"action":     "user_is_in_error_state",
-			"user_id":    appointment.UserID,
-			"user_error": userError,
-		})
-		app.logger.Error("User is in error state", "user_id", appointment.UserID)
-		app.reportServerError(r, apptErr)
-
-		// this is likely our problem, so we don't want to retry
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	if user.Status < internal.UserStatusCallScheduled {
-		apptErr = fmt.Errorf("user is not ready for a call: %s", appointment.UserID)
-		internal.SentryReportError(r.Context(), apptErr, sentry.LevelError, map[string]string{
-			"action":  "user_is_not_ready_for_a_call",
-			"user_id": appointment.UserID,
-		})
-		app.logger.Error("User is not ready for a call", "user_id", appointment.UserID)
-		app.reportServerError(r, apptErr)
-
-		// this is likely our problem, so we don't want to retry
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	assistantOverrides, err := internal.BuildAssistantOverrides(r.Context(), user, app.fs, app.logger)
+	user, found, err := internal.GetUser(r.Context(), app.fs, callRequest.UserID)
 	if err != nil {
-		apptErr = fmt.Errorf("failed to build assistant overrides: %w", err)
-		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-			"action":  "failed_to_build_assistant_overrides",
-			"user_id": appointment.UserID,
-		})
-		app.logger.Error("Failed to build assistant overrides", "error", apptErr)
-		app.reportServerError(r, apptErr)
-		w.WriteHeader(http.StatusOK)
+		app.serverError(w, r, fmt.Errorf("read outbound call user: %w", err))
+		return
+	}
+	if !found || user.Phone == nil || *user.Phone == "" {
+		http.Error(w, "call is not eligible", http.StatusConflict)
+		return
+	}
+	if user.Status < internal.UserStatusCallScheduled {
+		http.Error(w, "call setup is not complete", http.StatusServiceUnavailable)
+		return
+	}
+	if user.Status != internal.UserStatusCallScheduled {
+		http.Error(w, "call is not eligible", http.StatusConflict)
+		return
+	}
+	assistantID := os.Getenv("VAPI_ASSISTANT_ID")
+	if assistantID == "" || os.Getenv("VAPI_OUTBOUND_PHONE_ID") == "" {
+		app.serverError(w, r, fmt.Errorf("outbound call configuration is incomplete"))
+		return
+	}
+
+	overrides, err := internal.BuildAssistantOverrides(r.Context(), user, app.fs, app.logger)
+	if err != nil {
+		app.serverError(w, r, fmt.Errorf("build outbound assistant overrides: %w", err))
+		return
+	}
+	appointment, err := app.claimOutboundAppointment(r.Context(), callRequest)
+	if err != nil {
+		switch {
+		case errors.Is(err, errOutboundNotScheduled):
+			http.Error(w, "appointment is not scheduled", http.StatusConflict)
+		case errors.Is(err, errOutboundNotDue):
+			http.Error(w, "appointment is not due", http.StatusServiceUnavailable)
+		case errors.Is(err, errOutboundExpired):
+			http.Error(w, "appointment call window has expired", http.StatusConflict)
+		default:
+			app.serverError(w, r, fmt.Errorf("claim outbound appointment: %w", err))
+		}
 		return
 	}
 
 	var result *vapi.Call
 	if os.Getenv("TESTING_MODE") == "true" {
 		result, err = vapi.GetCall(r.Context(), simulate.TestingCallID)
-		if err != nil {
-			apptErr = fmt.Errorf("failed to get call: %w", err)
-			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-				"action":       "failed_to_get_call",
-				"user_id":      appointment.UserID,
-				"testing_mode": os.Getenv("TESTING_MODE"),
-			})
-			app.logger.Error("Failed to get call", "error", err)
-			app.reportServerError(r, apptErr)
-			return
-		}
-
-		appointment.CallID = result.ID
 	} else {
 		phone := vapi.PhoneNumber{
 			TwilioAccountSid:  os.Getenv("TWILIO_ACCOUNT_SID"),
 			TwilioAuthToken:   os.Getenv("TWILIO_AUTH_TOKEN"),
 			TwilioPhoneNumber: os.Getenv("TWILIO_FROM_NUMBER"),
 		}
-
-		// Create call config
 		callConfig := vapi.Call{
 			Name:               &appointment.ID,
 			AssistantID:        &assistantID,
 			PhoneNumber:        &phone,
-			AssistantOverrides: assistantOverrides,
-			Customer: &vapi.Customer{
-				Number: *user.Phone,
-				Name:   user.ID,
-			},
+			AssistantOverrides: overrides,
+			Customer:           &vapi.Customer{Number: *user.Phone, Name: user.ID},
 		}
-
 		result, err = vapi.CreateCall(r.Context(), callConfig)
-		if err != nil {
-			apptErr = fmt.Errorf("handleVapiCall CreateCall: %w", err)
-			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-				"action":       "failed_to_create_call",
-				"user_id":      appointment.UserID,
-				"testing_mode": os.Getenv("TESTING_MODE"),
-			})
-			app.logger.Error("failed to create call", "error", err)
-
-			b, err := json.MarshalIndent(callConfig, "", "  ")
-			if err != nil {
-				app.logger.Error("failed to marshal call config", "error", err)
-			}
-			app.logger.Error("call config", "call_config", string(b))
-
-			app.reportServerError(r, apptErr)
-
-			// This is likely a transient error, but it could be we are not configuring the call correctly, so we want to retry
-			response.JSON(w, http.StatusInternalServerError, map[string]string{
-				"error": "failed to create call: " + err.Error(),
-			})
-			return
-		}
 	}
-
-	if result != nil && result.ID != nil && result.Status != nil {
-		app.logger.Info(internal.Green("call created successfully"),
-			"users_id", user.ID,
-			"call_id", *result.ID,
-			"status", *result.Status,
-		)
-	} else {
-		app.logger.Warn(internal.BGYellow("unexpected nil pointer result from CreateCall"), "result", result)
-		app.reportServerError(r, fmt.Errorf("unexpected nil pointer result from CreateCall"))
-
+	if err != nil || result == nil || result.ID == nil {
+		persistCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if persistErr := app.failClaimedAppointment(persistCtx, appointment); persistErr != nil {
+			app.logger.Error("failed to record outbound call failure", "appointment_id", appointment.ID, "error", persistErr)
+		}
+		cancel()
+		app.logger.Error("outbound call provider failed", "appointment_id", appointment.ID)
+		http.Error(w, "failed to create call", http.StatusBadGateway)
 		return
 	}
+	persistCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	if err := app.recordOutboundCall(persistCtx, appointment, *result.ID); err != nil {
+		cancel()
+		// The provider may already have started the call. Leave the claim in
+		// place so a task retry cannot start a second one.
+		app.reportServerError(r, fmt.Errorf("record outbound call %s: %w", appointment.ID, err))
+		http.Error(w, "call state needs reconciliation", http.StatusInternalServerError)
+		return
+	}
+	cancel()
 
-	app.fs.RunTransaction(r.Context(), func(ctx context.Context, tx *firestore.Transaction) error {
-		appointment.Status = internal.AppointmentStatusRunning
-		appointment.CallID = result.ID
-		if err := internal.UpdateAppointmentTx(ctx, app.fs, tx, appointment); err != nil {
-			return fmt.Errorf("failed to update appointment: %w", err)
-		}
-
-		user.Status = internal.UserStatusCallStarted
-		if err := internal.UpdateUserStatusTx(ctx, app.fs, tx, user, internal.UserStatusCallStarted); err != nil {
-			return fmt.Errorf("failed to update user: %w", err)
-		}
-
-		return nil
-	})
-
+	app.logger.Info("outbound call created", "user_id", user.ID, "appointment_id", appointment.ID, "call_id", *result.ID)
 	if err := internal.SendPusherRedirect(app.pusher, user.ID, "/dashboard"); err != nil {
 		internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
 			"action":  "failed_to_send_pusher_redirect",
 			"user_id": user.ID,
 		})
-		app.logger.Error("Failed to send pusher redirect", "error", err)
-		// app.reportServerError(r, fmt.Errorf("failed to send pusher redirect: %w", err))
 	}
-
-	// In test mode, schedule a simulated end-of-call webhook
 	if os.Getenv("TESTING_MODE") == "true" {
 		if err := simulate.EndOfCall(r.Context(), app.processor, appointment.UserID, appointment.ID, app.logger); err != nil {
-			// Log error but continue with normal flow since this is just test simulation
-			internal.SentryReportError(r.Context(), err, sentry.LevelError, map[string]string{
-				"action":       "failed_to_simulate_end_of_call",
-				"user_id":      appointment.UserID,
-				"testing_mode": os.Getenv("TESTING_MODE"),
-			})
-			app.logger.Error("Failed to simulate end-of-call", "error", err)
+			app.logger.Error("simulate end of call", "appointment_id", appointment.ID, "error", err)
 		}
 	}
-
 	w.WriteHeader(http.StatusOK)
+}
+
+func (app *application) claimOutboundAppointment(ctx context.Context, request outboundCallRequest) (*internal.Appointment, error) {
+	// These paths match the persisted collections in internal/appointment.go.
+	ref := app.fs.Collection("users").Doc(request.UserID).Collection("appointments").Doc(request.AppointmentID)
+	var claimed internal.Appointment
+	err := app.fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		doc, err := tx.Get(ref)
+		if err != nil {
+			if grpcstatus.Code(err) == codes.NotFound {
+				return errOutboundNotScheduled
+			}
+			return err
+		}
+		var appointment internal.Appointment
+		if err := doc.DataTo(&appointment); err != nil {
+			return fmt.Errorf("decode appointment: %w", err)
+		}
+		if err := validateOutboundAppointment(appointment, request, time.Now()); err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		if err := tx.Update(ref, []firestore.Update{
+			{Path: "Status", Value: internal.AppointmentStatusRunning},
+			{Path: "UpdatedAt", Value: now},
+		}); err != nil {
+			return err
+		}
+		claimed = appointment
+		claimed.Status = internal.AppointmentStatusRunning
+		claimed.UpdatedAt = now
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &claimed, nil
+}
+
+func validateOutboundAppointment(appointment internal.Appointment, request outboundCallRequest, now time.Time) error {
+	if appointment.ID != request.AppointmentID || appointment.UserID != request.UserID ||
+		appointment.Status != internal.AppointmentStatusScheduled || appointment.CallID != nil ||
+		appointment.ScheduledTime.IsZero() {
+		return errOutboundNotScheduled
+	}
+	if now.Before(appointment.ScheduledTime) {
+		return errOutboundNotDue
+	}
+	if now.After(appointment.ScheduledTime.Add(outboundCallWindow)) {
+		return errOutboundExpired
+	}
+	return nil
+}
+
+func (app *application) failClaimedAppointment(ctx context.Context, appointment *internal.Appointment) error {
+	ref := app.fs.Collection("users").Doc(appointment.UserID).Collection("appointments").Doc(appointment.ID)
+	userRef := app.fs.Collection("users").Doc(appointment.UserID)
+	return app.fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		doc, err := tx.Get(ref)
+		if err != nil {
+			return err
+		}
+		var current internal.Appointment
+		if err := doc.DataTo(&current); err != nil {
+			return err
+		}
+		if current.Status != internal.AppointmentStatusRunning || current.CallID != nil {
+			return nil
+		}
+		userDoc, err := tx.Get(userRef)
+		if err != nil {
+			return err
+		}
+		var currentUser internal.User
+		if err := userDoc.DataTo(&currentUser); err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		failure := "unable to start call"
+		if err := tx.Update(ref, []firestore.Update{
+			{Path: "Status", Value: internal.AppointmentStatusFailed},
+			{Path: "Error", Value: failure},
+			{Path: "FailedAt", Value: now},
+			{Path: "UpdatedAt", Value: now},
+		}); err != nil {
+			return err
+		}
+		if currentUser.Status != internal.UserStatusCallScheduled {
+			return nil
+		}
+		return tx.Update(userRef, []firestore.Update{
+			{Path: "Status", Value: internal.UserStatusError},
+			{Path: "Error", Value: failure},
+			{Path: "StatusUpdatedAt", Value: now},
+		})
+	})
+}
+
+func (app *application) recordOutboundCall(ctx context.Context, appointment *internal.Appointment, callID string) error {
+	ref := app.fs.Collection("users").Doc(appointment.UserID).Collection("appointments").Doc(appointment.ID)
+	userRef := app.fs.Collection("users").Doc(appointment.UserID)
+	return app.fs.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		doc, err := tx.Get(ref)
+		if err != nil {
+			return err
+		}
+		var current internal.Appointment
+		if err := doc.DataTo(&current); err != nil {
+			return err
+		}
+		if current.Status != internal.AppointmentStatusRunning || current.CallID != nil {
+			return errOutboundNotScheduled
+		}
+		userDoc, err := tx.Get(userRef)
+		if err != nil {
+			return err
+		}
+		var currentUser internal.User
+		if err := userDoc.DataTo(&currentUser); err != nil {
+			return err
+		}
+		if err := tx.Update(ref, []firestore.Update{{Path: "CallID", Value: callID}, {Path: "UpdatedAt", Value: time.Now().UTC()}}); err != nil {
+			return err
+		}
+		if currentUser.Status != internal.UserStatusCallScheduled {
+			return nil
+		}
+		return internal.UpdateUserStatusTx(ctx, app.fs, tx, &currentUser, internal.UserStatusCallStarted)
+	})
 }

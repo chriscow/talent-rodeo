@@ -15,11 +15,11 @@ import (
 	"talent-rodeo/internal"
 	"time"
 
-	"github.com/chriscow/minds/tools"
 	"github.com/getsentry/sentry-go"
 	"github.com/pusher/pusher-http-go/v5"
 	"github.com/samber/lo"
 	"github.com/sashabaranov/go-openai"
+	tools "talent-rodeo/internal/llmtools"
 )
 
 // ProcessCompletedCall updates the appointment after a successful call with the transcript summary.
@@ -521,7 +521,7 @@ func GenerateFailureEmail(ctx context.Context, fs *internal.FirestoreClient, use
 	}
 
 	resp := openai.ChatCompletionResponse{}
-	llmResp, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat), tools.WantCompletionResponse(&resp))
+	llmResp, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekFlash), tools.WantCompletionResponse(&resp))
 	if err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"error_type": "tools_ask",
@@ -530,7 +530,7 @@ func GenerateFailureEmail(ctx context.Context, fs *internal.FirestoreClient, use
 	}
 
 	// Record LLM cost for failure email generation
-	if err := internal.RecordLLMCost(ctx, fs, &user.ID, tools.DeepSeekChat, resp, "failure_email_generation", nil); err != nil {
+	if err := internal.RecordLLMCost(ctx, fs, &user.ID, tools.DeepSeekFlash, resp, "failure_email_generation", nil); err != nil {
 		// Log error but don't fail the operation
 		logger.Error("failed to record LLM cost for failure email generation", "error", err)
 	}
@@ -617,7 +617,7 @@ func GenerateRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user 
 	}
 
 	resp := openai.ChatCompletionResponse{}
-	llmResp, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat), tools.WantCompletionResponse(&resp))
+	llmResp, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekFlash), tools.WantCompletionResponse(&resp))
 	if err != nil {
 		internal.SentryReportError(ctx, err, sentry.LevelError, map[string]string{
 			"error_type": "tools_ask",
@@ -626,7 +626,7 @@ func GenerateRecapEmail(ctx context.Context, fs *internal.FirestoreClient, user 
 	}
 
 	// Record LLM cost for recap email generation
-	if err := internal.RecordLLMCost(ctx, fs, &user.ID, tools.DeepSeekChat, resp, "recap_email_generation", nil); err != nil {
+	if err := internal.RecordLLMCost(ctx, fs, &user.ID, tools.DeepSeekFlash, resp, "recap_email_generation", nil); err != nil {
 		// Log error but don't fail the operation
 		logger.Error("failed to record LLM cost for recap email generation", "error", err)
 	}
@@ -919,13 +919,13 @@ func getWorkPreferences(ctx context.Context, fs *internal.FirestoreClient, logge
 	}
 
 	resp := openai.ChatCompletionResponse{}
-	data, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat), tools.WantCompletionResponse(&resp))
+	data, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekFlash), tools.WantCompletionResponse(&resp))
 	if err != nil {
 		return fmt.Errorf("getWorkPreferences: Ask: %w", err)
 	}
 
 	// Record LLM cost for work preferences extraction
-	if err := internal.RecordLLMCost(ctx, fs, &user.ID, tools.DeepSeekChat, resp, "work_preferences_extraction", nil); err != nil {
+	if err := internal.RecordLLMCost(ctx, fs, &user.ID, tools.DeepSeekFlash, resp, "work_preferences_extraction", nil); err != nil {
 		// Log error but don't fail the operation
 		// Note: we don't have a logger here, so using default
 		logger.Error("failed to record LLM cost for work preferences extraction", "error", err)
@@ -969,9 +969,9 @@ func GetUserStatement(ctx context.Context, user *internal.User, transcript *inte
 		logger.Debug("user already has statement, skipping transcript generation", "userID", user.ID, "currentVersion", existing.VersionNumber)
 		return nil
 	}
-	
+
 	logger.Debug("generating initial user statement using versioning system", "userID", user.ID)
-	
+
 	// Use versioning system to create initial statement
 	promptFile := "transcript.user-statement.v001.txt"
 	version, err := internal.CreateInitialStatement(ctx, fs, user.ID, transcript, promptFile)
@@ -979,10 +979,10 @@ func GetUserStatement(ctx context.Context, user *internal.User, transcript *inte
 		internal.SentryReportError(ctx, err, sentry.LevelError, nil)
 		return fmt.Errorf("failed to create initial statement: %w", err)
 	}
-	
+
 	// Update user object with new statement for immediate use in this session
 	user.Statement = &version.StatementText
-	
+
 	logger.Debug("created initial statement version", "userID", user.ID, "versionID", version.ID, "versionNumber", version.VersionNumber)
 	return nil
 }

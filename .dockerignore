@@ -1,4 +1,14 @@
 # flyctl launch added from .gitignore
+.git
+.env
+.env.*
+*.env
+**/gmail_token.json
+**/*credentials*.json
+**/*service-account*.json
+docs/proposals
+.config
+.claude
 **/.DS_Store
 **/.devcontainer
 **/.local

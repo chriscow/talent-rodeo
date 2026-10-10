@@ -17,8 +17,8 @@ import (
 
 	"talent-rodeo/internal/inbox"
 
-	"github.com/chriscow/minds/tools"
 	"github.com/joho/godotenv"
+	tools "talent-rodeo/internal/llmtools"
 )
 
 // TestEmailParser_ErrorHandling tests the email parser's behavior under various error conditions

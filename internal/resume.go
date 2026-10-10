@@ -13,11 +13,11 @@ import (
 
 	"cloud.google.com/go/firestore"
 	"github.com/chriscow/minds"
-	"github.com/chriscow/minds/tools"
 	"github.com/sashabaranov/go-openai"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	tools "talent-rodeo/internal/llmtools"
 )
 
 const (
@@ -341,13 +341,13 @@ func getAnnotatedResume(ctx context.Context, fs *FirestoreClient, logger *slog.L
 	}
 
 	resp := openai.ChatCompletionResponse{}
-	analysis, err := tools.Ask(ctx, resume.RawText, tools.WithMessages(msgs), tools.WithModel(tools.DeepSeekChat), tools.WithMaxTokens(4096), tools.WantCompletionResponse(&resp))
+	analysis, err := tools.Ask(ctx, resume.RawText, tools.WithMessages(msgs), tools.WithModel(tools.DeepSeekFlash), tools.WithMaxTokens(4096), tools.WantCompletionResponse(&resp))
 	if err != nil {
 		return nil, fmt.Errorf("convertResume: failed to ask LLM: %w", err)
 	}
 
 	// Record LLM cost for resume analysis
-	if err := RecordLLMCost(ctx, fs, &userID, tools.DeepSeekChat, resp, "resume_analysis", nil); err != nil {
+	if err := RecordLLMCost(ctx, fs, &userID, tools.DeepSeekFlash, resp, "resume_analysis", nil); err != nil {
 		// Log error but don't fail the operation
 		logger.Error("failed to record LLM cost for resume analysis", "error", err)
 	}
@@ -494,13 +494,13 @@ func getResumeSearchAnalysis(ctx context.Context, fs *FirestoreClient, logger *s
 	}
 
 	resp := openai.ChatCompletionResponse{}
-	result, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekChat), tools.WantCompletionResponse(&resp))
+	result, err := tools.Ask(ctx, prompt, tools.WithModel(tools.DeepSeekFlash), tools.WantCompletionResponse(&resp))
 	if err != nil {
 		return "", err
 	}
 
 	// Record LLM cost for resume search analysis
-	if err := RecordLLMCost(ctx, fs, &userID, tools.DeepSeekChat, resp, "resume_search_analysis", nil); err != nil {
+	if err := RecordLLMCost(ctx, fs, &userID, tools.DeepSeekFlash, resp, "resume_search_analysis", nil); err != nil {
 		// Log error but don't fail the operation
 		logger.Error("failed to record LLM cost for resume search analysis", "error", err)
 	}

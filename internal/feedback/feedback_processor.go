@@ -42,9 +42,14 @@ type Processor struct {
 	settings   ProcessorSettings
 	isRunning  bool
 	cancelFunc context.CancelFunc
+	mode       internal.RuntimeMode
 }
 
-func NewProcessor(fs *internal.FirestoreClient, logger *slog.Logger) *Processor {
+func NewProcessor(fs *internal.FirestoreClient, logger *slog.Logger, modes ...internal.RuntimeMode) *Processor {
+	var mode internal.RuntimeMode
+	if len(modes) > 0 {
+		mode = modes[0]
+	}
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 	}
@@ -58,6 +63,7 @@ func NewProcessor(fs *internal.FirestoreClient, logger *slog.Logger) *Processor 
 		logger:   logger,
 		done:     make(chan bool),
 		settings: settings,
+		mode:     mode,
 	}
 }
 
@@ -128,6 +134,20 @@ func (p *Processor) initCloudflareKV() error {
 
 func (p *Processor) RefreshSettings() error {
 	var settings ProcessorSettings
+	if p.mode.Personal {
+		p.settings = ProcessorSettings{Paused: true, Interval: DefaultTickInterval}
+		if p.kv == nil {
+			return fmt.Errorf("personal feedback settings unavailable")
+		}
+		if err := p.kv.Get(FeedbackProcessorKey, &settings); err != nil {
+			return fmt.Errorf("read personal feedback settings: %w", err)
+		}
+		if settings.Interval <= 0 {
+			settings.Interval = DefaultTickInterval
+		}
+		p.settings = settings
+		return nil
+	}
 	if p.kv != nil {
 		if err := p.kv.Get(FeedbackProcessorKey, &settings); err != nil {
 			settings = DefaultSettings
@@ -169,7 +189,9 @@ func (p *Processor) IsWithinAllowedHours() bool {
 }
 
 func (p *Processor) process(ctx context.Context) error {
-	p.RefreshSettings()
+	if err := p.RefreshSettings(); err != nil {
+		return err
+	}
 	if p.settings.Paused {
 		p.logger.Info("feedback processor is paused, skipping processing")
 		return nil
@@ -180,6 +202,16 @@ func (p *Processor) process(ctx context.Context) error {
 			"end_hour", p.settings.EndHour,
 			"current_time_utc", time.Now().UTC().Format("15:04"))
 		return nil
+	}
+	if p.mode.Personal {
+		owner, err := internal.GetPersonalSearchOwner(ctx, p.fs, p.mode.UserID)
+		if err != nil {
+			return err
+		}
+		if !p.mode.CanMatch(owner, time.Now()) {
+			return nil
+		}
+		return ProcessUserFeedback(ctx, p.fs, p.logger, owner.ID)
 	}
 	p.logger.Info("processing user feedback for all users with enhanced processor...")
 	return ProcessAllUsersFeedback(ctx, p.fs, p.logger)

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/chriscow/minds/tools"
 	"github.com/sashabaranov/go-openai"
 	"google.golang.org/api/iterator"
+	tools "talent-rodeo/internal/llmtools"
 )
 
 const geoIDCollection = "geo_ids"
@@ -149,13 +149,13 @@ func ExtractGeoID(ctx context.Context, fs *FirestoreClient, userID *string, data
 	`
 
 	resp := openai.ChatCompletionResponse{}
-	res, err := tools.StructuredAsk[locationID](ctx, fmt.Sprintf(prompt, string(geoidJSON), data), tools.WithModel(tools.GPT41Mini), tools.WantCompletionResponse(&resp))
+	res, err := tools.StructuredAsk[locationID](ctx, fmt.Sprintf(prompt, string(geoidJSON), data), tools.WithModel(tools.GPT6Luna), tools.WantCompletionResponse(&resp))
 	if err != nil {
 		return "", err
 	}
 
 	// Record LLM cost for geo ID extraction
-	if err := RecordLLMCost(ctx, fs, userID, string(tools.GPT41Mini), resp, "geo_id_extraction", nil); err != nil {
+	if err := RecordLLMCost(ctx, fs, userID, string(tools.GPT6Luna), resp, "geo_id_extraction", nil); err != nil {
 		// Log error but don't fail the operation
 		slog.Default().Error("failed to record LLM cost for geo ID extraction", "error", err)
 	}

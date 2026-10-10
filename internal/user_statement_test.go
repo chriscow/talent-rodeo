@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/chriscow/minds"
-	"github.com/chriscow/minds/tools"
+	tools "talent-rodeo/internal/llmtools"
 )
 
 func TestUserStatementVersioning(t *testing.T) {
@@ -705,7 +705,6 @@ func TestTranscriptIntegration(t *testing.T) {
 	})
 }
 
-
 // TestCompareStatementVersions tests the statement version comparison functionality
 func TestCompareStatementVersions(t *testing.T) {
 	ctx := context.Background()
@@ -730,15 +729,15 @@ func TestCompareStatementVersions(t *testing.T) {
 		StatementHash: generateStatementHash("I am a software engineer with 5 years of experience seeking backend development roles with Go and Python."),
 		CreatedAt:     time.Now(),
 		SourceData: map[string]any{
-			"transcript":     "original transcript",
-			"skills":         []string{"go", "python"},
-			"feedback_data":  "enhanced with feedback",
-			"experience":     "5 years",
+			"transcript":    "original transcript",
+			"skills":        []string{"go", "python"},
+			"feedback_data": "enhanced with feedback",
+			"experience":    "5 years",
 		},
 	}
 
 	tests := []struct {
-		name                     string
+		name                    string
 		v1, v2                  *UserStatementVersion
 		performSemanticAnalysis bool
 		expectError             bool
@@ -791,7 +790,7 @@ func TestCompareStatementVersions(t *testing.T) {
 			},
 		},
 		{
-			name:                     "With semantic analysis",
+			name:                    "With semantic analysis",
 			v1:                      version1,
 			v2:                      version2,
 			performSemanticAnalysis: true,
@@ -870,7 +869,7 @@ func TestMockLLMStatementGeneration(t *testing.T) {
 	timestamp := time.Now().UnixNano()
 	uniqueEmail := fmt.Sprintf("test-mock-llm-%d@example.com", timestamp)
 	user := CreateTestUser(t, client, "Mock LLM Test User", uniqueEmail, "+14251234567", false)
-	
+
 	// Set up user preferences
 	locationPref := "Seattle, WA"
 	user.LocationPreference = &locationPref
@@ -880,7 +879,7 @@ func TestMockLLMStatementGeneration(t *testing.T) {
 		ExperienceLevel: "senior",
 	}
 	user.SteeringQuery = steeringQuery
-	
+
 	if err := SaveUser(ctx, client, user); err != nil {
 		t.Fatalf("Failed to save user: %v", err)
 	}
@@ -938,7 +937,7 @@ func TestMockLLMStatementGeneration(t *testing.T) {
 		timestamp2 := time.Now().UnixNano()
 		uniqueEmail2 := fmt.Sprintf("test-mock-llm-enhance-%d@example.com", timestamp2)
 		user2 := CreateTestUser(t, client, "Mock LLM Test User 2", uniqueEmail2, "+14251234568", false)
-		
+
 		// Set up user preferences
 		locationPref2 := "Seattle, WA"
 		user2.LocationPreference = &locationPref2
@@ -948,7 +947,7 @@ func TestMockLLMStatementGeneration(t *testing.T) {
 			ExperienceLevel: "senior",
 		}
 		user2.SteeringQuery = steeringQuery2
-		
+
 		if err := SaveUser(ctx, client, user2); err != nil {
 			t.Fatalf("Failed to save user2: %v", err)
 		}
@@ -1041,8 +1040,8 @@ func TestMockLLMStatementGeneration(t *testing.T) {
 			StatementHash: generateStatementHash("I am a software engineer with 5 years of experience seeking remote opportunities at startups."),
 			CreatedAt:     time.Now(),
 			SourceData: map[string]any{
-				"transcript":     "original transcript",
-				"feedback_data":  "enhanced with feedback",
+				"transcript":    "original transcript",
+				"feedback_data": "enhanced with feedback",
 			},
 		}
 
@@ -1076,7 +1075,7 @@ func TestMockLLMStatementGeneration(t *testing.T) {
 		timestamp3 := time.Now().UnixNano()
 		uniqueEmail3 := fmt.Sprintf("test-mock-llm-error-%d@example.com", timestamp3)
 		user3 := CreateTestUser(t, client, "Mock LLM Test User 3", uniqueEmail3, "+14251234569", false)
-		
+
 		// Set up user preferences
 		locationPref3 := "Seattle, WA"
 		user3.LocationPreference = &locationPref3
@@ -1086,7 +1085,7 @@ func TestMockLLMStatementGeneration(t *testing.T) {
 			ExperienceLevel: "senior",
 		}
 		user3.SteeringQuery = steeringQuery3
-		
+
 		if err := SaveUser(ctx, client, user3); err != nil {
 			t.Fatalf("Failed to save user3: %v", err)
 		}
@@ -1111,7 +1110,7 @@ func TestMockLLMStatementGeneration(t *testing.T) {
 
 		// Test that LLM errors are properly handled
 		version, err := CreateInitialStatement(mockCtx, client, user3.ID, transcript, "transcript.user-statement.v001.txt")
-		
+
 		// Since the mock mechanism might not work as expected for errors,
 		// let's just validate that some statement was generated for now
 		// This test mainly verifies the mock model selection works
@@ -1154,7 +1153,7 @@ func TestStatementRegeneration(t *testing.T) {
 	timestamp := time.Now().UnixNano()
 	uniqueEmail := fmt.Sprintf("test-regeneration-%d@example.com", timestamp)
 	user := CreateTestUser(t, client, "Regeneration Test User", uniqueEmail, "+14251234567", false)
-	
+
 	// Set up user preferences
 	locationPref := "Seattle, WA"
 	user.LocationPreference = &locationPref
@@ -1164,7 +1163,7 @@ func TestStatementRegeneration(t *testing.T) {
 		ExperienceLevel: "senior",
 	}
 	user.SteeringQuery = steeringQuery
-	
+
 	if err := SaveUser(ctx, client, user); err != nil {
 		t.Fatalf("Failed to save user: %v", err)
 	}
@@ -1347,39 +1346,39 @@ func TestPromptVersionParsing(t *testing.T) {
 
 func TestPromptCompatibility(t *testing.T) {
 	tests := []struct {
-		name             string
-		originalPrompt   string
-		newPrompt        string
+		name               string
+		originalPrompt     string
+		newPrompt          string
 		expectedCompatible bool
-		expectedReason   string
+		expectedReason     string
 	}{
 		{
-			name:             "Same prompt version",
-			originalPrompt:   "transcript.user-statement.v001.txt",
-			newPrompt:        "transcript.user-statement.v001.txt",
+			name:               "Same prompt version",
+			originalPrompt:     "transcript.user-statement.v001.txt",
+			newPrompt:          "transcript.user-statement.v001.txt",
 			expectedCompatible: true,
-			expectedReason:   "Same version",
+			expectedReason:     "Same version",
 		},
 		{
-			name:             "Version upgrade",
-			originalPrompt:   "transcript.user-statement.v001.txt",
-			newPrompt:        "transcript.user-statement.v002.txt",
+			name:               "Version upgrade",
+			originalPrompt:     "transcript.user-statement.v001.txt",
+			newPrompt:          "transcript.user-statement.v002.txt",
 			expectedCompatible: true,
-			expectedReason:   "Version change from v001 to v002",
+			expectedReason:     "Version change from v001 to v002",
 		},
 		{
-			name:             "Different prompt types",
-			originalPrompt:   "transcript.user-statement.v001.txt",
-			newPrompt:        "feedback-analysis.v001.txt",
+			name:               "Different prompt types",
+			originalPrompt:     "transcript.user-statement.v001.txt",
+			newPrompt:          "feedback-analysis.v001.txt",
 			expectedCompatible: false,
-			expectedReason:   "Different prompt types: transcript.user-statement vs feedback-analysis",
+			expectedReason:     "Different prompt types: transcript.user-statement vs feedback-analysis",
 		},
 		{
-			name:             "Compatible statement prompts",
-			originalPrompt:   "statement-update.v001.txt",
-			newPrompt:        "statement-update.v002.txt",
+			name:               "Compatible statement prompts",
+			originalPrompt:     "statement-update.v001.txt",
+			newPrompt:          "statement-update.v002.txt",
 			expectedCompatible: true,
-			expectedReason:   "Version change from v001 to v002",
+			expectedReason:     "Version change from v001 to v002",
 		},
 	}
 
@@ -1442,7 +1441,7 @@ func TestValidatePromptForGeneration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidatePromptForGeneration(tt.promptFile, tt.generationMethod)
-			
+
 			if tt.shouldError && err == nil {
 				t.Error("Expected error but got none")
 			}

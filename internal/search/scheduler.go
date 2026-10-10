@@ -47,12 +47,21 @@ type Scheduler struct {
 	kv    *cloudflare.KV
 
 	settings SchedulerSettings
+	mode     internal.RuntimeMode
 
 	disableSearchSchedulingLogOnce sync.Once
 }
 
 // NewScheduler creates a new search service
-func NewScheduler(fs *internal.FirestoreClient, logger *slog.Logger, queue internal.SearchQueue, mailer smtp.Mailer, recipient string) *Scheduler {
+func NewScheduler(fs *internal.FirestoreClient, logger *slog.Logger, queue internal.SearchQueue, mailer smtp.Mailer, recipient string, modes ...internal.RuntimeMode) *Scheduler {
+	var mode internal.RuntimeMode
+	if len(modes) > 0 {
+		mode = modes[0]
+	}
+	initialSettings := SchedulerSettings{}
+	if mode.Personal {
+		initialSettings = SchedulerSettings{Paused: true, Interval: defaultSearchTickInterval}
+	}
 
 	logger = logger.With("pkg", "search.Scheduler")
 
@@ -82,6 +91,8 @@ func NewScheduler(fs *internal.FirestoreClient, logger *slog.Logger, queue inter
 		wg:        sync.WaitGroup{},
 		done:      make(chan struct{}),
 		kv:        kv,
+		mode:      mode,
+		settings:  initialSettings,
 		// pusher:    pusher,
 		// progressCache: progressCache,
 	}
@@ -100,7 +111,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 
 	s.RefreshSettings()
 
-	// Then requeue any users that were previously queued but not completed
+	// Then requeue eligible searches that were previously queued but not completed.
 	if err := s.RecoverIncompleteSearches(); err != nil {
 		internal.SentryReportError(context.Background(), err, sentry.LevelError, map[string]string{
 			"action": "NewScheduler::Start: failed to requeue incomplete searches",
@@ -111,8 +122,10 @@ func (s *Scheduler) Start(ctx context.Context) error {
 	// Start the background processing
 	s.wg.Add(1) // used for graceful shutdown if Close is called
 	go func() {
-		// Process searches immediately on start
-		s.StartCriteriaSearch(ctx)
+		// Process searches immediately only when settings explicitly allow it.
+		if !s.settings.Paused {
+			s.StartCriteriaSearch(ctx)
+		}
 		s.wg.Done()
 
 		// Then continue with regular interval processing
@@ -124,6 +137,23 @@ func (s *Scheduler) Start(ctx context.Context) error {
 
 func (s *Scheduler) RefreshSettings() error {
 	var settings SchedulerSettings
+	if s.mode.Personal {
+		s.settings = SchedulerSettings{Paused: true, Interval: defaultSearchTickInterval}
+		if s.kv == nil {
+			return fmt.Errorf("personal search scheduler settings unavailable")
+		}
+		if err := s.kv.Get(SchedulerSettingsKey, &settings); err != nil {
+			return fmt.Errorf("read personal search scheduler settings: %w", err)
+		}
+		if settings.Interval <= 0 {
+			settings.Interval = defaultSearchTickInterval
+		}
+		s.settings = settings
+		if s.ticker != nil {
+			s.ticker.Reset(settings.Interval)
+		}
+		return nil
+	}
 	if s.kv != nil {
 		if err := s.kv.Get(SchedulerSettingsKey, &settings); err != nil {
 			settings = DefaultSchedulerSettings
@@ -177,7 +207,10 @@ func (s *Scheduler) run(ctx context.Context) {
 			s.logger.Info("background processing stopped due to context cancellation")
 			return
 		case <-s.ticker.C:
-			s.RefreshSettings()
+			if err := s.RefreshSettings(); err != nil {
+				s.logger.Error("failed to refresh search scheduler settings", "error", err)
+				continue
+			}
 
 			if s.settings.Paused {
 				s.disableSearchSchedulingLogOnce.Do(func() {
@@ -235,8 +268,20 @@ func (s *Scheduler) StartCriteriaSearch(ctx context.Context) {
 		s.logger.Info("search scheduler is paused, skipping criteria scan")
 		return
 	}
+	if s.mode.Personal {
+		if err := s.recoverPersonalSearches(ctx, false); err != nil {
+			s.logger.Error("failed to recover queued personal searches", "error", err)
+			return
+		}
+	}
 
-	items, err := internal.GetSearchCriteriaNeedsSearch(ctx, s.fs)
+	var items []internal.SearchCriteria
+	var err error
+	if s.mode.Personal {
+		items, err = s.personalCriteriaNeedsSearch(ctx)
+	} else {
+		items, err = internal.GetSearchCriteriaNeedsSearch(ctx, s.fs)
+	}
 	if err != nil {
 		s.logger.Error("error getting search criteria", "error", err)
 		return
@@ -273,7 +318,20 @@ func (s *Scheduler) enqueueSearch(ctx context.Context, criteria internal.SearchC
 		return fmt.Errorf("nil search")
 	}
 
-	jobSearch, err := internal.CreateSearchTask(ctx, s.fs, criteria, "scrapingdog", nil)
+	var jobSearch *internal.SearchTask
+	var err error
+	if s.mode.Personal {
+		owner, ownerErr := internal.GetPersonalSearchOwner(ctx, s.fs, s.mode.UserID)
+		if ownerErr != nil {
+			return ownerErr
+		}
+		if !s.mode.CanMatch(owner, time.Now()) {
+			return nil
+		}
+		jobSearch, err = internal.CreatePersonalSearchTask(ctx, s.fs, criteria, "scrapingdog", owner.ID, *owner.PersonalSearchStartedAt)
+	} else {
+		jobSearch, err = internal.CreateSearchTask(ctx, s.fs, criteria, "scrapingdog", nil)
+	}
 	if err != nil {
 		if errors.Is(err, internal.ErrSearchTaskExists) {
 			s.logger.Debug("search task already exists", "criteria", criteria)
@@ -301,6 +359,9 @@ func (s *Scheduler) enqueueSearch(ctx context.Context, criteria internal.SearchC
 
 // notifyAdmin sends an error notification to the admin
 func (s *Scheduler) notifyAdmin(_ context.Context, user *internal.User, err error) {
+	if s.mode.Personal {
+		return
+	}
 	data := map[string]interface{}{
 		"UserID":    user.ID,
 		"UserEmail": user.Email,
@@ -322,6 +383,9 @@ func (s *Scheduler) RecoverIncompleteSearches() error {
 	if !s.IsWithinAllowedHours() {
 		s.logger.Debug("skipping recovery of incomplete searches - outside allowed hours")
 		return nil
+	}
+	if s.mode.Personal {
+		return s.recoverPersonalSearches(context.Background(), true)
 	}
 
 	// TODO: If several servers start at the same time, they will all try to requeue the same jobs.
@@ -355,4 +419,67 @@ func (s *Scheduler) RecoverIncompleteSearches() error {
 	}
 
 	return nil
+}
+
+func (s *Scheduler) recoverPersonalSearches(ctx context.Context, includeProcessing bool) error {
+	owner, err := internal.GetPersonalSearchOwner(ctx, s.fs, s.mode.UserID)
+	if err != nil {
+		return err
+	}
+	if !s.mode.CanMatch(owner, time.Now()) {
+		return nil
+	}
+	tasks, err := internal.GetIncompleteSearchTasks(ctx, s.fs)
+	if err != nil {
+		return err
+	}
+	for _, task := range tasks {
+		if !internal.PersonalSearchTaskEligible(task, owner.ID, *owner.PersonalSearchStartedAt) {
+			continue
+		}
+		if task.Status != internal.SearchTaskStatusQueued {
+			if !includeProcessing || task.Status != internal.SearchTaskStatusProcessing {
+				continue
+			}
+			if err := internal.SetSearchTaskStatus(ctx, s.fs, task.ID, internal.SearchTaskStatusQueued); err != nil {
+				return err
+			}
+		}
+		if err := s.queue.QueueSearch(ctx, *task); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Scheduler) personalCriteriaNeedsSearch(ctx context.Context) ([]internal.SearchCriteria, error) {
+	owner, err := internal.GetPersonalSearchOwner(ctx, s.fs, s.mode.UserID)
+	if err != nil {
+		return nil, err
+	}
+	if !s.mode.CanMatch(owner, time.Now()) {
+		return nil, nil
+	}
+	subs, err := internal.GetSubscriptionsForUser(ctx, s.fs, owner.ID)
+	if err != nil {
+		return nil, err
+	}
+	var items []internal.SearchCriteria
+	for _, sub := range subs {
+		criteria, found, err := internal.GetSearchCriteria(ctx, s.fs, sub.CriteriaID)
+		if err != nil {
+			return nil, err
+		}
+		if !found || criteria.Query == "" {
+			continue
+		}
+		searched, err := internal.PersonalSearchCompletedSince(ctx, s.fs, criteria.ID, owner.ID, *owner.PersonalSearchStartedAt, time.Now().Add(-24*time.Hour))
+		if err != nil {
+			return nil, err
+		}
+		if !searched {
+			items = append(items, *criteria)
+		}
+	}
+	return items, nil
 }
