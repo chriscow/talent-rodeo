@@ -48,3 +48,25 @@ build-errors.log
 
 .config/
 .claude/
+
+# Keep runtime credentials and OAuth downloads out of source control.
+**/.env
+**/.env.*
+**/*.env
+**/*.env.*
+**/.dev.vars
+**/.dev.vars.*
+**/client_secret*.json
+**/*credentials*.json
+**/*service-account*.json
+**/gmail_token*.json
+**/mcp.json
+**/mcp.json.OLD
+!**/.env.example
+!**/.env.sample
+!**/.env.template
+!**/*.env.example
+!**/*.env.sample
+!**/*.env.template
+!**/.dev.vars.example
+!**/mcp.json.example

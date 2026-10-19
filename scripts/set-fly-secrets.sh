@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # Check if an environment file was provided as an argument
 ENV_FILE="${1:-.prod.env}"
@@ -10,7 +11,9 @@ if [ ! -f "$ENV_FILE" ]; then
 fi
 
 # Create a temporary file for secrets
+umask 077
 SECRETS_FILE=$(mktemp)
+trap 'rm -f "$SECRETS_FILE"' EXIT
 
 # Read the env file line by line and build the secrets file
 while IFS= read -r line; do

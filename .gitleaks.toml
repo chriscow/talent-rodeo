@@ -1,0 +1,18 @@
+title = "Credential cleanup verification"
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Literal marker replacing revoked historical credentials"
+regexTarget = "secret"
+regexes = ['^REVOKED_CREDENTIAL$']
+
+[[allowlists]]
+description = "Exact nonfunctional CSRF fixture used in local testing documentation"
+regexTarget = "secret"
+regexes = ['^test-csrf-token$']
+
+[[allowlists]]
+description = "Exact historical fake private-key fixture; OpenSSL cannot parse any key material"
+regexTarget = "secret"
+regexes = ['''^\-\-\-\-\-BEGIN\ PRIVATE\ KEY\-\-\-\-\-\\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDR7DBC\\n\-\-\-\-\-END\ PRIVATE\ KEY\-\-\-\-\-$''']

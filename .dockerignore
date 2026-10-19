@@ -52,3 +52,13 @@ docs/proposals
 **/testdata
 **/.logs
 fly.toml
+
+# Exclude all runtime environment and OAuth credential files.
+**/.env
+**/.env.*
+**/*.env
+**/*.env.*
+**/.dev.vars*
+**/client_secret*.json
+**/*credentials*.json
+**/gmail_token*.json
